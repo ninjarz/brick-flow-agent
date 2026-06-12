@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">brick-flow-agent</title>
+
+  <rect width="64" height="64" rx="16" fill="#111827"/>
+
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 45c8-9 18-15 31-18" stroke="#22d3ee" stroke-width="3.5" opacity=".9"/>
+    <path d="M10 36c7-8 16-13 27-16" stroke="#22d3ee" stroke-width="2.5" opacity=".45"/>
+
+    <g transform="rotate(-14 42 24)" stroke="#6ee7b7" stroke-width="3">
+      <rect x="31" y="17" width="23" height="15" rx="4"/>
+      <path d="M38 17v-3h5v3"/>
+      <path d="M46 17v-3h5v3"/>
+    </g>
+
+    <g transform="rotate(-14 27 38)" stroke="#fbbf24" stroke-width="3">
+      <rect x="17" y="31" width="22" height="15" rx="4"/>
+      <path d="M24 31v-3h5v3"/>
+      <path d="M32 31v-3h5v3"/>
+    </g>
+  </g>
+</svg>

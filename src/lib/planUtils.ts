@@ -1,0 +1,1050 @@
+import { brickById } from '../data/basicBricks'
+import {
+  HORIZONTAL_EDIT_STEP_STUDS,
+  getBrickConnectors,
+  footprintToWorld,
+  isHorizontalStudOnGrid,
+  isYStudOnGrid,
+  normalizeHorizontalStud,
+  normalizeQuarterTurns,
+  normalizeVerticalQuarterTurns,
+  normalizeYStud,
+} from './brickUnits'
+import { getBrickWorldBounds } from './ldrawBounds'
+import {
+  createStructuralCollisionIndex,
+  doBrickStructuralCellsCollide,
+  getStructuralCollisionCandidateIds,
+  getStructuralOverlapScore,
+  getBrickWorldCollisionKeys,
+} from './structuralGrid'
+import type { BrickColor, BrickPose, BuildPlan, BuildStep, PlacedBrick } from '../types/bricks'
+import type { StructuralCollisionIndex } from './structuralGrid'
+
+const connectionTolerance = 0.001
+const boundsTolerance = 0.000001
+const connectorConnectionTolerance = 0.12
+const mechanicalConnectorConnectionTolerance = 0.12
+const connectorSnapSearchTolerance = 0.6
+const connectorUnsnapTolerance = 0.000001
+
+export const createId = (prefix: string) =>
+  `${prefix}-${Math.random().toString(36).slice(2, 8)}`
+
+export const makeBrick = (
+  brickId: string,
+  color: BrickColor,
+  xStud: number,
+  yStud: number,
+  zStud: number,
+  rotationQuarterTurns = 0,
+  verticalQuarterTurns = 0,
+): PlacedBrick => ({
+  id: createId('piece'),
+  brickId,
+  color,
+  pose: {
+    xStud: normalizeHorizontalStud(xStud),
+    yStud: normalizeYStud(yStud),
+    zStud: normalizeHorizontalStud(zStud),
+    rotationQuarterTurns: normalizeQuarterTurns(rotationQuarterTurns),
+    verticalQuarterTurns: normalizeVerticalQuarterTurns(verticalQuarterTurns),
+  },
+})
+
+export const countBricks = (plan: BuildPlan) =>
+  plan.bricks.reduce<Record<string, number>>((counts, brick) => {
+    counts[brick.brickId] = (counts[brick.brickId] ?? 0) + 1
+    return counts
+  }, {})
+
+export const createSingleBrickSteps = (bricks: PlacedBrick[]): BuildStep[] =>
+  bricks.map((brick, index) => {
+    const definition = brickById.get(brick.brickId)
+    const name = definition?.name ?? brick.brickId
+
+    return {
+      id: createId('step'),
+      title: `放置 ${name}`,
+      description: `放置第 ${index + 1} 个零件：${name}。`,
+      brickIds: [brick.id],
+    }
+  })
+
+export const getBrickBounds = (brick: PlacedBrick) => {
+  const definition = brickById.get(brick.brickId)
+  if (!definition) return undefined
+
+  return getBrickWorldBounds(definition, brick.pose)
+}
+
+export const doBrickBoundsOverlap = (source: PlacedBrick, target: PlacedBrick) => {
+  const sourceKeys = getBrickWorldCollisionKeys(source)
+  const targetKeys = getBrickWorldCollisionKeys(target)
+  if (sourceKeys.size === 0 || targetKeys.size === 0) return false
+
+  for (const key of sourceKeys) {
+    if (targetKeys.has(key)) return true
+  }
+
+  return false
+}
+
+export const createBrickCollisionIndex = createStructuralCollisionIndex
+
+const getBoundsOverlapVolume = (
+  sourceBounds: NonNullable<ReturnType<typeof getBrickBounds>>,
+  targetBounds: NonNullable<ReturnType<typeof getBrickBounds>>,
+) => {
+  const x = Math.max(0, Math.min(sourceBounds.maxX, targetBounds.maxX) - Math.max(sourceBounds.minX, targetBounds.minX) - boundsTolerance)
+  const y = Math.max(0, Math.min(sourceBounds.maxY, targetBounds.maxY) - Math.max(sourceBounds.minY, targetBounds.minY) - boundsTolerance)
+  const z = Math.max(0, Math.min(sourceBounds.maxZ, targetBounds.maxZ) - Math.max(sourceBounds.minZ, targetBounds.minZ) - boundsTolerance)
+  return x * y * z
+}
+
+export const getBrickRawOverlapScore = (
+  brick: PlacedBrick,
+  bricks: PlacedBrick[],
+  collisionIndex?: StructuralCollisionIndex,
+) => {
+  if (collisionIndex) return getStructuralOverlapScore(brick, collisionIndex)
+
+  const sourceKeys = getBrickWorldCollisionKeys(brick)
+  if (sourceKeys.size === 0) return 0
+
+  return bricks.reduce((score, other) => {
+    if (other.id === brick.id) return score
+    const otherKeys = getBrickWorldCollisionKeys(other)
+    let overlapCount = 0
+    for (const key of sourceKeys) {
+      if (otherKeys.has(key)) overlapCount += 1
+    }
+    return score + overlapCount * HORIZONTAL_EDIT_STEP_STUDS ** 3
+  }, 0)
+}
+
+export const hasBrickCollision = (
+  brick: PlacedBrick,
+  bricks: PlacedBrick[],
+  collisionIndex?: StructuralCollisionIndex,
+) => {
+  if (!collisionIndex) {
+    return bricks.some((other) => (
+      other.id !== brick.id &&
+      doBrickBoundsOverlap(brick, other) &&
+      !hasConnectorConnection(brick, other) &&
+      !hasIndirectMechanicalConnectorClearance(brick, other, bricks)
+    ))
+  }
+
+  for (const candidateId of getStructuralCollisionCandidateIds(brick, collisionIndex)) {
+    const other = collisionIndex.bricksById.get(candidateId)
+    if (
+      other &&
+      doBrickStructuralCellsCollide(brick, other) &&
+      !hasConnectorConnection(brick, other) &&
+      !hasIndirectMechanicalConnectorClearance(brick, other, bricks)
+    ) return true
+  }
+
+  return false
+}
+
+const doBrickBoundsOverlapHorizontally = (source: PlacedBrick, target: PlacedBrick) => {
+  const sourceBounds = getBrickBounds(source)
+  const targetBounds = getBrickBounds(target)
+  if (!sourceBounds || !targetBounds) return false
+
+  return (
+    sourceBounds.minX < targetBounds.maxX - boundsTolerance &&
+    sourceBounds.maxX > targetBounds.minX + boundsTolerance &&
+    sourceBounds.minZ < targetBounds.maxZ - boundsTolerance &&
+    sourceBounds.maxZ > targetBounds.minZ + boundsTolerance
+  )
+}
+
+const hasTopSupportOverlap = (brick: PlacedBrick, support: PlacedBrick) => {
+  const bounds = getBrickBounds(brick)
+  const supportBounds = getBrickBounds(support)
+  const supportDefinition = brickById.get(support.brickId)
+  if (!bounds || !supportBounds || !supportDefinition || Math.abs(supportBounds.maxY - bounds.minY) > connectionTolerance) return false
+
+  if (supportDefinition.kind === 'cone') {
+    return false
+  }
+
+  if (supportDefinition.kind !== 'slope') {
+    return doBrickBoundsOverlapHorizontally(brick, support)
+  }
+
+  return getBrickConnectors(supportDefinition, support.pose)
+    .filter((connector) => connector.kind === 'stud' && Math.abs(connector.pose.yStud - supportBounds.maxY) <= connectionTolerance)
+    .some((connector) => (
+      connector.pose.xStud > bounds.minX &&
+      connector.pose.xStud < bounds.maxX &&
+      connector.pose.zStud > bounds.minZ &&
+      connector.pose.zStud < bounds.maxZ
+    ))
+}
+
+const hasConnectorConnection = (brick: PlacedBrick, other: PlacedBrick) => {
+  const definition = brickById.get(brick.brickId)
+  const otherDefinition = brickById.get(other.brickId)
+  if (!definition || !otherDefinition) return false
+
+  const sourceConnectors = getBrickConnectors(definition, brick.pose)
+  const targetConnectors = getBrickConnectors(otherDefinition, other.pose)
+
+  return sourceConnectors.some((source) =>
+    targetConnectors.some((target) => (
+      areConnectorsCompatible(source, target) &&
+      connectorDistance(source, target) <= getConnectorConnectionTolerance(source, target)
+    )),
+  )
+}
+
+const isMechanicalConnector = (
+  connector: ReturnType<typeof getBrickConnectors>[number],
+) =>
+  connector.kind === 'axle' || connector.kind === 'bar' || connector.kind === 'pin'
+
+const hasMechanicalConnectorConnection = (brick: PlacedBrick, other: PlacedBrick) => {
+  const definition = brickById.get(brick.brickId)
+  const otherDefinition = brickById.get(other.brickId)
+  if (!definition || !otherDefinition) return false
+
+  const sourceConnectors = getBrickConnectors(definition, brick.pose)
+  const targetConnectors = getBrickConnectors(otherDefinition, other.pose)
+
+  return sourceConnectors.some((source) =>
+    isMechanicalConnector(source) &&
+    targetConnectors.some((target) => (
+      isMechanicalConnector(target) &&
+      areConnectorsCompatible(source, target) &&
+      connectorDistance(source, target) <= getConnectorConnectionTolerance(source, target)
+    )),
+  )
+}
+
+const areBricksAttached = (source: PlacedBrick, target: PlacedBrick) =>
+  hasTopSupportOverlap(source, target) ||
+  hasTopSupportOverlap(target, source) ||
+  hasConnectorConnection(source, target)
+
+const hasIndirectMechanicalConnectorClearance = (
+  source: PlacedBrick,
+  target: PlacedBrick,
+  bricks: PlacedBrick[],
+) =>
+  // Clips, bars, pins, and axles can sit beside a supporting brick while being
+  // held by an intermediate piece; allow that narrow mechanical chain only.
+  bricks.some((bridge) => (
+    bridge.id !== source.id &&
+    bridge.id !== target.id &&
+    (
+      (hasMechanicalConnectorConnection(source, bridge) && areBricksAttached(target, bridge)) ||
+      (hasMechanicalConnectorConnection(target, bridge) && areBricksAttached(source, bridge))
+    )
+  ))
+
+const isVerticalStudTubeConnection = (
+  source: ReturnType<typeof getBrickConnectors>[number],
+  target: ReturnType<typeof getBrickConnectors>[number],
+) =>
+  source.axis === 'y' &&
+  target.axis === 'y' &&
+  ((source.kind === 'stud' && target.kind === 'tube') ||
+    (source.kind === 'tube' && target.kind === 'stud'))
+
+const hasSupportConnectorConnection = (brick: PlacedBrick, other: PlacedBrick) => {
+  const definition = brickById.get(brick.brickId)
+  const otherDefinition = brickById.get(other.brickId)
+  if (!definition || !otherDefinition) return false
+
+  const sourceConnectors = getBrickConnectors(definition, brick.pose)
+  const targetConnectors = getBrickConnectors(otherDefinition, other.pose)
+
+  return sourceConnectors.some((source) =>
+    targetConnectors.some((target) => (
+      areConnectorsCompatible(source, target) &&
+      connectorDistance(source, target) <= getConnectorConnectionTolerance(source, target) &&
+      !isVerticalStudTubeConnection(source, target)
+    )),
+  )
+}
+
+const canBrickDescendOneStep = (
+  brick: PlacedBrick,
+  bricks: PlacedBrick[],
+  collisionIndex?: StructuralCollisionIndex,
+) => {
+  const bounds = getBrickBounds(brick)
+  if (!bounds || bounds.minY <= boundsTolerance) return false
+
+  const nextYStud = normalizeYStud(brick.pose.yStud - HORIZONTAL_EDIT_STEP_STUDS)
+  if (nextYStud >= brick.pose.yStud - boundsTolerance) return false
+
+  const loweredBrick: PlacedBrick = {
+    ...brick,
+    pose: {
+      ...brick.pose,
+      yStud: nextYStud,
+    },
+  }
+  const loweredBounds = getBrickBounds(loweredBrick)
+  if (!loweredBounds || loweredBounds.minY < -boundsTolerance) return false
+
+  return !hasBrickCollision(loweredBrick, bricks, collisionIndex)
+}
+
+export const isBrickSupported = (
+  brick: PlacedBrick,
+  bricks: PlacedBrick[],
+  collisionIndex?: StructuralCollisionIndex,
+) => {
+  const bounds = getBrickBounds(brick)
+  if (!bounds || bounds.minY <= boundsTolerance) return true
+
+  const connectorSupported = bricks.some((other) => other.id !== brick.id && hasSupportConnectorConnection(brick, other))
+  if (connectorSupported || hasAxleConnection(brick, bricks)) return true
+
+  return !canBrickDescendOneStep(brick, bricks, collisionIndex)
+}
+
+export const findOpenPose = (brick: PlacedBrick, bricks: PlacedBrick[]): PlacedBrick => {
+  const collisionIndex = createBrickCollisionIndex(bricks)
+  if (!hasBrickCollision(brick, bricks, collisionIndex)) return brick
+
+  const bounds = getBounds(bricks)
+  const definition = brickById.get(brick.brickId)
+  const footprint = definition ? footprintToWorld(definition, brick.pose.rotationQuarterTurns, brick.pose.verticalQuarterTurns ?? 0) : undefined
+  const maxX = Math.max(bounds.width + (footprint?.widthStuds ?? 1), 8)
+  const maxZ = Math.max(bounds.depth + (footprint?.depthStuds ?? 1), 8)
+
+  for (let yStud = 0; yStud <= bounds.height + 2.4; yStud += HORIZONTAL_EDIT_STEP_STUDS) {
+    for (let zStep = 0; zStep <= Math.ceil(maxZ / HORIZONTAL_EDIT_STEP_STUDS); zStep += 1) {
+      for (let xStep = 0; xStep <= Math.ceil(maxX / HORIZONTAL_EDIT_STEP_STUDS); xStep += 1) {
+        const xStud = normalizeHorizontalStud(xStep * HORIZONTAL_EDIT_STEP_STUDS)
+        const zStud = normalizeHorizontalStud(zStep * HORIZONTAL_EDIT_STEP_STUDS)
+        const candidate = {
+          ...brick,
+          pose: {
+            ...brick.pose,
+            xStud,
+            yStud,
+            zStud,
+          },
+        }
+        if (!hasBrickCollision(candidate, bricks, collisionIndex)) return candidate
+      }
+    }
+  }
+
+  return {
+    ...brick,
+    pose: {
+      ...brick.pose,
+      xStud: normalizeHorizontalStud(bounds.width + 1),
+      yStud: 0,
+      zStud: 0,
+    },
+  }
+}
+
+type FindSupportedOpenPoseOptions = {
+  allowGroundFallback?: boolean
+}
+
+export const findSupportedOpenPose = (
+  brick: PlacedBrick,
+  bricks: PlacedBrick[],
+  options: FindSupportedOpenPoseOptions = {},
+): PlacedBrick => {
+  if (bricks.length === 0) return findOpenPose(brick, bricks)
+
+  const collisionIndex = createBrickCollisionIndex(bricks)
+  const definition = brickById.get(brick.brickId)
+  const bounds = getBounds(bricks)
+  const footprint = definition ? footprintToWorld(definition, brick.pose.rotationQuarterTurns, brick.pose.verticalQuarterTurns ?? 0) : undefined
+  const maxX = Math.max(bounds.width + (footprint?.widthStuds ?? 1), 8)
+  const maxZ = Math.max(bounds.depth + (footprint?.depthStuds ?? 1), 8)
+  const tryCandidate = (candidate: PlacedBrick) =>
+    !hasBrickCollision(candidate, bricks, collisionIndex) && isBrickSupported(candidate, bricks, collisionIndex)
+
+  if (footprint) {
+    for (const support of bricks) {
+      const supportBounds = getBrickBounds(support)
+      if (!supportBounds) continue
+
+      for (let xStud = supportBounds.minX - footprint.widthStuds + HORIZONTAL_EDIT_STEP_STUDS; xStud < supportBounds.maxX; xStud += 1) {
+        for (let zStud = supportBounds.minZ - footprint.depthStuds + HORIZONTAL_EDIT_STEP_STUDS; zStud < supportBounds.maxZ; zStud += 1) {
+          const candidate: PlacedBrick = {
+            ...brick,
+            pose: {
+              ...brick.pose,
+              xStud: normalizeHorizontalStud(xStud),
+              yStud: normalizeYStud(supportBounds.maxY),
+              zStud: normalizeHorizontalStud(zStud),
+            },
+          }
+
+          if (tryCandidate(candidate)) return candidate
+        }
+      }
+    }
+  }
+
+  if (options.allowGroundFallback) {
+    for (const pose of [
+      { xStud: bounds.width + HORIZONTAL_EDIT_STEP_STUDS, yStud: 0, zStud: 0 },
+      { xStud: 0, yStud: 0, zStud: bounds.depth + HORIZONTAL_EDIT_STEP_STUDS },
+    ]) {
+      const candidate: PlacedBrick = {
+        ...brick,
+        pose: {
+          ...brick.pose,
+          xStud: normalizeHorizontalStud(pose.xStud),
+          yStud: normalizeYStud(pose.yStud),
+          zStud: normalizeHorizontalStud(pose.zStud),
+        },
+      }
+
+      if (tryCandidate(candidate)) return candidate
+    }
+  }
+
+  for (let yStud = HORIZONTAL_EDIT_STEP_STUDS; yStud <= bounds.height + 1.2; yStud += HORIZONTAL_EDIT_STEP_STUDS) {
+    for (let zStep = 0; zStep <= Math.ceil(maxZ / HORIZONTAL_EDIT_STEP_STUDS); zStep += 1) {
+      for (let xStep = 0; xStep <= Math.ceil(maxX / HORIZONTAL_EDIT_STEP_STUDS); xStep += 1) {
+        const xStud = normalizeHorizontalStud(xStep * HORIZONTAL_EDIT_STEP_STUDS)
+        const zStud = normalizeHorizontalStud(zStep * HORIZONTAL_EDIT_STEP_STUDS)
+        const candidate: PlacedBrick = {
+          ...brick,
+          pose: {
+            ...brick.pose,
+            xStud,
+            yStud,
+            zStud,
+          },
+        }
+
+        if (tryCandidate(candidate)) {
+          return candidate
+        }
+      }
+    }
+  }
+
+  return findOpenPose(brick, bricks)
+}
+
+const areConnectorsCompatible = (
+  source: ReturnType<typeof getBrickConnectors>[number],
+  target: ReturnType<typeof getBrickConnectors>[number],
+) => {
+  if (source.axis !== target.axis) return false
+
+  const sourceDirection = source.direction ?? { x: 0, y: 1, z: 0 }
+  const targetDirection = target.direction ?? { x: 0, y: 1, z: 0 }
+  const directionDot =
+    sourceDirection.x * targetDirection.x +
+    sourceDirection.y * targetDirection.y +
+    sourceDirection.z * targetDirection.z
+
+  if (source.kind === 'studsocket' && target.kind === 'studsocket') return directionDot < -0.5
+  if (source.gender === target.gender) return false
+
+  if (source.kind === 'axle' && target.kind === 'axle') return Math.abs(directionDot) > 0.5
+  if (source.kind === 'bar' && target.kind === 'bar') return Math.abs(directionDot) > 0.5
+  if (source.kind === 'pin' && target.kind === 'pin') return Math.abs(directionDot) > 0.5
+
+  return (
+    directionDot < -0.5 &&
+    ((source.kind === 'stud' && target.kind === 'tube') ||
+      (source.kind === 'tube' && target.kind === 'stud'))
+  )
+}
+
+const getConnectorConnectionTolerance = (
+  source: ReturnType<typeof getBrickConnectors>[number],
+  target: ReturnType<typeof getBrickConnectors>[number],
+) =>
+  source.kind === 'axle' || target.kind === 'axle' || source.kind === 'bar' || target.kind === 'bar' || source.kind === 'pin' || target.kind === 'pin'
+    ? mechanicalConnectorConnectionTolerance
+    : connectorConnectionTolerance
+
+const hasAxleConnection = (brick: PlacedBrick, bricks: PlacedBrick[]) => {
+  const definition = brickById.get(brick.brickId)
+  if (!definition) return false
+
+  const sourceConnectors = getBrickConnectors(definition, brick.pose).filter((connector) => connector.kind === 'axle')
+  if (sourceConnectors.length === 0) return false
+
+  return bricks.some((other) => {
+    if (other.id === brick.id) return false
+    const otherDefinition = brickById.get(other.brickId)
+    if (!otherDefinition) return false
+
+    const targetConnectors = getBrickConnectors(otherDefinition, other.pose).filter((connector) => connector.kind === 'axle')
+    return sourceConnectors.some((source) =>
+      targetConnectors.some(
+        (target) => areConnectorsCompatible(source, target) && connectorDistance(source, target) <= 0.2,
+      ),
+    )
+  })
+}
+
+const connectorDistance = (
+  source: ReturnType<typeof getBrickConnectors>[number],
+  target: ReturnType<typeof getBrickConnectors>[number],
+) => {
+  const dx = target.pose.xStud - source.pose.xStud
+  const dy = target.pose.yStud - source.pose.yStud
+  const dz = target.pose.zStud - source.pose.zStud
+  return Math.sqrt(dx * dx + dy * dy + dz * dz)
+}
+
+const connectorDirectionDot = (
+  source: ReturnType<typeof getBrickConnectors>[number],
+  target: ReturnType<typeof getBrickConnectors>[number],
+) => {
+  const sourceDirection = source.direction ?? { x: 0, y: 1, z: 0 }
+  const targetDirection = target.direction ?? { x: 0, y: 1, z: 0 }
+  return (
+    sourceDirection.x * targetDirection.x +
+    sourceDirection.y * targetDirection.y +
+    sourceDirection.z * targetDirection.z
+  )
+}
+
+export const getBrickPlacementDiagnostics = (brick: PlacedBrick, bricks: PlacedBrick[]) => {
+  const definition = brickById.get(brick.brickId)
+  const bounds = getBrickBounds(brick)
+  const connectors = definition ? getBrickConnectors(definition, brick.pose) : []
+
+  const otherDetails = bricks
+    .filter((other) => other.id !== brick.id)
+    .map((other) => {
+      const otherDefinition = brickById.get(other.brickId)
+      const otherBounds = getBrickBounds(other)
+      const otherConnectors = otherDefinition ? getBrickConnectors(otherDefinition, other.pose) : []
+      const connectorPairs = connectors.flatMap((source) =>
+        otherConnectors.map((target) => ({
+          sourceId: source.id,
+          sourceKind: source.kind,
+          sourceAxis: source.axis,
+          sourceDirection: source.direction,
+          sourcePose: source.pose,
+          targetId: target.id,
+          targetKind: target.kind,
+          targetAxis: target.axis,
+          targetDirection: target.direction,
+          targetPose: target.pose,
+          compatible: areConnectorsCompatible(source, target),
+          directionDot: connectorDirectionDot(source, target),
+          distance: connectorDistance(source, target),
+        })),
+      )
+      const compatiblePairs = connectorPairs
+        .filter((pair) => pair.compatible)
+        .sort((source, target) => source.distance - target.distance)
+
+      return {
+        id: other.id,
+        brickId: other.brickId,
+        pose: other.pose,
+        bounds: otherBounds,
+        rawOverlapVolume: bounds && otherBounds ? getBoundsOverlapVolume(bounds, otherBounds) : 0,
+        boundsOverlap: doBrickBoundsOverlap(brick, other),
+        hasConnectorConnection: hasConnectorConnection(brick, other),
+        topSupportOverlap: hasTopSupportOverlap(brick, other),
+        nearestCompatibleConnectors: compatiblePairs.slice(0, 5),
+        nearestAnyConnectors: connectorPairs
+          .sort((source, target) => source.distance - target.distance)
+          .slice(0, 5),
+      }
+    })
+
+  return {
+    id: brick.id,
+    brickId: brick.brickId,
+    pose: brick.pose,
+    bounds,
+    supported: isBrickSupported(brick, bricks),
+    canDescendOneStep: canBrickDescendOneStep(brick, bricks),
+    collision: hasBrickCollision(brick, bricks),
+    rawOverlapScore: getBrickRawOverlapScore(brick, bricks),
+    details: otherDetails.filter(
+      (detail) =>
+        detail.boundsOverlap ||
+        detail.hasConnectorConnection ||
+        detail.topSupportOverlap ||
+        detail.nearestCompatibleConnectors.length > 0,
+    ),
+  }
+}
+
+const buildPlacedBrickWithPose = (brick: PlacedBrick, pose: BrickPose): PlacedBrick => ({
+  ...brick,
+  pose: {
+    ...pose,
+    xStud: normalizeHorizontalStud(pose.xStud),
+    yStud: normalizeYStud(pose.yStud),
+    zStud: normalizeHorizontalStud(pose.zStud),
+    rotationQuarterTurns: normalizeQuarterTurns(pose.rotationQuarterTurns),
+    verticalQuarterTurns: normalizeVerticalQuarterTurns(pose.verticalQuarterTurns ?? 0),
+  },
+})
+
+type SnapBrickToPlanOptions = {
+  previousBrick?: PlacedBrick
+}
+
+export const snapBrickToPlan = (
+  brick: PlacedBrick,
+  bricks: PlacedBrick[],
+  options: SnapBrickToPlanOptions = {},
+) => {
+  const definition = brickById.get(brick.brickId)
+  if (!definition) return brick
+
+  const sourceConnectors = getBrickConnectors(definition, brick.pose)
+  const previousSourceConnectorsById = options.previousBrick
+    ? new Map(getBrickConnectors(definition, options.previousBrick.pose).map((connector) => [connector.id, connector]))
+    : undefined
+  let best:
+    | {
+        score: number
+        pose: BrickPose
+      }
+    | undefined
+
+  for (const other of bricks) {
+    if (other.id === brick.id) continue
+    const otherDefinition = brickById.get(other.brickId)
+    if (!otherDefinition) continue
+
+    const targetConnectors = getBrickConnectors(otherDefinition, other.pose)
+
+    for (const source of sourceConnectors) {
+      for (const target of targetConnectors) {
+        if (!areConnectorsCompatible(source, target)) continue
+        const distance = connectorDistance(source, target)
+        if (distance > connectorSnapSearchTolerance) continue
+        const previousSource = previousSourceConnectorsById?.get(source.id)
+        if (previousSource && areConnectorsCompatible(previousSource, target)) {
+          const previousDistance = connectorDistance(previousSource, target)
+          if (
+            previousDistance <= getConnectorConnectionTolerance(previousSource, target) &&
+            distance > previousDistance + connectorUnsnapTolerance
+          ) {
+            continue
+          }
+        }
+
+        const snappedPose: BrickPose = {
+          xStud: normalizeHorizontalStud(brick.pose.xStud + (target.pose.xStud - source.pose.xStud)),
+          yStud: normalizeYStud(brick.pose.yStud + (target.pose.yStud - source.pose.yStud)),
+          zStud: normalizeHorizontalStud(brick.pose.zStud + (target.pose.zStud - source.pose.zStud)),
+          rotationQuarterTurns: brick.pose.rotationQuarterTurns,
+          verticalQuarterTurns: brick.pose.verticalQuarterTurns ?? 0,
+        }
+
+        if (!best || distance < best.score) {
+          best = {
+            score: distance,
+            pose: snappedPose,
+          }
+        }
+      }
+    }
+  }
+
+  const snappedBrick = best ? buildPlacedBrickWithPose(brick, best.pose) : brick
+  return hasBrickCollision(snappedBrick, bricks) ? brick : snappedBrick
+}
+
+export const getBounds = (bricks: PlacedBrick[]) => {
+  if (bricks.length === 0) {
+    return { width: 0, depth: 0, height: 0 }
+  }
+
+  return bricks.reduce(
+    (bounds, brick) => {
+      const brickBounds = getBrickBounds(brick)
+      if (!brickBounds) return bounds
+
+      return {
+        width: Math.max(bounds.width, brickBounds.maxX),
+        depth: Math.max(bounds.depth, brickBounds.maxZ),
+        height: Math.max(bounds.height, brickBounds.maxY),
+      }
+    },
+    { width: 0, depth: 0, height: 0 },
+  )
+}
+
+export const duplicateBrick = (brick: PlacedBrick): PlacedBrick => ({
+  ...brick,
+  id: createId('piece'),
+  pose: {
+    ...brick.pose,
+    yStud: brick.pose.yStud + (
+      brickById.get(brick.brickId)
+        ? footprintToWorld(
+            brickById.get(brick.brickId)!,
+            brick.pose.rotationQuarterTurns,
+            brick.pose.verticalQuarterTurns ?? 0,
+          ).height
+        : 1.2
+    ),
+  },
+})
+
+const cloneBrickWithUniqueId = (brick: PlacedBrick, usedIds: Set<string>): PlacedBrick => {
+  const nextId = usedIds.has(brick.id) ? createId('piece') : brick.id
+  usedIds.add(nextId)
+
+  return {
+    ...brick,
+    id: nextId,
+    pose: {
+      xStud: normalizeHorizontalStud(brick.pose.xStud),
+      yStud: normalizeYStud(brick.pose.yStud),
+      zStud: normalizeHorizontalStud(brick.pose.zStud),
+      rotationQuarterTurns: normalizeQuarterTurns(brick.pose.rotationQuarterTurns),
+      verticalQuarterTurns: normalizeVerticalQuarterTurns(brick.pose.verticalQuarterTurns ?? 0),
+    },
+  }
+}
+
+const tryPlaceBrick = (brick: PlacedBrick, placed: PlacedBrick[]) => {
+  const groundedBrick: PlacedBrick = placed.length === 0
+    ? {
+        ...brick,
+        pose: {
+          ...brick.pose,
+          yStud: 0,
+        },
+      }
+    : brick
+
+  const snappedBrick = groundedBrick
+  const collisionIndex = createBrickCollisionIndex(placed)
+  if (!hasBrickCollision(snappedBrick, placed, collisionIndex) && isBrickSupported(snappedBrick, placed, collisionIndex)) {
+    if (placed.length === 0 || snappedBrick.pose.yStud > 0) return snappedBrick
+  }
+
+  const supportedBrick = findSupportedOpenPose(snappedBrick, placed)
+  if (!hasBrickCollision(supportedBrick, placed, collisionIndex) && isBrickSupported(supportedBrick, placed, collisionIndex)) {
+    if (placed.length === 0 || supportedBrick.pose.yStud > 0) return supportedBrick
+  }
+
+  return undefined
+}
+
+export const repairBuildPlan = (plan: BuildPlan): BuildPlan => {
+  const placed: PlacedBrick[] = []
+  const usedIds = new Set<string>()
+  const repairedCounts = new Map<string, number>()
+
+  for (const brick of plan.bricks) {
+    const definition = brickById.get(brick.brickId)
+    if (!definition || !definition.colors.includes(brick.color)) continue
+    const currentCount = repairedCounts.get(brick.brickId) ?? 0
+    if (Number.isFinite(definition.inventory) && currentCount >= definition.inventory) continue
+
+    const nextBrick = cloneBrickWithUniqueId(brick, usedIds)
+    const placedBrick = tryPlaceBrick(nextBrick, placed)
+    if (!placedBrick) continue
+
+    placed.push(placedBrick)
+    repairedCounts.set(brick.brickId, currentCount + 1)
+  }
+
+  return {
+    ...plan,
+    bricks: placed,
+    steps: createSingleBrickSteps(placed),
+  }
+}
+
+export const moveBrick = (brick: PlacedBrick, delta: Partial<BrickPose>): PlacedBrick => ({
+  ...brick,
+  pose: {
+    ...brick.pose,
+    ...delta,
+    xStud: normalizeHorizontalStud(delta.xStud ?? brick.pose.xStud),
+    yStud: normalizeYStud(delta.yStud ?? brick.pose.yStud),
+    zStud: normalizeHorizontalStud(delta.zStud ?? brick.pose.zStud),
+    rotationQuarterTurns: normalizeQuarterTurns(
+      delta.rotationQuarterTurns ?? brick.pose.rotationQuarterTurns,
+    ),
+    verticalQuarterTurns: normalizeVerticalQuarterTurns(
+      delta.verticalQuarterTurns ?? brick.pose.verticalQuarterTurns ?? 0,
+    ),
+  },
+})
+
+export type BuildPlanIssue =
+  | {
+      type: 'unknown-brick'
+      brickId: string
+    }
+  | {
+      type: 'invalid-color'
+      brickId: string
+      color: BrickColor
+    }
+  | {
+      type: 'inventory-exceeded'
+      brickId: string
+      count: number
+      inventory: number
+    }
+  | {
+      type: 'invalid-pose'
+      brickId: string
+    }
+  | {
+      type: 'duplicate-id'
+      brickId: string
+    }
+  | {
+      type: 'missing-step-brick'
+      brickId: string
+    }
+  | {
+      type: 'unassigned-step-brick'
+      brickId: string
+    }
+  | {
+      type: 'disconnected-island'
+      brickId: string
+      componentIndex: number
+      componentCount: number
+    }
+  | {
+      type: 'collision'
+      brickIds: [string, string]
+    }
+  | {
+      type: 'unsupported'
+      brickId: string
+    }
+
+export const isBuildPlanIssueBlocking = (issue: BuildPlanIssue) =>
+  issue.type !== 'disconnected-island'
+
+export const getBlockingBuildPlanIssues = (issues: BuildPlanIssue[]) =>
+  issues.filter(isBuildPlanIssueBlocking)
+
+const areBricksConnected = areBricksAttached
+
+export const getConnectedBrickComponents = (bricks: PlacedBrick[]) => {
+  const remaining = new Map(bricks.map((brick) => [brick.id, brick]))
+  const components: PlacedBrick[][] = []
+
+  for (const root of bricks) {
+    if (!remaining.has(root.id)) continue
+
+    remaining.delete(root.id)
+    const component: PlacedBrick[] = []
+    const queue = [root]
+
+    while (queue.length > 0) {
+      const current = queue.shift()
+      if (!current) break
+
+      component.push(current)
+
+      for (const candidate of Array.from(remaining.values())) {
+        if (!areBricksConnected(current, candidate)) continue
+        remaining.delete(candidate.id)
+        queue.push(candidate)
+      }
+    }
+
+    components.push(component)
+  }
+
+  return components
+}
+
+export const validateBuildPlan = (plan: BuildPlan): BuildPlanIssue[] => {
+  const issues: BuildPlanIssue[] = []
+  const seenBrickIds = new Set<string>()
+  const brickCounts = countBricks(plan)
+
+  for (const brick of plan.bricks) {
+    if (seenBrickIds.has(brick.id)) {
+      issues.push({ type: 'duplicate-id', brickId: brick.id })
+    }
+    seenBrickIds.add(brick.id)
+
+    const definition = brickById.get(brick.brickId)
+    if (!definition) {
+      issues.push({ type: 'unknown-brick', brickId: brick.id })
+    } else if (!definition.colors.includes(brick.color)) {
+      issues.push({ type: 'invalid-color', brickId: brick.id, color: brick.color })
+    }
+
+    const hasInvalidPose =
+      !Number.isFinite(brick.pose.xStud) ||
+      !Number.isFinite(brick.pose.yStud) ||
+      !Number.isFinite(brick.pose.zStud) ||
+      !isHorizontalStudOnGrid(brick.pose.xStud) ||
+      !isHorizontalStudOnGrid(brick.pose.zStud) ||
+      !isYStudOnGrid(brick.pose.yStud) ||
+      brick.pose.yStud < 0 ||
+      ![0, 1, 2, 3].includes(brick.pose.rotationQuarterTurns) ||
+      ![0, 1, 2, 3].includes(brick.pose.verticalQuarterTurns ?? 0)
+    if (hasInvalidPose) {
+      issues.push({ type: 'invalid-pose', brickId: brick.id })
+    }
+  }
+
+  for (const [brickId, count] of Object.entries(brickCounts)) {
+    const definition = brickById.get(brickId)
+    if (definition && Number.isFinite(definition.inventory) && count > definition.inventory) {
+      issues.push({ type: 'inventory-exceeded', brickId, count, inventory: definition.inventory })
+    }
+  }
+
+  const brickIds = new Set(plan.bricks.map((brick) => brick.id))
+  const assignedBrickIds = new Set<string>()
+  for (const step of plan.steps) {
+    for (const brickId of step.brickIds) {
+      if (!brickIds.has(brickId)) {
+        issues.push({ type: 'missing-step-brick', brickId })
+      } else {
+        assignedBrickIds.add(brickId)
+      }
+    }
+  }
+  for (const brickId of brickIds) {
+    if (!assignedBrickIds.has(brickId)) {
+      issues.push({ type: 'unassigned-step-brick', brickId })
+    }
+  }
+
+  const collisionIndex = createBrickCollisionIndex(plan.bricks)
+  const checkedCollisionPairs = new Set<string>()
+  for (const source of plan.bricks) {
+    for (const targetId of getStructuralCollisionCandidateIds(source, collisionIndex)) {
+      const pairKey = [source.id, targetId].sort().join(':')
+      if (checkedCollisionPairs.has(pairKey)) continue
+      checkedCollisionPairs.add(pairKey)
+
+      const target = collisionIndex.bricksById.get(targetId)
+      if (
+        target &&
+        doBrickStructuralCellsCollide(source, target) &&
+        !hasConnectorConnection(source, target) &&
+        !hasIndirectMechanicalConnectorClearance(source, target, plan.bricks)
+      ) {
+        issues.push({ type: 'collision', brickIds: [source.id, target.id] })
+      }
+    }
+  }
+
+  for (const brick of plan.bricks) {
+    if (!isBrickSupported(brick, plan.bricks, collisionIndex)) {
+      issues.push({ type: 'unsupported', brickId: brick.id })
+    }
+  }
+
+  const connectedComponents = getConnectedBrickComponents(plan.bricks)
+  if (connectedComponents.length > 1) {
+    connectedComponents.slice(1).forEach((component, componentOffset) => {
+      for (const brick of component) {
+        issues.push({
+          type: 'disconnected-island',
+          brickId: brick.id,
+          componentIndex: componentOffset + 2,
+          componentCount: connectedComponents.length,
+        })
+      }
+    })
+  }
+
+  return issues
+}
+
+type SummaryLocale = 'zh-CN' | 'en-US'
+
+const issueSummaryLabels: Record<SummaryLocale, {
+  unknownBrick: string
+  invalidColor: string
+  inventoryExceeded: string
+  invalidPose: string
+  duplicateId: string
+  missingStepBrick: string
+  unassignedStepBrick: string
+  independentStructure: string
+  collision: string
+  unsupported: string
+  ok: string
+  separator: string
+}> = {
+  'zh-CN': {
+    unknownBrick: '{count} 个未知零件',
+    invalidColor: '{count} 个颜色不在库存中',
+    inventoryExceeded: '{count} 类零件超过库存',
+    invalidPose: '{count} 个坐标或旋转非法',
+    duplicateId: '{count} 个重复实例 id',
+    missingStepBrick: '{count} 个步骤引用不存在的零件',
+    unassignedStepBrick: '{count} 个零件未分配到步骤',
+    independentStructure: '{count} 个独立结构',
+    collision: '{count} 处砖块重叠',
+    unsupported: '{count} 个砖块悬空',
+    ok: '未发现结构问题',
+    separator: '，',
+  },
+  'en-US': {
+    unknownBrick: '{count} unknown parts',
+    invalidColor: '{count} parts use unavailable colors',
+    inventoryExceeded: '{count} part types exceed inventory',
+    invalidPose: '{count} invalid coordinates or rotations',
+    duplicateId: '{count} duplicate instance ids',
+    missingStepBrick: '{count} steps reference missing parts',
+    unassignedStepBrick: '{count} parts are not assigned to steps',
+    independentStructure: '{count} independent structures',
+    collision: '{count} brick overlaps',
+    unsupported: '{count} floating bricks',
+    ok: 'No structure issues found',
+    separator: ', ',
+  },
+}
+
+const formatIssueCount = (template: string, count: number) =>
+  template.replace('{count}', String(count))
+
+export const summarizeBuildPlanIssues = (issues: BuildPlanIssue[], locale: SummaryLocale = 'zh-CN') => {
+  const labels = issueSummaryLabels[locale]
+  const unknownCount = issues.filter((issue) => issue.type === 'unknown-brick').length
+  const invalidColorCount = issues.filter((issue) => issue.type === 'invalid-color').length
+  const inventoryExceededCount = issues.filter((issue) => issue.type === 'inventory-exceeded').length
+  const invalidPoseCount = issues.filter((issue) => issue.type === 'invalid-pose').length
+  const duplicateIdCount = issues.filter((issue) => issue.type === 'duplicate-id').length
+  const missingStepBrickCount = issues.filter((issue) => issue.type === 'missing-step-brick').length
+  const unassignedStepBrickCount = issues.filter((issue) => issue.type === 'unassigned-step-brick').length
+  const disconnectedIssues = issues.filter((issue) => issue.type === 'disconnected-island')
+  const independentStructureCount = Math.max(1, ...disconnectedIssues.map((issue) => issue.componentCount))
+  const collisionCount = issues.filter((issue) => issue.type === 'collision').length
+  const unsupportedCount = issues.filter((issue) => issue.type === 'unsupported').length
+  const parts = [
+    unknownCount ? formatIssueCount(labels.unknownBrick, unknownCount) : '',
+    invalidColorCount ? formatIssueCount(labels.invalidColor, invalidColorCount) : '',
+    inventoryExceededCount ? formatIssueCount(labels.inventoryExceeded, inventoryExceededCount) : '',
+    invalidPoseCount ? formatIssueCount(labels.invalidPose, invalidPoseCount) : '',
+    duplicateIdCount ? formatIssueCount(labels.duplicateId, duplicateIdCount) : '',
+    missingStepBrickCount ? formatIssueCount(labels.missingStepBrick, missingStepBrickCount) : '',
+    unassignedStepBrickCount ? formatIssueCount(labels.unassignedStepBrick, unassignedStepBrickCount) : '',
+    independentStructureCount > 1 ? formatIssueCount(labels.independentStructure, independentStructureCount) : '',
+    collisionCount ? formatIssueCount(labels.collision, collisionCount) : '',
+    unsupportedCount ? formatIssueCount(labels.unsupported, unsupportedCount) : '',
+  ].filter(Boolean)
+
+  return parts.length > 0 ? parts.join(labels.separator) : labels.ok
+}
