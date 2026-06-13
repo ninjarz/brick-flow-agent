@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useDeferredValue, useMemo, useState } from 'react'
 import { BookOpen, Box, Download, ImageUp, Plus, Sparkles, Trash2, Upload } from 'lucide-react'
 import { brickDefinitions } from '../data/basicBricks'
 import { PLATE_HEIGHT_WORLD } from '../lib/brickUnits'
@@ -65,7 +65,8 @@ export const ControlPanel = ({
   const [partQuery, setPartQuery] = useState('')
   const [partKindFilter, setPartKindFilter] = useState('all')
   const [partPackFilter, setPartPackFilter] = useState<BrickPack>('lego')
-  const planIssues = useMemo(() => validateBuildPlan(plan), [plan])
+  const deferredValidationPlan = useDeferredValue(plan)
+  const planIssues = useMemo(() => validateBuildPlan(deferredValidationPlan), [deferredValidationPlan])
   const blockingPlanIssues = useMemo(() => getBlockingBuildPlanIssues(planIssues), [planIssues])
   const planIssueSummary = useMemo(() => summarizeBuildPlanIssues(planIssues, locale), [locale, planIssues])
   const brickCounts = useMemo(() => countBricks(plan), [plan])

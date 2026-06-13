@@ -11,8 +11,8 @@ import { loadLlmConfig, saveLlmConfig } from './lib/llmConfig'
 import { defaultFinishedAssets, isDefaultFinishedAsset, loadFinishedAssets, saveFinishedAssets } from './lib/finishedAssets'
 import { formatBuildManualHtml, formatBuildManualMarkdown, serializeBuildManual } from './lib/manualSerializer'
 import { isValidImportedPose, normalizeImportedPose, tryNormalizeImportedPlan } from './lib/planImport'
-import { countBricks, createBrickCollisionIndex, duplicateBrick, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickPlacementDiagnostics, getBrickRawOverlapScore, getConnectedBrickComponents, hasBrickCollision, makeBrick, repairBuildPlan, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
-import { footprintToWorld, getBrickWorldFrame, normalizeHorizontalStud, normalizeQuarterTurns, normalizeVerticalQuarterTurns, normalizeYStud } from './lib/brickUnits'
+import { countBricks, createBrickCollisionIndex, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickBounds, getBrickPlacementDiagnostics, getBrickRawOverlapScore, getConnectedBrickComponents, getNearestHorizontalSearchOffsets, hasBrickCollision, isBrickAboveGround, makeBrick, repairBuildPlan, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
+import { WORLD_SNAP_STEP_STUDS, footprintToWorld, getBrickWorldFrame, normalizeHorizontalStud, normalizeQuarterTurns, normalizeVerticalQuarterTurns, normalizeYStud } from './lib/brickUnits'
 import { useI18n } from './lib/i18n'
 import type { BuildPlan, FinishedAsset, LlmConfig, PlacedBrick } from './types/bricks'
 import './App.css'
@@ -41,6 +41,9 @@ const defaultImportText: ImportText = {
   importedPlanTitle: '导入的手册方案',
   importedStepTitle: (stepNumber) => `第 ${stepNumber} 步`,
 }
+
+const ROTATION_REPOSITION_SEARCH_RADIUS_STUDS = 5
+const ROTATION_REPOSITION_BOUNDS_TOLERANCE = 0.000001
 
 const localizeFinishedAsset = (
   asset: FinishedAsset,
@@ -177,6 +180,54 @@ const parseImportedPlan = (value: unknown, text: ImportText = defaultImportText)
     if (nestedPlan) return nestedPlan
   }
   return buildPlanFromManualJson(value, text)
+}
+
+const liftBrickGroupAboveGround = (bricks: PlacedBrick[]) => {
+  const minY = bricks.reduce((lowest, brick) => {
+    const bounds = getBrickBounds(brick)
+    return bounds ? Math.min(lowest, bounds.minY) : lowest
+  }, Infinity)
+  if (!Number.isFinite(minY) || minY >= -ROTATION_REPOSITION_BOUNDS_TOLERANCE) return bricks
+
+  const liftSteps = Math.ceil(Math.max(0, -minY) / WORLD_SNAP_STEP_STUDS)
+  const liftStuds = liftSteps * WORLD_SNAP_STEP_STUDS
+  return bricks.map((brick) => ({
+    ...brick,
+    pose: {
+      ...brick.pose,
+      yStud: normalizeYStud(brick.pose.yStud + liftStuds),
+    },
+  }))
+}
+
+const findNearestOpenBrickGroupAround = (
+  rotatedBricks: PlacedBrick[],
+  allBricks: PlacedBrick[],
+  selectedIds: Set<string>,
+) => {
+  const stationaryBricks = allBricks.filter((brick) => !selectedIds.has(brick.id))
+  const stationaryCollisionIndex = createBrickCollisionIndex(stationaryBricks)
+
+  for (const offset of getNearestHorizontalSearchOffsets(ROTATION_REPOSITION_SEARCH_RADIUS_STUDS)) {
+    const candidateBricks = liftBrickGroupAboveGround(rotatedBricks.map((brick) => ({
+      ...brick,
+      pose: {
+        ...brick.pose,
+        xStud: normalizeHorizontalStud(brick.pose.xStud + offset.xStud),
+        zStud: normalizeHorizontalStud(brick.pose.zStud + offset.zStud),
+      },
+    })))
+
+    if (candidateBricks.some((brick) => !isBrickAboveGround(brick))) continue
+    if (candidateBricks.some((brick) => hasBrickCollision(brick, stationaryBricks, stationaryCollisionIndex))) continue
+
+    const groupCollisionIndex = createBrickCollisionIndex(candidateBricks)
+    if (candidateBricks.some((brick) => hasBrickCollision(brick, candidateBricks, groupCollisionIndex))) continue
+
+    return candidateBricks
+  }
+
+  return undefined
 }
 
 const workspaceDraftStorageKey = 'brick-flow-agent:workspace-draft:v1'
@@ -683,6 +734,18 @@ function App() {
     bricks: PlacedBrick[],
     context?: Record<string, unknown>,
   ) => {
+    if (!isBrickAboveGround(nextBrick)) {
+      if (import.meta.env.DEV) {
+        console.warn('brick-flow-agent blocked below-ground move', {
+          context,
+          current: currentBrick,
+          attempted: nextBrick,
+          attemptedDiagnostics: getBrickPlacementDiagnostics(nextBrick, bricks),
+        })
+      }
+      return false
+    }
+
     const collisionIndex = createBrickCollisionIndex(bricks)
     if (!hasBrickCollision(nextBrick, bricks, collisionIndex)) return true
 
@@ -714,6 +777,18 @@ function App() {
 
     const nextBrickById = new Map(nextBricks.map((brick) => [brick.id, brick]))
     const nextPlanBricks = bricks.map((brick) => nextBrickById.get(brick.id) ?? brick)
+    const belowGroundBricks = nextBricks.filter((brick) => !isBrickAboveGround(brick))
+    if (belowGroundBricks.length > 0) {
+      if (import.meta.env.DEV) {
+        console.warn('brick-flow-agent blocked below-ground group move', {
+          context,
+          attempted: nextBricks,
+          belowGroundBricks,
+        })
+      }
+      return false
+    }
+
     const collisionIndex = createBrickCollisionIndex(nextPlanBricks)
     const hasCollision = nextBricks.some((brick) => hasBrickCollision(brick, nextPlanBricks, collisionIndex))
     if (!hasCollision) return true
@@ -892,7 +967,7 @@ function App() {
           (placedBrick = findSupportedOpenPose(
             isAutoSnapEnabled ? snapBrickToPlan(nextBrick, current.bricks) : nextBrick,
             current.bricks,
-            { allowGroundFallback: true },
+            { allowGroundFallback: true, preferGroundFallback: true },
           )),
         ],
       }
@@ -992,8 +1067,11 @@ function App() {
         const nextBricks = axis === 'horizontal'
           ? rotateBrickGroupHorizontally(selectedBricks, selected, deltaQuarterTurns)
           : rotateBrickGroupVertically(selectedBricks, selected, deltaQuarterTurns)
-        if (!canAcceptBrickGroupPose(nextBricks, current.bricks, { action: 'rotateSelectedGroup', axis, deltaQuarterTurns })) return current
-        const nextBrickById = new Map(nextBricks.map((brick) => [brick.id, brick]))
+        const acceptedBricks = canAcceptBrickGroupPose(nextBricks, current.bricks, { action: 'rotateSelectedGroup', axis, deltaQuarterTurns })
+          ? nextBricks
+          : findNearestOpenBrickGroupAround(nextBricks, current.bricks, selectionIdSet)
+        if (!acceptedBricks) return current
+        const nextBrickById = new Map(acceptedBricks.map((brick) => [brick.id, brick]))
 
         return {
           ...current,
@@ -1021,11 +1099,14 @@ function App() {
       const nextBrick = isAutoSnapEnabled
         ? snapBrickToPlan(rotatedBrick, current.bricks, { previousBrick: selected })
         : rotatedBrick
-      if (!canAcceptBrickPose(selected, nextBrick, current.bricks, { action: 'rotateSelected', axis, deltaQuarterTurns })) return current
+      const acceptedBrick = canAcceptBrickPose(selected, nextBrick, current.bricks, { action: 'rotateSelected', axis, deltaQuarterTurns })
+        ? nextBrick
+        : findNearestOpenPoseAround(nextBrick, current.bricks, { radiusStuds: ROTATION_REPOSITION_SEARCH_RADIUS_STUDS })
+      if (!acceptedBrick) return current
 
       return {
         ...current,
-        bricks: current.bricks.map((brick) => (brick.id === selected.id ? nextBrick : brick)),
+        bricks: current.bricks.map((brick) => (brick.id === selected.id ? acceptedBrick : brick)),
       }
     })
   }

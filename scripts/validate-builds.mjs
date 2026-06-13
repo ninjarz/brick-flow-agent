@@ -34,10 +34,11 @@ await writeFile(entry, `
   import { getBrickConnectors } from ${JSON.stringify(`${workspace}/src/lib/brickUnits.ts`)};
   import { serializeBuildManual } from ${JSON.stringify(`${workspace}/src/lib/manualSerializer.ts`)};
   import { normalizeImportedPlan, normalizeImportedPose, tryNormalizeImportedPlan } from ${JSON.stringify(`${workspace}/src/lib/planImport.ts`)};
-  import { getBlockingBuildPlanIssues, hasBrickCollision, isBrickSupported, summarizeBuildPlanIssues, validateBuildPlan } from ${JSON.stringify(`${workspace}/src/lib/planUtils.ts`)};
+  import { findNearestOpenPoseAround, findOpenPose, getBlockingBuildPlanIssues, hasBrickCollision, isBrickAboveGround, isBrickSupported, summarizeBuildPlanIssues, validateBuildPlan } from ${JSON.stringify(`${workspace}/src/lib/planUtils.ts`)};
   import { createLDrawStudConnector, ldrawPointToBrickLocal } from ${JSON.stringify(`${workspace}/src/lib/ldrawConnectors.ts`)};
   import { parseLDrawColorDefinitions } from ${JSON.stringify(`${workspace}/src/lib/ldrawColors.ts`)};
   import { loadLDrawGeneratedVisual } from ${JSON.stringify(`${workspace}/src/lib/ldrawGeneratedVisualLoader.ts`)};
+  import { getBrickLocalBounds, getBrickWorldBounds } from ${JSON.stringify(`${workspace}/src/lib/ldrawBounds.ts`)};
   import { getBrickStructuralCells } from ${JSON.stringify(`${workspace}/src/lib/structuralGrid.ts`)};
   import {
     createCurvedSlope1x2Geometry,
@@ -324,6 +325,20 @@ await writeFile(entry, `
   const seatedEyeTile98138 = makePlacedBrick('eye-tile-seated', 'tile-eye-1x1', 1.2, 'white');
   const highStacked3005 = makePlacedBrick('stacked-3005-high', 'brick-1x1', 1.4);
   const seatedStacked3005 = makePlacedBrick('stacked-3005-seated', 'brick-1x1', 1.2);
+  const flippedGround3005 = {
+    ...makePlacedBrick('flipped-ground-3005', 'brick-1x1', 0),
+    pose: { xStud: 0, yStud: 0, zStud: 0, rotationQuarterTurns: 0, verticalQuarterTurns: 2 },
+  };
+  const liftedFlippedGround3005 = findOpenPose(flippedGround3005, []);
+  const blockedRotation3005 = {
+    ...makePlacedBrick('blocked-rotation-3005', 'brick-1x1', 0),
+    pose: { xStud: 0, yStud: 0, zStud: 0, rotationQuarterTurns: 1, verticalQuarterTurns: 0 },
+  };
+  const blockingRotation3005 = {
+    ...makePlacedBrick('blocking-rotation-3005', 'brick-1x1', 0),
+    pose: { xStud: 0, yStud: 0, zStud: 0, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
+  };
+  const relocatedRotation3005 = findNearestOpenPoseAround(blockedRotation3005, [blockingRotation3005], { radiusStuds: 1 });
   const minecraftBlockDefinition = getDefinition('minecraft-basic-block');
   const minecraftBlockConnectors = minecraftBlockDefinition.connectors.filter((connector) => connector.kind === 'studsocket');
   const minecraftBlockStructuralCells = getBrickStructuralCells(minecraftBlockDefinition);
@@ -419,7 +434,7 @@ await writeFile(entry, `
         id: 'pin-propeller-blade',
         brickId: 'propeller-4-blade-open',
         color: 'black',
-        pose: { xStud: -1.5, yStud: 0.9, zStud: -0.4, rotationQuarterTurns: 0, verticalQuarterTurns: 1 },
+        pose: { xStud: -1.5, yStud: 0.9, zStud: -1.4, rotationQuarterTurns: 0, verticalQuarterTurns: 1 },
       },
     ],
     steps: [
@@ -444,6 +459,13 @@ await writeFile(entry, `
     getDefinition('propeller-4-blade-closed'),
     { xStud: 0, yStud: 0, zStud: 0, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
   ).find((connector) => connector.kind === 'pin');
+  const openPropellerDefinition = getDefinition('propeller-4-blade-open');
+  const closedPropellerDefinition = getDefinition('propeller-4-blade-closed');
+  const openPropellerLocalBounds = getBrickLocalBounds(openPropellerDefinition);
+  const closedPropellerFlippedBounds = getBrickWorldBounds(
+    closedPropellerDefinition,
+    { xStud: 0, yStud: 0, zStud: 0, rotationQuarterTurns: 0, verticalQuarterTurns: 2 },
+  );
 
   const regressionFailures = [
     !headlightConnector ? 'Headlight side stud connector is missing' : '',
@@ -484,6 +506,12 @@ await writeFile(entry, `
       : '',
     !closedHubConnector
       ? '67737 closed hub propeller should expose a pin connector'
+      : '',
+    openPropellerDefinition.footprint.heightStuds < openPropellerLocalBounds.maxY - 0.000001
+      ? '2479 propeller footprint height must cover its LDraw hub and blade geometry'
+      : '',
+    closedPropellerFlippedBounds.minY < -0.000001
+      ? '67737 vertical 180-degree rotation at ground level must not render below ground'
       : '',
     pinHolderConnector && propellerHubConnector && distance(pinHolderConnector, propellerHubConnector) > 0.000001
       ? 'Pin/propeller regression connectors are outside mechanical tolerance'
@@ -702,6 +730,37 @@ await writeFile(entry, `
       : '',
     !isBrickSupported(seatedStacked3005, [support3005, seatedStacked3005])
       ? '3005 should be supported once seated at the real stud/tube connection height'
+      : '',
+    isBrickAboveGround(flippedGround3005)
+      ? '3005 flipped at ground level must be below-ground because the top stud rotates below y=0'
+      : '',
+    isBrickSupported(flippedGround3005, [flippedGround3005])
+      ? '3005 flipped below ground must not count as supported'
+      : '',
+    !isBrickAboveGround(liftedFlippedGround3005)
+      ? 'findOpenPose must lift flipped 3005 above ground'
+      : '',
+    !validateBuildPlan({
+      id: 'flipped-ground-3005-regression',
+      title: 'Flipped 3005 Regression',
+      prompt: '',
+      source: 'template-local',
+      bricks: [flippedGround3005],
+      steps: [],
+    }).some((issue) => issue.type === 'invalid-pose' && issue.brickId === flippedGround3005.id)
+      ? '3005 flipped at ground level must be rejected as an invalid pose'
+      : '',
+    !relocatedRotation3005
+      ? 'Rotation fallback search should find a nearby open 3005 position'
+      : '',
+    relocatedRotation3005 && hasBrickCollision(relocatedRotation3005, [blockingRotation3005])
+      ? 'Rotation fallback search must return a collision-free 3005 position'
+      : '',
+    relocatedRotation3005 && Math.hypot(
+      relocatedRotation3005.pose.xStud - blockedRotation3005.pose.xStud,
+      relocatedRotation3005.pose.zStud - blockedRotation3005.pose.zStud,
+    ) > 1.000001
+      ? 'Rotation fallback search must respect the configured local radius'
       : '',
     duplicateDefaultAssetIds.length > 0
       ? 'Default finished assets contain duplicate ids: ' + duplicateDefaultAssetIds.join(', ')

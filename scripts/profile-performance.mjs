@@ -94,7 +94,7 @@ await writeFile(entry, `
   measure('manual add 6091 fast search on largest finished asset x20', () => {
     for (let index = 0; index < 20; index += 1) {
       const brick = makeBrick('curved-slope-1x2', 'white', 0, 0, 0);
-      findSupportedOpenPose(snapBrickToPlan(brick, largestAsset.plan.bricks), largestAsset.plan.bricks, { allowGroundFallback: true });
+      findSupportedOpenPose(snapBrickToPlan(brick, largestAsset.plan.bricks), largestAsset.plan.bricks, { allowGroundFallback: true, preferGroundFallback: true });
     }
   });
   measure('single moved-brick collision checks on largest asset x200', () => {

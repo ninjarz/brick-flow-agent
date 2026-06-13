@@ -1,7 +1,7 @@
 import { Edges, OrbitControls, Text } from '@react-three/drei'
 import { Canvas, useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
-import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { BufferGeometry, DoubleSide, Float32BufferAttribute, Object3D, Vector3, type DirectionalLight, type InstancedMesh } from 'three'
 import { brickById, colorHex, colorOpacity } from '../data/basicBricks'
 import { createRound2x2AxleBodyGeometry, createRound2x2AxleGrilleBodyGeometry } from '../lib/csgBrickGeometry'
@@ -1262,15 +1262,16 @@ export const BrickScene = ({
       modelCenterZ: (modelMinZ + modelMaxZ) / 2,
     }
   }, [bricks, ldrawBoundsVersion])
+  const deferredSupportBricks = useDeferredValue(bricks)
   const supportedByBrickId = useMemo(() => {
     void ldrawBoundsVersion
 
-    const collisionIndex = createBrickCollisionIndex(bricks)
-    return new Map(bricks.map((brick) => [
+    const collisionIndex = createBrickCollisionIndex(deferredSupportBricks)
+    return new Map(deferredSupportBricks.map((brick) => [
       brick.id,
-      isBrickSupported(brick, bricks, collisionIndex),
+      isBrickSupported(brick, deferredSupportBricks, collisionIndex),
     ]))
-  }, [bricks, ldrawBoundsVersion])
+  }, [deferredSupportBricks, ldrawBoundsVersion])
 
   if (orbitTargetKeyRef.current !== boundsCameraFrameKey) {
     orbitTargetKeyRef.current = boundsCameraFrameKey
