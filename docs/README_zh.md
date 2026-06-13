@@ -2,7 +2,7 @@
 
 > 一个运行在浏览器里的砖块类搭建工作台，结合零件包、LDraw 几何、结构体素和可选的 LLM 生成能力
 
-[English README](../README.md)
+[English README](../README.md) | 中文文档
 
 积流工坊（brick-flow-agent）可以把提示词、导入方案和手动编辑的布局变成可交互的 3D 搭建工作区。项目的目标是把不同砖块类体系放进同一个编辑器：当前以 LEGO-compatible LDraw 零件为主，下一步扩展 Minecraft 风格体素方块，之后可以继续接入更多零件包
 
