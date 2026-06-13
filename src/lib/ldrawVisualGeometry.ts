@@ -1,6 +1,5 @@
 import { BufferGeometry, Float32BufferAttribute } from 'three'
 import type { BrickFootprint } from '../types/bricks'
-import { PLATE_HEIGHT_WORLD } from './brickUnits'
 import {
   getLoadedLDrawGeneratedVisualTriangles,
   loadLDrawGeneratedVisualTriangles,
@@ -11,7 +10,7 @@ import type { MeshTriangle } from './structuralVoxelizer'
 const geometryCache = new Map<string, BufferGeometry>()
 
 const makeCacheKey = (partNumber: string, footprint: BrickFootprint) =>
-  `${normalizeLDrawPartNumber(partNumber)}:${footprint.widthStuds}x${footprint.depthStuds}x${footprint.heightPlates}`
+  `${normalizeLDrawPartNumber(partNumber)}:${footprint.widthStuds}x${footprint.depthStuds}x${footprint.heightStuds}`
 
 const createGeometryFromTriangles = (
   cacheKey: string,
@@ -19,7 +18,7 @@ const createGeometryFromTriangles = (
   triangles: MeshTriangle[],
 ) => {
   const width = footprint.widthStuds
-  const height = footprint.heightPlates * PLATE_HEIGHT_WORLD
+  const height = footprint.heightStuds
   const depth = footprint.depthStuds
   const vertices = new Float32Array(triangles.flatMap((triangle) =>
     triangle.flatMap((point) => [

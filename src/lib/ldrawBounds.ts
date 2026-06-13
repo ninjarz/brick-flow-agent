@@ -1,7 +1,7 @@
 import type { BrickDefinition, BrickPose } from '../types/bricks'
 import { getLoadedLDrawGeneratedVisualTriangles } from './ldrawGeneratedVisualLoader'
 import { normalizeLDrawPartNumber } from './ldrawPartNumbers'
-import { PLATE_HEIGHT_WORLD, transformBrickLocalPoint } from './brickUnits'
+import { transformBrickLocalPoint } from './brickUnits'
 import type { MeshTriangle } from './structuralVoxelizer'
 
 export type BrickBounds = {
@@ -54,7 +54,7 @@ const getFootprintLocalBounds = (definition: BrickDefinition): BrickBounds => ({
   minX: 0,
   maxX: definition.footprint.widthStuds,
   minY: 0,
-  maxY: definition.footprint.heightPlates * PLATE_HEIGHT_WORLD,
+  maxY: definition.footprint.heightStuds,
   minZ: 0,
   maxZ: definition.footprint.depthStuds,
 })

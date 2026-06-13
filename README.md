@@ -82,6 +82,23 @@ Open **Config** in the app and set:
 - Request mode: browser direct or local proxy
 - Thinking mode: optional, off by default for faster and more predictable generation
 
+## ⌨️ Keyboard Controls
+
+Keyboard controls are ignored while typing in text fields. Brick movement works after a brick is selected, moves in `1/5` stud steps, and repeats while the key is held.
+
+| Key | Action |
+| --- | --- |
+| `W` / `A` / `S` / `D` | Move the selected brick relative to the current camera view |
+| `R` / `F` | Move the selected brick up or down |
+| `Q` | Rotate the selected brick horizontally |
+| `E` | Rotate the selected brick vertically |
+| `Backspace` | Delete the selected brick |
+| `Ctrl`/`Cmd` + `Z` | Undo |
+| `Ctrl`/`Cmd` + `Shift` + `Z` or `Ctrl`/`Cmd` + `Y` | Redo |
+| `Esc` | Close the open config, prompt preview, asset library, or build manual dialog |
+| `←` / `→` | Move to the previous or next build-manual step while the build manual is open |
+| `Enter` / `Space` | Select a focused build-manual step card |
+
 ## 🧩 Working With Parts
 
 New or corrected parts should be backed by real references:

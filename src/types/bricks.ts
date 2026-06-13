@@ -61,7 +61,7 @@ export type BrickConnector = {
 export type BrickFootprint = {
   widthStuds: number
   depthStuds: number
-  heightPlates: number
+  heightStuds: number
 }
 
 export type BrickDefinition = {

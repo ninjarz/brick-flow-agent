@@ -23,7 +23,6 @@ import type { BrickFootprint, BrickKind } from '../types/bricks'
 import { brickById } from '../data/basicBricks'
 import { createRound2x2AxleBodyGeometry, createRound2x2AxleGrilleBodyGeometry } from '../lib/csgBrickGeometry'
 import { createLoadedLDrawPartGeometry, loadLDrawPartGeometry } from '../lib/ldrawVisualGeometry'
-import { PLATE_HEIGHT_WORLD } from '../lib/brickUnits'
 import {
   createCheeseSlopeGeometry,
   createCurvedSlope1x2Geometry,
@@ -61,7 +60,7 @@ const getCacheKey = (
   brickId?: string,
   ldrawLoaded = false,
 ) =>
-  `${brickId ?? kind}:${kind}:${footprint.widthStuds}x${footprint.depthStuds}x${footprint.heightPlates}:${ldrawLoaded ? 'ldraw' : 'fallback'}`
+  `${brickId ?? kind}:${kind}:${footprint.widthStuds}x${footprint.depthStuds}x${footprint.heightStuds}:${ldrawLoaded ? 'ldraw' : 'fallback'}`
 
 const getRenderer = () => {
   if (!sharedRenderer) {
@@ -110,7 +109,7 @@ const getCameraZoom = (kind: BrickKind, footprint: BrickFootprint, brickId?: str
   const height =
     kind === 'wheel'
       ? 1.2
-      : footprint.heightPlates * PLATE_HEIGHT_WORLD + (kind === 'tile' || kind === 'block' ? 0 : studHeight) + (kind === 'slope' ? 0.1 : 0)
+      : footprint.heightStuds + (kind === 'tile' || kind === 'block' ? 0 : studHeight) + (kind === 'slope' ? 0.1 : 0)
   const projected = getProjectedSize(width, height, depth)
   const usableWidth = viewWidthPx - viewPaddingPx * 2
   const usableHeight = viewHeightPx - viewPaddingPx * 2
@@ -242,7 +241,7 @@ const localBrickPosition = (
 const buildPreviewGroup = (kind: BrickKind, footprint: BrickFootprint, brickId?: string) => {
   const width = footprint.widthStuds
   const depth = footprint.depthStuds
-  const height = footprint.heightPlates * PLATE_HEIGHT_WORLD
+  const height = footprint.heightStuds
   const group = new Group()
   group.rotation.y = modelRotationY
 

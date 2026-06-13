@@ -1,6 +1,6 @@
 import type { BrickColor, BrickConnector, BrickDefinition } from '../types/bricks'
 import { getLDrawConnectors } from '../lib/ldrawPartRegistry'
-import { plateHeightToWorldStud } from '../lib/brickUnits'
+import { legoPlateFootprint, plateHeightToWorldStud } from '../lib/brickUnits'
 import { getOfficialPartColors } from './officialPartColors'
 
 const makeStudGrid = (
@@ -159,9 +159,8 @@ const makeStudSocketFaceConnectors = (
   prefix: string,
   widthStuds: number,
   depthStuds: number,
-  heightPlates: number,
+  heightStuds: number,
 ): BrickConnector[] => {
-  const heightStuds = plateHeightToWorldStud(heightPlates)
   const centerXStud = widthStuds / 2 - 0.5
   const centerYStud = heightStuds / 2
   const centerZStud = depthStuds / 2 - 0.5
@@ -232,7 +231,7 @@ const makeBrickDefinition = (
   partNumber,
   name,
   kind: 'brick',
-  footprint: { widthStuds, depthStuds, heightPlates },
+  footprint: legoPlateFootprint(widthStuds, depthStuds, heightPlates),
   connectors: [
     ...makeStudGrid(id, widthStuds, depthStuds, heightPlates),
     ...makeTubeGrid(id, widthStuds, depthStuds, 0),
@@ -258,7 +257,7 @@ const getConnectorGroup = (connectors: BrickConnector[], key: string) =>
 
 const withLDrawConnectors = (definition: BrickDefinitionDraft): BrickDefinitionDraft => {
   const ldrawConnectors = getLDrawConnectors(definition.partNumber, definition.id)
-  const topYStud = plateHeightToWorldStud(definition.footprint.heightPlates)
+  const topYStud = definition.footprint.heightStuds
   const fallbackGroupKeys = new Set(definition.connectors.map(connectorGroupKey))
   const discardedLDrawGroupKeys = new Set<string>()
   const hasLDrawTopStud = ldrawConnectors.some(isTopStudConnector)
@@ -316,7 +315,7 @@ const makePlateDefinition = (
   partNumber,
   name,
   kind: 'plate',
-  footprint: { widthStuds, depthStuds, heightPlates: 1 },
+  footprint: legoPlateFootprint(widthStuds, depthStuds, 1),
   connectors: [
     ...makeStudGrid(id, widthStuds, depthStuds, 1),
     ...makeTubeGrid(id, widthStuds, depthStuds, 0),
@@ -339,7 +338,7 @@ const makeJumperPlateDefinition = (
   partNumber,
   name,
   kind: 'plate',
-  footprint: { widthStuds, depthStuds, heightPlates: 1 },
+  footprint: legoPlateFootprint(widthStuds, depthStuds, 1),
   connectors: [
     makeCenterStud(id, widthStuds, depthStuds, 1),
     ...makeTubeGrid(id, widthStuds, depthStuds, 0),
@@ -361,7 +360,7 @@ const makeTileDefinition = (
   partNumber,
   name,
   kind: 'tile',
-  footprint: { widthStuds, depthStuds, heightPlates: 1 },
+  footprint: legoPlateFootprint(widthStuds, depthStuds, 1),
   connectors: [...makeTubeGrid(id, widthStuds, depthStuds, 0)],
   colors,
   inventory,
@@ -382,7 +381,7 @@ const makeSlopeDefinition = (
   partNumber,
   name,
   kind: 'slope',
-  footprint: { widthStuds, depthStuds, heightPlates },
+  footprint: legoPlateFootprint(widthStuds, depthStuds, heightPlates),
   connectors: [
     ...makeStudRow(id, widthStuds, studRowZ, heightPlates),
     ...makeTubeGrid(id, widthStuds, depthStuds, 0),
@@ -405,7 +404,7 @@ const makeStudlessSlopeDefinition = (
   partNumber,
   name,
   kind: 'slope',
-  footprint: { widthStuds, depthStuds, heightPlates },
+  footprint: legoPlateFootprint(widthStuds, depthStuds, heightPlates),
   connectors: [...makeTubeGrid(id, widthStuds, depthStuds, 0)],
   colors,
   inventory,
@@ -425,7 +424,7 @@ const makeRoundDefinition = (
   partNumber,
   name,
   kind: 'round',
-  footprint: { widthStuds, depthStuds, heightPlates },
+  footprint: legoPlateFootprint(widthStuds, depthStuds, heightPlates),
   connectors: [
     ...makeStudGrid(id, Math.max(1, Math.floor(widthStuds)), Math.max(1, Math.floor(depthStuds)), heightPlates),
     ...makeTubeGrid(id, Math.max(1, Math.floor(widthStuds)), Math.max(1, Math.floor(depthStuds)), 0),
@@ -448,7 +447,7 @@ const makeConeDefinition = (
   partNumber,
   name,
   kind: 'cone',
-  footprint: { widthStuds, depthStuds, heightPlates },
+  footprint: legoPlateFootprint(widthStuds, depthStuds, heightPlates),
   connectors: [
     makeCenterStud(id, widthStuds, depthStuds, heightPlates),
     ...makeTubeGrid(id, Math.max(1, Math.floor(widthStuds)), Math.max(1, Math.floor(depthStuds)), 0),
@@ -471,7 +470,7 @@ const makeConeNoTopStudDefinition = (
   partNumber,
   name,
   kind: 'cone',
-  footprint: { widthStuds, depthStuds, heightPlates },
+  footprint: legoPlateFootprint(widthStuds, depthStuds, heightPlates),
   connectors: [...makeTubeGrid(id, Math.max(1, Math.floor(widthStuds)), Math.max(1, Math.floor(depthStuds)), 0)],
   colors,
   inventory,
@@ -490,7 +489,7 @@ const makeWheelDefinition = (
   partNumber,
   name,
   kind: 'wheel',
-  footprint: { widthStuds, depthStuds, heightPlates: 3 },
+  footprint: legoPlateFootprint(widthStuds, depthStuds, 3),
   connectors: [],
   colors,
   inventory,
@@ -510,7 +509,7 @@ const makePropellerDefinition = (
   partNumber,
   name,
   kind: 'propeller',
-  footprint: { widthStuds: diameterStuds, depthStuds: diameterStuds, heightPlates },
+  footprint: legoPlateFootprint(diameterStuds, diameterStuds, heightPlates),
   connectors: hasPinHole ? [
     makePinConnector(`${id}-hub`, diameterStuds / 2, 0, diameterStuds / 2, 'y', 'female', { x: 0, y: 1, z: 0 }),
   ] : [],
@@ -627,8 +626,8 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     partNumber: 'minecraft-basic-block',
     name: 'Basic Minecraft Block',
     kind: 'block',
-    footprint: { widthStuds: 1, depthStuds: 1, heightPlates: 2.5 },
-    connectors: makeStudSocketFaceConnectors('minecraft-basic-block', 1, 1, 2.5),
+    footprint: { widthStuds: 1, depthStuds: 1, heightStuds: 1 },
+    connectors: makeStudSocketFaceConnectors('minecraft-basic-block', 1, 1, 1),
     colors: minecraftColors,
     inventory: 64,
   },
@@ -637,7 +636,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     partNumber: '3005',
     name: '1x1 Brick',
     kind: 'brick',
-    footprint: { widthStuds: 1, depthStuds: 1, heightPlates: 3 },
+    footprint: legoPlateFootprint(1, 1, 3),
     connectors: [...makeStudGrid('brick-1x1', 1, 1, 3), ...makeTubeGrid('brick-1x1', 1, 1, 0)],
     colors: ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange'],
     inventory: 60,
@@ -647,7 +646,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     partNumber: '3004',
     name: '1x2 Brick',
     kind: 'brick',
-    footprint: { widthStuds: 2, depthStuds: 1, heightPlates: 3 },
+    footprint: legoPlateFootprint(2, 1, 3),
     connectors: [...makeStudGrid('brick-1x2', 2, 1, 3), ...makeTubeGrid('brick-1x2', 2, 1, 0)],
     colors: ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'pink', 'trans-pink'],
     inventory: 80,
@@ -657,7 +656,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     partNumber: '3622',
     name: '1x3 Brick',
     kind: 'brick',
-    footprint: { widthStuds: 3, depthStuds: 1, heightPlates: 3 },
+    footprint: legoPlateFootprint(3, 1, 3),
     connectors: [...makeStudGrid('brick-1x3', 3, 1, 3), ...makeTubeGrid('brick-1x3', 3, 1, 0)],
     colors: ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan'],
     inventory: 48,
@@ -667,7 +666,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     partNumber: '3010',
     name: '1x4 Brick',
     kind: 'brick',
-    footprint: { widthStuds: 4, depthStuds: 1, heightPlates: 3 },
+    footprint: legoPlateFootprint(4, 1, 3),
     connectors: [...makeStudGrid('brick-1x4', 4, 1, 3), ...makeTubeGrid('brick-1x4', 4, 1, 0)],
     colors: ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown'],
     inventory: 52,
@@ -677,7 +676,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     partNumber: '3003',
     name: '2x2 Brick',
     kind: 'brick',
-    footprint: { widthStuds: 2, depthStuds: 2, heightPlates: 3 },
+    footprint: legoPlateFootprint(2, 2, 3),
     connectors: [...makeStudGrid('brick-2x2', 2, 2, 3), ...makeTubeGrid('brick-2x2', 2, 2, 0)],
     colors: ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan'],
     inventory: 48,
@@ -687,7 +686,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     partNumber: '3002',
     name: '2x3 Brick',
     kind: 'brick',
-    footprint: { widthStuds: 3, depthStuds: 2, heightPlates: 3 },
+    footprint: legoPlateFootprint(3, 2, 3),
     connectors: [...makeStudGrid('brick-2x3', 3, 2, 3), ...makeTubeGrid('brick-2x3', 3, 2, 0)],
     colors: ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown'],
     inventory: 36,
@@ -697,7 +696,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     partNumber: '3001',
     name: '2x4 Brick',
     kind: 'brick',
-    footprint: { widthStuds: 4, depthStuds: 2, heightPlates: 3 },
+    footprint: legoPlateFootprint(4, 2, 3),
     connectors: [...makeStudGrid('brick-2x4', 4, 2, 3), ...makeTubeGrid('brick-2x4', 4, 2, 0)],
     colors: ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'orange', 'tan', 'cyan'],
     inventory: 36,
@@ -707,7 +706,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     partNumber: '3023',
     name: '1x2 Plate',
     kind: 'plate',
-    footprint: { widthStuds: 2, depthStuds: 1, heightPlates: 1 },
+    footprint: legoPlateFootprint(2, 1, 1),
     connectors: [...makeStudGrid('plate-1x2', 2, 1, 1), ...makeTubeGrid('plate-1x2', 2, 1, 0)],
     colors: ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan'],
     inventory: 72,
@@ -717,7 +716,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     partNumber: '3024',
     name: '1x1 Plate',
     kind: 'plate',
-    footprint: { widthStuds: 1, depthStuds: 1, heightPlates: 1 },
+    footprint: legoPlateFootprint(1, 1, 1),
     connectors: [...makeStudGrid('plate-1x1', 1, 1, 1), ...makeTubeGrid('plate-1x1', 1, 1, 0)],
     colors: ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'orange', 'tan', 'cyan', 'lime', 'pink'],
     inventory: 96,
@@ -727,7 +726,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     partNumber: '3022',
     name: '2x2 Plate',
     kind: 'plate',
-    footprint: { widthStuds: 2, depthStuds: 2, heightPlates: 1 },
+    footprint: legoPlateFootprint(2, 2, 1),
     connectors: [...makeStudGrid('plate-2x2', 2, 2, 1), ...makeTubeGrid('plate-2x2', 2, 2, 0)],
     colors: ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'tan'],
     inventory: 64,
@@ -737,7 +736,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     partNumber: '3710',
     name: '1x4 Plate',
     kind: 'plate',
-    footprint: { widthStuds: 4, depthStuds: 1, heightPlates: 1 },
+    footprint: legoPlateFootprint(4, 1, 1),
     connectors: [...makeStudGrid('plate-1x4', 4, 1, 1), ...makeTubeGrid('plate-1x4', 4, 1, 0)],
     colors: ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime'],
     inventory: 56,
@@ -747,7 +746,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     partNumber: '3020',
     name: '2x4 Plate',
     kind: 'plate',
-    footprint: { widthStuds: 4, depthStuds: 2, heightPlates: 1 },
+    footprint: legoPlateFootprint(4, 2, 1),
     connectors: [...makeStudGrid('plate-2x4', 4, 2, 1), ...makeTubeGrid('plate-2x4', 4, 2, 0)],
     colors: ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'orange', 'tan'],
     inventory: 48,
@@ -757,7 +756,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     partNumber: '3795',
     name: '2x6 Plate',
     kind: 'plate',
-    footprint: { widthStuds: 6, depthStuds: 2, heightPlates: 1 },
+    footprint: legoPlateFootprint(6, 2, 1),
     connectors: [...makeStudGrid('plate-2x6', 6, 2, 1), ...makeTubeGrid('plate-2x6', 6, 2, 0)],
     colors: ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'tan'],
     inventory: 32,
@@ -767,7 +766,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     partNumber: '3034',
     name: '2x8 Plate',
     kind: 'plate',
-    footprint: { widthStuds: 8, depthStuds: 2, heightPlates: 1 },
+    footprint: legoPlateFootprint(8, 2, 1),
     connectors: [...makeStudGrid('plate-2x8', 8, 2, 1), ...makeTubeGrid('plate-2x8', 8, 2, 0)],
     colors: ['white', 'red', 'blue', 'yellow', 'green', 'black', 'gray', 'tan'],
     inventory: 24,
@@ -777,7 +776,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     partNumber: '3032',
     name: '4x6 Plate',
     kind: 'plate',
-    footprint: { widthStuds: 6, depthStuds: 4, heightPlates: 1 },
+    footprint: legoPlateFootprint(6, 4, 1),
     connectors: [...makeStudGrid('plate-4x6', 6, 4, 1), ...makeTubeGrid('plate-4x6', 6, 4, 0)],
     colors: ['green', 'gray', 'tan', 'blue', 'white', 'black'],
     inventory: 18,
@@ -787,7 +786,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     partNumber: '3069',
     name: '1x2 Tile',
     kind: 'tile',
-    footprint: { widthStuds: 2, depthStuds: 1, heightPlates: 1 },
+    footprint: legoPlateFootprint(2, 1, 1),
     connectors: [...makeTubeGrid('tile-1x2', 2, 1, 0)],
     colors: ['red', 'blue', 'yellow', 'white', 'black', 'gray', 'tan'],
     inventory: 52,
@@ -797,7 +796,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     partNumber: '3070',
     name: '1x1 Tile',
     kind: 'tile',
-    footprint: { widthStuds: 1, depthStuds: 1, heightPlates: 1 },
+    footprint: legoPlateFootprint(1, 1, 1),
     connectors: [...makeTubeGrid('tile-1x1', 1, 1, 0)],
     colors: ['red', 'blue', 'yellow', 'white', 'black', 'gray', 'tan', 'cyan', 'lime', 'pink'],
     inventory: 64,
@@ -807,7 +806,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     partNumber: '98138',
     name: '1x1 Round Eye Tile',
     kind: 'tile',
-    footprint: { widthStuds: 1, depthStuds: 1, heightPlates: 1 },
+    footprint: legoPlateFootprint(1, 1, 1),
     connectors: [...makeTubeGrid('tile-eye-1x1', 1, 1, 0)],
     colors: ['white'],
     inventory: 24,
@@ -817,7 +816,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     partNumber: '4073',
     name: '1x1 Round Plate',
     kind: 'round',
-    footprint: { widthStuds: 1, depthStuds: 1, heightPlates: 1 },
+    footprint: legoPlateFootprint(1, 1, 1),
     connectors: [...makeStudGrid('round-1x1-plate', 1, 1, 1), ...makeTubeGrid('round-1x1-plate', 1, 1, 0)],
     colors: ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'orange', 'tan', 'cyan', 'lime', 'pink'],
     inventory: 80,
@@ -828,7 +827,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     name: '1x2 Slope',
     kind: 'slope',
     // LDraw 3040.dat is moved to 3040b.dat: Slope Brick 45 2 x 1.
-    footprint: { widthStuds: 2, depthStuds: 1, heightPlates: 3 },
+    footprint: legoPlateFootprint(2, 1, 3),
     connectors: [
       {
         id: 'slope-1x2-stud-high',
@@ -849,7 +848,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     name: '2x2 Slope',
     kind: 'slope',
     // LDraw 3039.dat: Slope Brick 45 2 x 2.
-    footprint: { widthStuds: 2, depthStuds: 2, heightPlates: 3 },
+    footprint: legoPlateFootprint(2, 2, 3),
     connectors: [...makeStudRow('slope-2x2', 2, 1, 3), ...makeTubeGrid('slope-2x2', 2, 2, 0)],
     colors: ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan'],
     inventory: 28,
@@ -860,7 +859,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     name: '1x1 Cheese Slope',
     kind: 'slope',
     // LDraw 54200.dat: Slope Brick 31 1 x 1 x 0.667, commonly called a cheese slope.
-    footprint: { widthStuds: 1, depthStuds: 1, heightPlates: 2 },
+    footprint: legoPlateFootprint(1, 1, 2),
     connectors: [...makeTubeGrid('slope-cheese-1x1', 1, 1, 0)],
     colors: ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'orange', 'tan', 'cyan', 'lime', 'pink'],
     inventory: 48,
@@ -871,7 +870,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     name: '1x2 Curved Slope',
     kind: 'slope',
     // LDraw 6091.dat: Brick 2 x 1 x 1.333 with Curved Top.
-    footprint: { widthStuds: 2, depthStuds: 1, heightPlates: 4 },
+    footprint: legoPlateFootprint(2, 1, 4),
     connectors: [
       makeCenterStud('curved-slope-1x2', 2, 1, 3),
       makeTubeConnector('curved-slope-1x2-left', 0, 0, 0),
@@ -886,7 +885,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     name: '2x2 Inverted Slope',
     kind: 'slope',
     // LDraw 3660.dat: Slope Brick 45 2 x 2 Inverted.
-    footprint: { widthStuds: 2, depthStuds: 2, heightPlates: 3 },
+    footprint: legoPlateFootprint(2, 2, 3),
     connectors: [...makeStudGrid('inverted-slope-2x2', 2, 2, 3), ...makeTubeGrid('inverted-slope-2x2', 2, 2, 0)],
     colors: ['white', 'red', 'blue', 'yellow', 'green', 'black', 'gray'],
     inventory: 24,
@@ -898,7 +897,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     kind: 'brick',
     // LDraw 4070.dat: Brick 1 x 1 with Headlight. The side stud is recessed from
     // the front edge and sits slightly above the vertical center of a normal brick.
-    footprint: { widthStuds: 1, depthStuds: 1, heightPlates: 3 },
+    footprint: legoPlateFootprint(1, 1, 3),
     connectors: [
       ...makeStudGrid('headlight-brick-1x1', 1, 1, 3),
       ...makeTubeGrid('headlight-brick-1x1', 1, 1, 0),
@@ -913,7 +912,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     name: '2x2x2 Cone',
     kind: 'cone',
     // BrickLink 3942: Cone 2 x 2 x 2. It is two bricks tall and tapers to a single top stud.
-    footprint: { widthStuds: 2, depthStuds: 2, heightPlates: 6 },
+    footprint: legoPlateFootprint(2, 2, 6),
     connectors: [
       {
         id: 'cone-2x2-stud-center',

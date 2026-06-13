@@ -128,7 +128,7 @@ const isValidSource = (value: unknown): value is BuildPlan['source'] =>
   value === 'template-local' || value === 'llm'
 
 const buildPlanFromManualJson = (value: unknown, text: ImportText = defaultImportText): BuildPlan | undefined => {
-  if (!isRecord(value) || ![1, 2].includes(Number(value.schemaVersion)) || !Array.isArray(value.steps)) return undefined
+  if (!isRecord(value) || ![1, 2, 3].includes(Number(value.schemaVersion)) || !Array.isArray(value.steps)) return undefined
 
   const bricks: PlacedBrick[] = []
   const steps: BuildPlan['steps'] = []
@@ -1070,7 +1070,7 @@ function App() {
   const exportPlan = () => {
     const manual = serializeBuildManual(plan, locale)
     downloadJson(`${plan.title || 'brick-plan'}.json`, {
-      schemaVersion: 2,
+      schemaVersion: 3,
       exportedAt: new Date().toISOString(),
       plan,
       manual,

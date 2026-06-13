@@ -526,7 +526,7 @@ await writeFile(entry, `
       : '',
     minecraftBlockDefinition.footprint.widthStuds !== 1 ||
       minecraftBlockDefinition.footprint.depthStuds !== 1 ||
-      minecraftBlockDefinition.footprint.heightPlates !== 2.5
+      minecraftBlockDefinition.footprint.heightStuds !== 1
       ? 'Minecraft basic block must be exactly 1 x 1 x 1 studs / 5 x 5 x 5 voxels'
       : '',
     minecraftBlockConnectors.length !== 6 ||
@@ -599,7 +599,7 @@ await writeFile(entry, `
       : '',
     curvedSlope50950Definition.footprint.widthStuds !== 3 ||
       curvedSlope50950Definition.footprint.depthStuds !== 1 ||
-      curvedSlope50950Definition.footprint.heightPlates !== 3
+      curvedSlope50950Definition.footprint.heightStuds !== 1.2
       ? '50950 curved slope footprint must stay 3 x 1 x 3 plates'
       : '',
     !hasVertex(curvedSlope50950Geometry, { x: -1.5, y: -0.4, z: -0.5 }) ||
@@ -614,7 +614,7 @@ await writeFile(entry, `
     curvedSlope6091Definition.partNumber !== '6091'
       ? '6091 curved slope must keep the real part number'
       : '',
-    curvedSlope6091Definition.footprint.heightPlates !== 4
+    curvedSlope6091Definition.footprint.heightStuds !== 1.6
       ? '6091 curved slope must be 1.333 bricks / 4 plates tall'
       : '',
     !approx(ldrawPointToBrickLocal({ x: 0, y: 8, z: 0 }, curvedSlope6091Frame).xStud, 1.5) ||
@@ -731,7 +731,7 @@ await writeFile(entry, `
     result.planRoundTripBlockingIssues.length > 0 ||
     result.manualRoundTripBlockingIssues.length > 0 ||
     result.invalidManualSteps.length > 0 ||
-    result.manualSchema !== 2,
+    result.manualSchema !== 3,
   );
 
   console.log(JSON.stringify(results.map((result) => ({

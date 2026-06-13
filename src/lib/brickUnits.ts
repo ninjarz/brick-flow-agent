@@ -57,6 +57,12 @@ export const isYStudOnGrid = isWorldStudOnGrid
 export const plateHeightToWorldStud = (value: number) =>
   normalizeWorldStud(value * PLATE_HEIGHT_WORLD)
 
+export const legoPlateFootprint = (widthStuds: number, depthStuds: number, heightPlates: number): BrickFootprint => ({
+  widthStuds,
+  depthStuds,
+  heightStuds: plateHeightToWorldStud(heightPlates),
+})
+
 export const poseToWorld = (pose: BrickPose) => ({
   x: pose.xStud * STUD_PITCH_WORLD,
   y: pose.yStud * STUD_PITCH_WORLD,
@@ -65,7 +71,7 @@ export const poseToWorld = (pose: BrickPose) => ({
 
 const getVerticalSize = (definition: BrickDefinition, verticalQuarterTurns: BrickVerticalQuarterTurns) => {
   const isVertical = verticalQuarterTurns % 2 === 1
-  const baseHeightStuds = definition.footprint.heightPlates * PLATE_HEIGHT_WORLD
+  const baseHeightStuds = definition.footprint.heightStuds
 
   return {
     widthStuds: definition.footprint.widthStuds,
@@ -90,7 +96,7 @@ export const footprintToWorld = (
     height: vertical.heightStuds * STUD_PITCH_WORLD,
     widthStuds,
     depthStuds,
-    heightPlates: vertical.heightStuds / PLATE_HEIGHT_WORLD,
+    heightStuds: vertical.heightStuds,
   }
 }
 
@@ -137,7 +143,7 @@ const rotateVerticalPoint = (
   verticalQuarterTurns: BrickVerticalQuarterTurns,
   footprint: BrickFootprint,
 ) => {
-  const height = footprint.heightPlates * PLATE_HEIGHT_WORLD
+  const height = footprint.heightStuds
   const depth = footprint.depthStuds
 
   switch (verticalQuarterTurns) {

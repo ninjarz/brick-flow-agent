@@ -1,7 +1,7 @@
 import { brickById, brickDefinitions } from '../data/basicBricks'
 import type { BrickColor, BuildPlan, GeneratorInput, LlmConfig, PlacedBrick } from '../types/bricks'
 import { generateBuildPlan } from './localGenerator'
-import { WORLD_EDIT_STEP_STUDS, normalizeHorizontalStud, normalizeYStud, plateHeightToWorldStud } from './brickUnits'
+import { PLATE_HEIGHT_WORLD, WORLD_EDIT_STEP_STUDS, normalizeHorizontalStud, normalizeYStud, plateHeightToWorldStud } from './brickUnits'
 import { createId, createSingleBrickSteps, findSupportedOpenPose, hasBrickCollision, isBrickSupported, makeBrick } from './planUtils'
 
 type LlmBrick = {
@@ -165,11 +165,14 @@ const normalizeBrickPose = (brick: PlacedBrick): PlacedBrick => ({
 const formatInventoryForPrompt = (inventory: number) =>
   Number.isFinite(inventory) ? String(inventory) : 'unlimited'
 
+const formatLegoHeightForPrompt = (heightStuds: number) =>
+  Number((heightStuds / PLATE_HEIGHT_WORLD).toFixed(3))
+
 const inventorySummary = brickDefinitions
   .filter((brick) => brick.pack === 'lego')
   .map(
     (brick) =>
-      `${brick.id}: ${brick.name}, footprint ${brick.footprint.widthStuds}x${brick.footprint.depthStuds}, height ${brick.footprint.heightPlates} plates, colors ${brick.colors.join('/')}, inventory ${formatInventoryForPrompt(brick.inventory)}`,
+      `${brick.id}: ${brick.name}, footprint ${brick.footprint.widthStuds}x${brick.footprint.depthStuds}, height ${formatLegoHeightForPrompt(brick.footprint.heightStuds)} plates, colors ${brick.colors.join('/')}, inventory ${formatInventoryForPrompt(brick.inventory)}`,
   )
   .join('\n')
 

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { BookOpen, Box, Download, ImageUp, Plus, Sparkles, Trash2, Upload } from 'lucide-react'
 import { brickDefinitions } from '../data/basicBricks'
+import { PLATE_HEIGHT_WORLD } from '../lib/brickUnits'
 import { countBricks, getBlockingBuildPlanIssues, summarizeBuildPlanIssues, validateBuildPlan } from '../lib/planUtils'
 import { useI18n } from '../lib/i18n'
 import { BrickGlyph } from './BrickGlyph'
@@ -30,6 +31,10 @@ type ControlPanelProps = {
 
 const getFootprintLabel = (widthStuds: number, depthStuds: number) =>
   `${Math.min(widthStuds, depthStuds)}x${Math.max(widthStuds, depthStuds)}`
+const getHeightLabel = (brick: (typeof brickDefinitions)[number]) =>
+  brick.pack === 'lego'
+    ? `${Number((brick.footprint.heightStuds / PLATE_HEIGHT_WORLD).toFixed(3))}p`
+    : `${Number(brick.footprint.heightStuds.toFixed(3))}h`
 
 const isInventoryLimited = (inventory: number) => Number.isFinite(inventory)
 const formatInventory = (inventory: number) => isInventoryLimited(inventory) ? String(inventory) : '∞'
@@ -203,7 +208,7 @@ export const ControlPanel = ({
                   <strong>{brick.name}</strong>
                   <small>{t('control.partNumber', { number: brick.partNumber })}</small>
                   <small>
-                    {getFootprintLabel(brick.footprint.widthStuds, brick.footprint.depthStuds)} · {brick.footprint.heightPlates}p · {usedCount}/{formatInventory(brick.inventory)}
+                    {getFootprintLabel(brick.footprint.widthStuds, brick.footprint.depthStuds)} · {getHeightLabel(brick)} · {usedCount}/{formatInventory(brick.inventory)}
                   </small>
                 </span>
                 <Plus size={15} />

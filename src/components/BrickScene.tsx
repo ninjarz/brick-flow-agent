@@ -10,7 +10,7 @@ import { loadLDrawGeneratedVisual } from '../lib/ldrawGeneratedVisualLoader'
 import { createLoadedLDrawPartGeometry, loadLDrawPartGeometry } from '../lib/ldrawVisualGeometry'
 import { createBrickCollisionIndex, getBrickBounds, isBrickSupported } from '../lib/planUtils'
 import { getBrickWorldStructuralCellBoxes, type StructuralCellKind, type WorldStructuralCellBox } from '../lib/structuralGrid'
-import { PLATE_HEIGHT_WORLD, WORLD_EDIT_STEP_STUDS, getBrickConnectors, getBrickWorldFrame, poseToWorld } from '../lib/brickUnits'
+import { WORLD_EDIT_STEP_STUDS, getBrickConnectors, getBrickWorldFrame, poseToWorld } from '../lib/brickUnits'
 import { useI18n } from '../lib/i18n'
 import {
   createCheeseSlopeGeometry,
@@ -607,7 +607,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, onS
   const isEyeTile = brick.brickId === 'tile-eye-1x1' || brick.brickId === 'tile-eye-closed-1x1' || brick.brickId === 'tile-eye-offset-1x1' || brick.brickId === 'tile-eye-centered-1x1'
   const baseWidth = definition.footprint.widthStuds
   const baseDepth = definition.footprint.depthStuds
-  const baseHeight = definition.footprint.heightPlates * PLATE_HEIGHT_WORLD
+  const baseHeight = definition.footprint.heightStuds
   const [ldrawGeometry, setLDrawGeometry] = useState(() =>
     createLoadedLDrawPartGeometry(definition.partNumber, definition.footprint)
   )

@@ -22,7 +22,7 @@ await writeFile(entry, `
       {
         partNumber: normalizeLDrawPartNumber(definition.partNumber),
         widthStuds: definition.footprint.widthStuds,
-        heightStuds: definition.footprint.heightPlates * (2 / 5),
+        heightStuds: definition.footprint.heightStuds,
         depthStuds: definition.footprint.depthStuds,
       },
     ])

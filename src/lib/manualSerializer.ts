@@ -93,7 +93,6 @@ export type ManualPiece = {
   footprint: {
     widthStuds: number
     depthStuds: number
-    heightPlates: number
     heightStuds: number
   }
   rotationDegrees: number
@@ -118,7 +117,7 @@ export type ManualStepPage = {
 }
 
 export type BuildManual = {
-  schemaVersion: 2
+  schemaVersion: 3
   planId: string
   title: string
   prompt: string
@@ -175,7 +174,6 @@ const toManualPiece = (brick: BuildPlan['bricks'][number]): ManualPiece => {
     footprint: {
       widthStuds: footprint?.widthStuds ?? 1,
       depthStuds: footprint?.depthStuds ?? 1,
-      heightPlates: definition?.footprint.heightPlates ?? 1,
       heightStuds: footprint?.height ?? 0.4,
     },
     rotationDegrees: brick.pose.rotationQuarterTurns * 90,
@@ -294,7 +292,7 @@ export const serializeBuildManual = (plan: BuildPlan, locale: ManualLocale = 'zh
   const blockingIssues = getBlockingBuildPlanIssues(issues)
 
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     planId: plan.id,
     title: plan.title,
     prompt: plan.prompt,

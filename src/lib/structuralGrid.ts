@@ -3,7 +3,7 @@ import type { BrickConnector, BrickDefinition, PlacedBrick } from '../types/bric
 import { onLDrawGeneratedVisualLoaded } from './ldrawGeneratedVisualLoader'
 import { getTriangleBounds } from './ldrawBounds'
 import { getLDrawStructuralTriangles } from './ldrawPartRegistry'
-import { getConnectorLocalPoint, PLATE_HEIGHT_WORLD, transformBrickLocalPoint } from './brickUnits'
+import { getConnectorLocalPoint, transformBrickLocalPoint } from './brickUnits'
 import { voxelizeMeshStructuralCells, type MeshTriangle } from './structuralVoxelizer'
 
 export const STRUCTURAL_VOXEL_SIZE = 1 / 5
@@ -162,7 +162,7 @@ const structuralAxes = ['x', 'y', 'z'] as const
 const getDefinitionAxisSize = (definition: BrickDefinition, axis: BrickConnector['axis']) => {
   if (axis === 'x') return definition.footprint.widthStuds
   if (axis === 'z') return definition.footprint.depthStuds
-  return definition.footprint.heightPlates * PLATE_HEIGHT_WORLD
+  return definition.footprint.heightStuds
 }
 
 const getVoxelMinContaining = (value: number) =>
@@ -239,7 +239,7 @@ const makeMeshStructuralCells = (definition: BrickDefinition, triangles: MeshTri
   return overlayStructuralCells(
     voxelizeMeshStructuralCells({
       widthStuds: triangleBounds?.maxX ?? definition.footprint.widthStuds,
-      heightStuds: triangleBounds?.maxY ?? definition.footprint.heightPlates * PLATE_HEIGHT_WORLD,
+      heightStuds: triangleBounds?.maxY ?? definition.footprint.heightStuds,
       depthStuds: triangleBounds?.maxZ ?? definition.footprint.depthStuds,
       voxelSize: STRUCTURAL_VOXEL_SIZE,
       triangles,
@@ -275,14 +275,14 @@ const makeConnectorCells = (definition: BrickDefinition) =>
 const makeDefaultStructuralCells = (definition: BrickDefinition) => [
   ...makeSolidBlockCells(
     definition.footprint.widthStuds,
-    definition.footprint.heightPlates * PLATE_HEIGHT_WORLD,
+    definition.footprint.heightStuds,
     definition.footprint.depthStuds,
   ),
   ...makeConnectorCells(definition),
 ]
 
 const makeStructuralDefinitionCacheKey = (definition: BrickDefinition) =>
-  `${definition.id}:${definition.partNumber}:${definition.footprint.widthStuds},${definition.footprint.depthStuds},${definition.footprint.heightPlates}`
+  `${definition.id}:${definition.partNumber}:${definition.footprint.widthStuds},${definition.footprint.depthStuds},${definition.footprint.heightStuds}`
 
 export const getBrickStructuralCells = (definition: BrickDefinition): StructuralCell[] => {
   const cacheKey = makeStructuralDefinitionCacheKey(definition)
