@@ -11,10 +11,13 @@ import {
   normalizeVerticalQuarterTurns,
   normalizeYStud,
 } from './brickUnits'
-import { getBrickWorldBounds } from './ldrawBounds'
+import { getBrickFootprintWorldBounds, getBrickWorldBounds } from './ldrawBounds'
 import {
   createStructuralCollisionIndex,
   doBrickStructuralCellsCollide,
+  getStructuralCacheVersion,
+  getBrickWorldSupportBounds,
+  getBrickWorldSupportFaces,
   getStructuralCollisionCandidateIds,
   getStructuralOverlapScore,
   getBrickWorldCollisionKeys,
@@ -29,7 +32,102 @@ const mechanicalConnectorConnectionTolerance = 0.12
 const connectorSnapSearchTolerance = 0.6
 const connectorUnsnapTolerance = 0.000001
 const graphPairTolerance = 0.12
+const graphPairSpatialCellSize = 1
 const defaultLocalSearchRadiusStuds = 5
+const verticalLoadContactCacheLimit = 100000
+const verticalLoadContactCache = new Map<string, boolean>()
+
+type PlanValidationContext = {
+  connectorCache: Map<string, WorldBrickConnector[]>
+  graphConnectorBrickIds: Set<string>
+  mechanicalConnectorBrickIds: Set<string>
+}
+
+type WorldBrickConnector = ReturnType<typeof getBrickConnectors>[number]
+
+const isMechanicalConnectorKind = (kind: WorldBrickConnector['kind']) =>
+  kind === 'axle' || kind === 'bar' || kind === 'pin'
+
+const getConnectorCacheKey = (brick: PlacedBrick) =>
+  `${brick.id}:${brick.brickId}:${brick.pose.xStud},${brick.pose.yStud},${brick.pose.zStud},${brick.pose.rotationQuarterTurns},${brick.pose.verticalQuarterTurns ?? 0}`
+
+const getBrickPoseGeometryCacheKey = (brick: PlacedBrick) =>
+  `${brick.brickId}:${brick.pose.xStud},${brick.pose.yStud},${brick.pose.zStud},${brick.pose.rotationQuarterTurns},${brick.pose.verticalQuarterTurns ?? 0}`
+
+const setLimitedBooleanCache = (cache: Map<string, boolean>, key: string, value: boolean) => {
+  if (!cache.has(key) && cache.size >= verticalLoadContactCacheLimit) {
+    const oldestKey = cache.keys().next().value
+    if (oldestKey) cache.delete(oldestKey)
+  }
+
+  cache.set(key, value)
+}
+
+const getPlacedBrickConnectors = (
+  brick: PlacedBrick,
+  context?: PlanValidationContext,
+) => {
+  const definition = brickById.get(brick.brickId)
+  if (!definition) return []
+
+  if (!context) return getBrickConnectors(definition, brick.pose)
+
+  const cacheKey = getConnectorCacheKey(brick)
+  const cached = context.connectorCache.get(cacheKey)
+  if (cached) return cached
+
+  const connectors = getBrickConnectors(definition, brick.pose)
+  context.connectorCache.set(cacheKey, connectors)
+  return connectors
+}
+
+const placedBrickHasMechanicalConnector = (
+  brick: PlacedBrick,
+  context?: PlanValidationContext,
+) =>
+  getPlacedBrickConnectors(brick, context).some((connector) => isMechanicalConnectorKind(connector.kind))
+
+const connectorCanFormNonSupportGraphEdge = (connector: WorldBrickConnector) =>
+  connector.axis !== 'y' ||
+  connector.kind === 'studsocket' ||
+  isMechanicalConnectorKind(connector.kind)
+
+const placedBrickNeedsGraphConnectorCheck = (
+  brick: PlacedBrick,
+  context?: PlanValidationContext,
+) =>
+  getPlacedBrickConnectors(brick, context).some(connectorCanFormNonSupportGraphEdge)
+
+const graphPairNeedsConnectorCheck = (
+  source: PlacedBrick,
+  target: PlacedBrick,
+  context?: PlanValidationContext,
+) => {
+  if (context) {
+    return context.graphConnectorBrickIds.has(source.id) || context.graphConnectorBrickIds.has(target.id)
+  }
+
+  return placedBrickNeedsGraphConnectorCheck(source) || placedBrickNeedsGraphConnectorCheck(target)
+}
+
+const createPlanValidationContext = (bricks: PlacedBrick[]): PlanValidationContext => {
+  const context: PlanValidationContext = {
+    connectorCache: new Map(),
+    graphConnectorBrickIds: new Set(),
+    mechanicalConnectorBrickIds: new Set(),
+  }
+
+  for (const brick of bricks) {
+    if (placedBrickNeedsGraphConnectorCheck(brick, context)) {
+      context.graphConnectorBrickIds.add(brick.id)
+    }
+    if (placedBrickHasMechanicalConnector(brick, context)) {
+      context.mechanicalConnectorBrickIds.add(brick.id)
+    }
+  }
+
+  return context
+}
 
 export const createId = (prefix: string) =>
   `${prefix}-${Math.random().toString(36).slice(2, 8)}`
@@ -80,6 +178,23 @@ export const getBrickBounds = (brick: PlacedBrick) => {
 
   return getBrickWorldBounds(definition, brick.pose)
 }
+
+const getBrickSupportBodyBounds = (brick: PlacedBrick) => {
+  const definition = brickById.get(brick.brickId)
+  if (!definition) return undefined
+
+  return getBrickWorldSupportBounds(brick) ?? getBrickFootprintWorldBounds(definition, brick.pose)
+}
+
+const getBrickCollisionBroadBounds = (
+  brick: PlacedBrick,
+  context?: PlanValidationContext,
+) =>
+  graphPairNeedsConnectorCheck(brick, brick, context)
+    ? getBrickBounds(brick)
+    : getBrickSupportBodyBounds(brick)
+
+const getBrickGraphPairBounds = getBrickCollisionBroadBounds
 
 export const isBrickAboveGround = (brick: PlacedBrick) => {
   const bounds = getBrickBounds(brick)
@@ -233,13 +348,14 @@ export const hasBrickCollision = (
   brick: PlacedBrick,
   bricks: PlacedBrick[],
   collisionIndex?: StructuralCollisionIndex,
+  context?: PlanValidationContext,
 ) => {
   if (!collisionIndex) {
     return bricks.some((other) => (
       other.id !== brick.id &&
       doBrickBoundsOverlap(brick, other) &&
-      !hasConnectorConnection(brick, other) &&
-      !hasIndirectMechanicalConnectorClearance(brick, other, bricks)
+      !hasConnectorConnection(brick, other, context) &&
+      !hasIndirectMechanicalConnectorClearance(brick, other, bricks, context)
     ))
   }
 
@@ -248,8 +364,8 @@ export const hasBrickCollision = (
     if (
       other &&
       doBrickStructuralCellsCollide(brick, other) &&
-      !hasConnectorConnection(brick, other) &&
-      !hasIndirectMechanicalConnectorClearance(brick, other, bricks)
+      !hasConnectorConnection(brick, other, context) &&
+      !hasIndirectMechanicalConnectorClearance(brick, other, bricks, context)
     ) return true
   }
 
@@ -257,49 +373,62 @@ export const hasBrickCollision = (
 }
 
 const doBoundsOverlapHorizontally = (
-  sourceBounds: NonNullable<ReturnType<typeof getBrickBounds>>,
-  targetBounds: NonNullable<ReturnType<typeof getBrickBounds>>,
+  sourceBounds: Pick<NonNullable<ReturnType<typeof getBrickBounds>>, 'minX' | 'maxX' | 'minZ' | 'maxZ'>,
+  targetBounds: Pick<NonNullable<ReturnType<typeof getBrickBounds>>, 'minX' | 'maxX' | 'minZ' | 'maxZ'>,
 ) =>
   sourceBounds.minX < targetBounds.maxX - boundsTolerance &&
   sourceBounds.maxX > targetBounds.minX + boundsTolerance &&
   sourceBounds.minZ < targetBounds.maxZ - boundsTolerance &&
   sourceBounds.maxZ > targetBounds.minZ + boundsTolerance
 
-const hasTopSupportOverlap = (
+const hasVerticalLoadContact = (
   brick: PlacedBrick,
   support: PlacedBrick,
   boundsById?: Map<string, NonNullable<ReturnType<typeof getBrickBounds>>>,
 ) => {
-  const bounds = boundsById?.get(brick.id) ?? getBrickBounds(brick)
-  const supportBounds = boundsById?.get(support.id) ?? getBrickBounds(support)
-  const supportDefinition = brickById.get(support.brickId)
-  if (!bounds || !supportBounds || !supportDefinition || Math.abs(supportBounds.maxY - bounds.minY) > connectionTolerance) return false
-
-  if (supportDefinition.kind === 'cone') {
-    return false
+  const cacheKey = [
+    getStructuralCacheVersion(),
+    getBrickPoseGeometryCacheKey(brick),
+    getBrickPoseGeometryCacheKey(support),
+  ].join('>')
+  const cached = verticalLoadContactCache.get(cacheKey)
+  if (cached !== undefined) return cached
+  const remember = (value: boolean) => {
+    setLimitedBooleanCache(verticalLoadContactCache, cacheKey, value)
+    return value
   }
 
-  if (supportDefinition.kind !== 'slope') {
-    return doBoundsOverlapHorizontally(bounds, supportBounds)
+  const bounds = boundsById?.get(brick.id) ?? getBrickSupportBodyBounds(brick)
+  const supportBounds = boundsById?.get(support.id) ?? getBrickSupportBodyBounds(support)
+  if (!bounds || !supportBounds) return remember(false)
+  if (supportBounds.maxY < bounds.minY - connectionTolerance) return remember(false)
+  if (supportBounds.minY > bounds.maxY + connectionTolerance) return remember(false)
+  if (!doBoundsOverlapHorizontally(bounds, supportBounds)) return remember(false)
+
+  const brickFaces = getBrickWorldSupportFaces(brick)
+  const supportFaces = getBrickWorldSupportFaces(support)
+
+  for (const [planeKey, bottomFaces] of brickFaces.bottomPlanes) {
+    const topFaces = supportFaces.topPlanes.get(planeKey)
+    if (!topFaces) continue
+
+    if (bottomFaces.some((bottomFace) =>
+      topFaces.some((topFace) => doBoundsOverlapHorizontally(bottomFace, topFace))
+    )) {
+      return remember(true)
+    }
   }
 
-  return getBrickConnectors(supportDefinition, support.pose)
-    .filter((connector) => connector.kind === 'stud' && Math.abs(connector.pose.yStud - supportBounds.maxY) <= connectionTolerance)
-    .some((connector) => (
-      connector.pose.xStud > bounds.minX &&
-      connector.pose.xStud < bounds.maxX &&
-      connector.pose.zStud > bounds.minZ &&
-      connector.pose.zStud < bounds.maxZ
-    ))
+  return remember(false)
 }
 
-const hasConnectorConnection = (brick: PlacedBrick, other: PlacedBrick) => {
-  const definition = brickById.get(brick.brickId)
-  const otherDefinition = brickById.get(other.brickId)
-  if (!definition || !otherDefinition) return false
-
-  const sourceConnectors = getBrickConnectors(definition, brick.pose)
-  const targetConnectors = getBrickConnectors(otherDefinition, other.pose)
+const hasConnectorConnection = (
+  brick: PlacedBrick,
+  other: PlacedBrick,
+  context?: PlanValidationContext,
+) => {
+  const sourceConnectors = getPlacedBrickConnectors(brick, context)
+  const targetConnectors = getPlacedBrickConnectors(other, context)
 
   return sourceConnectors.some((source) =>
     targetConnectors.some((target) => (
@@ -312,15 +441,15 @@ const hasConnectorConnection = (brick: PlacedBrick, other: PlacedBrick) => {
 const isMechanicalConnector = (
   connector: ReturnType<typeof getBrickConnectors>[number],
 ) =>
-  connector.kind === 'axle' || connector.kind === 'bar' || connector.kind === 'pin'
+  isMechanicalConnectorKind(connector.kind)
 
-const hasMechanicalConnectorConnection = (brick: PlacedBrick, other: PlacedBrick) => {
-  const definition = brickById.get(brick.brickId)
-  const otherDefinition = brickById.get(other.brickId)
-  if (!definition || !otherDefinition) return false
-
-  const sourceConnectors = getBrickConnectors(definition, brick.pose)
-  const targetConnectors = getBrickConnectors(otherDefinition, other.pose)
+const hasMechanicalConnectorConnection = (
+  brick: PlacedBrick,
+  other: PlacedBrick,
+  context?: PlanValidationContext,
+) => {
+  const sourceConnectors = getPlacedBrickConnectors(brick, context)
+  const targetConnectors = getPlacedBrickConnectors(other, context)
 
   return sourceConnectors.some((source) =>
     isMechanicalConnector(source) &&
@@ -332,10 +461,18 @@ const hasMechanicalConnectorConnection = (brick: PlacedBrick, other: PlacedBrick
   )
 }
 
-const areBricksAttached = (source: PlacedBrick, target: PlacedBrick) =>
-  hasTopSupportOverlap(source, target) ||
-  hasTopSupportOverlap(target, source) ||
-  hasConnectorConnection(source, target)
+const areBricksAttached = (
+  source: PlacedBrick,
+  target: PlacedBrick,
+  context?: PlanValidationContext,
+  boundsById?: Map<string, BrickBounds>,
+) =>
+  hasVerticalLoadContact(source, target, boundsById) ||
+  hasVerticalLoadContact(target, source, boundsById) ||
+  (
+    graphPairNeedsConnectorCheck(source, target, context) &&
+    hasConnectorConnection(source, target, context)
+  )
 
 const addGraphEdge = (edges: Map<string, Set<string>>, sourceId: string, targetId: string) => {
   const targets = edges.get(sourceId)
@@ -351,12 +488,14 @@ const addUndirectedGraphEdge = (edges: Map<string, Set<string>>, sourceId: strin
   addGraphEdge(edges, targetId, sourceId)
 }
 
+const emptyGraphEdgeTargets = new Set<string>()
+
 const getGraphEdgeTargets = (edges: Map<string, Set<string>>, sourceId: string) =>
-  edges.get(sourceId) ?? new Set<string>()
+  edges.get(sourceId) ?? emptyGraphEdgeTargets
 
 export type BuildGraph = {
-  collisionIndex: StructuralCollisionIndex
   attachmentEdges: Map<string, Set<string>>
+  boundsById: Map<string, BrickBounds>
   groundedIds: Set<string>
   components: PlacedBrick[][]
 }
@@ -364,25 +503,122 @@ export type BuildGraph = {
 const isBuildGraph = (value: StructuralCollisionIndex | BuildGraph | undefined): value is BuildGraph =>
   Boolean(value && 'groundedIds' in value)
 
+type BrickBounds = NonNullable<ReturnType<typeof getBrickBounds>>
+
+type GraphPairSpatialIndex = {
+  keyToBrickIds: Map<string, Set<string>>
+}
+
+const graphPairSpatialCoordinate = (value: number) =>
+  Math.floor(value / graphPairSpatialCellSize)
+
+const makeGraphPairSpatialKey = (x: number, y: number, z: number) =>
+  `${x},${y},${z}`
+
+const getGraphPairSpatialKeys = (
+  bounds: BrickBounds,
+  tolerance = graphPairTolerance,
+) => {
+  const minX = graphPairSpatialCoordinate(bounds.minX - tolerance)
+  const maxX = graphPairSpatialCoordinate(bounds.maxX + tolerance)
+  const minY = graphPairSpatialCoordinate(bounds.minY - tolerance)
+  const maxY = graphPairSpatialCoordinate(bounds.maxY + tolerance)
+  const minZ = graphPairSpatialCoordinate(bounds.minZ - tolerance)
+  const maxZ = graphPairSpatialCoordinate(bounds.maxZ + tolerance)
+  const keys: string[] = []
+
+  for (let x = minX; x <= maxX; x += 1) {
+    for (let y = minY; y <= maxY; y += 1) {
+      for (let z = minZ; z <= maxZ; z += 1) {
+        keys.push(makeGraphPairSpatialKey(x, y, z))
+      }
+    }
+  }
+
+  return keys
+}
+
+const createGraphPairSpatialIndex = (
+  bricks: PlacedBrick[],
+  boundsById: Map<string, BrickBounds>,
+  tolerance = graphPairTolerance,
+): GraphPairSpatialIndex => {
+  const keyToBrickIds = new Map<string, Set<string>>()
+
+  for (const brick of bricks) {
+    const bounds = boundsById.get(brick.id)
+    if (!bounds) continue
+
+    for (const key of getGraphPairSpatialKeys(bounds, tolerance)) {
+      const brickIds = keyToBrickIds.get(key)
+      if (brickIds) {
+        brickIds.add(brick.id)
+      } else {
+        keyToBrickIds.set(key, new Set([brick.id]))
+      }
+    }
+  }
+
+  return { keyToBrickIds }
+}
+
 const getPotentialGraphPairIds = (
   brick: PlacedBrick,
-  bricks: PlacedBrick[],
-  collisionIndex: StructuralCollisionIndex,
-  boundsById: Map<string, NonNullable<ReturnType<typeof getBrickBounds>>>,
+  boundsById: Map<string, BrickBounds>,
+  graphPairIndex: GraphPairSpatialIndex,
 ) => {
-  const ids = getStructuralCollisionCandidateIds(brick, collisionIndex)
+  const ids = new Set<string>()
   const bounds = boundsById.get(brick.id)
   if (!bounds) return ids
 
-  for (const candidate of bricks) {
-    if (candidate.id === brick.id || ids.has(candidate.id)) continue
-    const candidateBounds = boundsById.get(candidate.id)
-    if (!candidateBounds) continue
+  for (const key of getGraphPairSpatialKeys(bounds)) {
+    const brickIds = graphPairIndex.keyToBrickIds.get(key)
+    if (!brickIds) continue
 
-    const xNear = bounds.minX < candidateBounds.maxX + graphPairTolerance && bounds.maxX > candidateBounds.minX - graphPairTolerance
-    const yNear = bounds.minY < candidateBounds.maxY + graphPairTolerance && bounds.maxY > candidateBounds.minY - graphPairTolerance
-    const zNear = bounds.minZ < candidateBounds.maxZ + graphPairTolerance && bounds.maxZ > candidateBounds.minZ - graphPairTolerance
-    if (xNear && yNear && zNear) ids.add(candidate.id)
+    for (const candidateId of brickIds) {
+      if (candidateId === brick.id || ids.has(candidateId)) continue
+      const candidateBounds = boundsById.get(candidateId)
+      if (!candidateBounds) continue
+
+      const xNear = bounds.minX < candidateBounds.maxX + graphPairTolerance && bounds.maxX > candidateBounds.minX - graphPairTolerance
+      const yNear = bounds.minY < candidateBounds.maxY + graphPairTolerance && bounds.maxY > candidateBounds.minY - graphPairTolerance
+      const zNear = bounds.minZ < candidateBounds.maxZ + graphPairTolerance && bounds.maxZ > candidateBounds.minZ - graphPairTolerance
+      if (xNear && yNear && zNear) ids.add(candidateId)
+    }
+  }
+
+  return ids
+}
+
+const doBoundsOverlap3D = (
+  sourceBounds: BrickBounds,
+  targetBounds: BrickBounds,
+) =>
+  sourceBounds.minX < targetBounds.maxX - boundsTolerance &&
+  sourceBounds.maxX > targetBounds.minX + boundsTolerance &&
+  sourceBounds.minY < targetBounds.maxY - boundsTolerance &&
+  sourceBounds.maxY > targetBounds.minY + boundsTolerance &&
+  sourceBounds.minZ < targetBounds.maxZ - boundsTolerance &&
+  sourceBounds.maxZ > targetBounds.minZ + boundsTolerance
+
+const getPotentialBoundsCollisionPairIds = (
+  brick: PlacedBrick,
+  boundsById: Map<string, BrickBounds>,
+  boundsPairIndex: GraphPairSpatialIndex,
+) => {
+  const ids = new Set<string>()
+  const bounds = boundsById.get(brick.id)
+  if (!bounds) return ids
+
+  for (const key of getGraphPairSpatialKeys(bounds, 0)) {
+    const brickIds = boundsPairIndex.keyToBrickIds.get(key)
+    if (!brickIds) continue
+
+    for (const candidateId of brickIds) {
+      if (candidateId === brick.id || ids.has(candidateId)) continue
+      const candidateBounds = boundsById.get(candidateId)
+      if (candidateBounds && doBoundsOverlap3D(bounds, candidateBounds)) ids.add(candidateId)
+    }
   }
 
   return ids
@@ -401,10 +637,11 @@ const computeConnectedComponentsFromEdges = (
     remaining.delete(root.id)
     const component: PlacedBrick[] = []
     const queue = [root]
+    let queueIndex = 0
 
-    while (queue.length > 0) {
-      const current = queue.shift()
-      if (!current) break
+    while (queueIndex < queue.length) {
+      const current = queue[queueIndex]
+      queueIndex += 1
 
       component.push(current)
 
@@ -438,9 +675,11 @@ const computeGroundedIds = (
     queue.push(brick)
   }
 
-  while (queue.length > 0) {
-    const current = queue.shift()
-    if (!current) break
+  let queueIndex = 0
+
+  while (queueIndex < queue.length) {
+    const current = queue[queueIndex]
+    queueIndex += 1
 
     for (const candidateId of getGraphEdgeTargets(attachmentEdges, current.id)) {
       if (groundedIds.has(candidateId)) continue
@@ -454,20 +693,29 @@ const computeGroundedIds = (
   return groundedIds
 }
 
-export const createBuildGraph = (bricks: PlacedBrick[]): BuildGraph => {
-  const collisionIndex = createBrickCollisionIndex(bricks)
+export const createBuildGraph = (
+  bricks: PlacedBrick[],
+  context = createPlanValidationContext(bricks),
+): BuildGraph => {
   const attachmentEdges = new Map<string, Set<string>>()
   const bricksById = new Map(bricks.map((brick) => [brick.id, brick]))
   const boundsById = new Map(
     bricks.flatMap((brick) => {
-      const bounds = getBrickBounds(brick)
+      const bounds = getBrickSupportBodyBounds(brick)
       return bounds ? [[brick.id, bounds] as const] : []
     }),
   )
+  const graphPairBoundsById = new Map(
+    bricks.flatMap((brick) => {
+      const bounds = getBrickGraphPairBounds(brick, context)
+      return bounds ? [[brick.id, bounds] as const] : []
+    }),
+  )
+  const graphPairIndex = createGraphPairSpatialIndex(bricks, graphPairBoundsById)
   const checkedPairs = new Set<string>()
 
   for (const source of bricks) {
-    for (const targetId of getPotentialGraphPairIds(source, bricks, collisionIndex, boundsById)) {
+    for (const targetId of getPotentialGraphPairIds(source, graphPairBoundsById, graphPairIndex)) {
       const pairKey = [source.id, targetId].sort().join(':')
       if (checkedPairs.has(pairKey)) continue
       checkedPairs.add(pairKey)
@@ -475,9 +723,12 @@ export const createBuildGraph = (bricks: PlacedBrick[]): BuildGraph => {
       const target = bricksById.get(targetId)
       if (!target) continue
 
-      const sourceOnTarget = hasTopSupportOverlap(source, target, boundsById)
-      const targetOnSource = hasTopSupportOverlap(target, source, boundsById)
-      const connectorConnected = hasConnectorConnection(source, target)
+      const sourceOnTarget = hasVerticalLoadContact(source, target, boundsById)
+      const targetOnSource = hasVerticalLoadContact(target, source, boundsById)
+      const connectorConnected = !sourceOnTarget &&
+        !targetOnSource &&
+        graphPairNeedsConnectorCheck(source, target, context) &&
+        hasConnectorConnection(source, target, context)
 
       if (sourceOnTarget || targetOnSource || connectorConnected) {
         addUndirectedGraphEdge(attachmentEdges, source.id, target.id)
@@ -489,8 +740,8 @@ export const createBuildGraph = (bricks: PlacedBrick[]): BuildGraph => {
   const groundedIds = computeGroundedIds(bricks, attachmentEdges, boundsById)
 
   return {
-    collisionIndex,
     attachmentEdges,
+    boundsById,
     groundedIds,
     components,
   }
@@ -500,17 +751,24 @@ const hasIndirectMechanicalConnectorClearance = (
   source: PlacedBrick,
   target: PlacedBrick,
   bricks: PlacedBrick[],
-) =>
+  context?: PlanValidationContext,
+) => {
   // Clips, bars, pins, and axles can sit beside a supporting brick while being
   // held by an intermediate piece; allow that narrow mechanical chain only.
-  bricks.some((bridge) => (
-    bridge.id !== source.id &&
-    bridge.id !== target.id &&
-    (
-      (hasMechanicalConnectorConnection(source, bridge) && areBricksAttached(target, bridge)) ||
-      (hasMechanicalConnectorConnection(target, bridge) && areBricksAttached(source, bridge))
+  const sourceCanUseMechanicalBridge = placedBrickHasMechanicalConnector(source, context)
+  const targetCanUseMechanicalBridge = placedBrickHasMechanicalConnector(target, context)
+  if (!sourceCanUseMechanicalBridge && !targetCanUseMechanicalBridge) return false
+
+  return bricks.some((bridge) => {
+    if (bridge.id === source.id || bridge.id === target.id) return false
+    if (context && !context.mechanicalConnectorBrickIds.has(bridge.id)) return false
+
+    return (
+      (sourceCanUseMechanicalBridge && hasMechanicalConnectorConnection(source, bridge, context) && areBricksAttached(target, bridge, context)) ||
+      (targetCanUseMechanicalBridge && hasMechanicalConnectorConnection(target, bridge, context) && areBricksAttached(source, bridge, context))
     )
-  ))
+  })
+}
 
 const isVerticalStudTubeConnection = (
   source: ReturnType<typeof getBrickConnectors>[number],
@@ -521,13 +779,13 @@ const isVerticalStudTubeConnection = (
   ((source.kind === 'stud' && target.kind === 'tube') ||
     (source.kind === 'tube' && target.kind === 'stud'))
 
-const hasSupportConnectorConnection = (brick: PlacedBrick, other: PlacedBrick) => {
-  const definition = brickById.get(brick.brickId)
-  const otherDefinition = brickById.get(other.brickId)
-  if (!definition || !otherDefinition) return false
-
-  const sourceConnectors = getBrickConnectors(definition, brick.pose)
-  const targetConnectors = getBrickConnectors(otherDefinition, other.pose)
+const hasSupportConnectorConnection = (
+  brick: PlacedBrick,
+  other: PlacedBrick,
+  context?: PlanValidationContext,
+) => {
+  const sourceConnectors = getPlacedBrickConnectors(brick, context)
+  const targetConnectors = getPlacedBrickConnectors(other, context)
 
   return sourceConnectors.some((source) =>
     targetConnectors.some((target) => (
@@ -542,6 +800,7 @@ const canBrickDescendOneStep = (
   brick: PlacedBrick,
   bricks: PlacedBrick[],
   collisionIndex?: StructuralCollisionIndex,
+  context?: PlanValidationContext,
 ) => {
   const bounds = getBrickBounds(brick)
   if (!bounds || bounds.minY <= boundsTolerance) return false
@@ -559,13 +818,14 @@ const canBrickDescendOneStep = (
   const loweredBounds = getBrickBounds(loweredBrick)
   if (!loweredBounds || loweredBounds.minY < -boundsTolerance) return false
 
-  return !hasBrickCollision(loweredBrick, bricks, collisionIndex)
+  return !hasBrickCollision(loweredBrick, bricks, collisionIndex, context)
 }
 
 export const isBrickSupported = (
   brick: PlacedBrick,
   bricks: PlacedBrick[],
   collisionIndexOrGraph?: StructuralCollisionIndex | BuildGraph,
+  context?: PlanValidationContext,
 ) => {
   const bounds = getBrickBounds(brick)
   if (!bounds) return true
@@ -577,10 +837,10 @@ export const isBrickSupported = (
   }
 
   const collisionIndex: StructuralCollisionIndex | undefined = collisionIndexOrGraph
-  const connectorSupported = bricks.some((other) => other.id !== brick.id && hasSupportConnectorConnection(brick, other))
-  if (connectorSupported || hasAxleConnection(brick, bricks)) return true
+  const connectorSupported = bricks.some((other) => other.id !== brick.id && hasSupportConnectorConnection(brick, other, context))
+  if (connectorSupported || hasAxleConnection(brick, bricks, context)) return true
 
-  return !canBrickDescendOneStep(brick, bricks, collisionIndex)
+  return !canBrickDescendOneStep(brick, bricks, collisionIndex, context)
 }
 
 export const findOpenPose = (brick: PlacedBrick, bricks: PlacedBrick[]): PlacedBrick => {
@@ -626,6 +886,25 @@ export const findOpenPose = (brick: PlacedBrick, bricks: PlacedBrick[]): PlacedB
 type FindSupportedOpenPoseOptions = {
   allowGroundFallback?: boolean
   preferGroundFallback?: boolean
+}
+
+const getNearestRangeValues = (
+  start: number,
+  endExclusive: number,
+  step: number,
+  target: number,
+) => {
+  const values: number[] = []
+
+  for (let value = start; value < endExclusive; value += step) {
+    values.push(value)
+  }
+
+  values.sort((source, destination) =>
+    Math.abs(source - target) - Math.abs(destination - target) ||
+    source - destination
+  )
+  return values
 }
 
 export const findSupportedOpenPose = (
@@ -699,12 +978,44 @@ export const findSupportedOpenPose = (
   }
 
   if (footprint) {
-    for (const support of bricks) {
-      const supportBounds = getBrickBounds(support)
-      if (!supportBounds) continue
+    const supportOptions = bricks
+      .flatMap((support) => {
+        const supportBounds = getBrickBounds(support)
+        if (!supportBounds) return []
 
-      for (let xStud = supportBounds.minX - footprint.widthStuds + HORIZONTAL_EDIT_STEP_STUDS; xStud < supportBounds.maxX; xStud += 1) {
-        for (let zStud = supportBounds.minZ - footprint.depthStuds + HORIZONTAL_EDIT_STEP_STUDS; zStud < supportBounds.maxZ; zStud += 1) {
+        const centerX = (supportBounds.minX + supportBounds.maxX) / 2
+        const centerY = (supportBounds.minY + supportBounds.maxY) / 2
+        const centerZ = (supportBounds.minZ + supportBounds.maxZ) / 2
+        const dx = centerX - brick.pose.xStud
+        const dy = centerY - brick.pose.yStud
+        const dz = centerZ - brick.pose.zStud
+        return [{
+          support,
+          supportBounds,
+          distanceSq: dx * dx + dy * dy + dz * dz,
+        }]
+      })
+      .sort((source, target) =>
+        source.distanceSq - target.distanceSq ||
+        source.support.id.localeCompare(target.support.id)
+      )
+
+    for (const { supportBounds } of supportOptions) {
+      const xCandidates = getNearestRangeValues(
+        supportBounds.minX - footprint.widthStuds + HORIZONTAL_EDIT_STEP_STUDS,
+        supportBounds.maxX,
+        1,
+        brick.pose.xStud,
+      )
+      const zCandidates = getNearestRangeValues(
+        supportBounds.minZ - footprint.depthStuds + HORIZONTAL_EDIT_STEP_STUDS,
+        supportBounds.maxZ,
+        1,
+        brick.pose.zStud,
+      )
+
+      for (const xStud of xCandidates) {
+        for (const zStud of zCandidates) {
           const candidate: PlacedBrick = {
             ...brick,
             pose: {
@@ -781,19 +1092,18 @@ const getConnectorConnectionTolerance = (
     ? mechanicalConnectorConnectionTolerance
     : connectorConnectionTolerance
 
-const hasAxleConnection = (brick: PlacedBrick, bricks: PlacedBrick[]) => {
-  const definition = brickById.get(brick.brickId)
-  if (!definition) return false
-
-  const sourceConnectors = getBrickConnectors(definition, brick.pose).filter((connector) => connector.kind === 'axle')
+const hasAxleConnection = (
+  brick: PlacedBrick,
+  bricks: PlacedBrick[],
+  context?: PlanValidationContext,
+) => {
+  const sourceConnectors = getPlacedBrickConnectors(brick, context).filter((connector) => connector.kind === 'axle')
   if (sourceConnectors.length === 0) return false
 
   return bricks.some((other) => {
     if (other.id === brick.id) return false
-    const otherDefinition = brickById.get(other.brickId)
-    if (!otherDefinition) return false
 
-    const targetConnectors = getBrickConnectors(otherDefinition, other.pose).filter((connector) => connector.kind === 'axle')
+    const targetConnectors = getPlacedBrickConnectors(other, context).filter((connector) => connector.kind === 'axle')
     return sourceConnectors.some((source) =>
       targetConnectors.some(
         (target) => areConnectorsCompatible(source, target) && connectorDistance(source, target) <= 0.2,
@@ -865,7 +1175,7 @@ export const getBrickPlacementDiagnostics = (brick: PlacedBrick, bricks: PlacedB
         rawOverlapVolume: bounds && otherBounds ? getBoundsOverlapVolume(bounds, otherBounds) : 0,
         boundsOverlap: doBrickBoundsOverlap(brick, other),
         hasConnectorConnection: hasConnectorConnection(brick, other),
-        topSupportOverlap: hasTopSupportOverlap(brick, other),
+        topSupportOverlap: hasVerticalLoadContact(brick, other),
         nearestCompatibleConnectors: compatiblePairs.slice(0, 5),
         nearestAnyConnectors: connectorPairs
           .sort((source, target) => source.distance - target.distance)
@@ -1147,26 +1457,42 @@ export const isBuildPlanIssueBlocking = (issue: BuildPlanIssue) =>
 export const getBlockingBuildPlanIssues = (issues: BuildPlanIssue[]) =>
   issues.filter(isBuildPlanIssueBlocking)
 
-const areBricksConnected = areBricksAttached
-
 export const getConnectedBrickComponents = (bricks: PlacedBrick[]) => {
   const attachmentEdges = new Map<string, Set<string>>()
+  const context = createPlanValidationContext(bricks)
+  const bricksById = new Map(bricks.map((brick) => [brick.id, brick]))
+  const boundsById = new Map(
+    bricks.flatMap((brick) => {
+      const bounds = getBrickSupportBodyBounds(brick)
+      return bounds ? [[brick.id, bounds] as const] : []
+    }),
+  )
+  const graphPairBoundsById = new Map(
+    bricks.flatMap((brick) => {
+      const bounds = getBrickGraphPairBounds(brick, context)
+      return bounds ? [[brick.id, bounds] as const] : []
+    }),
+  )
+  const graphPairIndex = createGraphPairSpatialIndex(bricks, graphPairBoundsById)
   const checkedPairs = new Set<string>()
 
   for (const source of bricks) {
-    for (const target of bricks) {
-      if (source.id === target.id) continue
-      const pairKey = [source.id, target.id].sort().join(':')
+    for (const targetId of getPotentialGraphPairIds(source, graphPairBoundsById, graphPairIndex)) {
+      const pairKey = [source.id, targetId].sort().join(':')
       if (checkedPairs.has(pairKey)) continue
       checkedPairs.add(pairKey)
-      if (areBricksConnected(source, target)) addUndirectedGraphEdge(attachmentEdges, source.id, target.id)
+
+      const target = bricksById.get(targetId)
+      if (target && areBricksAttached(source, target, context, boundsById)) {
+        addUndirectedGraphEdge(attachmentEdges, source.id, target.id)
+      }
     }
   }
 
   return computeConnectedComponentsFromEdges(bricks, attachmentEdges)
 }
 
-export const validateBuildPlan = (plan: BuildPlan): BuildPlanIssue[] => {
+export const validateBuildPlanBasics = (plan: BuildPlan): BuildPlanIssue[] => {
   const issues: BuildPlanIssue[] = []
   const seenBrickIds = new Set<string>()
   const brickCounts = countBricks(plan)
@@ -1224,21 +1550,34 @@ export const validateBuildPlan = (plan: BuildPlan): BuildPlanIssue[] => {
     }
   }
 
-  const buildGraph = createBuildGraph(plan.bricks)
-  const collisionIndex = buildGraph.collisionIndex
+  return issues
+}
+
+export const validateBuildPlanStructural = (plan: BuildPlan): BuildPlanIssue[] => {
+  const issues: BuildPlanIssue[] = []
+  const context = createPlanValidationContext(plan.bricks)
+  const buildGraph = createBuildGraph(plan.bricks, context)
+  const collisionBoundsById = new Map(
+    plan.bricks.flatMap((brick) => {
+      const bounds = getBrickCollisionBroadBounds(brick, context)
+      return bounds ? [[brick.id, bounds] as const] : []
+    }),
+  )
+  const boundsPairIndex = createGraphPairSpatialIndex(plan.bricks, collisionBoundsById, 0)
+  const bricksById = new Map(plan.bricks.map((brick) => [brick.id, brick]))
   const checkedCollisionPairs = new Set<string>()
   for (const source of plan.bricks) {
-    for (const targetId of getStructuralCollisionCandidateIds(source, collisionIndex)) {
+    for (const targetId of getPotentialBoundsCollisionPairIds(source, collisionBoundsById, boundsPairIndex)) {
       const pairKey = [source.id, targetId].sort().join(':')
       if (checkedCollisionPairs.has(pairKey)) continue
       checkedCollisionPairs.add(pairKey)
 
-      const target = collisionIndex.bricksById.get(targetId)
+      const target = bricksById.get(targetId)
       if (
         target &&
         doBrickStructuralCellsCollide(source, target) &&
-        !hasConnectorConnection(source, target) &&
-        !hasIndirectMechanicalConnectorClearance(source, target, plan.bricks)
+        !hasConnectorConnection(source, target, context) &&
+        !hasIndirectMechanicalConnectorClearance(source, target, plan.bricks, context)
       ) {
         issues.push({ type: 'collision', brickIds: [source.id, target.id] })
       }
@@ -1267,6 +1606,11 @@ export const validateBuildPlan = (plan: BuildPlan): BuildPlanIssue[] => {
 
   return issues
 }
+
+export const validateBuildPlan = (plan: BuildPlan): BuildPlanIssue[] => [
+  ...validateBuildPlanBasics(plan),
+  ...validateBuildPlanStructural(plan),
+]
 
 type SummaryLocale = 'zh-CN' | 'en-US'
 

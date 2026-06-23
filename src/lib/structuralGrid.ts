@@ -1,7 +1,7 @@
 import { brickById } from '../data/basicBricks'
 import type { BrickConnector, BrickDefinition, PlacedBrick } from '../types/bricks'
 import { onLDrawGeneratedVisualLoaded } from './ldrawGeneratedVisualLoader'
-import { getTriangleBounds } from './ldrawBounds'
+import { getTriangleBounds, type BrickBounds } from './ldrawBounds'
 import { getLDrawStructuralTriangles } from './ldrawPartRegistry'
 import { getConnectorLocalPoint, transformBrickLocalPoint } from './brickUnits'
 import { voxelizeMeshStructuralCells, type MeshTriangle } from './structuralVoxelizer'
@@ -11,14 +11,30 @@ const STRUCTURAL_HASH_STEP = STRUCTURAL_VOXEL_SIZE / 2
 const STRUCTURAL_OVERLAP_TOLERANCE = 0.000001
 const WORLD_STRUCTURAL_CACHE_LIMIT = 5000
 const structuralCellCache = new Map<string, StructuralCell[]>()
+const localSupportBoundsCache = new Map<string, BrickBounds | undefined>()
+const localSupportFaceCache = new Map<string, WorldStructuralSupportFaces>()
 const worldStructuralCellBoxCache = new Map<string, WorldStructuralCellBox[]>()
+const worldSupportCellBoxCache = new Map<string, WorldStructuralCellBox[]>()
+const worldSupportFaceCache = new Map<string, WorldStructuralSupportFaces>()
+const worldSupportBoundsCache = new Map<string, BrickBounds | undefined>()
+const worldCollisionCellBoxCache = new Map<string, WorldStructuralCellBox[]>()
 const worldCollisionKeyCache = new Map<string, Set<string>>()
+let structuralCacheVersion = 0
 
 onLDrawGeneratedVisualLoaded(() => {
+  structuralCacheVersion += 1
   structuralCellCache.clear()
+  localSupportBoundsCache.clear()
+  localSupportFaceCache.clear()
   worldStructuralCellBoxCache.clear()
+  worldSupportCellBoxCache.clear()
+  worldSupportFaceCache.clear()
+  worldSupportBoundsCache.clear()
+  worldCollisionCellBoxCache.clear()
   worldCollisionKeyCache.clear()
 })
+
+export const getStructuralCacheVersion = () => structuralCacheVersion
 
 export type StructuralCellKind = 'solid' | 'stud' | 'socket' | 'studsocket' | 'enterable'
 export type StructuralEntryDirection = 'top' | 'bottom' | 'left' | 'right' | 'front' | 'back'
@@ -41,6 +57,21 @@ export type WorldStructuralCell = StructuralCell & {
 }
 
 export type WorldStructuralCellBox = StructuralCell
+
+export type WorldStructuralSupportFace = {
+  y: number
+  minX: number
+  maxX: number
+  minZ: number
+  maxZ: number
+}
+
+export type WorldStructuralSupportFaces = {
+  top: WorldStructuralSupportFace[]
+  bottom: WorldStructuralSupportFace[]
+  topPlanes: Map<string, WorldStructuralSupportFace[]>
+  bottomPlanes: Map<string, WorldStructuralSupportFace[]>
+}
 
 export type StructuralCollisionIndex = {
   keyToBrickIds: Map<string, Set<string>>
@@ -298,16 +329,57 @@ export const getBrickStructuralCells = (definition: BrickDefinition): Structural
   return cells
 }
 
-const cellCorners = (cell: StructuralCell) => [
-  { x: cell.minX, y: cell.minY, z: cell.minZ },
-  { x: cell.minX, y: cell.minY, z: cell.maxZ },
-  { x: cell.minX, y: cell.maxY, z: cell.minZ },
-  { x: cell.minX, y: cell.maxY, z: cell.maxZ },
-  { x: cell.maxX, y: cell.minY, z: cell.minZ },
-  { x: cell.maxX, y: cell.minY, z: cell.maxZ },
-  { x: cell.maxX, y: cell.maxY, z: cell.minZ },
-  { x: cell.maxX, y: cell.maxY, z: cell.maxZ },
-]
+const transformLocalBox = (
+  definition: BrickDefinition,
+  brick: PlacedBrick,
+  bounds: BrickBounds,
+): BrickBounds => {
+  let minX = Infinity
+  let maxX = -Infinity
+  let minY = Infinity
+  let maxY = -Infinity
+  let minZ = Infinity
+  let maxZ = -Infinity
+
+  for (let xIndex = 0; xIndex < 2; xIndex += 1) {
+    for (let yIndex = 0; yIndex < 2; yIndex += 1) {
+      for (let zIndex = 0; zIndex < 2; zIndex += 1) {
+        const x = xIndex === 0 ? bounds.minX : bounds.maxX
+        const y = yIndex === 0 ? bounds.minY : bounds.maxY
+        const z = zIndex === 0 ? bounds.minZ : bounds.maxZ
+        const point = transformBrickLocalPoint(definition, brick.pose, { x, y, z })
+        minX = Math.min(minX, point.x)
+        maxX = Math.max(maxX, point.x)
+        minY = Math.min(minY, point.y)
+        maxY = Math.max(maxY, point.y)
+        minZ = Math.min(minZ, point.z)
+        maxZ = Math.max(maxZ, point.z)
+      }
+    }
+  }
+
+  return {
+    minX,
+    maxX,
+    minY,
+    maxY,
+    minZ,
+    maxZ,
+  }
+}
+
+const transformStructuralCellBox = (
+  definition: BrickDefinition,
+  brick: PlacedBrick,
+  cell: StructuralCell,
+): WorldStructuralCellBox => {
+  const bounds = transformLocalBox(definition, brick, cell)
+
+  return {
+    ...cell,
+    ...bounds,
+  }
+}
 
 const hashCoordinate = (value: number) =>
 {
@@ -350,19 +422,9 @@ export const getBrickWorldStructuralCellBoxes = (brick: PlacedBrick): WorldStruc
   const definition = brickById.get(brick.brickId)
   if (!definition) return []
 
-  const boxes = getBrickStructuralCells(definition).map((cell) => {
-    const transformedCorners = cellCorners(cell).map((corner) => transformBrickLocalPoint(definition, brick.pose, corner))
-
-    return {
-      ...cell,
-      minX: Math.min(...transformedCorners.map((corner) => corner.x)),
-      maxX: Math.max(...transformedCorners.map((corner) => corner.x)),
-      minY: Math.min(...transformedCorners.map((corner) => corner.y)),
-      maxY: Math.max(...transformedCorners.map((corner) => corner.y)),
-      minZ: Math.min(...transformedCorners.map((corner) => corner.z)),
-      maxZ: Math.max(...transformedCorners.map((corner) => corner.z)),
-    }
-  })
+  const boxes = getBrickStructuralCells(definition).map((cell) =>
+    transformStructuralCellBox(definition, brick, cell)
+  )
 
   setLimitedWorldCache(worldStructuralCellBoxCache, cacheKey, boxes)
   return boxes
@@ -375,6 +437,308 @@ export const getBrickWorldStructuralCells = (brick: PlacedBrick): WorldStructura
 
 export const structuralCellBlocksCollision = (cell: Pick<StructuralCell, 'kind'>) =>
   cell.kind === 'solid' || cell.kind === 'studsocket'
+
+const supportCellCenterTolerance = 0.000001
+
+const cellCenterIsInsideNominalBody = (definition: BrickDefinition, cell: StructuralCell) => {
+  const centerX = (cell.minX + cell.maxX) / 2
+  const centerY = (cell.minY + cell.maxY) / 2
+  const centerZ = (cell.minZ + cell.maxZ) / 2
+
+  return (
+    centerX >= -supportCellCenterTolerance &&
+    centerX <= definition.footprint.widthStuds + supportCellCenterTolerance &&
+    centerY >= -supportCellCenterTolerance &&
+    centerY <= definition.footprint.heightStuds + supportCellCenterTolerance &&
+    centerZ >= -supportCellCenterTolerance &&
+    centerZ <= definition.footprint.depthStuds + supportCellCenterTolerance
+  )
+}
+
+const supportCellCarriesLoad = (definition: BrickDefinition, cell: StructuralCell) =>
+  structuralCellBlocksCollision(cell) && cellCenterIsInsideNominalBody(definition, cell)
+
+const getBrickLocalSupportCellBoxes = (definition: BrickDefinition) =>
+  getBrickStructuralCells(definition).filter((cell) => supportCellCarriesLoad(definition, cell))
+
+export const getBrickWorldSupportCellBoxes = (brick: PlacedBrick): WorldStructuralCellBox[] => {
+  const cacheKey = getPlacedBrickCacheKey(brick)
+  const cached = worldSupportCellBoxCache.get(cacheKey)
+  if (cached) return cached
+
+  const definition = brickById.get(brick.brickId)
+  if (!definition) return []
+
+  const boxes = getBrickLocalSupportCellBoxes(definition).map((cell) =>
+    transformStructuralCellBox(definition, brick, cell)
+  )
+
+  setLimitedWorldCache(worldSupportCellBoxCache, cacheKey, boxes)
+  return boxes
+}
+
+const makeSupportFaceKey = (
+  y: number,
+  box: Pick<WorldStructuralCellBox, 'minX' | 'maxX' | 'minZ' | 'maxZ'>,
+) =>
+  `${round(y)}:${round(box.minX)},${round(box.maxX)},${round(box.minZ)},${round(box.maxZ)}`
+
+const makeSupportFace = (
+  y: number,
+  box: Pick<WorldStructuralCellBox, 'minX' | 'maxX' | 'minZ' | 'maxZ'>,
+): WorldStructuralSupportFace => ({
+  y: round(y),
+  minX: round(box.minX),
+  maxX: round(box.maxX),
+  minZ: round(box.minZ),
+  maxZ: round(box.maxZ),
+})
+
+const makeSupportFacePlaneKey = (y: number) => String(round(y))
+
+const mergeSupportFaceRows = (faces: WorldStructuralSupportFace[]) => {
+  const rowsByZ = new Map<string, WorldStructuralSupportFace[]>()
+
+  for (const face of faces) {
+    const key = `${face.y}:${face.minZ},${face.maxZ}`
+    const rows = rowsByZ.get(key)
+    if (rows) {
+      rows.push(face)
+    } else {
+      rowsByZ.set(key, [face])
+    }
+  }
+
+  const rows: WorldStructuralSupportFace[] = []
+  for (const rowFaces of rowsByZ.values()) {
+    const sorted = [...rowFaces].sort((source, target) => source.minX - target.minX)
+    for (const face of sorted) {
+      const previous = rows.at(-1)
+      if (
+        previous &&
+        previous.y === face.y &&
+        previous.minZ === face.minZ &&
+        previous.maxZ === face.maxZ &&
+        face.minX <= previous.maxX + STRUCTURAL_OVERLAP_TOLERANCE
+      ) {
+        previous.maxX = Math.max(previous.maxX, face.maxX)
+      } else {
+        rows.push({ ...face })
+      }
+    }
+  }
+
+  return rows
+}
+
+const mergeSupportFaceColumns = (faces: WorldStructuralSupportFace[]) => {
+  const sorted = [...faces].sort((source, target) =>
+    source.y - target.y ||
+    source.minX - target.minX ||
+    source.maxX - target.maxX ||
+    source.minZ - target.minZ
+  )
+  const merged: WorldStructuralSupportFace[] = []
+
+  for (const face of sorted) {
+    const previous = merged.at(-1)
+    if (
+      previous &&
+      previous.y === face.y &&
+      previous.minX === face.minX &&
+      previous.maxX === face.maxX &&
+      face.minZ <= previous.maxZ + STRUCTURAL_OVERLAP_TOLERANCE
+    ) {
+      previous.maxZ = Math.max(previous.maxZ, face.maxZ)
+    } else {
+      merged.push({ ...face })
+    }
+  }
+
+  return merged
+}
+
+const mergeSupportFaces = (faces: WorldStructuralSupportFace[]) =>
+  mergeSupportFaceColumns(mergeSupportFaceRows(faces))
+
+const groupSupportFacesByPlane = (faces: WorldStructuralSupportFace[]) => {
+  const grouped = new Map<string, WorldStructuralSupportFace[]>()
+  const facesByPlane = new Map<string, WorldStructuralSupportFace[]>()
+
+  for (const face of faces) {
+    const key = makeSupportFacePlaneKey(face.y)
+    const planeFaces = facesByPlane.get(key)
+    if (planeFaces) {
+      planeFaces.push(face)
+    } else {
+      facesByPlane.set(key, [face])
+    }
+  }
+
+  for (const [key, planeFaces] of facesByPlane) {
+    grouped.set(key, mergeSupportFaces(planeFaces))
+  }
+
+  return grouped
+}
+
+const makeSupportFaces = (
+  top: WorldStructuralSupportFace[],
+  bottom: WorldStructuralSupportFace[],
+): WorldStructuralSupportFaces => ({
+  top,
+  bottom,
+  topPlanes: groupSupportFacesByPlane(top),
+  bottomPlanes: groupSupportFacesByPlane(bottom),
+})
+
+const getBrickLocalSupportFaces = (definition: BrickDefinition): WorldStructuralSupportFaces => {
+  const cacheKey = makeStructuralDefinitionCacheKey(definition)
+  const cached = localSupportFaceCache.get(cacheKey)
+  if (cached) return cached
+
+  const boxes = getBrickLocalSupportCellBoxes(definition)
+  const bottomFaceKeys = new Set(boxes.map((box) => makeSupportFaceKey(box.minY, box)))
+  const topFaceKeys = new Set(boxes.map((box) => makeSupportFaceKey(box.maxY, box)))
+  const faces = makeSupportFaces(
+    boxes
+      .filter((box) => !bottomFaceKeys.has(makeSupportFaceKey(box.maxY, box)))
+      .map((box) => makeSupportFace(box.maxY, box)),
+    boxes
+      .filter((box) => !topFaceKeys.has(makeSupportFaceKey(box.minY, box)))
+      .map((box) => makeSupportFace(box.minY, box)),
+  )
+
+  localSupportFaceCache.set(cacheKey, faces)
+  return faces
+}
+
+const transformHorizontalSupportFace = (
+  definition: BrickDefinition,
+  brick: PlacedBrick,
+  face: WorldStructuralSupportFace,
+): WorldStructuralSupportFace => {
+  let minX = Infinity
+  let maxX = -Infinity
+  let minZ = Infinity
+  let maxZ = -Infinity
+  let y = face.y
+
+  for (let xIndex = 0; xIndex < 2; xIndex += 1) {
+    for (let zIndex = 0; zIndex < 2; zIndex += 1) {
+      const x = xIndex === 0 ? face.minX : face.maxX
+      const z = zIndex === 0 ? face.minZ : face.maxZ
+      const point = transformBrickLocalPoint(definition, brick.pose, { x, y: face.y, z })
+      minX = Math.min(minX, point.x)
+      maxX = Math.max(maxX, point.x)
+      minZ = Math.min(minZ, point.z)
+      maxZ = Math.max(maxZ, point.z)
+      y = point.y
+    }
+  }
+
+  return makeSupportFace(y, { minX, maxX, minZ, maxZ })
+}
+
+const getBrickWorldHorizontalSupportFaces = (
+  definition: BrickDefinition,
+  brick: PlacedBrick,
+) => {
+  const localFaces = getBrickLocalSupportFaces(definition)
+
+  return makeSupportFaces(
+    localFaces.top.map((face) => transformHorizontalSupportFace(definition, brick, face)),
+    localFaces.bottom.map((face) => transformHorizontalSupportFace(definition, brick, face)),
+  )
+}
+
+export const getBrickWorldSupportFaces = (brick: PlacedBrick): WorldStructuralSupportFaces => {
+  const cacheKey = getPlacedBrickCacheKey(brick)
+  const cached = worldSupportFaceCache.get(cacheKey)
+  if (cached) return cached
+
+  const definition = brickById.get(brick.brickId)
+  if (!definition) return makeSupportFaces([], [])
+
+  if ((brick.pose.verticalQuarterTurns ?? 0) === 0) {
+    const faces = getBrickWorldHorizontalSupportFaces(definition, brick)
+    setLimitedWorldCache(worldSupportFaceCache, cacheKey, faces)
+    return faces
+  }
+
+  const boxes = getBrickWorldSupportCellBoxes(brick)
+  const bottomFaceKeys = new Set(boxes.map((box) => makeSupportFaceKey(box.minY, box)))
+  const topFaceKeys = new Set(boxes.map((box) => makeSupportFaceKey(box.maxY, box)))
+  const top = boxes
+    .filter((box) => !bottomFaceKeys.has(makeSupportFaceKey(box.maxY, box)))
+    .map((box) => makeSupportFace(box.maxY, box))
+  const bottom = boxes
+    .filter((box) => !topFaceKeys.has(makeSupportFaceKey(box.minY, box)))
+    .map((box) => makeSupportFace(box.minY, box))
+  const faces = makeSupportFaces(top, bottom)
+
+  setLimitedWorldCache(worldSupportFaceCache, cacheKey, faces)
+  return faces
+}
+
+const getCellBoxBounds = (boxes: WorldStructuralCellBox[]): BrickBounds | undefined => {
+  if (boxes.length === 0) return undefined
+
+  let minX = Infinity
+  let maxX = -Infinity
+  let minY = Infinity
+  let maxY = -Infinity
+  let minZ = Infinity
+  let maxZ = -Infinity
+
+  for (const box of boxes) {
+    minX = Math.min(minX, box.minX)
+    maxX = Math.max(maxX, box.maxX)
+    minY = Math.min(minY, box.minY)
+    maxY = Math.max(maxY, box.maxY)
+    minZ = Math.min(minZ, box.minZ)
+    maxZ = Math.max(maxZ, box.maxZ)
+  }
+
+  return {
+    minX,
+    maxX,
+    minY,
+    maxY,
+    minZ,
+    maxZ,
+  }
+}
+
+const getBrickLocalSupportBounds = (definition: BrickDefinition) => {
+  const cacheKey = makeStructuralDefinitionCacheKey(definition)
+  if (localSupportBoundsCache.has(cacheKey)) return localSupportBoundsCache.get(cacheKey)
+
+  const bounds = getCellBoxBounds(getBrickLocalSupportCellBoxes(definition))
+  localSupportBoundsCache.set(cacheKey, bounds)
+  return bounds
+}
+
+export const getBrickWorldSupportBounds = (brick: PlacedBrick) => {
+  const cacheKey = getPlacedBrickCacheKey(brick)
+  if (worldSupportBoundsCache.has(cacheKey)) return worldSupportBoundsCache.get(cacheKey)
+
+  const definition = brickById.get(brick.brickId)
+  const localBounds = definition ? getBrickLocalSupportBounds(definition) : undefined
+  const bounds = definition && localBounds ? transformLocalBox(definition, brick, localBounds) : undefined
+  setLimitedWorldCache(worldSupportBoundsCache, cacheKey, bounds)
+  return bounds
+}
+
+const getBrickWorldCollisionCellBoxes = (brick: PlacedBrick): WorldStructuralCellBox[] => {
+  const cacheKey = getPlacedBrickCacheKey(brick)
+  const cached = worldCollisionCellBoxCache.get(cacheKey)
+  if (cached) return cached
+
+  const boxes = getBrickWorldStructuralCellBoxes(brick).filter(structuralCellBlocksCollision)
+  setLimitedWorldCache(worldCollisionCellBoxCache, cacheKey, boxes)
+  return boxes
+}
 
 const doCellBoxesOverlap = (
   source: Pick<StructuralCell, 'minX' | 'maxX' | 'minY' | 'maxY' | 'minZ' | 'maxZ'>,
@@ -392,11 +756,12 @@ export const getBrickWorldCollisionKeys = (brick: PlacedBrick) => {
   const cached = worldCollisionKeyCache.get(cacheKey)
   if (cached) return cached
 
-  const keys = new Set(
-    getBrickWorldStructuralCells(brick)
-      .filter(structuralCellBlocksCollision)
-      .map((cell) => cell.key),
-  )
+  const keys = new Set<string>()
+  for (const worldCell of getBrickWorldCollisionCellBoxes(brick)) {
+    for (const key of getCellHashKeys(worldCell)) {
+      keys.add(key)
+    }
+  }
   setLimitedWorldCache(worldCollisionKeyCache, cacheKey, keys)
   return keys
 }
@@ -446,13 +811,13 @@ export const getStructuralOverlapScore = (
   index: StructuralCollisionIndex,
 ) => {
   let overlapCount = 0
-  const sourceCells = getBrickWorldStructuralCellBoxes(brick).filter(structuralCellBlocksCollision)
+  const sourceCells = getBrickWorldCollisionCellBoxes(brick)
 
   for (const candidateId of getStructuralCollisionCandidateIds(brick, index)) {
     const candidate = index.bricksById.get(candidateId)
     if (!candidate) continue
 
-    const targetCells = getBrickWorldStructuralCellBoxes(candidate).filter(structuralCellBlocksCollision)
+    const targetCells = getBrickWorldCollisionCellBoxes(candidate)
     for (const sourceCell of sourceCells) {
       for (const targetCell of targetCells) {
         if (doCellBoxesOverlap(sourceCell, targetCell)) overlapCount += 1
@@ -467,8 +832,8 @@ export const doBrickStructuralCellsCollide = (
   source: PlacedBrick,
   target: PlacedBrick,
 ) => {
-  const sourceCells = getBrickWorldStructuralCellBoxes(source).filter(structuralCellBlocksCollision)
-  const targetCells = getBrickWorldStructuralCellBoxes(target).filter(structuralCellBlocksCollision)
+  const sourceCells = getBrickWorldCollisionCellBoxes(source)
+  const targetCells = getBrickWorldCollisionCellBoxes(target)
 
   return sourceCells.some((sourceCell) =>
     targetCells.some((targetCell) => doCellBoxesOverlap(sourceCell, targetCell)),

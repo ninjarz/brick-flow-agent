@@ -44,6 +44,7 @@ const defaultImportText: ImportText = {
 
 const ROTATION_REPOSITION_SEARCH_RADIUS_STUDS = 5
 const ROTATION_REPOSITION_BOUNDS_TOLERANCE = 0.000001
+const workspaceDraftSaveDebounceMs = 120
 
 const localizeFinishedAsset = (
   asset: FinishedAsset,
@@ -242,7 +243,8 @@ const loadWorkspaceDraft = () => {
     if (!isRecord(parsed)) return undefined
     const plan = parseImportedPlan(parsed.plan)
     if (!plan) return undefined
-    if (getBlockingBuildPlanIssues(validateBuildPlan(plan)).length > 0) return undefined
+    const issues = validateBuildPlan(plan)
+    if (getBlockingBuildPlanIssues(issues).length > 0) return undefined
 
     return {
       plan,
@@ -288,6 +290,11 @@ function App() {
     past: BuildPlan[]
     future: BuildPlan[]
   }>({ past: [], future: [] })
+  const stationaryCollisionIndexCacheRef = useRef<{
+    excludedKey: string
+    stationaryBricks: PlacedBrick[]
+    index: ReturnType<typeof createBrickCollisionIndex>
+  }>()
   const [selectedId, setSelectedId] = useState('')
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([])
   const [llmConfig, setLlmConfig] = useState<LlmConfig>(() => loadLlmConfig())
@@ -404,23 +411,23 @@ function App() {
   const canUndo = historyVersion >= 0 && planHistoryRef.current.past.length > 0
   const canRedo = historyVersion >= 0 && planHistoryRef.current.future.length > 0
 
-  const selectBrick = (id: string) => {
+  const selectBrick = useCallback((id: string) => {
     setSelectedId(id)
     setSelectedGroupIds([])
-  }
+  }, [])
 
-  const selectConnectedGroup = (id: string) => {
+  const selectConnectedGroup = useCallback((id: string) => {
     if (!id) {
       selectBrick('')
       return
     }
 
-    const component = getConnectedBrickComponents(plan.bricks).find((bricks) =>
+    const component = getConnectedBrickComponents(planRef.current.bricks).find((bricks) =>
       bricks.some((brick) => brick.id === id)
     )
     setSelectedId(id)
     setSelectedGroupIds(component?.map((brick) => brick.id) ?? [id])
-  }
+  }, [selectBrick])
 
   const selectedBrick = useMemo(
     () => plan.bricks.find((brick) => brick.id === selectedId),
@@ -512,7 +519,12 @@ function App() {
   }, [plan])
 
   useEffect(() => {
-    saveWorkspaceDraft(plan, prompt)
+    const timeoutId = window.setTimeout(
+      () => saveWorkspaceDraft(plan, prompt),
+      workspaceDraftSaveDebounceMs,
+    )
+
+    return () => window.clearTimeout(timeoutId)
   }, [plan, prompt])
 
   useEffect(() => {
@@ -728,6 +740,38 @@ function App() {
     }
   }
 
+  const getStationaryCollisionIndex = useCallback((bricks: PlacedBrick[], excludedIds: Set<string>) => {
+    const excludedKey = [...excludedIds].sort().join('|')
+    const cached = stationaryCollisionIndexCacheRef.current
+
+    if (cached?.excludedKey === excludedKey) {
+      let stationaryIndex = 0
+      let matches = true
+
+      for (const brick of bricks) {
+        if (excludedIds.has(brick.id)) continue
+        if (cached.stationaryBricks[stationaryIndex] !== brick) {
+          matches = false
+          break
+        }
+        stationaryIndex += 1
+      }
+
+      if (matches && stationaryIndex === cached.stationaryBricks.length) {
+        return cached
+      }
+    }
+
+    const stationaryBricks = bricks.filter((brick) => !excludedIds.has(brick.id))
+    const nextCache = {
+      excludedKey,
+      stationaryBricks,
+      index: createBrickCollisionIndex(stationaryBricks),
+    }
+    stationaryCollisionIndexCacheRef.current = nextCache
+    return nextCache
+  }, [])
+
   const canAcceptBrickPose = (
     currentBrick: PlacedBrick,
     nextBrick: PlacedBrick,
@@ -746,11 +790,11 @@ function App() {
       return false
     }
 
-    const collisionIndex = createBrickCollisionIndex(bricks)
-    if (!hasBrickCollision(nextBrick, bricks, collisionIndex)) return true
+    const collisionData = getStationaryCollisionIndex(bricks, new Set([currentBrick.id]))
+    if (!hasBrickCollision(nextBrick, collisionData.stationaryBricks, collisionData.index)) return true
 
-    const currentOverlapScore = getBrickRawOverlapScore(currentBrick, bricks, collisionIndex)
-    const nextOverlapScore = getBrickRawOverlapScore(nextBrick, bricks, collisionIndex)
+    const currentOverlapScore = getBrickRawOverlapScore(currentBrick, collisionData.stationaryBricks, collisionData.index)
+    const nextOverlapScore = getBrickRawOverlapScore(nextBrick, collisionData.stationaryBricks, collisionData.index)
     const accepted = nextOverlapScore < currentOverlapScore - 0.000001
 
     if (!accepted && import.meta.env.DEV) {
@@ -775,8 +819,6 @@ function App() {
   ) => {
     if (nextBricks.length === 0) return false
 
-    const nextBrickById = new Map(nextBricks.map((brick) => [brick.id, brick]))
-    const nextPlanBricks = bricks.map((brick) => nextBrickById.get(brick.id) ?? brick)
     const belowGroundBricks = nextBricks.filter((brick) => !isBrickAboveGround(brick))
     if (belowGroundBricks.length > 0) {
       if (import.meta.env.DEV) {
@@ -789,9 +831,15 @@ function App() {
       return false
     }
 
-    const collisionIndex = createBrickCollisionIndex(nextPlanBricks)
-    const hasCollision = nextBricks.some((brick) => hasBrickCollision(brick, nextPlanBricks, collisionIndex))
-    if (!hasCollision) return true
+    const collisionData = getStationaryCollisionIndex(bricks, new Set(nextBricks.map((brick) => brick.id)))
+    const hasStationaryCollision = nextBricks.some((brick) =>
+      hasBrickCollision(brick, collisionData.stationaryBricks, collisionData.index)
+    )
+    if (!hasStationaryCollision) {
+      const groupCollisionIndex = createBrickCollisionIndex(nextBricks)
+      const hasGroupCollision = nextBricks.some((brick) => hasBrickCollision(brick, nextBricks, groupCollisionIndex))
+      if (!hasGroupCollision) return true
+    }
 
     if (import.meta.env.DEV) {
       console.warn('brick-flow-agent blocked group move', {

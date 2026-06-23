@@ -1,14 +1,14 @@
 import { Edges, OrbitControls, Text } from '@react-three/drei'
 import { Canvas, useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
-import { type ReactNode, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, type ReactNode, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { BufferGeometry, DoubleSide, Float32BufferAttribute, Object3D, Vector3, type DirectionalLight, type InstancedMesh } from 'three'
 import { brickById, colorHex, colorOpacity } from '../data/basicBricks'
 import { createRound2x2AxleBodyGeometry, createRound2x2AxleGrilleBodyGeometry } from '../lib/csgBrickGeometry'
 import { getBrickWorldBoundsFrame } from '../lib/ldrawBounds'
 import { loadLDrawGeneratedVisual } from '../lib/ldrawGeneratedVisualLoader'
 import { createLoadedLDrawPartGeometry, loadLDrawPartGeometry } from '../lib/ldrawVisualGeometry'
-import { createBrickCollisionIndex, getBrickBounds, isBrickSupported } from '../lib/planUtils'
+import { createBuildGraph, getBrickBounds } from '../lib/planUtils'
 import { getBrickWorldStructuralCellBoxes, type StructuralCellKind, type WorldStructuralCellBox } from '../lib/structuralGrid'
 import { WORLD_EDIT_STEP_STUDS, getBrickConnectors, getBrickWorldFrame, poseToWorld } from '../lib/brickUnits'
 import { useI18n } from '../lib/i18n'
@@ -537,14 +537,14 @@ const SceneLighting = ({
   )
 }
 
-const BrickMesh = ({ brick, selected, highlighted, floating, onSelect, onSelectConnected }: {
+const BrickMesh = memo(function BrickMesh({ brick, selected, highlighted, floating, onSelect, onSelectConnected }: {
   brick: PlacedBrick
   selected: boolean
   highlighted: boolean
   floating: boolean
   onSelect: (id: string) => void
   onSelectConnected?: (id: string) => void
-}) => {
+}) {
   const definition = brickById.get(brick.brickId)
   if (!definition) return null
 
@@ -559,7 +559,7 @@ const BrickMesh = ({ brick, selected, highlighted, floating, onSelect, onSelectC
       onSelectConnected={onSelectConnected}
     />
   )
-}
+})
 
 const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, onSelect, onSelectConnected }: {
   brick: PlacedBrick
@@ -1266,10 +1266,10 @@ export const BrickScene = ({
   const supportedByBrickId = useMemo(() => {
     void ldrawBoundsVersion
 
-    const collisionIndex = createBrickCollisionIndex(deferredSupportBricks)
+    const buildGraph = createBuildGraph(deferredSupportBricks)
     return new Map(deferredSupportBricks.map((brick) => [
       brick.id,
-      isBrickSupported(brick, deferredSupportBricks, collisionIndex),
+      buildGraph.groundedIds.has(brick.id),
     ]))
   }, [deferredSupportBricks, ldrawBoundsVersion])
 
@@ -1279,7 +1279,13 @@ export const BrickScene = ({
   }
 
   return (
-    <Canvas shadows camera={{ position: [8, 7, 9], fov: 42 }} onPointerMissed={() => onSelect('')}>
+    <Canvas
+      shadows
+      frameloop="demand"
+      dpr={[1, 1.5]}
+      camera={{ position: [8, 7, 9], fov: 42 }}
+      onPointerMissed={() => onSelect('')}
+    >
       <color attach="background" args={['#eef2f5']} />
       <SceneLighting
         centerX={gridFrame.centerX}

@@ -50,7 +50,7 @@ export const getTriangleBounds = (triangles: MeshTriangle[]): BrickBounds | unde
   return { minX, maxX, minY, maxY, minZ, maxZ }
 }
 
-const getFootprintLocalBounds = (definition: BrickDefinition): BrickBounds => ({
+export const getFootprintLocalBounds = (definition: BrickDefinition): BrickBounds => ({
   minX: 0,
   maxX: definition.footprint.widthStuds,
   minY: 0,
@@ -105,6 +105,9 @@ export const transformBrickLocalBounds = (
 
 export const getBrickWorldBounds = (definition: BrickDefinition, pose: BrickPose) =>
   transformBrickLocalBounds(definition, pose, getBrickLocalBounds(definition))
+
+export const getBrickFootprintWorldBounds = (definition: BrickDefinition, pose: BrickPose) =>
+  transformBrickLocalBounds(definition, pose, getFootprintLocalBounds(definition))
 
 export const boundsToFrame = (bounds: BrickBounds): BrickBoundsFrame => ({
   x: (bounds.minX + bounds.maxX) / 2,

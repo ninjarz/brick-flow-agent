@@ -34,12 +34,12 @@ await writeFile(entry, `
   import { getBrickConnectors } from ${JSON.stringify(`${workspace}/src/lib/brickUnits.ts`)};
   import { serializeBuildManual } from ${JSON.stringify(`${workspace}/src/lib/manualSerializer.ts`)};
   import { normalizeImportedPlan, normalizeImportedPose, tryNormalizeImportedPlan } from ${JSON.stringify(`${workspace}/src/lib/planImport.ts`)};
-  import { findNearestOpenPoseAround, findOpenPose, getBlockingBuildPlanIssues, hasBrickCollision, isBrickAboveGround, isBrickSupported, summarizeBuildPlanIssues, validateBuildPlan } from ${JSON.stringify(`${workspace}/src/lib/planUtils.ts`)};
+  import { findNearestOpenPoseAround, findOpenPose, getBlockingBuildPlanIssues, getBrickBounds, hasBrickCollision, isBrickAboveGround, isBrickSupported, summarizeBuildPlanIssues, validateBuildPlan } from ${JSON.stringify(`${workspace}/src/lib/planUtils.ts`)};
   import { createLDrawStudConnector, ldrawPointToBrickLocal } from ${JSON.stringify(`${workspace}/src/lib/ldrawConnectors.ts`)};
   import { parseLDrawColorDefinitions } from ${JSON.stringify(`${workspace}/src/lib/ldrawColors.ts`)};
   import { loadLDrawGeneratedVisual } from ${JSON.stringify(`${workspace}/src/lib/ldrawGeneratedVisualLoader.ts`)};
   import { getBrickLocalBounds, getBrickWorldBounds } from ${JSON.stringify(`${workspace}/src/lib/ldrawBounds.ts`)};
-  import { getBrickStructuralCells } from ${JSON.stringify(`${workspace}/src/lib/structuralGrid.ts`)};
+  import { getBrickStructuralCells, getBrickWorldSupportBounds } from ${JSON.stringify(`${workspace}/src/lib/structuralGrid.ts`)};
   import {
     createCurvedSlope1x2Geometry,
     createCurvedSlope1x2OutlineGeometry,
@@ -58,7 +58,7 @@ await writeFile(entry, `
     const planRoundTripIssues = validateBuildPlan(normalizeImportedPlan(JSON.parse(JSON.stringify(plan))));
     const planRoundTripBlockingIssues = getBlockingBuildPlanIssues(planRoundTripIssues);
     const manual = serializeBuildManual(plan);
-    const manualPlan = {
+    const manualPlan = manual ? {
       id: manual.planId,
       title: manual.title,
       prompt: manual.prompt,
@@ -77,10 +77,10 @@ await writeFile(entry, `
         description: step.description,
         brickIds: step.addPieces.map((piece) => piece.instanceId),
       })),
-    };
-    const manualRoundTripIssues = validateBuildPlan(normalizeImportedPlan(manualPlan));
+    } : undefined;
+    const manualRoundTripIssues = manualPlan ? validateBuildPlan(normalizeImportedPlan(manualPlan)) : [];
     const manualRoundTripBlockingIssues = getBlockingBuildPlanIssues(manualRoundTripIssues);
-    const invalidManualSteps = manual.steps.filter((step) => !step.validation.ok);
+    const invalidManualSteps = manual?.steps.filter((step) => !step.validation.ok) ?? [];
 
     return {
       assetId: asset.id,
@@ -90,7 +90,8 @@ await writeFile(entry, `
       planBlockingIssues,
       planRoundTripIssues,
       planRoundTripBlockingIssues,
-      manualSchema: manual.schemaVersion,
+      manualSkipped: false,
+      manualSchema: manual?.schemaVersion,
       manualRoundTripIssues,
       manualRoundTripBlockingIssues,
       invalidManualSteps,
@@ -139,6 +140,16 @@ await writeFile(entry, `
     'finished-robot',
     'finished-tree',
     'finished-duck',
+    'finished-obj-stanford-bunny-s',
+    'finished-obj-stanford-bunny-m',
+    'finished-obj-stanford-bunny-l',
+    'finished-obj-stanford-bunny-xl',
+    'finished-obj-stanford-bunny-xxl',
+    'finished-obj-armadillo-s',
+    'finished-obj-armadillo-m',
+    'finished-obj-armadillo-l',
+    'finished-obj-armadillo-xl',
+    'finished-obj-armadillo-xxl',
   ]);
   const expectedDefaultAssetPieceCounts = {
     'finished-ghost': 26,
@@ -321,6 +332,8 @@ await writeFile(entry, `
     pose: { xStud: 0, yStud, zStud: 0, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
   });
   const support3005 = makePlacedBrick('support-3005', 'brick-1x1', 0);
+  const support3005VisualBounds = getBrickBounds(support3005);
+  const support3005BodyBounds = getBrickWorldSupportBounds(support3005);
   const highEyeTile98138 = makePlacedBrick('eye-tile-high', 'tile-eye-1x1', 1.4, 'white');
   const seatedEyeTile98138 = makePlacedBrick('eye-tile-seated', 'tile-eye-1x1', 1.2, 'white');
   const highStacked3005 = makePlacedBrick('stacked-3005-high', 'brick-1x1', 1.4);
@@ -731,6 +744,12 @@ await writeFile(entry, `
     !isBrickSupported(seatedStacked3005, [support3005, seatedStacked3005])
       ? '3005 should be supported once seated at the real stud/tube connection height'
       : '',
+    !support3005BodyBounds || Math.abs(support3005BodyBounds.maxY - 1.2) > 0.000001
+      ? '3005 support body bounds must stop at the nominal body top, not the visual stud top'
+      : '',
+    !support3005VisualBounds || support3005VisualBounds.maxY <= (support3005BodyBounds?.maxY ?? 0) + 0.000001
+      ? '3005 visual bounds should remain allowed to include the top stud above the support body'
+      : '',
     isBrickAboveGround(flippedGround3005)
       ? '3005 flipped at ground level must be below-ground because the top stud rotates below y=0'
       : '',
@@ -790,7 +809,7 @@ await writeFile(entry, `
     result.planRoundTripBlockingIssues.length > 0 ||
     result.manualRoundTripBlockingIssues.length > 0 ||
     result.invalidManualSteps.length > 0 ||
-    result.manualSchema !== 3,
+    (!result.manualSkipped && result.manualSchema !== 3),
   );
 
   console.log(JSON.stringify(results.map((result) => ({
@@ -798,6 +817,7 @@ await writeFile(entry, `
     title: result.title,
     pieces: result.pieces,
     manualSchema: result.manualSchema,
+    manualSkipped: result.manualSkipped,
     plan: result.summary.plan,
     planRoundTrip: result.summary.planRoundTrip,
     manualRoundTrip: result.summary.manualRoundTrip,

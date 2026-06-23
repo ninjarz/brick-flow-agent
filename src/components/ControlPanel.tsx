@@ -1,8 +1,8 @@
-import { useDeferredValue, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { BookOpen, Box, Download, ImageUp, Plus, Sparkles, Trash2, Upload } from 'lucide-react'
 import { brickDefinitions } from '../data/basicBricks'
 import { PLATE_HEIGHT_WORLD } from '../lib/brickUnits'
-import { countBricks, getBlockingBuildPlanIssues, summarizeBuildPlanIssues, validateBuildPlan } from '../lib/planUtils'
+import { countBricks, getBlockingBuildPlanIssues, summarizeBuildPlanIssues, validateBuildPlan, validateBuildPlanBasics } from '../lib/planUtils'
 import { useI18n } from '../lib/i18n'
 import { BrickGlyph } from './BrickGlyph'
 import type { BrickPack, BuildPlan } from '../types/bricks'
@@ -39,6 +39,7 @@ const getHeightLabel = (brick: (typeof brickDefinitions)[number]) =>
 const isInventoryLimited = (inventory: number) => Number.isFinite(inventory)
 const formatInventory = (inventory: number) => isInventoryLimited(inventory) ? String(inventory) : '∞'
 const partPackOptions: BrickPack[] = ['lego', 'minecraft']
+const validationDebounceMs = 120
 
 export const ControlPanel = ({
   engineStatusLabel,
@@ -65,10 +66,48 @@ export const ControlPanel = ({
   const [partQuery, setPartQuery] = useState('')
   const [partKindFilter, setPartKindFilter] = useState('all')
   const [partPackFilter, setPartPackFilter] = useState<BrickPack>('lego')
-  const deferredValidationPlan = useDeferredValue(plan)
-  const planIssues = useMemo(() => validateBuildPlan(deferredValidationPlan), [deferredValidationPlan])
+  const [backgroundValidation, setBackgroundValidation] = useState<{
+    plan: BuildPlan
+    issues: ReturnType<typeof validateBuildPlan>
+  }>()
+  const basicPlanIssues = useMemo(() => validateBuildPlanBasics(plan), [plan])
+
+  useEffect(() => {
+    let isCanceled = false
+    const timeoutId = window.setTimeout(() => {
+      const issues = validateBuildPlan(plan)
+      if (!isCanceled) {
+        setBackgroundValidation({ plan, issues })
+      }
+    }, validationDebounceMs)
+
+    return () => {
+      isCanceled = true
+      window.clearTimeout(timeoutId)
+    }
+  }, [plan])
+
+  const isStructureChecking = backgroundValidation?.plan !== plan
+  const planIssues = useMemo(
+    () => {
+      return backgroundValidation?.plan === plan ? backgroundValidation.issues : basicPlanIssues
+    },
+    [backgroundValidation, basicPlanIssues, plan],
+  )
   const blockingPlanIssues = useMemo(() => getBlockingBuildPlanIssues(planIssues), [planIssues])
   const planIssueSummary = useMemo(() => summarizeBuildPlanIssues(planIssues, locale), [locale, planIssues])
+  const structureStatusTone = blockingPlanIssues.length > 0
+    ? 'warn'
+    : planIssues.length > 0 || isStructureChecking
+      ? 'notice'
+      : 'ok'
+  const structureStatusText = isStructureChecking
+    ? planIssues.length > 0
+      ? `${planIssueSummary} · ${t('control.validationCheckingLarge')}`
+      : t('control.validationCheckingLarge')
+    : planIssues.length > 0
+      ? planIssueSummary
+      : t('common.structureOk')
   const brickCounts = useMemo(() => countBricks(plan), [plan])
   const packBrickDefinitions = useMemo(
     () => brickDefinitions.filter((brick) => brick.pack === partPackFilter),
@@ -236,8 +275,8 @@ export const ControlPanel = ({
           />
         </label>
         <p>{t('common.parts', { count: plan.bricks.length })} · {t('common.steps', { count: plan.steps.length })} · {t(`control.source.${plan.source}`)}</p>
-        <p className={`structure-status ${planIssues.length > 0 ? (blockingPlanIssues.length > 0 ? 'warn' : 'notice') : 'ok'}`}>
-          {planIssues.length > 0 ? planIssueSummary : t('common.structureOk')}
+        <p className={`structure-status ${structureStatusTone}`}>
+          {structureStatusText}
         </p>
         <button type="button" onClick={onOpenManual}>
           <BookOpen size={16} />
