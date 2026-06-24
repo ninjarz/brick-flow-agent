@@ -134,6 +134,9 @@ const createPlanValidationContextFromSpatialState = (state: PlanSpatialState): P
   mechanicalConnectorBrickIds: state.mechanicalConnectorBrickIds,
 })
 
+export const createPlanSpatialState = (bricks: PlacedBrick[]) =>
+  PlanSpatialState.fromBricks(bricks, connectorSnapSearchTolerance)
+
 export const createId = (prefix: string) =>
   `${prefix}-${Math.random().toString(36).slice(2, 8)}`
 
@@ -1254,6 +1257,7 @@ const buildPlacedBrickWithPose = (brick: PlacedBrick, pose: BrickPose): PlacedBr
 
 type SnapBrickToPlanOptions = {
   previousBrick?: PlacedBrick
+  spatialState?: PlanSpatialState
 }
 
 export const snapBrickToPlan = (
@@ -1264,7 +1268,7 @@ export const snapBrickToPlan = (
   const definition = brickById.get(brick.brickId)
   if (!definition) return brick
 
-  const spatialState = PlanSpatialState.fromBricks(bricks, connectorSnapSearchTolerance)
+  const spatialState = options.spatialState ?? createPlanSpatialState(bricks)
   const staticBricks = spatialState.bricks
   const context = createPlanValidationContextFromSpatialState(spatialState)
   const snapCacheKey = [

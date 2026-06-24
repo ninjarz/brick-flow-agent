@@ -68,11 +68,11 @@ export class PlanSpatialState {
   readonly bounds: ReturnType<typeof getPlanBounds>
   readonly boundsByBrickId = new Map<string, BrickBounds>()
   readonly connectorCache = new Map<string, WorldBrickConnector[]>()
-  readonly graphConnectorBrickIds = new Set<string>()
-  readonly mechanicalConnectorBrickIds = new Set<string>()
   readonly poseResults = new Map<string, BrickPose>()
   readonly snapResults = new Map<string, BrickPose>()
 
+  private graphConnectorBrickIdsValue?: Set<string>
+  private mechanicalConnectorBrickIdsValue?: Set<string>
   private connectorIndex?: ConnectorSpatialIndex
   private collisionIndexValue?: StructuralCollisionIndex
 
@@ -83,18 +83,6 @@ export class PlanSpatialState {
     for (const brick of this.bricks) {
       const bounds = getBrickBounds(brick)
       if (bounds) this.boundsByBrickId.set(brick.id, bounds)
-
-      const connectors = this.getConnectors(brick)
-      if (connectors.some((connector) => (
-        connector.axis !== 'y' ||
-        connector.kind === 'studsocket' ||
-        PlanSpatialState.isMechanicalConnectorKind(connector.kind)
-      ))) {
-        this.graphConnectorBrickIds.add(brick.id)
-      }
-      if (connectors.some((connector) => PlanSpatialState.isMechanicalConnectorKind(connector.kind))) {
-        this.mechanicalConnectorBrickIds.add(brick.id)
-      }
     }
   }
 
@@ -119,6 +107,16 @@ export class PlanSpatialState {
   get collisionIndex() {
     this.collisionIndexValue ??= createStructuralCollisionIndex(this.bricks)
     return this.collisionIndexValue
+  }
+
+  get graphConnectorBrickIds() {
+    this.ensureConnectorRoleIds()
+    return this.graphConnectorBrickIdsValue!
+  }
+
+  get mechanicalConnectorBrickIds() {
+    this.ensureConnectorRoleIds()
+    return this.mechanicalConnectorBrickIdsValue!
   }
 
   getConnectors(brick: PlacedBrick) {
@@ -175,6 +173,30 @@ export class PlanSpatialState {
 
     this.connectorIndex = { cellSize, keyToConnectors }
     return this.connectorIndex
+  }
+
+  private ensureConnectorRoleIds() {
+    if (this.graphConnectorBrickIdsValue && this.mechanicalConnectorBrickIdsValue) return
+
+    const graphConnectorBrickIds = new Set<string>()
+    const mechanicalConnectorBrickIds = new Set<string>()
+
+    for (const brick of this.bricks) {
+      const connectors = this.getConnectors(brick)
+      if (connectors.some((connector) => (
+        connector.axis !== 'y' ||
+        connector.kind === 'studsocket' ||
+        PlanSpatialState.isMechanicalConnectorKind(connector.kind)
+      ))) {
+        graphConnectorBrickIds.add(brick.id)
+      }
+      if (connectors.some((connector) => PlanSpatialState.isMechanicalConnectorKind(connector.kind))) {
+        mechanicalConnectorBrickIds.add(brick.id)
+      }
+    }
+
+    this.graphConnectorBrickIdsValue = graphConnectorBrickIds
+    this.mechanicalConnectorBrickIdsValue = mechanicalConnectorBrickIds
   }
 
   private static isMechanicalConnectorKind(kind: WorldBrickConnector['kind']) {

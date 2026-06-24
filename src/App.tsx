@@ -11,7 +11,7 @@ import { loadLlmConfig, saveLlmConfig } from './lib/llmConfig'
 import { defaultFinishedAssets, isDefaultFinishedAsset, loadFinishedAssets, saveFinishedAssets } from './lib/finishedAssets'
 import { formatBuildManualHtml, formatBuildManualMarkdown, serializeBuildManual } from './lib/manualSerializer'
 import { isValidImportedPose, normalizeImportedPose, tryNormalizeImportedPlan } from './lib/planImport'
-import { countBricks, createBrickCollisionIndex, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickBounds, getBrickPlacementDiagnostics, getBrickRawOverlapScore, getConnectedBrickComponents, getNearestHorizontalSearchOffsets, hasBrickCollision, isBrickAboveGround, makeBrick, repairBuildPlan, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
+import { countBricks, createBrickCollisionIndex, createPlanSpatialState, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickBounds, getBrickPlacementDiagnostics, getBrickRawOverlapScore, getConnectedBrickComponents, getNearestHorizontalSearchOffsets, hasBrickCollision, isBrickAboveGround, makeBrick, repairBuildPlan, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
 import { WORLD_SNAP_STEP_STUDS, footprintToWorld, getBrickWorldFrame, normalizeHorizontalStud, normalizeQuarterTurns, normalizeVerticalQuarterTurns, normalizeYStud } from './lib/brickUnits'
 import { useI18n } from './lib/i18n'
 import type { BuildPlan, FinishedAsset, LlmConfig, PlacedBrick } from './types/bricks'
@@ -35,6 +35,12 @@ type LocalizedFinishedAsset = {
 type ImportText = {
   importedPlanTitle: string
   importedStepTitle: (stepNumber: number) => string
+}
+
+type StationaryPlanSpatialData = {
+  excludedKey: string
+  stationaryBricks: PlacedBrick[]
+  spatialState: ReturnType<typeof createPlanSpatialState>
 }
 
 const defaultImportText: ImportText = {
@@ -205,9 +211,10 @@ const findNearestOpenBrickGroupAround = (
   rotatedBricks: PlacedBrick[],
   allBricks: PlacedBrick[],
   selectedIds: Set<string>,
+  stationaryData?: StationaryPlanSpatialData,
 ) => {
-  const stationaryBricks = allBricks.filter((brick) => !selectedIds.has(brick.id))
-  const stationaryCollisionIndex = createBrickCollisionIndex(stationaryBricks)
+  const stationaryBricks = stationaryData?.stationaryBricks ?? allBricks.filter((brick) => !selectedIds.has(brick.id))
+  const stationaryCollisionIndex = stationaryData?.spatialState.collisionIndex ?? createBrickCollisionIndex(stationaryBricks)
 
   for (const offset of getNearestHorizontalSearchOffsets(ROTATION_REPOSITION_SEARCH_RADIUS_STUDS)) {
     const candidateBricks = liftBrickGroupAboveGround(rotatedBricks.map((brick) => ({
@@ -290,11 +297,7 @@ function App() {
     past: BuildPlan[]
     future: BuildPlan[]
   }>({ past: [], future: [] })
-  const stationaryCollisionIndexCacheRef = useRef<{
-    excludedKey: string
-    stationaryBricks: PlacedBrick[]
-    index: ReturnType<typeof createBrickCollisionIndex>
-  }>()
+  const stationarySpatialStateCacheRef = useRef<StationaryPlanSpatialData>()
   const [selectedId, setSelectedId] = useState('')
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([])
   const [llmConfig, setLlmConfig] = useState<LlmConfig>(() => loadLlmConfig())
@@ -740,9 +743,9 @@ function App() {
     }
   }
 
-  const getStationaryCollisionIndex = useCallback((bricks: PlacedBrick[], excludedIds: Set<string>) => {
+  const getStationarySpatialState = useCallback((bricks: PlacedBrick[], excludedIds: Set<string>) => {
     const excludedKey = [...excludedIds].sort().join('|')
-    const cached = stationaryCollisionIndexCacheRef.current
+    const cached = stationarySpatialStateCacheRef.current
 
     if (cached?.excludedKey === excludedKey) {
       let stationaryIndex = 0
@@ -766,9 +769,9 @@ function App() {
     const nextCache = {
       excludedKey,
       stationaryBricks,
-      index: createBrickCollisionIndex(stationaryBricks),
+      spatialState: createPlanSpatialState(stationaryBricks),
     }
-    stationaryCollisionIndexCacheRef.current = nextCache
+    stationarySpatialStateCacheRef.current = nextCache
     return nextCache
   }, [])
 
@@ -777,6 +780,7 @@ function App() {
     nextBrick: PlacedBrick,
     bricks: PlacedBrick[],
     context?: Record<string, unknown>,
+    stationaryData?: StationaryPlanSpatialData,
   ) => {
     if (!isBrickAboveGround(nextBrick)) {
       if (import.meta.env.DEV) {
@@ -790,11 +794,11 @@ function App() {
       return false
     }
 
-    const collisionData = getStationaryCollisionIndex(bricks, new Set([currentBrick.id]))
-    if (!hasBrickCollision(nextBrick, collisionData.stationaryBricks, collisionData.index)) return true
+    const collisionData = stationaryData ?? getStationarySpatialState(bricks, new Set([currentBrick.id]))
+    if (!hasBrickCollision(nextBrick, collisionData.stationaryBricks, collisionData.spatialState.collisionIndex)) return true
 
-    const currentOverlapScore = getBrickRawOverlapScore(currentBrick, collisionData.stationaryBricks, collisionData.index)
-    const nextOverlapScore = getBrickRawOverlapScore(nextBrick, collisionData.stationaryBricks, collisionData.index)
+    const currentOverlapScore = getBrickRawOverlapScore(currentBrick, collisionData.stationaryBricks, collisionData.spatialState.collisionIndex)
+    const nextOverlapScore = getBrickRawOverlapScore(nextBrick, collisionData.stationaryBricks, collisionData.spatialState.collisionIndex)
     const accepted = nextOverlapScore < currentOverlapScore - 0.000001
 
     if (!accepted && import.meta.env.DEV) {
@@ -816,6 +820,7 @@ function App() {
     nextBricks: PlacedBrick[],
     bricks: PlacedBrick[],
     context?: Record<string, unknown>,
+    stationaryData?: StationaryPlanSpatialData,
   ) => {
     if (nextBricks.length === 0) return false
 
@@ -831,9 +836,9 @@ function App() {
       return false
     }
 
-    const collisionData = getStationaryCollisionIndex(bricks, new Set(nextBricks.map((brick) => brick.id)))
+    const collisionData = stationaryData ?? getStationarySpatialState(bricks, new Set(nextBricks.map((brick) => brick.id)))
     const hasStationaryCollision = nextBricks.some((brick) =>
-      hasBrickCollision(brick, collisionData.stationaryBricks, collisionData.index)
+      hasBrickCollision(brick, collisionData.stationaryBricks, collisionData.spatialState.collisionIndex)
     )
     if (!hasStationaryCollision) {
       const groupCollisionIndex = createBrickCollisionIndex(nextBricks)
@@ -977,7 +982,8 @@ function App() {
               zStud: normalizeHorizontalStud(brick.pose.zStud + delta.zStud),
             },
           }))
-        if (!canAcceptBrickGroupPose(nextBricks, current.bricks, { action: 'updateBrickGroup' })) return current
+        const stationaryData = getStationarySpatialState(current.bricks, selectionIdSet)
+        if (!canAcceptBrickGroupPose(nextBricks, current.bricks, { action: 'updateBrickGroup' }, stationaryData)) return current
         const nextBrickById = new Map(nextBricks.map((brick) => [brick.id, brick]))
 
         return {
@@ -986,10 +992,11 @@ function App() {
         }
       }
 
+      const stationaryData = getStationarySpatialState(current.bricks, new Set([currentBrick.id]))
       const nextBrick = isAutoSnapEnabled
-        ? snapBrickToPlan(updated, current.bricks, { previousBrick: currentBrick })
+        ? snapBrickToPlan(updated, stationaryData.stationaryBricks, { previousBrick: currentBrick, spatialState: stationaryData.spatialState })
         : updated
-      if (!canAcceptBrickPose(currentBrick, nextBrick, current.bricks, { action: 'updateBrick' })) return current
+      if (!canAcceptBrickPose(currentBrick, nextBrick, current.bricks, { action: 'updateBrick' }, stationaryData)) return current
 
       return {
         ...current,
@@ -1072,7 +1079,8 @@ function App() {
               zStud: normalizeHorizontalStud(brick.pose.zStud + (delta.zStud ?? 0)),
             },
           }))
-        if (!canAcceptBrickGroupPose(nextBricks, current.bricks, { action: 'nudgeSelectedGroup', delta })) return current
+        const stationaryData = getStationarySpatialState(current.bricks, selectionIdSet)
+        if (!canAcceptBrickGroupPose(nextBricks, current.bricks, { action: 'nudgeSelectedGroup', delta }, stationaryData)) return current
         const nextBrickById = new Map(nextBricks.map((brick) => [brick.id, brick]))
 
         return {
@@ -1090,10 +1098,11 @@ function App() {
           zStud: normalizeHorizontalStud(selected.pose.zStud + (delta.zStud ?? 0)),
         },
       }
+      const stationaryData = getStationarySpatialState(current.bricks, new Set([selected.id]))
       const nextBrick = isAutoSnapEnabled
-        ? snapBrickToPlan(movedBrick, current.bricks, { previousBrick: selected })
+        ? snapBrickToPlan(movedBrick, stationaryData.stationaryBricks, { previousBrick: selected, spatialState: stationaryData.spatialState })
         : movedBrick
-      if (!canAcceptBrickPose(selected, nextBrick, current.bricks, { action: 'nudgeSelected', delta })) return current
+      if (!canAcceptBrickPose(selected, nextBrick, current.bricks, { action: 'nudgeSelected', delta }, stationaryData)) return current
 
       return {
         ...current,
@@ -1115,9 +1124,10 @@ function App() {
         const nextBricks = axis === 'horizontal'
           ? rotateBrickGroupHorizontally(selectedBricks, selected, deltaQuarterTurns)
           : rotateBrickGroupVertically(selectedBricks, selected, deltaQuarterTurns)
-        const acceptedBricks = canAcceptBrickGroupPose(nextBricks, current.bricks, { action: 'rotateSelectedGroup', axis, deltaQuarterTurns })
+        const stationaryData = getStationarySpatialState(current.bricks, selectionIdSet)
+        const acceptedBricks = canAcceptBrickGroupPose(nextBricks, current.bricks, { action: 'rotateSelectedGroup', axis, deltaQuarterTurns }, stationaryData)
           ? nextBricks
-          : findNearestOpenBrickGroupAround(nextBricks, current.bricks, selectionIdSet)
+          : findNearestOpenBrickGroupAround(nextBricks, current.bricks, selectionIdSet, stationaryData)
         if (!acceptedBricks) return current
         const nextBrickById = new Map(acceptedBricks.map((brick) => [brick.id, brick]))
 
@@ -1144,12 +1154,13 @@ function App() {
             }),
         },
       }
+      const stationaryData = getStationarySpatialState(current.bricks, new Set([selected.id]))
       const nextBrick = isAutoSnapEnabled
-        ? snapBrickToPlan(rotatedBrick, current.bricks, { previousBrick: selected })
+        ? snapBrickToPlan(rotatedBrick, stationaryData.stationaryBricks, { previousBrick: selected, spatialState: stationaryData.spatialState })
         : rotatedBrick
-      const acceptedBrick = canAcceptBrickPose(selected, nextBrick, current.bricks, { action: 'rotateSelected', axis, deltaQuarterTurns })
+      const acceptedBrick = canAcceptBrickPose(selected, nextBrick, current.bricks, { action: 'rotateSelected', axis, deltaQuarterTurns }, stationaryData)
         ? nextBrick
-        : findNearestOpenPoseAround(nextBrick, current.bricks, { radiusStuds: ROTATION_REPOSITION_SEARCH_RADIUS_STUDS })
+        : findNearestOpenPoseAround(nextBrick, stationaryData.stationaryBricks, { radiusStuds: ROTATION_REPOSITION_SEARCH_RADIUS_STUDS })
       if (!acceptedBrick) return current
 
       return {
