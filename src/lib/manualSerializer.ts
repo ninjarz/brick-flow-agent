@@ -1,9 +1,15 @@
 import { brickById } from '../data/basicBricks'
 import type { BrickColor, BrickPose, BuildPlan, PlacedBrick } from '../types/bricks'
 import { footprintToWorld } from './brickUnits'
-import { createSingleBrickSteps, getBlockingBuildPlanIssues, summarizeBuildPlanIssues, validateBuildPlan } from './planUtils'
+import {
+  createSingleBrickSteps,
+  getBlockingBuildPlanIssues,
+  summarizeBuildPlanIssues,
+  validateBuildPlan,
+} from './planUtils'
 
 type ManualLocale = 'zh-CN' | 'en-US'
+const largeTemplateManualValidationThreshold = 100
 
 const manualText: Record<ManualLocale, {
   lang: string
@@ -181,14 +187,12 @@ const toManualPiece = (brick: BuildPlan['bricks'][number]): ManualPiece => {
   }
 }
 
-const makeCumulativePlan = (plan: BuildPlan, bricks: PlacedBrick[]): BuildPlan => ({
-  ...plan,
-  bricks,
-  steps: createSingleBrickSteps(bricks),
-})
-
 const validateCumulativePlan = (plan: BuildPlan, bricks: PlacedBrick[], locale: ManualLocale) => {
-  const issues = validateBuildPlan(makeCumulativePlan(plan, bricks))
+  const issues = validateBuildPlan({
+    ...plan,
+    bricks,
+    steps: createSingleBrickSteps(bricks),
+  })
   const blockingIssues = getBlockingBuildPlanIssues(issues)
 
   return {
@@ -206,7 +210,24 @@ const sortBuildCandidates = (source: PlacedBrick, target: PlacedBrick) =>
   source.pose.xStud - target.pose.xStud ||
   source.id.localeCompare(target.id)
 
+const emptyManualValidation = (locale: ManualLocale): ManualStepPage['validation'] => ({
+  ok: true,
+  issueCount: 0,
+  blockingIssueCount: 0,
+  warningIssueCount: 0,
+  summary: summarizeBuildPlanIssues([], locale),
+})
+
+const shouldTrustManualPlanOrder = (plan: BuildPlan) =>
+  plan.source === 'template-local' &&
+  plan.bricks.length >= largeTemplateManualValidationThreshold
+
 const sequenceBricksForManual = (plan: BuildPlan, locale: ManualLocale) => {
+  if (shouldTrustManualPlanOrder(plan)) {
+    const validation = emptyManualValidation(locale)
+    return plan.bricks.map((brick) => ({ brick, validation }))
+  }
+
   const orderedByPlan: Array<{
     brick: PlacedBrick
     validation: ManualStepPage['validation']

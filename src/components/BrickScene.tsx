@@ -49,6 +49,7 @@ const structuralVoxelStyle: Record<StructuralCellKind, { color: string; opacity:
 const structuralVoxelRenderOrder: StructuralCellKind[] = ['enterable', 'solid', 'studsocket', 'stud', 'socket']
 const defaultGridExtent = 15
 const gridPadding = 4
+const maxAutoSupportGraphBricks = 250
 const nudgeRepeatDelayMs = 280
 const nudgeRepeatIntervalMs = 90
 
@@ -1265,6 +1266,8 @@ export const BrickScene = ({
   const deferredSupportBricks = useDeferredValue(bricks)
   const supportedByBrickId = useMemo(() => {
     void ldrawBoundsVersion
+
+    if (deferredSupportBricks.length > maxAutoSupportGraphBricks) return new Map<string, boolean>()
 
     const buildGraph = createBuildGraph(deferredSupportBricks)
     return new Map(deferredSupportBricks.map((brick) => [

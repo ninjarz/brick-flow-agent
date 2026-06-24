@@ -40,6 +40,7 @@ const isInventoryLimited = (inventory: number) => Number.isFinite(inventory)
 const formatInventory = (inventory: number) => isInventoryLimited(inventory) ? String(inventory) : '∞'
 const partPackOptions: BrickPack[] = ['lego', 'minecraft']
 const validationDebounceMs = 120
+const maxAutoStructuralValidationBricks = 250
 
 export const ControlPanel = ({
   engineStatusLabel,
@@ -71,8 +72,14 @@ export const ControlPanel = ({
     issues: ReturnType<typeof validateBuildPlan>
   }>()
   const basicPlanIssues = useMemo(() => validateBuildPlanBasics(plan), [plan])
+  const isLargePlan = plan.bricks.length > maxAutoStructuralValidationBricks
 
   useEffect(() => {
+    if (isLargePlan) {
+      setBackgroundValidation({ plan, issues: basicPlanIssues })
+      return
+    }
+
     let isCanceled = false
     const timeoutId = window.setTimeout(() => {
       const issues = validateBuildPlan(plan)
@@ -85,9 +92,10 @@ export const ControlPanel = ({
       isCanceled = true
       window.clearTimeout(timeoutId)
     }
-  }, [plan])
+  }, [basicPlanIssues, isLargePlan, plan])
 
   const isStructureChecking = backgroundValidation?.plan !== plan
+  const isStructureCheckSkipped = isLargePlan && backgroundValidation?.plan === plan
   const planIssues = useMemo(
     () => {
       return backgroundValidation?.plan === plan ? backgroundValidation.issues : basicPlanIssues
@@ -105,6 +113,10 @@ export const ControlPanel = ({
     ? planIssues.length > 0
       ? `${planIssueSummary} · ${t('control.validationCheckingLarge')}`
       : t('control.validationCheckingLarge')
+    : isStructureCheckSkipped
+      ? planIssues.length > 0
+        ? `${planIssueSummary} · ${t('control.validationSkippedLarge')}`
+        : t('control.validationSkippedLarge')
     : planIssues.length > 0
       ? planIssueSummary
       : t('common.structureOk')

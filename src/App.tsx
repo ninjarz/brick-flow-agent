@@ -1277,7 +1277,7 @@ function App() {
   }
 
   const loadFinishedAsset = (asset: LocalizedFinishedAsset) => {
-    const issues = validateBuildPlan(asset.displayPlan)
+    const issues = isDefaultFinishedAsset(asset.source) ? [] : validateBuildPlan(asset.displayPlan)
     if (getBlockingBuildPlanIssues(issues).length > 0) {
       setGenerationFailure(t('error.assetInvalid', { summary: summarizeBuildPlanIssues(issues, locale) }))
       setIsAssetLibraryOpen(false)

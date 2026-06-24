@@ -12,6 +12,7 @@ import {
   normalizeYStud,
 } from './brickUnits'
 import { getBrickFootprintWorldBounds, getBrickWorldBounds } from './ldrawBounds'
+import { PlanSpatialState, type WorldBrickConnector } from './planSpatialState'
 import {
   createStructuralCollisionIndex,
   doBrickStructuralCellsCollide,
@@ -42,8 +43,6 @@ type PlanValidationContext = {
   graphConnectorBrickIds: Set<string>
   mechanicalConnectorBrickIds: Set<string>
 }
-
-type WorldBrickConnector = ReturnType<typeof getBrickConnectors>[number]
 
 const isMechanicalConnectorKind = (kind: WorldBrickConnector['kind']) =>
   kind === 'axle' || kind === 'bar' || kind === 'pin'
@@ -128,6 +127,12 @@ const createPlanValidationContext = (bricks: PlacedBrick[]): PlanValidationConte
 
   return context
 }
+
+const createPlanValidationContextFromSpatialState = (state: PlanSpatialState): PlanValidationContext => ({
+  connectorCache: state.connectorCache,
+  graphConnectorBrickIds: state.graphConnectorBrickIds,
+  mechanicalConnectorBrickIds: state.mechanicalConnectorBrickIds,
+})
 
 export const createId = (prefix: string) =>
   `${prefix}-${Math.random().toString(36).slice(2, 8)}`
@@ -914,20 +919,53 @@ export const findSupportedOpenPose = (
 ): PlacedBrick => {
   if (bricks.length === 0) return findOpenPose(brick, bricks)
 
+  const spatialState = PlanSpatialState.fromBricks(bricks, connectorSnapSearchTolerance)
+  const staticBricks = spatialState.bricks
+  const resultCacheKey = [
+    brick.brickId,
+    brick.color,
+    brick.pose.xStud,
+    brick.pose.yStud,
+    brick.pose.zStud,
+    brick.pose.rotationQuarterTurns,
+    brick.pose.verticalQuarterTurns ?? 0,
+    options.allowGroundFallback ? 1 : 0,
+    options.preferGroundFallback ? 1 : 0,
+  ].join(':')
+  const cachedResultPose = spatialState.poseResults.get(resultCacheKey)
+  if (cachedResultPose) {
+    return {
+      ...brick,
+      pose: { ...cachedResultPose },
+    }
+  }
+  const rememberResult = (result: PlacedBrick) => {
+    spatialState.poseResults.set(resultCacheKey, { ...result.pose })
+    return result
+  }
   const definition = brickById.get(brick.brickId)
-  const bounds = getBounds(bricks)
+  const bounds = spatialState.bounds
   const footprint = definition ? footprintToWorld(definition, brick.pose.rotationQuarterTurns, brick.pose.verticalQuarterTurns ?? 0) : undefined
   const maxX = Math.max(bounds.width + (footprint?.widthStuds ?? 1), 8)
   const maxZ = Math.max(bounds.depth + (footprint?.depthStuds ?? 1), 8)
-  let collisionIndex: StructuralCollisionIndex | undefined
-  const getCollisionIndex = () => {
-    collisionIndex ??= createBrickCollisionIndex(bricks)
-    return collisionIndex
-  }
+  const context = createPlanValidationContextFromSpatialState(spatialState)
   const tryCandidate = (candidate: PlacedBrick) =>
     isBrickAboveGround(candidate) &&
-    !hasBrickCollision(candidate, bricks, getCollisionIndex()) &&
-    isBrickSupported(candidate, bricks, getCollisionIndex())
+    !hasBrickCollision(candidate, staticBricks, spatialState.collisionIndex, context) &&
+    isBrickSupported(candidate, staticBricks, spatialState.collisionIndex, context)
+  const testedCandidatePoseKeys = new Set<string>()
+  const tryUniqueCandidate = (candidate: PlacedBrick) => {
+    const poseKey = [
+      candidate.pose.xStud,
+      candidate.pose.yStud,
+      candidate.pose.zStud,
+      candidate.pose.rotationQuarterTurns,
+      candidate.pose.verticalQuarterTurns ?? 0,
+    ].join(':')
+    if (testedCandidatePoseKeys.has(poseKey)) return false
+    testedCandidatePoseKeys.add(poseKey)
+    return tryCandidate(candidate)
+  }
 
   const groundFallbackPoses: Array<{ xStud: number; yStud: number; zStud: number; outsideAxis: 'x' | 'z' }> = [
     { xStud: bounds.width + HORIZONTAL_EDIT_STEP_STUDS, yStud: 0, zStud: 0 },
@@ -961,24 +999,24 @@ export const findSupportedOpenPose = (
       if (
         isBrickAboveGround(candidate) &&
         (isOutsideCurrentBounds(candidate, pose.outsideAxis) || tryCandidate(candidate))
-      ) return candidate
+      ) return rememberResult(candidate)
     }
   }
 
   if (tryCandidate(brick) && (options.allowGroundFallback || brick.pose.yStud > 0)) {
-    return brick
+    return rememberResult(brick)
   }
 
   if (options.allowGroundFallback) {
     for (const pose of groundFallbackPoses) {
       const candidate = makeGroundFallbackCandidate(pose)
 
-      if (tryCandidate(candidate)) return candidate
+      if (tryCandidate(candidate)) return rememberResult(candidate)
     }
   }
 
   if (footprint) {
-    const supportOptions = bricks
+    const supportOptions = staticBricks
       .flatMap((support) => {
         const supportBounds = getBrickBounds(support)
         if (!supportBounds) return []
@@ -1026,7 +1064,7 @@ export const findSupportedOpenPose = (
             },
           }
 
-          if (tryCandidate(candidate)) return candidate
+          if (tryUniqueCandidate(candidate)) return rememberResult(candidate)
         }
       }
     }
@@ -1047,14 +1085,14 @@ export const findSupportedOpenPose = (
           },
         }
 
-        if (tryCandidate(candidate)) {
-          return candidate
+        if (tryUniqueCandidate(candidate)) {
+          return rememberResult(candidate)
         }
       }
     }
   }
 
-  return findOpenPose(brick, bricks)
+  return rememberResult(findOpenPose(brick, staticBricks))
 }
 
 const areConnectorsCompatible = (
@@ -1226,9 +1264,39 @@ export const snapBrickToPlan = (
   const definition = brickById.get(brick.brickId)
   if (!definition) return brick
 
-  const sourceConnectors = getBrickConnectors(definition, brick.pose)
+  const spatialState = PlanSpatialState.fromBricks(bricks, connectorSnapSearchTolerance)
+  const staticBricks = spatialState.bricks
+  const context = createPlanValidationContextFromSpatialState(spatialState)
+  const snapCacheKey = [
+    brick.brickId,
+    brick.color,
+    brick.pose.xStud,
+    brick.pose.yStud,
+    brick.pose.zStud,
+    brick.pose.rotationQuarterTurns,
+    brick.pose.verticalQuarterTurns ?? 0,
+    options.previousBrick?.brickId ?? '',
+    options.previousBrick?.pose.xStud ?? '',
+    options.previousBrick?.pose.yStud ?? '',
+    options.previousBrick?.pose.zStud ?? '',
+    options.previousBrick?.pose.rotationQuarterTurns ?? '',
+    options.previousBrick?.pose.verticalQuarterTurns ?? '',
+  ].join(':')
+  const cachedSnapPose = spatialState.snapResults.get(snapCacheKey)
+  if (cachedSnapPose) {
+    return {
+      ...brick,
+      pose: { ...cachedSnapPose },
+    }
+  }
+  const rememberSnap = (result: PlacedBrick) => {
+    spatialState.snapResults.set(snapCacheKey, { ...result.pose })
+    return result
+  }
+
+  const sourceConnectors = spatialState.getConnectors(brick)
   const previousSourceConnectorsById = options.previousBrick
-    ? new Map(getBrickConnectors(definition, options.previousBrick.pose).map((connector) => [connector.id, connector]))
+    ? new Map(spatialState.getConnectors(options.previousBrick).map((connector) => [connector.id, connector]))
     : undefined
   let best:
     | {
@@ -1237,49 +1305,46 @@ export const snapBrickToPlan = (
       }
     | undefined
 
-  for (const other of bricks) {
-    if (other.id === brick.id) continue
-    const otherDefinition = brickById.get(other.brickId)
-    if (!otherDefinition) continue
-
-    const targetConnectors = getBrickConnectors(otherDefinition, other.pose)
-
-    for (const source of sourceConnectors) {
-      for (const target of targetConnectors) {
-        if (!areConnectorsCompatible(source, target)) continue
-        const distance = connectorDistance(source, target)
-        if (distance > connectorSnapSearchTolerance) continue
-        const previousSource = previousSourceConnectorsById?.get(source.id)
-        if (previousSource && areConnectorsCompatible(previousSource, target)) {
-          const previousDistance = connectorDistance(previousSource, target)
-          if (
-            previousDistance <= getConnectorConnectionTolerance(previousSource, target) &&
-            distance > previousDistance + connectorUnsnapTolerance
-          ) {
-            continue
-          }
+  for (const source of sourceConnectors) {
+    for (const { brickId, connector: target } of spatialState.getConnectorSnapCandidates(source)) {
+      if (brickId === brick.id) continue
+      if (!areConnectorsCompatible(source, target)) continue
+      const distance = connectorDistance(source, target)
+      if (distance > connectorSnapSearchTolerance) continue
+      const previousSource = previousSourceConnectorsById?.get(source.id)
+      if (previousSource && areConnectorsCompatible(previousSource, target)) {
+        const previousDistance = connectorDistance(previousSource, target)
+        if (
+          previousDistance <= getConnectorConnectionTolerance(previousSource, target) &&
+          distance > previousDistance + connectorUnsnapTolerance
+        ) {
+          continue
         }
+      }
 
-        const snappedPose: BrickPose = {
-          xStud: normalizeHorizontalStud(brick.pose.xStud + (target.pose.xStud - source.pose.xStud)),
-          yStud: normalizeYStud(brick.pose.yStud + (target.pose.yStud - source.pose.yStud)),
-          zStud: normalizeHorizontalStud(brick.pose.zStud + (target.pose.zStud - source.pose.zStud)),
-          rotationQuarterTurns: brick.pose.rotationQuarterTurns,
-          verticalQuarterTurns: brick.pose.verticalQuarterTurns ?? 0,
-        }
+      const snappedPose: BrickPose = {
+        xStud: normalizeHorizontalStud(brick.pose.xStud + (target.pose.xStud - source.pose.xStud)),
+        yStud: normalizeYStud(brick.pose.yStud + (target.pose.yStud - source.pose.yStud)),
+        zStud: normalizeHorizontalStud(brick.pose.zStud + (target.pose.zStud - source.pose.zStud)),
+        rotationQuarterTurns: brick.pose.rotationQuarterTurns,
+        verticalQuarterTurns: brick.pose.verticalQuarterTurns ?? 0,
+      }
 
-        if (!best || distance < best.score) {
-          best = {
-            score: distance,
-            pose: snappedPose,
-          }
+      if (!best || distance < best.score) {
+        best = {
+          score: distance,
+          pose: snappedPose,
         }
       }
     }
   }
 
   const snappedBrick = best ? buildPlacedBrickWithPose(brick, best.pose) : brick
-  return hasBrickCollision(snappedBrick, bricks) ? brick : snappedBrick
+  return rememberSnap(
+    hasBrickCollision(snappedBrick, staticBricks, spatialState.collisionIndex, context)
+      ? brick
+      : snappedBrick,
+  )
 }
 
 export const getBounds = (bricks: PlacedBrick[]) => {
