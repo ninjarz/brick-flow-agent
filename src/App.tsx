@@ -50,6 +50,7 @@ const defaultImportText: ImportText = {
 
 const ROTATION_REPOSITION_SEARCH_RADIUS_STUDS = 5
 const ROTATION_REPOSITION_BOUNDS_TOLERANCE = 0.000001
+const maxPreciseInteractiveCollisionBricks = 250
 const workspaceDraftSaveDebounceMs = 120
 
 const localizeFinishedAsset = (
@@ -795,6 +796,24 @@ function App() {
     }
 
     const collisionData = stationaryData ?? getStationarySpatialState(bricks, new Set([currentBrick.id]))
+    if (collisionData.stationaryBricks.length > maxPreciseInteractiveCollisionBricks) {
+      const currentOverlapScore = getBrickRawOverlapScore(currentBrick, collisionData.stationaryBricks, collisionData.spatialState.collisionIndex)
+      const nextOverlapScore = getBrickRawOverlapScore(nextBrick, collisionData.stationaryBricks, collisionData.spatialState.collisionIndex)
+      const accepted = nextOverlapScore <= 0 || nextOverlapScore < currentOverlapScore - 0.000001
+
+      if (!accepted && import.meta.env.DEV) {
+        console.warn('brick-flow-agent blocked approximate large-model move', {
+          context,
+          currentOverlapScore,
+          nextOverlapScore,
+          current: currentBrick,
+          attempted: nextBrick,
+        })
+      }
+
+      return accepted
+    }
+
     if (!hasBrickCollision(nextBrick, collisionData.stationaryBricks, collisionData.spatialState.collisionIndex)) return true
 
     const currentOverlapScore = getBrickRawOverlapScore(currentBrick, collisionData.stationaryBricks, collisionData.spatialState.collisionIndex)
@@ -837,6 +856,26 @@ function App() {
     }
 
     const collisionData = stationaryData ?? getStationarySpatialState(bricks, new Set(nextBricks.map((brick) => brick.id)))
+    if (collisionData.stationaryBricks.length > maxPreciseInteractiveCollisionBricks) {
+      const hasStationaryOverlap = nextBricks.some((brick) =>
+        getBrickRawOverlapScore(brick, collisionData.stationaryBricks, collisionData.spatialState.collisionIndex) > 0
+      )
+      if (!hasStationaryOverlap) {
+        const groupCollisionIndex = createBrickCollisionIndex(nextBricks)
+        const hasGroupCollision = nextBricks.some((brick) => hasBrickCollision(brick, nextBricks, groupCollisionIndex))
+        if (!hasGroupCollision) return true
+      }
+
+      if (import.meta.env.DEV) {
+        console.warn('brick-flow-agent blocked approximate large-model group move', {
+          context,
+          attempted: nextBricks,
+        })
+      }
+
+      return false
+    }
+
     const hasStationaryCollision = nextBricks.some((brick) =>
       hasBrickCollision(brick, collisionData.stationaryBricks, collisionData.spatialState.collisionIndex)
     )
