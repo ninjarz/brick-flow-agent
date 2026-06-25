@@ -40,7 +40,8 @@ await writeFile(entry, `
     return modules;
   })();
 
-  const [{ brickById, brickDefinitions }, { defaultFinishedAssets }, { generateBuildPlan }, planUtils, structuralGrid, ldrawVisualGeometry, manualSerializer] = imports;
+  const [{ brickById, brickDefinitions }, finishedAssets, { generateBuildPlan }, planUtils, structuralGrid, ldrawVisualGeometry, manualSerializer] = imports;
+  const defaultFinishedAssets = await measureAsync('load all default finished assets', () => finishedAssets.loadAllDefaultFinishedAssets());
   const {
     createBrickCollisionIndex,
     findSupportedOpenPose,

@@ -1,10 +1,10 @@
 import type { FinishedAsset } from '../types/bricks'
-import { generatedObjAssets } from '../data/generatedObjAssets'
 import { generateBuildPlan } from './localGenerator'
 import { tryNormalizeImportedPlan } from './planImport'
 import { getBlockingBuildPlanIssues, validateBuildPlan } from './planUtils'
 
 const storageKey = 'brick-flow-agent:finished-assets:v18'
+const generatedObjAssetIdPrefix = 'finished-obj-'
 const retiredDefaultAssetIds = new Set([
   'finished-tiger',
   'finished-toaster',
@@ -25,8 +25,8 @@ const defaultAssetIds = new Set([
   'finished-robot',
   'finished-tree',
   'finished-duck',
-  ...generatedObjAssets.map((asset) => asset.id),
 ])
+let generatedObjAssetsPromise: Promise<FinishedAsset[]> | undefined
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
@@ -75,7 +75,6 @@ export const defaultFinishedAssets: FinishedAsset[] = [
   createDefaultAsset('finished-robot', 'asset.default.robot', '角色', '一个蓝灰色机器人', '灰色展示底座和手臂、蓝色身体、黄色头部、黑色眼睛、脚前控制灯、红色天线顶和脚部斜坡细节的机器人。'),
   createDefaultAsset('finished-tree', 'asset.default.tree', '自然', '一棵小树', '三层树冠、棕色树干、红黄橙果实、树冠小点、底部草叶和落果组成的小树。'),
   createDefaultAsset('finished-duck', 'asset.default.duck', '动物', '一只黄色小鸭', '黄色身体、双侧尾翼、头部、橙色嘴巴、黑色眼睛、双脚和四个水面点组成的紧凑小鸭。'),
-  ...generatedObjAssets,
 ]
 
 const isFinishedAsset = (item: unknown): item is FinishedAsset => {
@@ -93,14 +92,22 @@ const isFinishedAsset = (item: unknown): item is FinishedAsset => {
 }
 
 export const isDefaultFinishedAsset = (asset: Pick<FinishedAsset, 'id'>) =>
-  defaultAssetIds.has(asset.id)
+  defaultAssetIds.has(asset.id) || asset.id.startsWith(generatedObjAssetIdPrefix)
 
-const mergeWithDefaultAssets = (assets: FinishedAsset[]) => {
+export const mergeWithDefaultAssets = (
+  assets: FinishedAsset[],
+  defaultAssets = defaultFinishedAssets,
+) => {
   const customAssets = assets.filter((asset) =>
-    !defaultAssetIds.has(asset.id) &&
+    !isDefaultFinishedAsset(asset) &&
     !retiredDefaultAssetIds.has(asset.id)
   )
-  return [...defaultFinishedAssets, ...customAssets]
+  return [...defaultAssets, ...customAssets]
+}
+
+export const loadAllDefaultFinishedAssets = async () => {
+  generatedObjAssetsPromise ??= import('../data/generatedObjAssets').then((module) => module.generatedObjAssets)
+  return [...defaultFinishedAssets, ...await generatedObjAssetsPromise]
 }
 
 export const loadFinishedAssets = (): FinishedAsset[] => {

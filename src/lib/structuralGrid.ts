@@ -18,7 +18,6 @@ const worldSupportCellBoxCache = new Map<string, WorldStructuralCellBox[]>()
 const worldSupportFaceCache = new Map<string, WorldStructuralSupportFaces>()
 const worldSupportBoundsCache = new Map<string, BrickBounds | undefined>()
 const worldCollisionCellBoxCache = new Map<string, WorldStructuralCellBox[]>()
-const worldCollisionCellSpatialIndexCache = new Map<string, Map<string, WorldStructuralCellBox[]>>()
 const worldCollisionKeyCache = new Map<string, Set<string>>()
 let structuralCacheVersion = 0
 
@@ -32,7 +31,6 @@ onLDrawGeneratedVisualLoaded(() => {
   worldSupportFaceCache.clear()
   worldSupportBoundsCache.clear()
   worldCollisionCellBoxCache.clear()
-  worldCollisionCellSpatialIndexCache.clear()
   worldCollisionKeyCache.clear()
 })
 
@@ -753,27 +751,6 @@ const doCellBoxesOverlap = (
   source.minZ < target.maxZ - STRUCTURAL_OVERLAP_TOLERANCE &&
   source.maxZ > target.minZ + STRUCTURAL_OVERLAP_TOLERANCE
 
-const getBrickWorldCollisionCellSpatialIndex = (brick: PlacedBrick) => {
-  const cacheKey = getPlacedBrickCacheKey(brick)
-  const cached = worldCollisionCellSpatialIndexCache.get(cacheKey)
-  if (cached) return cached
-
-  const index = new Map<string, WorldStructuralCellBox[]>()
-  for (const worldCell of getBrickWorldCollisionCellBoxes(brick)) {
-    for (const key of getCellHashKeys(worldCell)) {
-      const cells = index.get(key)
-      if (cells) {
-        cells.push(worldCell)
-      } else {
-        index.set(key, [worldCell])
-      }
-    }
-  }
-
-  setLimitedWorldCache(worldCollisionCellSpatialIndexCache, cacheKey, index)
-  return index
-}
-
 export const getBrickWorldCollisionKeys = (brick: PlacedBrick) => {
   const cacheKey = getPlacedBrickCacheKey(brick)
   const cached = worldCollisionKeyCache.get(cacheKey)
@@ -836,12 +813,12 @@ export const getStructuralOverlapScore = (
   let overlapCount = 0
   const sourceKeys = getBrickWorldCollisionKeys(brick)
 
-  for (const candidateId of getStructuralCollisionCandidateIds(brick, index)) {
-    const targetKeys = index.brickKeys.get(candidateId)
-    if (!targetKeys) continue
+  for (const key of sourceKeys) {
+    const brickIds = index.keyToBrickIds.get(key)
+    if (!brickIds) continue
 
-    for (const key of sourceKeys) {
-      if (targetKeys.has(key)) overlapCount += 1
+    for (const brickId of brickIds) {
+      if (brickId !== brick.id) overlapCount += 1
     }
   }
 
@@ -853,23 +830,11 @@ export const doBrickStructuralCellsCollide = (
   target: PlacedBrick,
 ) => {
   const sourceCells = getBrickWorldCollisionCellBoxes(source)
-  const targetCellIndex = getBrickWorldCollisionCellSpatialIndex(target)
+  const targetCells = getBrickWorldCollisionCellBoxes(target)
 
-  for (const sourceCell of sourceCells) {
-    const checkedCells = new Set<WorldStructuralCellBox>()
-    for (const key of getCellHashKeys(sourceCell)) {
-      const targetCells = targetCellIndex.get(key)
-      if (!targetCells) continue
-
-      for (const targetCell of targetCells) {
-        if (checkedCells.has(targetCell)) continue
-        checkedCells.add(targetCell)
-        if (doCellBoxesOverlap(sourceCell, targetCell)) return true
-      }
-    }
-  }
-
-  return false
+  return sourceCells.some((sourceCell) =>
+    targetCells.some((targetCell) => doCellBoxesOverlap(sourceCell, targetCell)),
+  )
 }
 
 export const doStructuralCellsCollide = (

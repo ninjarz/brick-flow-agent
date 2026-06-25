@@ -8,7 +8,7 @@ import { brickById, brickDefinitions } from './data/basicBricks'
 import { generateBuildPlan } from './lib/localGenerator'
 import { buildLlmUserPrompt, generateLlmBuildPlan, isLlmConfigComplete, llmSystemPrompt, testLlmConnection } from './lib/llmGenerator'
 import { loadLlmConfig, saveLlmConfig } from './lib/llmConfig'
-import { defaultFinishedAssets, isDefaultFinishedAsset, loadFinishedAssets, saveFinishedAssets } from './lib/finishedAssets'
+import { defaultFinishedAssets, isDefaultFinishedAsset, loadAllDefaultFinishedAssets, loadFinishedAssets, mergeWithDefaultAssets, saveFinishedAssets } from './lib/finishedAssets'
 import { formatBuildManualHtml, formatBuildManualMarkdown, serializeBuildManual } from './lib/manualSerializer'
 import { isValidImportedPose, normalizeImportedPose, tryNormalizeImportedPlan } from './lib/planImport'
 import { countBricks, createBrickCollisionIndex, createPlanSpatialState, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickBounds, getBrickPlacementDiagnostics, getBrickRawOverlapScore, getConnectedBrickComponents, getNearestHorizontalSearchOffsets, hasBrickCollision, isBrickAboveGround, makeBrick, repairBuildPlan, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
@@ -507,6 +507,19 @@ function App() {
   useEffect(() => {
     saveLlmConfig(llmConfig)
   }, [llmConfig])
+
+  useEffect(() => {
+    let isCanceled = false
+
+    loadAllDefaultFinishedAssets().then((defaultAssets) => {
+      if (isCanceled) return
+      setFinishedAssets((current) => mergeWithDefaultAssets(current, defaultAssets))
+    })
+
+    return () => {
+      isCanceled = true
+    }
+  }, [])
 
   useEffect(() => {
     setAssetCategory((current) => defaultAssetCategoryLabels.has(current) ? t('asset.customCategory') : current)
@@ -1379,6 +1392,9 @@ function App() {
 
   const resetFinishedAssets = () => {
     setFinishedAssets(defaultFinishedAssets)
+    loadAllDefaultFinishedAssets().then((defaultAssets) => {
+      setFinishedAssets(defaultAssets)
+    })
     setAssetQuery('')
     setAssetCategoryFilter('all')
     clearGenerationFeedback()

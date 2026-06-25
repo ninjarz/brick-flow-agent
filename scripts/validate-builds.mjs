@@ -28,7 +28,7 @@ const ldrawConfigSource = await readFile(join(workspace, 'public/ldraw/LDConfig.
 await writeFile(entry, `
   import { brickById, brickDefinitions } from ${JSON.stringify(`${workspace}/src/data/basicBricks.ts`)};
   import { officialPartColorsByPartNumber } from ${JSON.stringify(`${workspace}/src/data/officialPartColors.ts`)};
-  import { defaultFinishedAssets } from ${JSON.stringify(`${workspace}/src/lib/finishedAssets.ts`)};
+  import { loadAllDefaultFinishedAssets } from ${JSON.stringify(`${workspace}/src/lib/finishedAssets.ts`)};
   import { generateBuildPlan } from ${JSON.stringify(`${workspace}/src/lib/localGenerator.ts`)};
   import { buildLlmUserPrompt, maxLlmBricks } from ${JSON.stringify(`${workspace}/src/lib/llmGenerator.ts`)};
   import { getBrickConnectors } from ${JSON.stringify(`${workspace}/src/lib/brickUnits.ts`)};
@@ -51,6 +51,7 @@ await writeFile(entry, `
 
   await loadLDrawGeneratedVisual();
 
+  const defaultFinishedAssets = await loadAllDefaultFinishedAssets();
   const results = defaultFinishedAssets.map((asset) => {
     const plan = asset.plan;
     const planIssues = validateBuildPlan(plan);
