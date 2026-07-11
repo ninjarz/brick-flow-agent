@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, Download, Eye, EyeOff, Globe2, KeyRound, Link, Plus, Redo2, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
+import { BookOpen, Box, Boxes, Download, Eye, Github, Globe2, KeyRound, Link, Plus, Redo2, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
 import { BrickGlyph } from './components/BrickGlyph'
 import { BrickEditorPanel } from './components/BrickEditorPanel'
-import { BrickScene } from './components/BrickScene'
+import { BrickScene, type BrickSceneViewMode } from './components/BrickScene'
 import { ControlPanel } from './components/ControlPanel'
 import { brickById, brickDefinitions } from './data/basicBricks'
 import { generateBuildPlan } from './lib/localGenerator'
@@ -51,6 +51,10 @@ const defaultImportText: ImportText = {
 const ROTATION_REPOSITION_SEARCH_RADIUS_STUDS = 5
 const ROTATION_REPOSITION_BOUNDS_TOLERANCE = 0.000001
 const workspaceDraftSaveDebounceMs = 120
+const sceneViewModeOrder: BrickSceneViewMode[] = ['normal', 'outline', 'voxel']
+
+const getNextSceneViewMode = (mode: BrickSceneViewMode) =>
+  sceneViewModeOrder[(sceneViewModeOrder.indexOf(mode) + 1) % sceneViewModeOrder.length]
 
 const localizeFinishedAsset = (
   asset: FinishedAsset,
@@ -324,7 +328,7 @@ function App() {
   const [assetDescription, setAssetDescription] = useState('')
   const [assetQuery, setAssetQuery] = useState('')
   const [assetCategoryFilter, setAssetCategoryFilter] = useState('all')
-  const [isStructuralDebugVisible, setIsStructuralDebugVisible] = useState(false)
+  const [sceneViewMode, setSceneViewMode] = useState<BrickSceneViewMode>('normal')
   const [isAutoSnapEnabled, setIsAutoSnapEnabled] = useState(false)
   const defaultAssetCategoryLabels = useMemo(() => new Set(['自定义', 'Custom']), [])
   const llmConfigComplete = isLlmConfigComplete(llmConfig)
@@ -1415,13 +1419,20 @@ function App() {
               <Redo2 size={18} />
             </button>
             <button
-              className="icon-button"
               type="button"
-              aria-label={isStructuralDebugVisible ? t('top.closeVoxel') : t('top.openVoxel')}
-              title={isStructuralDebugVisible ? t('top.closeVoxel') : t('top.openVoxel')}
-              onClick={() => setIsStructuralDebugVisible((visible) => !visible)}
+              className={`icon-button view-mode-button ${sceneViewMode === 'normal' ? '' : 'active'}`}
+              aria-label={t('top.switchViewMode', {
+                current: t(`top.viewMode.${sceneViewMode}`),
+                next: t(`top.viewMode.${getNextSceneViewMode(sceneViewMode)}`),
+              })}
+              title={t('top.switchViewMode', {
+                current: t(`top.viewMode.${sceneViewMode}`),
+                next: t(`top.viewMode.${getNextSceneViewMode(sceneViewMode)}`),
+              })}
+              onClick={() => setSceneViewMode((mode) => getNextSceneViewMode(mode))}
             >
-              {isStructuralDebugVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+              {sceneViewMode === 'normal' ? <Eye size={18} /> : sceneViewMode === 'outline' ? <Box size={18} /> : <Boxes size={18} />}
+              <span>{t(`top.viewMode.${sceneViewMode}`)}</span>
             </button>
             <button
               className={`icon-button ${isAutoSnapEnabled ? 'active' : ''}`}
@@ -1450,11 +1461,21 @@ function App() {
             >
               <BookOpen size={18} />
             </button>
+            <a
+              className="icon-button github-link"
+              href="https://github.com/ninjarz/brick-flow-agent"
+              target="_blank"
+              rel="noreferrer"
+              aria-label={t('top.github')}
+              title={t('top.github')}
+            >
+              <Github size={18} />
+            </a>
           </div>
         </header>
 
         <div className="viewer">
-          {isStructuralDebugVisible && (
+          {sceneViewMode === 'voxel' && (
             <div className="voxel-legend" aria-label={t('voxel.legend')}>
               <span><i style={{ background: '#ef4444' }} />{t('voxel.solid')}</span>
               <span><i style={{ background: '#22d3ee' }} />{t('voxel.enterable')}</span>
@@ -1467,7 +1488,7 @@ function App() {
             bricks={plan.bricks}
             selectedId={selectedId}
             cameraFrameKey={plan.id}
-            structuralDebug={isStructuralDebugVisible}
+            viewMode={sceneViewMode}
             highlightedIds={activeSelectedIds.filter((id) => id !== selectedId)}
             onSelect={selectBrick}
             onSelectConnected={selectConnectedGroup}

@@ -21,12 +21,14 @@ import {
 } from '../lib/slopeGeometries'
 import type { BrickDefinition, PlacedBrick } from '../types/bricks'
 
+export type BrickSceneViewMode = 'normal' | 'outline' | 'voxel'
+
 type BrickSceneProps = {
   bricks: PlacedBrick[]
   selectedId?: string
   highlightedIds?: string[]
   cameraFrameKey?: string
-  structuralDebug?: boolean
+  viewMode?: BrickSceneViewMode
   onSelect: (id: string) => void
   onSelectConnected?: (id: string) => void
   onNudgeSelected: (delta: { xStud?: number; yStud?: number; zStud?: number }) => void
@@ -539,12 +541,13 @@ const SceneLighting = ({
   )
 }
 
-const BrickMesh = memo(function BrickMesh({ brick, selected, highlighted, floating, preferDetailedGeometry, onSelect, onSelectConnected }: {
+const BrickMesh = memo(function BrickMesh({ brick, selected, highlighted, floating, preferDetailedGeometry, showEdges, onSelect, onSelectConnected }: {
   brick: PlacedBrick
   selected: boolean
   highlighted: boolean
   floating: boolean
   preferDetailedGeometry: boolean
+  showEdges: boolean
   onSelect: (id: string) => void
   onSelectConnected?: (id: string) => void
 }) {
@@ -559,19 +562,21 @@ const BrickMesh = memo(function BrickMesh({ brick, selected, highlighted, floati
       highlighted={highlighted}
       floating={floating}
       preferDetailedGeometry={preferDetailedGeometry}
+      showEdges={showEdges}
       onSelect={onSelect}
       onSelectConnected={onSelectConnected}
     />
   )
 })
 
-const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, preferDetailedGeometry, onSelect, onSelectConnected }: {
+const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, preferDetailedGeometry, showEdges, onSelect, onSelectConnected }: {
   brick: PlacedBrick
   definition: BrickDefinition
   selected: boolean
   highlighted: boolean
   floating: boolean
   preferDetailedGeometry: boolean
+  showEdges: boolean
   onSelect: (id: string) => void
   onSelectConnected?: (id: string) => void
 }) => {
@@ -666,7 +671,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
                 opacity={bodyOpacity}
                 isSlope={definition.kind === 'slope'}
                 flatShading={false}
-                showEdges={selected || highlighted || floating}
+                showEdges={showEdges || selected || highlighted || floating}
               />
             </mesh>
             {isEyeTile && <RoundEyeTilePrints variant={brick.brickId} height={baseHeight} />}
@@ -1398,7 +1403,7 @@ export const BrickScene = ({
   selectedId,
   highlightedIds = [],
   cameraFrameKey,
-  structuralDebug = false,
+  viewMode = 'normal',
   onSelect,
   onSelectConnected,
   onNudgeSelected,
@@ -1406,6 +1411,8 @@ export const BrickScene = ({
   onDeleteSelected,
 }: BrickSceneProps) => {
   const { t } = useI18n()
+  const structuralDebug = viewMode === 'voxel'
+  const showBrickEdges = viewMode === 'outline'
   const highlightedIdSet = useMemo(() => new Set(highlightedIds), [highlightedIds])
   const [ldrawBoundsVersion, setLDrawBoundsVersion] = useState(0)
   const deferredFrameBricks = useDeferredValue(bricks)
@@ -1521,6 +1528,7 @@ export const BrickScene = ({
               highlighted={highlightedIdSet.has(brick.id)}
               floating={supportedByBrickId.get(brick.id) === false}
               preferDetailedGeometry={preferDetailedGeometry}
+              showEdges={showBrickEdges}
               onSelect={onSelect}
               onSelectConnected={onSelectConnected}
             />

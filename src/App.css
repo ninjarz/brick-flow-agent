@@ -126,6 +126,25 @@ button.status-pill:hover {
   color: #2563eb;
 }
 
+.icon-button.view-mode-button {
+  width: auto;
+  gap: 7px;
+  padding: 0 11px;
+  white-space: nowrap;
+}
+
+.icon-button.github-link {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.icon-button.github-link:hover {
+  border-color: #94a3b8;
+}
+
 .viewer {
   position: relative;
   overflow: hidden;
