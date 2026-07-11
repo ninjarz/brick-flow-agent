@@ -7,7 +7,7 @@ import { brickById, colorHex, colorOpacity } from '../data/basicBricks'
 import { createRound2x2AxleBodyGeometry, createRound2x2AxleGrilleBodyGeometry } from '../lib/csgBrickGeometry'
 import { getBrickWorldBoundsFrame } from '../lib/ldrawBounds'
 import { loadLDrawGeneratedVisual } from '../lib/ldrawGeneratedVisualLoader'
-import { createLoadedLDrawPartGeometry, loadLDrawPartGeometry } from '../lib/ldrawVisualGeometry'
+import { createLoadedLDrawPartGeometry } from '../lib/ldrawVisualGeometry'
 import { createBuildGraph, getBrickBounds } from '../lib/planUtils'
 import { getBrickWorldStructuralCellBoxes, type StructuralCellKind, type WorldStructuralCellBox } from '../lib/structuralGrid'
 import { WORLD_EDIT_STEP_STUDS, getBrickConnectors, getBrickWorldFrame, poseToWorld } from '../lib/brickUnits'
@@ -49,7 +49,6 @@ const structuralVoxelStyle: Record<StructuralCellKind, { color: string; opacity:
 const structuralVoxelRenderOrder: StructuralCellKind[] = ['enterable', 'solid', 'studsocket', 'stud', 'socket']
 const defaultGridExtent = 15
 const gridPadding = 4
-const maxAutoSupportGraphBricks = 250
 const nudgeRepeatDelayMs = 280
 const nudgeRepeatIntervalMs = 90
 
@@ -484,11 +483,13 @@ const SceneLighting = ({
   centerY,
   centerZ,
   size,
+  enableShadows,
 }: {
   centerX: number
   centerY: number
   centerZ: number
   size: number
+  enableShadows: boolean
 }) => {
   const { scene } = useThree()
   const lightRef = useRef<DirectionalLight>(null)
@@ -528,7 +529,7 @@ const SceneLighting = ({
       <ambientLight intensity={0.65} />
       <directionalLight
         ref={lightRef}
-        castShadow
+        castShadow={enableShadows}
         intensity={1.4}
         shadow-mapSize={[2048, 2048]}
         shadow-bias={-0.00015}
@@ -538,11 +539,12 @@ const SceneLighting = ({
   )
 }
 
-const BrickMesh = memo(function BrickMesh({ brick, selected, highlighted, floating, onSelect, onSelectConnected }: {
+const BrickMesh = memo(function BrickMesh({ brick, selected, highlighted, floating, preferDetailedGeometry, onSelect, onSelectConnected }: {
   brick: PlacedBrick
   selected: boolean
   highlighted: boolean
   floating: boolean
+  preferDetailedGeometry: boolean
   onSelect: (id: string) => void
   onSelectConnected?: (id: string) => void
 }) {
@@ -556,18 +558,20 @@ const BrickMesh = memo(function BrickMesh({ brick, selected, highlighted, floati
       selected={selected}
       highlighted={highlighted}
       floating={floating}
+      preferDetailedGeometry={preferDetailedGeometry}
       onSelect={onSelect}
       onSelectConnected={onSelectConnected}
     />
   )
 })
 
-const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, onSelect, onSelectConnected }: {
+const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, preferDetailedGeometry, onSelect, onSelectConnected }: {
   brick: PlacedBrick
   definition: BrickDefinition
   selected: boolean
   highlighted: boolean
   floating: boolean
+  preferDetailedGeometry: boolean
   onSelect: (id: string) => void
   onSelectConnected?: (id: string) => void
 }) => {
@@ -609,20 +613,9 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, onS
   const baseWidth = definition.footprint.widthStuds
   const baseDepth = definition.footprint.depthStuds
   const baseHeight = definition.footprint.heightStuds
-  const [ldrawGeometry, setLDrawGeometry] = useState(() =>
-    createLoadedLDrawPartGeometry(definition.partNumber, definition.footprint)
-  )
-
-  useEffect(() => {
-    let cancelled = false
-    setLDrawGeometry(createLoadedLDrawPartGeometry(definition.partNumber, definition.footprint))
-    loadLDrawPartGeometry(definition.partNumber, definition.footprint).then((geometry) => {
-      if (!cancelled) setLDrawGeometry(geometry)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [definition])
+  const ldrawGeometry = preferDetailedGeometry
+    ? createLoadedLDrawPartGeometry(definition.partNumber, definition.footprint)
+    : undefined
 
   const handleClick = (event: ThreeEvent<MouseEvent>) => {
     event.stopPropagation()
@@ -661,14 +654,20 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, onS
     </mesh>
   ))
 
-  if (ldrawGeometry) {
+  if (preferDetailedGeometry && ldrawGeometry) {
     return (
       <group position={[frame.x, bodyY, frame.z]} onClick={handleClick} onDoubleClick={handleDoubleClick}>
         {rotateWithPose(
           <>
             <mesh castShadow receiveShadow>
               <primitive object={ldrawGeometry} attach="geometry" />
-              <BrickBodyMaterial color={bodyColor} opacity={bodyOpacity} isSlope={definition.kind === 'slope'} flatShading={false} />
+              <BrickBodyMaterial
+                color={bodyColor}
+                opacity={bodyOpacity}
+                isSlope={definition.kind === 'slope'}
+                flatShading={false}
+                showEdges={selected || highlighted || floating}
+              />
             </mesh>
             {isEyeTile && <RoundEyeTilePrints variant={brick.brickId} height={baseHeight} />}
           </>,
@@ -1045,6 +1044,39 @@ type StructuralVoxelBounds = {
   maxZ: number
 }
 
+type SimplifiedBrickInstance = {
+  brick: PlacedBrick
+  bounds: StructuralVoxelBounds
+}
+
+type SimplifiedBrickInstanceGroup = {
+  color: string
+  opacity: number
+  instances: SimplifiedBrickInstance[]
+}
+
+const simplifiedBrickBoundsCache = new WeakMap<PlacedBrick, StructuralVoxelBounds | undefined>()
+
+const getSimplifiedBrickBounds = (brick: PlacedBrick) => {
+  if (simplifiedBrickBoundsCache.has(brick)) return simplifiedBrickBoundsCache.get(brick)
+
+  const bounds = getBrickBounds(brick)
+  simplifiedBrickBoundsCache.set(brick, bounds)
+  return bounds
+}
+
+const getBoundsCenter = (bounds: StructuralVoxelBounds): [number, number, number] => [
+  (bounds.minX + bounds.maxX) / 2,
+  (bounds.minY + bounds.maxY) / 2,
+  (bounds.minZ + bounds.maxZ) / 2,
+]
+
+const getBoundsSize = (bounds: StructuralVoxelBounds): [number, number, number] => [
+  bounds.maxX - bounds.minX,
+  bounds.maxY - bounds.minY,
+  bounds.maxZ - bounds.minZ,
+]
+
 const StructuralVoxelInstances = ({ kind, instances, onSelect, onSelectConnected }: {
   kind: StructuralCellKind
   instances: StructuralVoxelInstance[]
@@ -1203,6 +1235,164 @@ const StructuralVoxelScene = ({ bricks, selectedId, highlightedIdSet, boundsVers
   )
 }
 
+const SimplifiedBrickInstances = memo(function SimplifiedBrickInstances({ group, onSelect, onSelectConnected }: {
+  group: SimplifiedBrickInstanceGroup
+  onSelect: (id: string) => void
+  onSelectConnected?: (id: string) => void
+}) {
+  const fillRef = useRef<InstancedMesh>(null)
+  const wireRef = useRef<InstancedMesh>(null)
+  const previousInstancesRef = useRef<SimplifiedBrickInstance[]>()
+  const matrixObject = useMemo(() => new Object3D(), [])
+
+  useLayoutEffect(() => {
+    const previousInstances = previousInstancesRef.current
+    const shouldRewriteAll = !previousInstances || previousInstances.length !== group.instances.length
+
+    const writeInstanceMatrices = (mesh: InstancedMesh | null, force: boolean) => {
+      if (!mesh) return
+
+      let hasMatrixUpdate = false
+      group.instances.forEach((instance, index) => {
+        if (!force && previousInstances?.[index]?.brick === instance.brick) return
+
+        const [x, y, z] = getBoundsCenter(instance.bounds)
+        const [width, height, depth] = getBoundsSize(instance.bounds)
+        matrixObject.position.set(x, y, z)
+        matrixObject.rotation.set(0, 0, 0)
+        matrixObject.scale.set(width, height, depth)
+        matrixObject.updateMatrix()
+        mesh.setMatrixAt(index, matrixObject.matrix)
+        hasMatrixUpdate = true
+      })
+      mesh.count = group.instances.length
+      if (hasMatrixUpdate) mesh.instanceMatrix.needsUpdate = true
+    }
+
+    writeInstanceMatrices(fillRef.current, shouldRewriteAll)
+    writeInstanceMatrices(wireRef.current, shouldRewriteAll)
+    previousInstancesRef.current = group.instances
+  }, [group.instances, matrixObject])
+
+  const getInstanceBrickId = (event: ThreeEvent<MouseEvent>) => {
+    const instanceId = event.instanceId
+    return typeof instanceId === 'number' ? group.instances[instanceId]?.brick.id : undefined
+  }
+
+  const handleClick = (event: ThreeEvent<MouseEvent>) => {
+    event.stopPropagation()
+    const brickId = getInstanceBrickId(event)
+    if (brickId) onSelect(brickId)
+  }
+
+  const handleDoubleClick = (event: ThreeEvent<MouseEvent>) => {
+    event.stopPropagation()
+    const brickId = getInstanceBrickId(event)
+    if (brickId) onSelectConnected?.(brickId)
+  }
+
+  if (group.instances.length === 0) return null
+
+  return (
+    <>
+      <instancedMesh
+        ref={fillRef}
+        args={[undefined, undefined, group.instances.length]}
+        frustumCulled={false}
+        onClick={handleClick}
+        onDoubleClick={handleDoubleClick}
+      >
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial
+          color={group.color}
+          roughness={0.52}
+          metalness={0.02}
+          transparent={group.opacity < 1}
+          opacity={group.opacity}
+        />
+      </instancedMesh>
+      <instancedMesh
+        ref={wireRef}
+        args={[undefined, undefined, group.instances.length]}
+        frustumCulled={false}
+        renderOrder={2}
+        onClick={handleClick}
+        onDoubleClick={handleDoubleClick}
+      >
+        <boxGeometry args={[1, 1, 1]} />
+        <meshBasicMaterial color={edgeColor} wireframe transparent opacity={0.22} depthWrite={false} />
+      </instancedMesh>
+    </>
+  )
+})
+
+const SimplifiedSelectionBox = ({ bounds, selected }: {
+  bounds: StructuralVoxelBounds
+  selected: boolean
+}) => {
+  const [width, height, depth] = getBoundsSize(bounds)
+  return (
+    <mesh position={getBoundsCenter(bounds)}>
+      <boxGeometry args={[width + 0.12, height + 0.16, depth + 0.12]} />
+      <meshBasicMaterial color={selected ? '#38bdf8' : '#f59e0b'} wireframe />
+    </mesh>
+  )
+}
+
+const SimplifiedBrickScene = ({ bricks, selectedId, highlightedIdSet, onSelect, onSelectConnected }: {
+  bricks: PlacedBrick[]
+  selectedId?: string
+  highlightedIdSet: Set<string>
+  onSelect: (id: string) => void
+  onSelectConnected?: (id: string) => void
+}) => {
+  const { groups, boundsByBrickId } = useMemo(() => {
+    const nextGroups = new Map<string, SimplifiedBrickInstanceGroup>()
+    const nextBoundsByBrickId = new Map<string, StructuralVoxelBounds>()
+
+    for (const brick of bricks) {
+      const bounds = getSimplifiedBrickBounds(brick)
+      if (!bounds) continue
+
+      nextBoundsByBrickId.set(brick.id, bounds)
+      const groupKey = brick.color
+      const group = nextGroups.get(groupKey) ?? {
+        color: colorHex[brick.color],
+        opacity: colorOpacity[brick.color],
+        instances: [],
+      }
+      group.instances.push({ brick, bounds })
+      nextGroups.set(groupKey, group)
+    }
+
+    return {
+      groups: [...nextGroups.values()],
+      boundsByBrickId: nextBoundsByBrickId,
+    }
+  }, [bricks])
+
+  return (
+    <>
+      {groups.map((group) => (
+        <SimplifiedBrickInstances
+          key={`${group.color}-${group.opacity}`}
+          group={group}
+          onSelect={onSelect}
+          onSelectConnected={onSelectConnected}
+        />
+      ))}
+      {selectedId && boundsByBrickId.has(selectedId) && (
+        <SimplifiedSelectionBox key={selectedId} bounds={boundsByBrickId.get(selectedId)!} selected />
+      )}
+      {[...highlightedIdSet].map((brickId) => {
+        if (brickId === selectedId) return null
+        const bounds = boundsByBrickId.get(brickId)
+        return bounds ? <SimplifiedSelectionBox key={brickId} bounds={bounds} selected={false} /> : null
+      })}
+    </>
+  )
+}
+
 export const BrickScene = ({
   bricks,
   selectedId,
@@ -1218,9 +1408,14 @@ export const BrickScene = ({
   const { t } = useI18n()
   const highlightedIdSet = useMemo(() => new Set(highlightedIds), [highlightedIds])
   const [ldrawBoundsVersion, setLDrawBoundsVersion] = useState(0)
+  const deferredFrameBricks = useDeferredValue(bricks)
+  const frameBricks = deferredFrameBricks
+  const enableRealtimeShadows = true
+  const preferDetailedGeometry = ldrawBoundsVersion > 0
+  const useSimplifiedInteractionView = false
   const resolvedCameraFrameKey = useMemo(
-    () => cameraFrameKey ?? bricks.map((brick) => brick.id).join('|'),
-    [bricks, cameraFrameKey],
+    () => cameraFrameKey ?? frameBricks.map((brick) => brick.id).join('|'),
+    [cameraFrameKey, frameBricks],
   )
   const boundsCameraFrameKey = `${resolvedCameraFrameKey}:ldraw-bounds-${ldrawBoundsVersion}`
   const orbitTargetRef = useRef<[number, number, number]>([0, 1, 0])
@@ -1240,7 +1435,7 @@ export const BrickScene = ({
   const gridFrame = useMemo(() => {
     void ldrawBoundsVersion
 
-    const brickBounds = bricks.map(getBrickBounds).filter((bounds) => Boolean(bounds))
+    const brickBounds = frameBricks.map(getBrickBounds).filter((bounds) => Boolean(bounds))
     const modelMinX = Math.min(0, ...brickBounds.map((bounds) => bounds.minX))
     const modelMaxX = Math.max(0, ...brickBounds.map((bounds) => bounds.maxX))
     const modelMinZ = Math.min(0, ...brickBounds.map((bounds) => bounds.minZ))
@@ -1262,12 +1457,10 @@ export const BrickScene = ({
       centerZ: (minZ + maxZ) / 2,
       modelCenterZ: (modelMinZ + modelMaxZ) / 2,
     }
-  }, [bricks, ldrawBoundsVersion])
+  }, [frameBricks, ldrawBoundsVersion])
   const deferredSupportBricks = useDeferredValue(bricks)
   const supportedByBrickId = useMemo(() => {
     void ldrawBoundsVersion
-
-    if (deferredSupportBricks.length > maxAutoSupportGraphBricks) return new Map<string, boolean>()
 
     const buildGraph = createBuildGraph(deferredSupportBricks)
     return new Map(deferredSupportBricks.map((brick) => [
@@ -1283,7 +1476,7 @@ export const BrickScene = ({
 
   return (
     <Canvas
-      shadows
+      shadows={enableRealtimeShadows}
       frameloop="demand"
       dpr={[1, 1.5]}
       camera={{ position: [8, 7, 9], fov: 42 }}
@@ -1295,9 +1488,10 @@ export const BrickScene = ({
         centerY={gridFrame.centerY}
         centerZ={gridFrame.centerZ}
         size={gridFrame.size}
+        enableShadows={enableRealtimeShadows}
       />
       <group>
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[gridFrame.centerX, -0.02, gridFrame.centerZ]} receiveShadow>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[gridFrame.centerX, -0.02, gridFrame.centerZ]} receiveShadow={enableRealtimeShadows}>
           <planeGeometry args={[gridFrame.size, gridFrame.size]} />
           <meshStandardMaterial color="#d7dee6" side={DoubleSide} />
         </mesh>
@@ -1311,6 +1505,14 @@ export const BrickScene = ({
             onSelect={onSelect}
             onSelectConnected={onSelectConnected}
           />
+        ) : useSimplifiedInteractionView ? (
+          <SimplifiedBrickScene
+            bricks={bricks}
+            selectedId={selectedId}
+            highlightedIdSet={highlightedIdSet}
+            onSelect={onSelect}
+            onSelectConnected={onSelectConnected}
+          />
         ) : bricks.map((brick) => (
             <BrickMesh
               key={brick.id}
@@ -1318,6 +1520,7 @@ export const BrickScene = ({
               selected={brick.id === selectedId}
               highlighted={highlightedIdSet.has(brick.id)}
               floating={supportedByBrickId.get(brick.id) === false}
+              preferDetailedGeometry={preferDetailedGeometry}
               onSelect={onSelect}
               onSelectConnected={onSelectConnected}
             />

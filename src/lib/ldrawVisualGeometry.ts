@@ -8,6 +8,7 @@ import { normalizeLDrawPartNumber } from './ldrawPartNumbers'
 import type { MeshTriangle } from './structuralVoxelizer'
 
 const geometryCache = new Map<string, BufferGeometry>()
+const geometryLoadCache = new Map<string, Promise<BufferGeometry | undefined>>()
 
 const makeCacheKey = (partNumber: string, footprint: BrickFootprint) =>
   `${normalizeLDrawPartNumber(partNumber)}:${footprint.widthStuds}x${footprint.depthStuds}x${footprint.heightStuds}`
@@ -31,13 +32,13 @@ const createGeometryFromTriangles = (
   geometry.setAttribute('position', new Float32BufferAttribute(vertices, 3))
   geometry.computeVertexNormals()
   geometryCache.set(cacheKey, geometry)
-  return geometry.clone()
+  return geometry
 }
 
 export const createLoadedLDrawPartGeometry = (partNumber: string, footprint: BrickFootprint) => {
   const cacheKey = makeCacheKey(partNumber, footprint)
   const cached = geometryCache.get(cacheKey)
-  if (cached) return cached.clone()
+  if (cached) return cached
 
   const triangles = getLoadedLDrawGeneratedVisualTriangles(normalizeLDrawPartNumber(partNumber))
   if (!triangles) return undefined
@@ -48,10 +49,20 @@ export const createLoadedLDrawPartGeometry = (partNumber: string, footprint: Bri
 export const loadLDrawPartGeometry = async (partNumber: string, footprint: BrickFootprint) => {
   const cacheKey = makeCacheKey(partNumber, footprint)
   const cached = geometryCache.get(cacheKey)
-  if (cached) return cached.clone()
+  if (cached) return cached
 
-  const triangles = await loadLDrawGeneratedVisualTriangles(normalizeLDrawPartNumber(partNumber))
-  if (!triangles) return undefined
+  const pending = geometryLoadCache.get(cacheKey)
+  if (pending) return pending
 
-  return createGeometryFromTriangles(cacheKey, footprint, triangles)
+  const loading = loadLDrawGeneratedVisualTriangles(normalizeLDrawPartNumber(partNumber))
+    .then((triangles) => {
+      const loaded = geometryCache.get(cacheKey)
+      if (loaded || !triangles) return loaded
+      return createGeometryFromTriangles(cacheKey, footprint, triangles)
+    })
+    .finally(() => {
+      geometryLoadCache.delete(cacheKey)
+    })
+  geometryLoadCache.set(cacheKey, loading)
+  return loading
 }

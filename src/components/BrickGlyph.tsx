@@ -497,7 +497,7 @@ const renderGlyph = (
   scene.add(light)
   const ldrawDefinition = brickId ? brickById.get(brickId) : undefined
   const ldrawGeometry = ldrawDefinition
-    ? createLoadedLDrawPartGeometry(ldrawDefinition.partNumber, ldrawDefinition.footprint)
+    ? createLoadedLDrawPartGeometry(ldrawDefinition.partNumber, ldrawDefinition.footprint)?.clone()
     : undefined
 
   if (ldrawLoaded && ldrawGeometry) {

@@ -9,7 +9,6 @@ import {
 } from './planUtils'
 
 type ManualLocale = 'zh-CN' | 'en-US'
-const largeTemplateManualValidationThreshold = 100
 
 const manualText: Record<ManualLocale, {
   lang: string
@@ -219,8 +218,7 @@ const emptyManualValidation = (locale: ManualLocale): ManualStepPage['validation
 })
 
 const shouldTrustManualPlanOrder = (plan: BuildPlan) =>
-  plan.source === 'template-local' &&
-  plan.bricks.length >= largeTemplateManualValidationThreshold
+  plan.source === 'template-local'
 
 const sequenceBricksForManual = (plan: BuildPlan, locale: ManualLocale) => {
   if (shouldTrustManualPlanOrder(plan)) {

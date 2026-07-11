@@ -16,7 +16,6 @@ import { PlanSpatialState, type WorldBrickConnector } from './planSpatialState'
 import {
   createStructuralCollisionIndex,
   doBrickStructuralCellsCollide,
-  getStructuralCacheVersion,
   getBrickWorldSupportBounds,
   getBrickWorldSupportFaces,
   getStructuralCollisionCandidateIds,
@@ -35,9 +34,6 @@ const connectorUnsnapTolerance = 0.000001
 const graphPairTolerance = 0.12
 const graphPairSpatialCellSize = 1
 const defaultLocalSearchRadiusStuds = 5
-const maxAutoConnectorSnapBricks = 250
-const largePlanExhaustivePlacementSearchThreshold = 250
-const maxLargePlanSupportSearchOptions = 24
 const verticalLoadContactCacheLimit = 100000
 const verticalLoadContactCache = new Map<string, boolean>()
 
@@ -398,7 +394,6 @@ const hasVerticalLoadContact = (
   boundsById?: Map<string, NonNullable<ReturnType<typeof getBrickBounds>>>,
 ) => {
   const cacheKey = [
-    getStructuralCacheVersion(),
     getBrickPoseGeometryCacheKey(brick),
     getBrickPoseGeometryCacheKey(support),
   ].join('>')
@@ -857,8 +852,11 @@ export const isBrickSupported = (
   return false
 }
 
-export const findOpenPose = (brick: PlacedBrick, bricks: PlacedBrick[]): PlacedBrick => {
-  const collisionIndex = createBrickCollisionIndex(bricks)
+export const findOpenPose = (
+  brick: PlacedBrick,
+  bricks: PlacedBrick[],
+  collisionIndex = createBrickCollisionIndex(bricks),
+): PlacedBrick => {
   if (isBrickAboveGround(brick) && !hasBrickCollision(brick, bricks, collisionIndex)) return brick
 
   const bounds = getBounds(bricks)
@@ -955,9 +953,6 @@ export const findSupportedOpenPose = (
   const definition = brickById.get(brick.brickId)
   const bounds = spatialState.bounds
   const footprint = definition ? footprintToWorld(definition, brick.pose.rotationQuarterTurns, brick.pose.verticalQuarterTurns ?? 0) : undefined
-  const maxX = Math.max(bounds.width + (footprint?.widthStuds ?? 1), 8)
-  const maxZ = Math.max(bounds.depth + (footprint?.depthStuds ?? 1), 8)
-  const shouldAvoidExhaustivePlacementSearch = staticBricks.length > largePlanExhaustivePlacementSearchThreshold
   const context = createPlanValidationContextFromSpatialState(spatialState)
   const tryCandidate = (candidate: PlacedBrick) =>
     isBrickAboveGround(candidate) &&
@@ -1026,30 +1021,35 @@ export const findSupportedOpenPose = (
   }
 
   if (footprint) {
-    const supportOptions = shouldAvoidExhaustivePlacementSearch && !options.allowGroundFallback
-      ? []
-      : staticBricks
-        .flatMap((support) => {
-          const supportBounds = getBrickBounds(support)
-          if (!supportBounds) return []
+    const supportSearchRadius = Math.max(
+      defaultLocalSearchRadiusStuds,
+      footprint.widthStuds,
+      footprint.depthStuds,
+    )
+    const supportSearchRadiusSq = supportSearchRadius * supportSearchRadius
+    const supportOptions = staticBricks
+      .flatMap((support) => {
+        const supportBounds = spatialState.boundsByBrickId.get(support.id)
+        if (!supportBounds) return []
 
-          const centerX = (supportBounds.minX + supportBounds.maxX) / 2
-          const centerY = (supportBounds.minY + supportBounds.maxY) / 2
-          const centerZ = (supportBounds.minZ + supportBounds.maxZ) / 2
-          const dx = centerX - brick.pose.xStud
-          const dy = centerY - brick.pose.yStud
-          const dz = centerZ - brick.pose.zStud
-          return [{
-            support,
-            supportBounds,
-            distanceSq: dx * dx + dy * dy + dz * dz,
-          }]
-        })
-        .sort((source, target) =>
-          source.distanceSq - target.distanceSq ||
-          source.support.id.localeCompare(target.support.id)
-        )
-        .slice(0, shouldAvoidExhaustivePlacementSearch ? maxLargePlanSupportSearchOptions : undefined)
+        const centerX = (supportBounds.minX + supportBounds.maxX) / 2
+        const centerY = (supportBounds.minY + supportBounds.maxY) / 2
+        const centerZ = (supportBounds.minZ + supportBounds.maxZ) / 2
+        const dx = centerX - brick.pose.xStud
+        const dy = centerY - brick.pose.yStud
+        const dz = centerZ - brick.pose.zStud
+        const horizontalDistanceSq = dx * dx + dz * dz
+        if (horizontalDistanceSq > supportSearchRadiusSq) return []
+        return [{
+          support,
+          supportBounds,
+          distanceSq: horizontalDistanceSq + dy * dy,
+        }]
+      })
+      .sort((source, target) =>
+        source.distanceSq - target.distanceSq ||
+        source.support.id.localeCompare(target.support.id)
+      )
 
     for (const { supportBounds } of supportOptions) {
       const xCandidates = getNearestRangeValues(
@@ -1083,38 +1083,7 @@ export const findSupportedOpenPose = (
     }
   }
 
-  if (shouldAvoidExhaustivePlacementSearch) {
-    for (const pose of groundFallbackPoses) {
-      const candidate = makeGroundFallbackCandidate(pose)
-      if (isBrickAboveGround(candidate) && isOutsideCurrentBounds(candidate, pose.outsideAxis)) {
-        return rememberResult(candidate)
-      }
-    }
-  }
-
-  for (let yStud = HORIZONTAL_EDIT_STEP_STUDS; yStud <= bounds.height + 1.2; yStud += HORIZONTAL_EDIT_STEP_STUDS) {
-    for (let zStep = 0; zStep <= Math.ceil(maxZ / HORIZONTAL_EDIT_STEP_STUDS); zStep += 1) {
-      for (let xStep = 0; xStep <= Math.ceil(maxX / HORIZONTAL_EDIT_STEP_STUDS); xStep += 1) {
-        const xStud = normalizeHorizontalStud(xStep * HORIZONTAL_EDIT_STEP_STUDS)
-        const zStud = normalizeHorizontalStud(zStep * HORIZONTAL_EDIT_STEP_STUDS)
-        const candidate: PlacedBrick = {
-          ...brick,
-          pose: {
-            ...brick.pose,
-            xStud,
-            yStud,
-            zStud,
-          },
-        }
-
-        if (tryUniqueCandidate(candidate)) {
-          return rememberResult(candidate)
-        }
-      }
-    }
-  }
-
-  return rememberResult(findOpenPose(brick, staticBricks))
+  return rememberResult(findOpenPose(brick, staticBricks, spatialState.collisionIndex))
 }
 
 const areConnectorsCompatible = (
@@ -1277,7 +1246,6 @@ const buildPlacedBrickWithPose = (brick: PlacedBrick, pose: BrickPose): PlacedBr
 type SnapBrickToPlanOptions = {
   previousBrick?: PlacedBrick
   spatialState?: PlanSpatialState
-  allowLargePlanSnap?: boolean
 }
 
 export const snapBrickToPlan = (
@@ -1287,7 +1255,6 @@ export const snapBrickToPlan = (
 ) => {
   const definition = brickById.get(brick.brickId)
   if (!definition) return brick
-  if (!options.allowLargePlanSnap && bricks.length > maxAutoConnectorSnapBricks) return brick
 
   const spatialState = options.spatialState ?? createPlanSpatialState(bricks)
   const staticBricks = spatialState.bricks
@@ -1364,7 +1331,9 @@ export const snapBrickToPlan = (
     }
   }
 
-  const snappedBrick = best ? buildPlacedBrickWithPose(brick, best.pose) : brick
+  if (!best) return rememberSnap(brick)
+
+  const snappedBrick = buildPlacedBrickWithPose(brick, best.pose)
   return rememberSnap(
     hasBrickCollision(snappedBrick, staticBricks, spatialState.collisionIndex, context)
       ? brick

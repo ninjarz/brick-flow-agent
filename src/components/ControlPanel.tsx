@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { BookOpen, Box, Download, ImageUp, Plus, Sparkles, Trash2, Upload } from 'lucide-react'
 import { brickDefinitions } from '../data/basicBricks'
 import { PLATE_HEIGHT_WORLD } from '../lib/brickUnits'
@@ -40,7 +40,6 @@ const isInventoryLimited = (inventory: number) => Number.isFinite(inventory)
 const formatInventory = (inventory: number) => isInventoryLimited(inventory) ? String(inventory) : '∞'
 const partPackOptions: BrickPack[] = ['lego', 'minecraft']
 const validationDebounceMs = 120
-const maxAutoStructuralValidationBricks = 250
 
 export const ControlPanel = ({
   engineStatusLabel,
@@ -71,20 +70,16 @@ export const ControlPanel = ({
     plan: BuildPlan
     issues: ReturnType<typeof validateBuildPlan>
   }>()
-  const basicPlanIssues = useMemo(() => validateBuildPlanBasics(plan), [plan])
-  const isLargePlan = plan.bricks.length > maxAutoStructuralValidationBricks
+  const deferredPlan = useDeferredValue(plan)
+  const derivedPlan = deferredPlan
+  const basicPlanIssues = useMemo(() => validateBuildPlanBasics(derivedPlan), [derivedPlan])
 
   useEffect(() => {
-    if (isLargePlan) {
-      setBackgroundValidation({ plan, issues: basicPlanIssues })
-      return
-    }
-
     let isCanceled = false
     const timeoutId = window.setTimeout(() => {
-      const issues = validateBuildPlan(plan)
+      const issues = validateBuildPlan(derivedPlan)
       if (!isCanceled) {
-        setBackgroundValidation({ plan, issues })
+        setBackgroundValidation({ plan: derivedPlan, issues })
       }
     }, validationDebounceMs)
 
@@ -92,15 +87,14 @@ export const ControlPanel = ({
       isCanceled = true
       window.clearTimeout(timeoutId)
     }
-  }, [basicPlanIssues, isLargePlan, plan])
+  }, [derivedPlan])
 
-  const isStructureChecking = backgroundValidation?.plan !== plan
-  const isStructureCheckSkipped = isLargePlan && backgroundValidation?.plan === plan
+  const isStructureChecking = backgroundValidation?.plan !== derivedPlan
   const planIssues = useMemo(
     () => {
-      return backgroundValidation?.plan === plan ? backgroundValidation.issues : basicPlanIssues
+      return backgroundValidation?.plan === derivedPlan ? backgroundValidation.issues : basicPlanIssues
     },
-    [backgroundValidation, basicPlanIssues, plan],
+    [backgroundValidation, basicPlanIssues, derivedPlan],
   )
   const blockingPlanIssues = useMemo(() => getBlockingBuildPlanIssues(planIssues), [planIssues])
   const planIssueSummary = useMemo(() => summarizeBuildPlanIssues(planIssues, locale), [locale, planIssues])
@@ -113,14 +107,10 @@ export const ControlPanel = ({
     ? planIssues.length > 0
       ? `${planIssueSummary} · ${t('control.validationCheckingLarge')}`
       : t('control.validationCheckingLarge')
-    : isStructureCheckSkipped
-      ? planIssues.length > 0
-        ? `${planIssueSummary} · ${t('control.validationSkippedLarge')}`
-        : t('control.validationSkippedLarge')
     : planIssues.length > 0
       ? planIssueSummary
       : t('common.structureOk')
-  const brickCounts = useMemo(() => countBricks(plan), [plan])
+  const brickCounts = useMemo(() => countBricks(derivedPlan), [derivedPlan])
   const packBrickDefinitions = useMemo(
     () => brickDefinitions.filter((brick) => brick.pack === partPackFilter),
     [partPackFilter],

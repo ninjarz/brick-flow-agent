@@ -16,12 +16,7 @@ type ConnectorSpatialIndex = {
   keyToConnectors: Map<string, IndexedWorldBrickConnector[]>
 }
 
-type PlanSpatialStateCacheEntry = {
-  bricks: PlacedBrick[]
-  state: PlanSpatialState
-}
-
-const planSpatialStateCache = new WeakMap<PlacedBrick[], PlanSpatialStateCacheEntry>()
+const planSpatialStateCache = new WeakMap<PlacedBrick[], PlanSpatialState>()
 
 const connectorSpatialCoordinate = (value: number, cellSize: number) =>
   Math.floor(value / cellSize)
@@ -43,29 +38,9 @@ const getBrickBounds = (brick: PlacedBrick) => {
   return getBrickWorldBounds(definition, brick.pose)
 }
 
-const getPlanBounds = (bricks: PlacedBrick[]) => {
-  if (bricks.length === 0) {
-    return { width: 0, depth: 0, height: 0 }
-  }
-
-  return bricks.reduce(
-    (bounds, brick) => {
-      const brickBounds = getBrickBounds(brick)
-      if (!brickBounds) return bounds
-
-      return {
-        width: Math.max(bounds.width, brickBounds.maxX),
-        depth: Math.max(bounds.depth, brickBounds.maxZ),
-        height: Math.max(bounds.height, brickBounds.maxY),
-      }
-    },
-    { width: 0, depth: 0, height: 0 },
-  )
-}
-
 export class PlanSpatialState {
   readonly bricks: PlacedBrick[]
-  readonly bounds: ReturnType<typeof getPlanBounds>
+  readonly bounds: { width: number; depth: number; height: number }
   readonly boundsByBrickId = new Map<string, BrickBounds>()
   readonly connectorCache = new Map<string, WorldBrickConnector[]>()
   readonly poseResults = new Map<string, BrickPose>()
@@ -78,29 +53,26 @@ export class PlanSpatialState {
 
   private constructor(bricks: PlacedBrick[], private readonly connectorSnapSearchTolerance: number) {
     this.bricks = [...bricks]
-    this.bounds = getPlanBounds(this.bricks)
+    const bounds = { width: 0, depth: 0, height: 0 }
 
     for (const brick of this.bricks) {
-      const bounds = getBrickBounds(brick)
-      if (bounds) this.boundsByBrickId.set(brick.id, bounds)
+      const brickBounds = getBrickBounds(brick)
+      if (!brickBounds) continue
+
+      this.boundsByBrickId.set(brick.id, brickBounds)
+      bounds.width = Math.max(bounds.width, brickBounds.maxX)
+      bounds.depth = Math.max(bounds.depth, brickBounds.maxZ)
+      bounds.height = Math.max(bounds.height, brickBounds.maxY)
     }
+    this.bounds = bounds
   }
 
   static fromBricks(bricks: PlacedBrick[], connectorSnapSearchTolerance: number) {
     const cached = planSpatialStateCache.get(bricks)
-    if (
-      cached &&
-      cached.bricks.length === bricks.length &&
-      cached.bricks.every((brick, index) => brick === bricks[index])
-    ) {
-      return cached.state
-    }
+    if (cached) return cached
 
     const state = new PlanSpatialState(bricks, connectorSnapSearchTolerance)
-    planSpatialStateCache.set(bricks, {
-      bricks: [...bricks],
-      state,
-    })
+    planSpatialStateCache.set(bricks, state)
     return state
   }
 

@@ -15,6 +15,7 @@ await writeFile(entry, `
     const value = fn();
     const ms = performance.now() - start;
     results.push({ name, ms });
+    console.log(name + ': ' + ms.toFixed(2) + ' ms');
     return value;
   };
   const measureAsync = async <T>(name: string, fn: () => Promise<T>): Promise<T> => {
@@ -22,6 +23,7 @@ await writeFile(entry, `
     const value = await fn();
     const ms = performance.now() - start;
     results.push({ name, ms });
+    console.log(name + ': ' + ms.toFixed(2) + ' ms');
     return value;
   };
 
@@ -36,14 +38,20 @@ await writeFile(entry, `
       import(${JSON.stringify(`${workspace}/src/lib/ldrawVisualGeometry.ts`)}),
       import(${JSON.stringify(`${workspace}/src/lib/manualSerializer.ts`)}),
     ]);
-    results.push({ name: 'module import + default asset construction', ms: performance.now() - start });
+    const ms = performance.now() - start;
+    results.push({ name: 'module import + default asset construction', ms });
+    console.log('module import + default asset construction: ' + ms.toFixed(2) + ' ms');
     return modules;
   })();
 
   const [{ brickById, brickDefinitions }, finishedAssets, { generateBuildPlan }, planUtils, structuralGrid, ldrawVisualGeometry, manualSerializer] = imports;
   const defaultFinishedAssets = await measureAsync('load all default finished assets', () => finishedAssets.loadAllDefaultFinishedAssets());
+  const largestAsset = defaultFinishedAssets.reduce((largest, asset) =>
+    asset.plan.bricks.length > largest.plan.bricks.length ? asset : largest
+  );
   const {
     createBrickCollisionIndex,
+    createPlanSpatialState,
     findSupportedOpenPose,
     getBrickRawOverlapScore,
     hasBrickCollision,
@@ -66,9 +74,9 @@ await writeFile(entry, `
   measure('serialize all finished asset manuals', () => {
     for (const asset of defaultFinishedAssets) serializeBuildManual(asset.plan);
   });
-  measure('build collision indexes for all finished assets', () => {
-    for (const asset of defaultFinishedAssets) createBrickCollisionIndex(asset.plan.bricks);
-  });
+  measure('build collision index for largest finished asset', () =>
+    createBrickCollisionIndex(largestAsset.plan.bricks)
+  );
 
   const curvedDefinition = brickById.get('curved-slope-1x2')!;
   measure('6091 structural cells x100', () => {
@@ -83,15 +91,17 @@ await writeFile(entry, `
     for (let index = 0; index < 100; index += 1) await loadLDrawPartGeometry(curvedDefinition.partNumber, curvedDefinition.footprint);
   });
 
-  const largestAsset = defaultFinishedAssets.reduce((largest, asset) =>
-    asset.plan.bricks.length > largest.plan.bricks.length ? asset : largest
+  console.log('largest finished asset: ' + largestAsset.id + ' (' + largestAsset.plan.bricks.length + ' bricks)');
+  const searchBrick = makeBrick('curved-slope-1x2', 'white', 0, 0, 0);
+  const largestSpatialState = measure('create spatial state for largest finished asset', () =>
+    createPlanSpatialState(largestAsset.plan.bricks)
   );
-  measure('add 6091 search on largest finished asset x20', () => {
-    for (let index = 0; index < 20; index += 1) {
-      const brick = makeBrick('curved-slope-1x2', 'white', 0, 0, 0);
-      findSupportedOpenPose(snapBrickToPlan(brick, largestAsset.plan.bricks), largestAsset.plan.bricks);
-    }
-  });
+  const snappedSearchBrick = measure('snap 6091 on largest finished asset', () =>
+    snapBrickToPlan(searchBrick, largestAsset.plan.bricks, { spatialState: largestSpatialState })
+  );
+  measure('place 6091 on largest finished asset', () =>
+    findSupportedOpenPose(snappedSearchBrick, largestAsset.plan.bricks)
+  );
   measure('manual add 6091 fast search on largest finished asset x20', () => {
     for (let index = 0; index < 20; index += 1) {
       const brick = makeBrick('curved-slope-1x2', 'white', 0, 0, 0);

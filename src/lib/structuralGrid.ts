@@ -7,10 +7,11 @@ import { getConnectorLocalPoint, transformBrickLocalPoint } from './brickUnits'
 import { voxelizeMeshStructuralCells, type MeshTriangle } from './structuralVoxelizer'
 
 export const STRUCTURAL_VOXEL_SIZE = 1 / 5
-const STRUCTURAL_HASH_STEP = STRUCTURAL_VOXEL_SIZE / 2
+const STRUCTURAL_HASH_STEP = STRUCTURAL_VOXEL_SIZE
 const STRUCTURAL_OVERLAP_TOLERANCE = 0.000001
 const WORLD_STRUCTURAL_CACHE_LIMIT = 5000
 const structuralCellCache = new Map<string, StructuralCell[]>()
+const interactionStructuralCellCache = new Map<string, StructuralCell[]>()
 const localSupportBoundsCache = new Map<string, BrickBounds | undefined>()
 const localSupportFaceCache = new Map<string, WorldStructuralSupportFaces>()
 const worldStructuralCellBoxCache = new Map<string, WorldStructuralCellBox[]>()
@@ -19,22 +20,11 @@ const worldSupportFaceCache = new Map<string, WorldStructuralSupportFaces>()
 const worldSupportBoundsCache = new Map<string, BrickBounds | undefined>()
 const worldCollisionCellBoxCache = new Map<string, WorldStructuralCellBox[]>()
 const worldCollisionKeyCache = new Map<string, Set<string>>()
-let structuralCacheVersion = 0
 
 onLDrawGeneratedVisualLoaded(() => {
-  structuralCacheVersion += 1
   structuralCellCache.clear()
-  localSupportBoundsCache.clear()
-  localSupportFaceCache.clear()
   worldStructuralCellBoxCache.clear()
-  worldSupportCellBoxCache.clear()
-  worldSupportFaceCache.clear()
-  worldSupportBoundsCache.clear()
-  worldCollisionCellBoxCache.clear()
-  worldCollisionKeyCache.clear()
 })
-
-export const getStructuralCacheVersion = () => structuralCacheVersion
 
 export type StructuralCellKind = 'solid' | 'stud' | 'socket' | 'studsocket' | 'enterable'
 export type StructuralEntryDirection = 'top' | 'bottom' | 'left' | 'right' | 'front' | 'back'
@@ -90,7 +80,6 @@ const setLimitedWorldCache = <T>(cache: Map<string, T>, key: string, value: T) =
   cache.set(key, value)
 }
 
-const rangeCount = (size: number) => Math.max(1, Math.round(size / STRUCTURAL_VOXEL_SIZE))
 const structuralCellKindPriority: Record<StructuralCellKind, number> = {
   solid: 1,
   enterable: 2,
@@ -123,22 +112,7 @@ const makeSolidBlockCells = (
   widthStuds: number,
   heightStuds: number,
   depthStuds: number,
-) => {
-  const cells: StructuralCell[] = []
-  const xCount = rangeCount(widthStuds)
-  const yCount = rangeCount(heightStuds)
-  const zCount = rangeCount(depthStuds)
-
-  for (let x = 0; x < xCount; x += 1) {
-    for (let y = 0; y < yCount; y += 1) {
-      for (let z = 0; z < zCount; z += 1) {
-        cells.push(makeCell('solid', x * STRUCTURAL_VOXEL_SIZE, y * STRUCTURAL_VOXEL_SIZE, z * STRUCTURAL_VOXEL_SIZE))
-      }
-    }
-  }
-
-  return cells
-}
+) => [makeCell('solid', 0, 0, 0, widthStuds, heightStuds, depthStuds)]
 
 const makeCellLocalKey = (cell: StructuralCell) =>
   `${cell.minX},${cell.minY},${cell.minZ}`
@@ -250,6 +224,30 @@ const makeSocketClearanceCells = (
   return cells
 }
 
+const makeConnectorCells = (definition: BrickDefinition) =>
+  definition.connectors.flatMap((connector): StructuralCell[] => {
+    if (connector.kind === 'stud' && connector.gender === 'male') {
+      return [
+        makeAxisAlignedConnectorCell(definition, connector, 'stud'),
+      ]
+    }
+
+    if (connector.kind === 'tube' && connector.gender === 'female') {
+      return [
+        ...makeSocketClearanceCells(definition, connector),
+        makeAxisAlignedConnectorCell(definition, connector, 'socket', { accepts: ['stud'] }),
+      ]
+    }
+
+    if (connector.kind === 'studsocket' && connector.gender === 'bidirectional') {
+      return [
+        makeAxisAlignedConnectorCell(definition, connector, 'studsocket', { accepts: ['studsocket'] }),
+      ]
+    }
+
+    return []
+  })
+
 const overlayStructuralCells = (...cellGroups: StructuralCell[][]) => {
   const cellsByKey = new Map<string, StructuralCell>()
 
@@ -279,30 +277,6 @@ const makeMeshStructuralCells = (definition: BrickDefinition, triangles: MeshTri
   )
 }
 
-const makeConnectorCells = (definition: BrickDefinition) =>
-  definition.connectors.flatMap((connector): StructuralCell[] => {
-    if (connector.kind === 'stud' && connector.gender === 'male') {
-      return [
-        makeAxisAlignedConnectorCell(definition, connector, 'stud'),
-      ]
-    }
-
-    if (connector.kind === 'tube' && connector.gender === 'female') {
-      return [
-        ...makeSocketClearanceCells(definition, connector),
-        makeAxisAlignedConnectorCell(definition, connector, 'socket', { accepts: ['stud'] }),
-      ]
-    }
-
-    if (connector.kind === 'studsocket' && connector.gender === 'bidirectional') {
-      return [
-        makeAxisAlignedConnectorCell(definition, connector, 'studsocket', { accepts: ['studsocket'] }),
-      ]
-    }
-
-    return []
-  })
-
 const makeDefaultStructuralCells = (definition: BrickDefinition) => [
   ...makeSolidBlockCells(
     definition.footprint.widthStuds,
@@ -326,6 +300,16 @@ export const getBrickStructuralCells = (definition: BrickDefinition): Structural
     : makeDefaultStructuralCells(definition)
 
   structuralCellCache.set(cacheKey, cells)
+  return cells
+}
+
+const getBrickInteractionStructuralCells = (definition: BrickDefinition) => {
+  const cacheKey = makeStructuralDefinitionCacheKey(definition)
+  const cached = interactionStructuralCellCache.get(cacheKey)
+  if (cached) return cached
+
+  const cells = makeDefaultStructuralCells(definition)
+  interactionStructuralCellCache.set(cacheKey, cells)
   return cells
 }
 
@@ -459,7 +443,7 @@ const supportCellCarriesLoad = (definition: BrickDefinition, cell: StructuralCel
   structuralCellBlocksCollision(cell) && cellCenterIsInsideNominalBody(definition, cell)
 
 const getBrickLocalSupportCellBoxes = (definition: BrickDefinition) =>
-  getBrickStructuralCells(definition).filter((cell) => supportCellCarriesLoad(definition, cell))
+  getBrickInteractionStructuralCells(definition).filter((cell) => supportCellCarriesLoad(definition, cell))
 
 export const getBrickWorldSupportCellBoxes = (brick: PlacedBrick): WorldStructuralCellBox[] => {
   const cacheKey = getPlacedBrickCacheKey(brick)
@@ -735,7 +719,12 @@ const getBrickWorldCollisionCellBoxes = (brick: PlacedBrick): WorldStructuralCel
   const cached = worldCollisionCellBoxCache.get(cacheKey)
   if (cached) return cached
 
-  const boxes = getBrickWorldStructuralCellBoxes(brick).filter(structuralCellBlocksCollision)
+  const definition = brickById.get(brick.brickId)
+  if (!definition) return []
+
+  const boxes = getBrickInteractionStructuralCells(definition)
+    .filter(structuralCellBlocksCollision)
+    .map((cell) => transformStructuralCellBox(definition, brick, cell))
   setLimitedWorldCache(worldCollisionCellBoxCache, cacheKey, boxes)
   return boxes
 }
