@@ -4,7 +4,7 @@
 
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=111)](https://react.dev/)
 [![Three.js](https://img.shields.io/badge/Three.js-r168-000?logo=three.js)](https://threejs.org/)
-[![Vite](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=fff)](https://vite.dev/)
+[![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=fff)](https://vite.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=fff)](https://www.typescriptlang.org/)
 
 English README | [中文文档](docs/README_zh.md)
@@ -22,12 +22,14 @@ The app uses React + Three.js for the editor, LDraw data for part rendering, and
 - LDraw-derived visual and structural data for part rendering, collision, and support checks
 - Brick-level editing: add, select, move, rotate, recolor, duplicate, delete, import, and export
 - Connector validation for studs, tubes, bars, pins, axles, and bidirectional block faces
-- Structural voxel debug view for solids, sockets, studs, bidirectional faces, and enterable cells
+- Four scene modes: bordered, borderless, structure X-ray, and structural voxels
+- Static stability analysis with per-brick risk colors, support hull, center of mass, tipping margin, and connection redundancy
+- A bridge-game-style disaster lab with deterministic wind, heavy-rain, and earthquake simulations, failure propagation, playback, and scoring
 - Editable per-part inventory limits shared by manual editing and LLM generation
 - Built-in asset library with IndexedDB-backed persistence for large user models
-- Browser-side OBJ import with size, brick-budget, edge-style, silhouette, and quality previews
+- Browser-side OBJ/MTL import with multi-material color mapping, size, brick-budget, edge-style, silhouette, and quality previews
 - JSON and LDraw/MPD import plus lossless LDraw export for application round trips
-- Build manuals with grouped layer steps and delta-only storage, plus Markdown, HTML, and JSON export
+- Build Manual 2.0 with delta-only storage, installation arrows, exploded view, guided camera angles, timeline playback, and Markdown/HTML/JSON export
 - Adaptive rendering for large scenes and lazy loading for 3D/OBJ-heavy modules
 - Bilingual UI with browser-language defaults and manual language selection
 
@@ -69,6 +71,7 @@ The app can run as a static frontend when LLM requests use browser-direct mode a
 npm run dev                  # start Vite
 npm run build                # type-check and build
 npm run lint                 # run ESLint
+npm test                     # run focused Vitest regressions
 npm run validate:builds      # validate default assets and regression cases
 npm run profile:performance  # profile performance-sensitive routines
 npm run generate:obj         # rebuild OBJ-derived default assets
@@ -86,7 +89,11 @@ node scripts/generate-obj-assets.mjs --dry-run --source=stanford-bunny --profile
 
 The pipeline uses four-sample solid voxelization, removes isolated mesh noise, adds only minimal bridge/support cells, prunes boundary voxels that cannot be connected, replaces suitable stair-step boundaries with oriented slopes, and tiles each layer with a connectivity-aware brick scorer. Its console metrics include voxel and multi-view silhouette IoU, voxel dimensions, shape modifications, unresolved supports, connected components, slope/brick counts, and odd scan-ray ratio. Default publishing is quality-gated per source; experimental profiles remain available through explicit `--source` and `--profile` arguments.
 
-The same conversion core powers the in-browser **Import OBJ** dialog. Files stay local; the dialog accepts OBJ files up to 100 MB, adapts voxel resolution to a selected brick budget, and shows source/result silhouettes before the plan is loaded.
+The same conversion core powers the in-browser **Import OBJ** dialog. Files stay local; the dialog accepts OBJ files up to 100 MB, can read companion MTL files and map their diffuse colors to legal part colors, adapts voxel resolution to a selected brick budget, and shows source/result silhouettes before the plan is loaded. Generated default assets use a compact tuple format and are expanded only when the asset library loads.
+
+## 🌪️ Stability Lab
+
+Structure X-ray provides immediate static feedback. The stability lab then applies time-varying wind, heavy-rain, or earthquake loads, propagates failed connections through the support graph, and scores survival, static stability, span, and material efficiency. See [the stability model](docs/STABILITY_MODEL.md) for formulas, weights, and limitations.
 
 ## 🤖 LLM Configuration
 
@@ -116,7 +123,7 @@ Keyboard controls are ignored while typing in text fields. Brick movement works 
 | `Backspace` | Delete the selected brick |
 | `Ctrl`/`Cmd` + `Z` | Undo |
 | `Ctrl`/`Cmd` + `Shift` + `Z` or `Ctrl`/`Cmd` + `Y` | Redo |
-| `Esc` | Close the open config, prompt preview, asset library, or build manual dialog |
+| `Esc` | Close the open config, import, stability lab, prompt preview, asset library, or build manual dialog |
 | `←` / `→` | Move to the previous or next build-manual step while the build manual is open |
 | `Enter` / `Space` | Select a focused build-manual step card |
 
@@ -146,6 +153,7 @@ Before opening a pull request:
 ```bash
 npm run lint
 npm run build
+npm test
 npm run validate:builds
 ```
 

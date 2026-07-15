@@ -148,8 +148,10 @@ export const getStabilityRiskColor = (risk: number, grounded = true) => {
   return '#22c55e'
 }
 
-export const analyzeBuildStability = (bricks: PlacedBrick[]): StabilityAnalysis => {
-  const graph = createBuildGraph(bricks)
+export const analyzeBuildStability = (
+  bricks: PlacedBrick[],
+  graph = createBuildGraph(bricks),
+): StabilityAnalysis => {
   const measured = bricks.flatMap((brick) => {
     const bounds = graph.boundsById.get(brick.id)
     if (!bounds) return []

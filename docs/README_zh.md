@@ -17,12 +17,14 @@
 - 使用 LDraw 数据生成零件视觉和结构数据
 - 支持积木级编辑：添加、选择、移动、旋转、换色、复制、删除、导入、导出
 - 支持 stud、tube、bar、pin、axle 和双向连接面等连接语义的校验
-- 支持结构体素调试视图，可查看 solid、socket、stud、双向连接面、enterable 等单元
+- 提供边框、无边框、结构 X 光、结构体素四种场景模式
+- 静态稳定性分析会计算逐砖风险、支撑范围、重心、倾覆裕度与连接冗余
+- 内置类似桥梁搭建游戏的灾害实验室，支持阵风、暴雨、地震、失效传播、时间轴回放与评分
 - 支持按零件编辑个人库存，手动添加和 LLM 生成共用同一约束
 - 内置成品素材库，大型用户素材通过 IndexedDB 持久化
-- 支持浏览器本地导入 OBJ，可配置尺寸、砖块预算和边缘风格，并预览轮廓与质量指标
+- 支持浏览器本地导入 OBJ/MTL，可按多材质映射合法零件颜色，并配置尺寸、砖块预算和边缘风格
 - 支持 JSON、LDraw/MPD 导入，以及可无损回到应用内编辑状态的 LDraw 导出
-- 搭建手册按同层零件分组，采用只存增量的线性结构，支持预览和 HTML/Markdown/JSON 导出
+- 搭建手册 2.0 采用只存增量的线性结构，支持安装箭头、爆炸图、引导相机、时间轴播放和 HTML/Markdown/JSON 导出
 - 大型场景自适应简化渲染，3D 与 OBJ 重模块按需加载
 - 中英文 UI，默认跟随浏览器语言，也可以在配置里手动切换
 
@@ -64,6 +66,7 @@ npm run preview
 npm run dev                  # 启动 Vite
 npm run build                # 类型检查并构建
 npm run lint                 # 运行 ESLint
+npm test                     # 运行 Vitest 定向回归测试
 npm run validate:builds      # 校验默认素材和回归用例
 npm run profile:performance  # 性能分析
 npm run generate:obj         # 重新生成 OBJ 默认素材
@@ -81,7 +84,11 @@ node scripts/generate-obj-assets.mjs --dry-run --source=stanford-bunny --profile
 
 流水线包含四点采样实体体素化、孤立网格噪点清理、最少桥接与支撑、不可连接边界裁剪、适合位置的定向斜坡替换，以及连接组件感知的逐层分砖。控制台指标会输出体素与三视图轮廓 IoU、体素尺寸、形状改动、未解决支撑、连接组件、斜坡/零件数量和异常扫描射线比例。默认发布档位会按源模型进行质量筛选，实验档仍可通过显式传入 `--source` 和 `--profile` 生成。
 
-应用内的 **导入 OBJ** 使用同一套转换核心。文件只在本机处理，最大支持 100 MB；可根据砖块预算自适应降低体素分辨率，并在正式加载前对比源模型与生成结果的三视图轮廓。
+应用内的 **导入 OBJ** 使用同一套转换核心。文件只在本机处理，最大支持 100 MB；可以同时读取 MTL，并把漫反射颜色映射到零件真实支持的颜色；还会根据砖块预算自适应降低体素分辨率，在正式加载前对比源模型与生成结果的三视图轮廓。内置 OBJ 素材采用紧凑元组保存，打开素材库时才恢复为完整方案。
+
+## 🌪️ 稳定性实验室
+
+结构 X 光负责即时静态反馈；稳定性实验室会施加随时间变化的阵风、暴雨或地震载荷，在支撑图中传播连接失效，并按结构存活、初始稳定、有效跨度和材料效率评分。当前模型是可解释、确定性的游戏化结构近似，不是现实工程有限元分析；具体公式、权重和限制见[稳定性模型文档](STABILITY_MODEL_zh.md)。
 
 ## 🤖 LLM 配置
 
@@ -111,7 +118,7 @@ node scripts/generate-obj-assets.mjs --dry-run --source=stanford-bunny --profile
 | `Backspace` | 删除选中的砖块 |
 | `Ctrl`/`Cmd` + `Z` | 撤销 |
 | `Ctrl`/`Cmd` + `Shift` + `Z` 或 `Ctrl`/`Cmd` + `Y` | 重做 |
-| `Esc` | 关闭当前打开的配置、提示词预览、素材库或搭建手册弹窗 |
+| `Esc` | 关闭当前打开的配置、导入、稳定性实验室、提示词预览、素材库或搭建手册弹窗 |
 | `←` / `→` | 搭建手册打开时切换到上一步或下一步 |
 | `Enter` / `Space` | 选中当前聚焦的搭建手册步骤卡片 |
 
@@ -141,6 +148,7 @@ node scripts/generate-obj-assets.mjs --dry-run --source=stanford-bunny --profile
 ```bash
 npm run lint
 npm run build
+npm test
 npm run validate:builds
 ```
 

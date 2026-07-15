@@ -37,6 +37,8 @@ await writeFile(entry, `
       import(${JSON.stringify(`${workspace}/src/lib/structuralGrid.ts`)}),
       import(${JSON.stringify(`${workspace}/src/lib/ldrawVisualGeometry.ts`)}),
       import(${JSON.stringify(`${workspace}/src/lib/manualSerializer.ts`)}),
+      import(${JSON.stringify(`${workspace}/src/lib/stabilityAnalysis.ts`)}),
+      import(${JSON.stringify(`${workspace}/src/lib/disasterSimulation.ts`)}),
     ]);
     const ms = performance.now() - start;
     results.push({ name: 'module import + default asset construction', ms });
@@ -44,7 +46,7 @@ await writeFile(entry, `
     return modules;
   })();
 
-  const [{ brickById, brickDefinitions }, finishedAssets, { generateBuildPlan }, planUtils, structuralGrid, ldrawVisualGeometry, manualSerializer] = imports;
+  const [{ brickById, brickDefinitions }, finishedAssets, { generateBuildPlan }, planUtils, structuralGrid, ldrawVisualGeometry, manualSerializer, stabilityAnalysis, disasterSimulation] = imports;
   const defaultFinishedAssets = await measureAsync('load all default finished assets', () => finishedAssets.loadAllDefaultFinishedAssets());
   const largestAsset = defaultFinishedAssets.reduce((largest, asset) =>
     asset.plan.bricks.length > largest.plan.bricks.length ? asset : largest
@@ -76,6 +78,12 @@ await writeFile(entry, `
   });
   measure('build collision index for largest finished asset', () =>
     createBrickCollisionIndex(largestAsset.plan.bricks)
+  );
+  measure('analyze stability for largest finished asset', () =>
+    stabilityAnalysis.analyzeBuildStability(largestAsset.plan.bricks)
+  );
+  measure('simulate wind for largest finished asset', () =>
+    disasterSimulation.runDisasterSimulation(largestAsset.plan.bricks, { scenario: 'wind', intensity: 70 })
   );
 
   const curvedDefinition = brickById.get('curved-slope-1x2')!;

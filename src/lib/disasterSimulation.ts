@@ -89,7 +89,7 @@ export const runDisasterSimulation = (
   }
   const intensity = resolvedOptions.intensity / 100
   const graph = createBuildGraph(bricks)
-  const analysis = analyzeBuildStability(bricks)
+  const analysis = analyzeBuildStability(bricks, graph)
   const rootIds = new Set([...graph.boundsById]
     .filter(([, bounds]) => Math.abs(bounds.minY) <= contactTolerance)
     .map(([brickId]) => brickId))
