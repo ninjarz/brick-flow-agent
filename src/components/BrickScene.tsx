@@ -1477,14 +1477,15 @@ export const BrickScene = ({
   const highlightedIdSet = useMemo(() => new Set(highlightedIds), [highlightedIds])
   const [ldrawBoundsVersion, setLDrawBoundsVersion] = useState(0)
   const deferredFrameBricks = useDeferredValue(bricks)
+  const deferredCameraFrameKey = useDeferredValue(cameraFrameKey)
   const frameBricks = deferredFrameBricks
   const performanceSettings = getScenePerformanceSettings(bricks.length, viewMode)
   const enableRealtimeShadows = performanceSettings.enableRealtimeShadows
   const preferDetailedGeometry = ldrawBoundsVersion > 0
   const useSimplifiedInteractionView = performanceSettings.useSimplifiedView
   const resolvedCameraFrameKey = useMemo(
-    () => cameraFrameKey ?? frameBricks.map((brick) => brick.id).join('|'),
-    [cameraFrameKey, frameBricks],
+    () => deferredCameraFrameKey ?? frameBricks.map((brick) => brick.id).join('|'),
+    [deferredCameraFrameKey, frameBricks],
   )
   const boundsCameraFrameKey = `${resolvedCameraFrameKey}:ldraw-bounds-${ldrawBoundsVersion}`
   const orbitTargetRef = useRef<[number, number, number]>([0, 1, 0])
