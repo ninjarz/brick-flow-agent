@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, Box, Boxes, Download, Eye, Github, Globe2, KeyRound, Link, Plus, Redo2, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
+import { BookOpen, Box, Boxes, Download, Eye, FileUp, Github, Globe2, KeyRound, Link, Plus, Redo2, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
 import { BrickGlyph } from './components/BrickGlyph'
 import { BrickEditorPanel } from './components/BrickEditorPanel'
 import { BrickScene, type BrickSceneViewMode } from './components/BrickScene'
 import { ControlPanel } from './components/ControlPanel'
+import { ObjImportModal } from './components/ObjImportModal'
 import { brickById, brickDefinitions } from './data/basicBricks'
 import { generateBuildPlan } from './lib/localGenerator'
 import { buildLlmUserPrompt, generateLlmBuildPlan, isLlmConfigComplete, llmSystemPrompt, testLlmConnection } from './lib/llmGenerator'
@@ -14,6 +15,7 @@ import { isValidImportedPose, normalizeImportedPose, tryNormalizeImportedPlan } 
 import { countBricks, createBrickCollisionIndex, createPlanSpatialState, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickBounds, getBrickPlacementDiagnostics, getBrickRawOverlapScore, getConnectedBrickComponents, getNearestHorizontalSearchOffsets, hasBrickCollision, isBrickAboveGround, makeBrick, repairBuildPlan, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
 import { WORLD_SNAP_STEP_STUDS, footprintToWorld, getBrickWorldFrame, normalizeHorizontalStud, normalizeQuarterTurns, normalizeVerticalQuarterTurns, normalizeYStud } from './lib/brickUnits'
 import { useI18n } from './lib/i18n'
+import type { ObjImportResult } from './lib/objImport'
 import type { BuildPlan, FinishedAsset, LlmConfig, PlacedBrick } from './types/bricks'
 import './App.css'
 
@@ -51,7 +53,7 @@ const defaultImportText: ImportText = {
 const ROTATION_REPOSITION_SEARCH_RADIUS_STUDS = 5
 const ROTATION_REPOSITION_BOUNDS_TOLERANCE = 0.000001
 const workspaceDraftSaveDebounceMs = 120
-const sceneViewModeOrder: BrickSceneViewMode[] = ['normal', 'outline', 'voxel']
+const sceneViewModeOrder: BrickSceneViewMode[] = ['border', 'borderless', 'voxel']
 
 const getNextSceneViewMode = (mode: BrickSceneViewMode) =>
   sceneViewModeOrder[(sceneViewModeOrder.indexOf(mode) + 1) % sceneViewModeOrder.length]
@@ -317,6 +319,7 @@ function App() {
   const [isConfigOpen, setIsConfigOpen] = useState(false)
   const [isPromptPreviewOpen, setIsPromptPreviewOpen] = useState(false)
   const [isAssetLibraryOpen, setIsAssetLibraryOpen] = useState(false)
+  const [isObjImportOpen, setIsObjImportOpen] = useState(false)
   const [isManualOpen, setIsManualOpen] = useState(false)
   const [manualPlan, setManualPlan] = useState<BuildPlan>()
   const [manualStepIndex, setManualStepIndex] = useState(0)
@@ -328,7 +331,7 @@ function App() {
   const [assetDescription, setAssetDescription] = useState('')
   const [assetQuery, setAssetQuery] = useState('')
   const [assetCategoryFilter, setAssetCategoryFilter] = useState('all')
-  const [sceneViewMode, setSceneViewMode] = useState<BrickSceneViewMode>('normal')
+  const [sceneViewMode, setSceneViewMode] = useState<BrickSceneViewMode>('border')
   const [isAutoSnapEnabled, setIsAutoSnapEnabled] = useState(false)
   const defaultAssetCategoryLabels = useMemo(() => new Set(['自定义', 'Custom']), [])
   const llmConfigComplete = isLlmConfigComplete(llmConfig)
@@ -582,7 +585,7 @@ function App() {
   }, [buildManual?.steps.length, isManualOpen])
 
   useEffect(() => {
-    if (!isConfigOpen && !isPromptPreviewOpen && !isAssetLibraryOpen && !isManualOpen) return
+    if (!isConfigOpen && !isPromptPreviewOpen && !isAssetLibraryOpen && !isObjImportOpen && !isManualOpen) return
 
     const handleModalEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
@@ -595,6 +598,8 @@ function App() {
         setPromptCopyStatus('idle')
       } else if (isAssetLibraryOpen) {
         setIsAssetLibraryOpen(false)
+      } else if (isObjImportOpen) {
+        setIsObjImportOpen(false)
       } else if (isConfigOpen) {
         setIsConfigOpen(false)
       }
@@ -602,11 +607,11 @@ function App() {
 
     window.addEventListener('keydown', handleModalEscape)
     return () => window.removeEventListener('keydown', handleModalEscape)
-  }, [closeManual, isAssetLibraryOpen, isConfigOpen, isManualOpen, isPromptPreviewOpen])
+  }, [closeManual, isAssetLibraryOpen, isConfigOpen, isManualOpen, isObjImportOpen, isPromptPreviewOpen])
 
   useEffect(() => {
     const handleHistoryKeyDown = (event: KeyboardEvent) => {
-      if (isConfigOpen || isPromptPreviewOpen || isAssetLibraryOpen || isManualOpen) return
+      if (isConfigOpen || isPromptPreviewOpen || isAssetLibraryOpen || isObjImportOpen || isManualOpen) return
       if (isTypingElement(event.target)) return
       if (!event.metaKey && !event.ctrlKey) return
 
@@ -625,7 +630,7 @@ function App() {
 
     window.addEventListener('keydown', handleHistoryKeyDown)
     return () => window.removeEventListener('keydown', handleHistoryKeyDown)
-  }, [isAssetLibraryOpen, isConfigOpen, isManualOpen, isPromptPreviewOpen, redoPlan, undoPlan])
+  }, [isAssetLibraryOpen, isConfigOpen, isManualOpen, isObjImportOpen, isPromptPreviewOpen, redoPlan, undoPlan])
 
 
 
@@ -1374,6 +1379,42 @@ function App() {
     clearGenerationFeedback()
   }
 
+  const importObjResult = (result: ObjImportResult, saveToLibrary: boolean) => {
+    const issues = validateBuildPlan(result.plan)
+    const blockingIssues = getBlockingBuildPlanIssues(issues)
+    if (blockingIssues.length > 0) {
+      setGenerationFailure(t('error.importIssues', { summary: summarizeBuildPlanIssues(issues, locale) }))
+      return
+    }
+
+    setPlan(result.plan)
+    setPrompt(result.plan.prompt)
+    selectBrick('')
+    clearGenerationFeedback()
+    setIsObjImportOpen(false)
+
+    if (saveToLibrary) {
+      const dimensions = `${result.stats.dimensions.width}×${result.stats.dimensions.height}×${result.stats.dimensions.depth}`
+      setFinishedAssets((current) => [
+        {
+          id: `asset-obj-${Date.now().toString(36)}`,
+          title: result.plan.title,
+          category: 'OBJ',
+          description: t('objImport.assetDescription', {
+            dimensions,
+            voxels: result.stats.sourceVoxels,
+            change: (result.stats.structuralChangeRatio * 100).toFixed(1),
+            bricks: result.stats.brickCount,
+          }),
+          plan: result.plan,
+        },
+        ...current,
+      ])
+    }
+
+    if (issues.length > 0) setGenerationWarning(summarizeBuildPlanIssues(issues, locale))
+  }
+
   const openManual = (sourcePlan?: BuildPlan) => {
     const nextManualPlan = sourcePlan ?? plan
     const issues = validateBuildPlan(nextManualPlan)
@@ -1420,7 +1461,7 @@ function App() {
             </button>
             <button
               type="button"
-              className={`icon-button ${sceneViewMode === 'normal' ? '' : 'active'}`}
+              className={`icon-button ${sceneViewMode === 'border' ? '' : 'active'}`}
               aria-label={t('top.switchViewMode', {
                 current: t(`top.viewMode.${sceneViewMode}`),
                 next: t(`top.viewMode.${getNextSceneViewMode(sceneViewMode)}`),
@@ -1431,7 +1472,7 @@ function App() {
               })}
               onClick={() => setSceneViewMode((mode) => getNextSceneViewMode(mode))}
             >
-              {sceneViewMode === 'normal' ? <Eye size={18} /> : sceneViewMode === 'outline' ? <Box size={18} /> : <Boxes size={18} />}
+              {sceneViewMode === 'border' ? <Box size={18} /> : sceneViewMode === 'borderless' ? <Eye size={18} /> : <Boxes size={18} />}
             </button>
             <button
               className={`icon-button ${isAutoSnapEnabled ? 'active' : ''}`}
@@ -1450,6 +1491,15 @@ function App() {
               onClick={() => setIsConfigOpen(true)}
             >
               <Settings2 size={18} />
+            </button>
+            <button
+              className="icon-button"
+              type="button"
+              aria-label={t('top.importObj')}
+              title={t('top.importObj')}
+              onClick={() => setIsObjImportOpen(true)}
+            >
+              <FileUp size={18} />
             </button>
             <button
               className="icon-button"
@@ -1567,6 +1617,12 @@ function App() {
           </div>
         </div>
       )}
+
+      <ObjImportModal
+        open={isObjImportOpen}
+        onClose={() => setIsObjImportOpen(false)}
+        onImported={importObjResult}
+      />
 
       {isConfigOpen && (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setIsConfigOpen(false)}>

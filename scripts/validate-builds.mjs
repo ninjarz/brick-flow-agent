@@ -34,6 +34,7 @@ await writeFile(entry, `
   import { getBrickConnectors } from ${JSON.stringify(`${workspace}/src/lib/brickUnits.ts`)};
   import { serializeBuildManual } from ${JSON.stringify(`${workspace}/src/lib/manualSerializer.ts`)};
   import { normalizeImportedPlan, normalizeImportedPose, tryNormalizeImportedPlan } from ${JSON.stringify(`${workspace}/src/lib/planImport.ts`)};
+  import { importObjToBrickPlan } from ${JSON.stringify(`${workspace}/src/lib/objImport.ts`)};
   import { findNearestOpenPoseAround, findOpenPose, getBlockingBuildPlanIssues, getBrickBounds, hasBrickCollision, isBrickAboveGround, isBrickSupported, summarizeBuildPlanIssues, validateBuildPlan } from ${JSON.stringify(`${workspace}/src/lib/planUtils.ts`)};
   import { createLDrawStudConnector, ldrawPointToBrickLocal } from ${JSON.stringify(`${workspace}/src/lib/ldrawConnectors.ts`)};
   import { parseLDrawColorDefinitions } from ${JSON.stringify(`${workspace}/src/lib/ldrawColors.ts`)};
@@ -50,6 +51,24 @@ await writeFile(entry, `
   } from ${JSON.stringify(`${workspace}/src/lib/slopeGeometries.ts`)};
 
   await loadLDrawGeneratedVisual();
+
+  const objImportProgress = [];
+  const objImportFixture = [
+    'v 0 0 0', 'v 1 0 0', 'v 1 0 1', 'v 0 0 1',
+    'v 0 0.075 0', 'v 1 0.075 0', 'v 1 0.075 1', 'v 0 0.075 1',
+    'f 1 4 3 2', 'f 5 6 7 8', 'f 1 2 6 5',
+    'f 2 3 7 6', 'f 3 4 8 7', 'f 4 1 5 8',
+  ].join('\\n');
+  const objImportRegression = importObjToBrickPlan(objImportFixture, {
+    title: 'OBJ import regression plate',
+    profileId: 's',
+    orientation: 'upright',
+    color: 'gray',
+    locale: 'en',
+    idPrefix: 'obj-import-regression',
+  }, (progress) => objImportProgress.push(progress));
+  const objImportIssues = validateBuildPlan(objImportRegression.plan);
+  const objImportBlockingIssues = getBlockingBuildPlanIssues(objImportIssues);
 
   const defaultFinishedAssets = await loadAllDefaultFinishedAssets();
   const results = defaultFinishedAssets.map((asset) => {
@@ -152,11 +171,11 @@ await writeFile(entry, `
     'finished-house': 19,
     'finished-castle': 20,
     'finished-bench': 18,
-    'finished-rocket': 19,
+    'finished-rocket': 18,
     'finished-flower': 19,
-    'finished-robot': 18,
-    'finished-tree': 19,
-    'finished-duck': 19,
+    'finished-robot': 20,
+    'finished-tree': 20,
+    'finished-duck': 16,
   };
   const retiredDefaultAssetIds = new Set([
     'finished-tiger',
@@ -180,6 +199,29 @@ await writeFile(entry, `
       actual: asset.plan.bricks.length,
     }))
     .filter((item) => item.expected !== undefined && item.actual !== item.expected);
+  const expectedDefaultAssetPartCounts = {
+    'finished-rocket': { 'headlight-brick-1x1': 2, 'cone-2x2': 1 },
+    'finished-flower': { 'slope-1x2': 2, 'plate-round-2x2-axle': 1 },
+    'finished-robot': { 'brick-side-studs-1x4': 2, 'tile-eye-1x1': 2, 'tile-grille-1x2': 1 },
+    'finished-tree': { 'slope-2x2': 4 },
+    'finished-duck': { 'brick-side-studs-1x4': 2, 'tile-eye-1x1': 2 },
+  };
+  const missingDefaultAssetSignatureParts = defaultFinishedAssets.flatMap((asset) => {
+    const expectedCounts = expectedDefaultAssetPartCounts[asset.id];
+    if (!expectedCounts) return [];
+    const actualCounts = asset.plan.bricks.reduce((counts, brick) => {
+      counts[brick.brickId] = (counts[brick.brickId] ?? 0) + 1;
+      return counts;
+    }, {});
+    return Object.entries(expectedCounts)
+      .filter(([brickId, expectedCount]) => (actualCounts[brickId] ?? 0) < expectedCount)
+      .map(([brickId, expectedCount]) => ({
+        assetId: asset.id,
+        brickId,
+        expectedCount,
+        actualCount: actualCounts[brickId] ?? 0,
+      }));
+  });
   const retiredLocalGeneratorTitles = new Set([
     'Classic 小老虎',
     'Classic 小烤面包机',
@@ -578,6 +620,23 @@ await writeFile(entry, `
   );
 
   const regressionFailures = [
+    objImportRegression.stats.dimensions.width !== 16 ||
+      objImportRegression.stats.dimensions.height !== 1 ||
+      objImportRegression.stats.dimensions.depth !== 16
+      ? 'OBJ import regression must preserve the configured 16 x 1 x 16 voxel dimensions'
+      : '',
+    objImportRegression.stats.sourceVoxels !== 256 || objImportRegression.stats.finalVoxels !== 256
+      ? 'OBJ import regression must solid-voxelize the closed plate without structural loss'
+      : '',
+    objImportRegression.plan.bricks.length === 0
+      ? 'OBJ import regression must generate an editable brick plan'
+      : '',
+    objImportBlockingIssues.length > 0
+      ? 'OBJ import regression plan failed validation: ' + summarizeBuildPlanIssues(objImportIssues)
+      : '',
+    objImportProgress.at(-1)?.stage !== 'finalize' || objImportProgress.at(-1)?.progress !== 1
+      ? 'OBJ import regression must report completed worker progress'
+      : '',
     !headlightConnector ? 'Headlight side stud connector is missing' : '',
     headlightConnector && eyeConnector ? (
       distance(headlightConnector, eyeConnector) > 0.000001
@@ -924,6 +983,9 @@ await writeFile(entry, `
       : '',
     changedDefaultAssetPieceCounts.length > 0
       ? 'Default finished asset piece counts changed unexpectedly: ' + JSON.stringify(changedDefaultAssetPieceCounts)
+      : '',
+    missingDefaultAssetSignatureParts.length > 0
+      ? 'Optimized default assets lost signature shaping parts: ' + JSON.stringify(missingDefaultAssetSignatureParts)
       : '',
   ].filter(Boolean);
 

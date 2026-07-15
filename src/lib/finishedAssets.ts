@@ -70,11 +70,11 @@ export const defaultFinishedAssets: FinishedAsset[] = [
   createDefaultAsset('finished-house', 'asset.default.house', '建筑', '一个小房子', '带侧墙、棕色门、透明绿色窗、红色坡屋顶、烟囱烟点和院内花树的紧凑房屋。'),
   createDefaultAsset('finished-castle', 'asset.default.castle', '建筑', '一个小城堡门楼', '双塔、中央城墙、红色塔顶旗点、灰色垛口、黑色门槛、金色门饰和前场水点组成的城堡门楼。'),
   createDefaultAsset('finished-bench', 'asset.default.bench', '街景', '一个公园长椅', '带四条椅腿、加厚座面、靠背、扶手、光面坐垫以及一排多色草地花点的公园长椅。'),
-  createDefaultAsset('finished-rocket', 'asset.default.rocket', '物体', '一个小火箭', '带底座、双层喷焰、蓝色尾翼、分色舱段、圆柱窗、红色舷窗、地面灯点和黄色鼻锥的小火箭。'),
-  createDefaultAsset('finished-flower', 'asset.default.flower', '自然', '一个小花盆', '棕色花盆、双茎、绿色叶片、红色花冠、粉色与红色花瓣、黄色花芯和底部小花点组成的小花盆。'),
-  createDefaultAsset('finished-robot', 'asset.default.robot', '角色', '一个蓝灰色机器人', '灰色展示底座和手臂、蓝色身体、黄色头部、黑色眼睛、脚前控制灯、红色天线顶和脚部斜坡细节的机器人。'),
-  createDefaultAsset('finished-tree', 'asset.default.tree', '自然', '一棵小树', '三层树冠、棕色树干、红黄橙果实、树冠小点、底部草叶和落果组成的小树。'),
-  createDefaultAsset('finished-duck', 'asset.default.duck', '动物', '一只黄色小鸭', '黄色身体、双侧尾翼、头部、橙色嘴巴、黑色眼睛、双脚和四个水面点组成的紧凑小鸭。'),
+  createDefaultAsset('finished-rocket', 'asset.default.rocket', '物体', '一个小火箭', '灰色发射台、橙色喷焰、蓝色双尾翼、红白蓝分色舱体、正面双舷窗和黄色锥形整流罩组成的小火箭。'),
+  createDefaultAsset('finished-flower', 'asset.default.flower', '自然', '一个小花盆', '绿色草地、棕色花盆、双茎、两侧斜叶、红色横向花冠、粉色四瓣和黄色圆形花芯组成的小花盆。'),
+  createDefaultAsset('finished-robot', 'asset.default.robot', '角色', '一个蓝灰色机器人', '带灰色斜面双脚、蓝色躯干、横向肩梁、红色双手、黄色双层头部、正面印刷眼睛、格栅嘴和天线的机器人。'),
+  createDefaultAsset('finished-tree', 'asset.default.tree', '自然', '一棵小树', '棕色树干、向中心收拢的四面坡树冠、青绿树顶、红黄橙果实和底部草叶组成的小树。'),
+  createDefaultAsset('finished-duck', 'asset.default.duck', '动物', '一只黄色小鸭', '蓝色水面底座、橙色双脚、黄色身体、尾翼和双翅、双层头部、正面橙色嘴与印刷眼睛组成的小鸭。'),
 ]
 
 const isFinishedAsset = (item: unknown): item is FinishedAsset => {

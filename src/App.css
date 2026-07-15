@@ -435,6 +435,7 @@ button.status-pill:hover {
 .config-modal,
 .prompt-preview-modal,
 .asset-modal,
+.obj-import-modal,
 .manual-modal {
   width: min(460px, 100%);
   display: grid;
@@ -453,6 +454,12 @@ button.status-pill:hover {
   overflow-y: auto;
 }
 
+.obj-import-modal {
+  width: min(620px, 100%);
+  max-height: min(760px, calc(100svh - 36px));
+  overflow: auto;
+}
+
 .prompt-preview-modal {
   width: min(860px, 100%);
   max-height: min(780px, calc(100svh - 36px));
@@ -468,6 +475,7 @@ button.status-pill:hover {
 .config-modal header,
 .prompt-preview-modal header,
 .asset-modal header,
+.obj-import-modal header,
 .manual-modal header {
   display: flex;
   align-items: flex-start;
@@ -478,6 +486,7 @@ button.status-pill:hover {
 .config-modal h2,
 .prompt-preview-modal h2,
 .asset-modal h2,
+.obj-import-modal h2,
 .manual-modal h2 {
   margin: 0 0 5px;
   color: var(--ink);
@@ -488,10 +497,181 @@ button.status-pill:hover {
 .config-modal p,
 .prompt-preview-modal p,
 .asset-modal p,
+.obj-import-modal p,
 .manual-modal p {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.35;
+}
+
+.obj-file-drop {
+  min-height: 116px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 6px;
+  padding: 18px;
+  border: 1px dashed #94a3b8;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: var(--muted);
+  cursor: pointer;
+  text-align: center;
+}
+
+.obj-file-drop:hover,
+.obj-file-drop.selected {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.obj-file-drop strong {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.obj-file-drop small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.obj-file-drop input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.obj-import-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.55fr);
+  gap: 10px;
+}
+
+.obj-import-fields label {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.obj-import-fields label > span,
+.obj-profile-options legend {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.obj-profile-options {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.obj-profile-options > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.obj-profile-options button {
+  min-width: 0;
+  display: grid;
+  justify-items: start;
+  gap: 3px;
+  padding: 10px 12px;
+  background: #fff;
+  color: var(--ink);
+}
+
+.obj-profile-options button.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.obj-profile-options button small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.obj-save-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.obj-save-option input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.obj-import-progress {
+  display: grid;
+  gap: 7px;
+  padding: 11px 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+}
+
+.obj-import-progress > div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  color: #1d4ed8;
+  font-size: 12px;
+}
+
+.obj-import-progress progress {
+  width: 100%;
+  height: 7px;
+  accent-color: #2563eb;
+}
+
+.obj-import-modal .obj-import-error {
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: #fee2e2;
+  color: #991b1b;
+  font-weight: 700;
+}
+
+.obj-import-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.obj-import-actions button {
+  min-height: 38px;
+}
+
+.obj-import-actions .secondary {
+  min-width: 84px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.obj-import-actions .primary {
+  width: auto;
+  flex: 1 1 auto;
+  margin-top: 0;
 }
 
 .config-form {
@@ -1390,5 +1570,15 @@ button:disabled {
 
   h1 {
     font-size: 25px;
+  }
+
+  .obj-import-fields,
+  .obj-profile-options > div {
+    grid-template-columns: 1fr;
+  }
+
+  .obj-import-actions {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
   }
 }

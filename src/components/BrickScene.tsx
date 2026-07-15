@@ -21,7 +21,7 @@ import {
 } from '../lib/slopeGeometries'
 import type { BrickDefinition, PlacedBrick } from '../types/bricks'
 
-export type BrickSceneViewMode = 'normal' | 'outline' | 'voxel'
+export type BrickSceneViewMode = 'border' | 'borderless' | 'voxel'
 
 type BrickSceneProps = {
   bricks: PlacedBrick[]
@@ -1403,7 +1403,7 @@ export const BrickScene = ({
   selectedId,
   highlightedIds = [],
   cameraFrameKey,
-  viewMode = 'normal',
+  viewMode = 'border',
   onSelect,
   onSelectConnected,
   onNudgeSelected,
@@ -1412,7 +1412,7 @@ export const BrickScene = ({
 }: BrickSceneProps) => {
   const { t } = useI18n()
   const structuralDebug = viewMode === 'voxel'
-  const showBrickEdges = viewMode === 'outline'
+  const showBrickEdges = viewMode === 'border'
   const highlightedIdSet = useMemo(() => new Set(highlightedIds), [highlightedIds])
   const [ldrawBoundsVersion, setLDrawBoundsVersion] = useState(0)
   const deferredFrameBricks = useDeferredValue(bricks)
