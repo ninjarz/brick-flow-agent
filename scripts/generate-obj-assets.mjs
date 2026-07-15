@@ -111,6 +111,87 @@ const createAsset = (source, profile, orientation, result) => {
   }
 }
 
+const compactAsset = (asset) => ({
+  id: asset.id,
+  title: asset.title,
+  category: asset.category,
+  description: asset.description,
+  planId: asset.plan.id,
+  planTitle: asset.plan.title,
+  prompt: asset.plan.prompt,
+  pieceIdPrefix: asset.plan.bricks[0]?.id.replace(/-\d+$/, '') ?? `${asset.plan.id}-piece`,
+  stepIdPrefix: asset.plan.steps[0]?.id.replace(/-\d+$/, '') ?? `${asset.plan.id}-step`,
+  bricks: asset.plan.bricks.map((brick) => [
+    brick.brickId,
+    brick.color,
+    brick.pose.xStud,
+    brick.pose.yStud,
+    brick.pose.zStud,
+    brick.pose.rotationQuarterTurns,
+    brick.pose.verticalQuarterTurns ?? 0,
+  ]),
+})
+
+const createGeneratedSource = (assets) => `import { brickById } from './basicBricks'
+import type { BrickColor, FinishedAsset, PlacedBrick } from '../types/bricks'
+
+type CompactBrick = [string, BrickColor, number, number, number, number, number]
+type CompactAsset = {
+  id: string
+  title: string
+  category: string
+  description: string
+  planId: string
+  planTitle: string
+  prompt: string
+  pieceIdPrefix: string
+  stepIdPrefix: string
+  bricks: CompactBrick[]
+}
+
+const compactAssets: CompactAsset[] = ${JSON.stringify(assets.map(compactAsset))}
+
+const expandAsset = (asset: CompactAsset): FinishedAsset => {
+  const bricks: PlacedBrick[] = asset.bricks.map(([brickId, color, xStud, yStud, zStud, rotationQuarterTurns, verticalQuarterTurns], index) => ({
+    id: \`\${asset.pieceIdPrefix}-\${index + 1}\`,
+    brickId,
+    color,
+    pose: {
+      xStud,
+      yStud,
+      zStud,
+      rotationQuarterTurns: rotationQuarterTurns as PlacedBrick['pose']['rotationQuarterTurns'],
+      verticalQuarterTurns: verticalQuarterTurns as PlacedBrick['pose']['verticalQuarterTurns'],
+    },
+  }))
+
+  return {
+    id: asset.id,
+    title: asset.title,
+    category: asset.category,
+    description: asset.description,
+    plan: {
+      id: asset.planId,
+      title: asset.planTitle,
+      prompt: asset.prompt,
+      source: 'template-local',
+      bricks,
+      steps: bricks.map((brick, index) => {
+        const name = brickById.get(brick.brickId)?.name ?? brick.brickId
+        return {
+          id: \`\${asset.stepIdPrefix}-\${index + 1}\`,
+          title: \`放置 \${name}\`,
+          description: \`放置第 \${index + 1} 个零件：\${name}。\`,
+          brickIds: [brick.id],
+        }
+      }),
+    },
+  }
+}
+
+export const generatedObjAssets: FinishedAsset[] = compactAssets.map(expandAsset)
+`
+
 const main = async () => {
   const options = parseArgs()
   const { importObjToBrickPlan } = await loadObjImportCore()
@@ -136,8 +217,7 @@ const main = async () => {
   }
 
   if (!options.write) return
-  const source = `import type { FinishedAsset } from '../types/bricks'\n\nexport const generatedObjAssets: FinishedAsset[] = ${JSON.stringify(assets, null, 2)}\n`
-  await writeFile(outputPath, source)
+  await writeFile(outputPath, createGeneratedSource(assets))
   console.log(`Wrote ${assets.length} assets to ${outputPath}`)
 }
 
