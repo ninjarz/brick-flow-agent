@@ -57,6 +57,7 @@ await writeFile(entry, `
     findSupportedOpenPose,
     getBrickRawOverlapScore,
     hasBrickCollision,
+    isBrickSupported,
     makeBrick,
     snapBrickToPlan,
     validateBuildPlan,
@@ -106,6 +107,15 @@ await writeFile(entry, `
   );
   const snappedSearchBrick = measure('snap 6091 on largest finished asset', () =>
     snapBrickToPlan(searchBrick, largestAsset.plan.bricks, { spatialState: largestSpatialState })
+  );
+  const largestSpatialCollisionIndex = measure('build cached spatial collision index for largest finished asset', () =>
+    largestSpatialState.collisionIndex
+  );
+  measure('check snapped 6091 collision on largest finished asset', () =>
+    hasBrickCollision(snappedSearchBrick, largestAsset.plan.bricks, largestSpatialCollisionIndex)
+  );
+  measure('check snapped 6091 support on largest finished asset', () =>
+    isBrickSupported(snappedSearchBrick, largestAsset.plan.bricks, largestSpatialCollisionIndex)
   );
   measure('place 6091 on largest finished asset', () =>
     findSupportedOpenPose(snappedSearchBrick, largestAsset.plan.bricks)

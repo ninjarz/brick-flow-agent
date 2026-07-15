@@ -956,22 +956,28 @@ export const findSupportedOpenPose = (
   const bounds = spatialState.bounds
   const footprint = definition ? footprintToWorld(definition, brick.pose.rotationQuarterTurns, brick.pose.verticalQuarterTurns ?? 0) : undefined
   const context = createPlanValidationContextFromSpatialState(spatialState)
-  const tryCandidate = (candidate: PlacedBrick) =>
+  const tryCandidate = (candidate: PlacedBrick, knownSupport?: PlacedBrick) =>
     isBrickAboveGround(candidate) &&
     !hasBrickCollision(candidate, staticBricks, spatialState.collisionIndex, context) &&
-    isBrickSupported(candidate, staticBricks, spatialState.collisionIndex, context)
+    isBrickSupported(
+      candidate,
+      knownSupport ? [knownSupport] : staticBricks,
+      knownSupport ? undefined : spatialState.collisionIndex,
+      context,
+    )
   const testedCandidatePoseKeys = new Set<string>()
-  const tryUniqueCandidate = (candidate: PlacedBrick) => {
+  const tryUniqueCandidate = (candidate: PlacedBrick, knownSupport: PlacedBrick) => {
     const poseKey = [
       candidate.pose.xStud,
       candidate.pose.yStud,
       candidate.pose.zStud,
       candidate.pose.rotationQuarterTurns,
       candidate.pose.verticalQuarterTurns ?? 0,
+      knownSupport.id,
     ].join(':')
     if (testedCandidatePoseKeys.has(poseKey)) return false
     testedCandidatePoseKeys.add(poseKey)
-    return tryCandidate(candidate)
+    return tryCandidate(candidate, knownSupport)
   }
 
   const groundFallbackPoses: Array<{ xStud: number; yStud: number; zStud: number; outsideAxis: 'x' | 'z' }> = [
@@ -1053,7 +1059,7 @@ export const findSupportedOpenPose = (
         source.support.id.localeCompare(target.support.id)
       )
 
-    for (const { supportBounds } of supportOptions) {
+    for (const { support, supportBounds } of supportOptions) {
       const xCandidates = getNearestRangeValues(
         supportBounds.minX - footprint.widthStuds + HORIZONTAL_EDIT_STEP_STUDS,
         supportBounds.maxX,
@@ -1079,7 +1085,7 @@ export const findSupportedOpenPose = (
             },
           }
 
-          if (tryUniqueCandidate(candidate)) return rememberResult(candidate)
+          if (tryUniqueCandidate(candidate, support)) return rememberResult(candidate)
         }
       }
     }

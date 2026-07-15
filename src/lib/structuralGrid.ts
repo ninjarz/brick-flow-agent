@@ -8,6 +8,7 @@ import { voxelizeMeshStructuralCells, type MeshTriangle } from './structuralVoxe
 
 export const STRUCTURAL_VOXEL_SIZE = 1 / 5
 const STRUCTURAL_HASH_STEP = STRUCTURAL_VOXEL_SIZE
+const COLLISION_INDEX_HASH_STEP = 1
 const STRUCTURAL_OVERLAP_TOLERANCE = 0.000001
 const WORLD_STRUCTURAL_CACHE_LIMIT = 5000
 const structuralCellCache = new Map<string, StructuralCell[]>()
@@ -309,6 +310,41 @@ const makeDefaultStructuralCells = (definition: BrickDefinition) => [
   ...makeConnectorCells(definition),
 ]
 
+const nominalBlockStructureIds = new Set([
+  'brick-1x1',
+  'brick-1x2',
+  'brick-1x3',
+  'brick-1x4',
+  'brick-1x6',
+  'brick-2x2',
+  'brick-2x3',
+  'brick-2x4',
+  'brick-2x8',
+  'brick-trans-1x2',
+  'plate-1x1',
+  'plate-1x2',
+  'plate-1x3',
+  'plate-1x4',
+  'plate-1x6',
+  'plate-2x2',
+  'plate-2x3',
+  'plate-2x4',
+  'plate-2x6',
+  'plate-2x8',
+  'plate-4x4',
+  'plate-4x6',
+  'plate-4x8',
+  'plate-6x8',
+  'plate-8x16',
+  'tile-1x1',
+  'tile-1x2',
+  'tile-1x4',
+  'tile-2x4',
+])
+
+const usesNominalBlockStructure = (definition: BrickDefinition) =>
+  definition.kind === 'block' || nominalBlockStructureIds.has(definition.id)
+
 const makeStructuralDefinitionCacheKey = (definition: BrickDefinition) =>
   `${definition.id}:${definition.partNumber}:${definition.footprint.widthStuds},${definition.footprint.depthStuds},${definition.footprint.heightStuds}`
 
@@ -317,7 +353,9 @@ export const getBrickStructuralCells = (definition: BrickDefinition): Structural
   const cached = structuralCellCache.get(cacheKey)
   if (cached) return cached
 
-  const structuralTriangles = getLDrawStructuralTriangles(definition.partNumber)
+  const structuralTriangles = usesNominalBlockStructure(definition)
+    ? undefined
+    : getLDrawStructuralTriangles(definition.partNumber)
   const cells = structuralTriangles
     ? makeMeshStructuralCells(definition, structuralTriangles)
     : makeDefaultStructuralCells(definition)
@@ -464,9 +502,9 @@ const transformStructuralCellBox = (
   }
 }
 
-const hashCoordinate = (value: number) =>
+const hashCoordinate = (value: number, step = STRUCTURAL_HASH_STEP) =>
 {
-  const scaled = value / STRUCTURAL_HASH_STEP
+  const scaled = value / step
   const nearest = Math.round(scaled)
   return Math.abs(scaled - nearest) < 0.000001 ? nearest : Math.floor(scaled)
 }
@@ -474,13 +512,16 @@ const hashCoordinate = (value: number) =>
 const makeKey = (x: number, y: number, z: number) =>
   `${x},${y},${z}`
 
-const getCellHashKeys = (cell: StructuralCell) => {
-  const minX = hashCoordinate(cell.minX)
-  const maxX = hashCoordinate(cell.maxX - 0.000001)
-  const minY = hashCoordinate(cell.minY)
-  const maxY = hashCoordinate(cell.maxY - 0.000001)
-  const minZ = hashCoordinate(cell.minZ)
-  const maxZ = hashCoordinate(cell.maxZ - 0.000001)
+const getCellHashKeys = (
+  cell: Pick<StructuralCell, 'minX' | 'maxX' | 'minY' | 'maxY' | 'minZ' | 'maxZ'>,
+  step = STRUCTURAL_HASH_STEP,
+) => {
+  const minX = hashCoordinate(cell.minX, step)
+  const maxX = hashCoordinate(cell.maxX - 0.000001, step)
+  const minY = hashCoordinate(cell.minY, step)
+  const maxY = hashCoordinate(cell.maxY - 0.000001, step)
+  const minZ = hashCoordinate(cell.minZ, step)
+  const maxZ = hashCoordinate(cell.maxZ - 0.000001, step)
   const keys: string[] = []
 
   for (let x = minX; x <= maxX; x += 1) {
@@ -860,7 +901,10 @@ export const createStructuralCollisionIndex = (bricks: PlacedBrick[]): Structura
   const bricksById = new Map(bricks.map((brick) => [brick.id, brick]))
 
   for (const brick of bricks) {
-    const keys = getBrickWorldCollisionKeys(brick)
+    const collisionBounds = getCellBoxBounds(getBrickWorldCollisionCellBoxes(brick))
+    const keys = new Set(collisionBounds
+      ? getCellHashKeys(collisionBounds, COLLISION_INDEX_HASH_STEP)
+      : [])
     brickKeys.set(brick.id, keys)
 
     for (const key of keys) {
@@ -881,8 +925,10 @@ export const getStructuralCollisionCandidateIds = (
   index: StructuralCollisionIndex,
 ) => {
   const candidateIds = new Set<string>()
+  const collisionBounds = getCellBoxBounds(getBrickWorldCollisionCellBoxes(brick))
+  if (!collisionBounds) return candidateIds
 
-  for (const key of getBrickWorldCollisionKeys(brick)) {
+  for (const key of getCellHashKeys(collisionBounds, COLLISION_INDEX_HASH_STEP)) {
     const brickIds = index.keyToBrickIds.get(key)
     if (!brickIds) continue
 
@@ -898,19 +944,24 @@ export const getStructuralOverlapScore = (
   brick: PlacedBrick,
   index: StructuralCollisionIndex,
 ) => {
-  let overlapCount = 0
-  const sourceKeys = getBrickWorldCollisionKeys(brick)
+  let overlapVolume = 0
+  const sourceBoxes = getBrickWorldCollisionCellBoxes(brick)
 
-  for (const key of sourceKeys) {
-    const brickIds = index.keyToBrickIds.get(key)
-    if (!brickIds) continue
+  for (const brickId of getStructuralCollisionCandidateIds(brick, index)) {
+    const other = index.bricksById.get(brickId)
+    if (!other) continue
 
-    for (const brickId of brickIds) {
-      if (brickId !== brick.id) overlapCount += 1
+    for (const source of sourceBoxes) {
+      for (const target of getBrickWorldCollisionCellBoxes(other)) {
+        const width = Math.max(0, Math.min(source.maxX, target.maxX) - Math.max(source.minX, target.minX))
+        const height = Math.max(0, Math.min(source.maxY, target.maxY) - Math.max(source.minY, target.minY))
+        const depth = Math.max(0, Math.min(source.maxZ, target.maxZ) - Math.max(source.minZ, target.minZ))
+        overlapVolume += width * height * depth
+      }
     }
   }
 
-  return overlapCount * STRUCTURAL_VOXEL_SIZE ** 3
+  return overlapVolume
 }
 
 export const doBrickStructuralCellsCollide = (
