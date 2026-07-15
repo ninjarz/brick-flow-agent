@@ -1,23 +1,30 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BookOpen, Box, Boxes, Download, Eye, FileUp, Github, Globe2, KeyRound, Link, Plus, Redo2, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
-import { BrickGlyph } from './components/BrickGlyph'
+import { LazyBrickGlyph } from './components/LazyBrickGlyph'
 import { BrickEditorPanel } from './components/BrickEditorPanel'
-import { BrickScene, type BrickSceneViewMode } from './components/BrickScene'
+import type { BrickSceneViewMode } from './components/BrickScene'
 import { ControlPanel } from './components/ControlPanel'
-import { ObjImportModal } from './components/ObjImportModal'
 import { brickById, brickDefinitions } from './data/basicBricks'
 import { generateBuildPlan } from './lib/localGenerator'
 import { buildLlmUserPrompt, generateLlmBuildPlan, isLlmConfigComplete, llmSystemPrompt, testLlmConnection } from './lib/llmGenerator'
 import { loadLlmConfig, saveLlmConfig } from './lib/llmConfig'
-import { defaultFinishedAssets, isDefaultFinishedAsset, loadAllDefaultFinishedAssets, loadFinishedAssets, mergeWithDefaultAssets, saveFinishedAssets } from './lib/finishedAssets'
+import { defaultFinishedAssets, hasIndexedDbFinishedAssets, isDefaultFinishedAsset, loadAllDefaultFinishedAssets, loadFinishedAssets, loadFinishedAssetsFromIndexedDb, mergeWithDefaultAssets, saveFinishedAssets } from './lib/finishedAssets'
 import { formatBuildManualHtml, formatBuildManualMarkdown, serializeBuildManual } from './lib/manualSerializer'
 import { isValidImportedPose, normalizeImportedPose, tryNormalizeImportedPlan } from './lib/planImport'
 import { countBricks, createBrickCollisionIndex, createPlanSpatialState, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickBounds, getBrickPlacementDiagnostics, getBrickRawOverlapScore, getConnectedBrickComponents, getNearestHorizontalSearchOffsets, hasBrickCollision, isBrickAboveGround, makeBrick, repairBuildPlan, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
 import { WORLD_SNAP_STEP_STUDS, footprintToWorld, getBrickWorldFrame, normalizeHorizontalStud, normalizeQuarterTurns, normalizeVerticalQuarterTurns, normalizeYStud } from './lib/brickUnits'
 import { useI18n } from './lib/i18n'
 import type { ObjImportResult } from './lib/objImport'
+import { prepareReferenceImage } from './lib/referenceImage'
+import { indexedDbStorageMarker, isIndexedDbStorageMarker, localStorageComfortLimit, readLargeStoredValue, removeLargeStoredValue, writeLargeStoredValue } from './lib/browserStorage'
+import { simplifiedBrickThreshold } from './lib/scenePerformance'
+import { formatLDrawPlan, parseLDrawPlan } from './lib/ldrawPlan'
+import { getEffectiveInventory, loadInventoryOverrides, saveInventoryOverrides } from './lib/userInventory'
 import type { BuildPlan, FinishedAsset, LlmConfig, PlacedBrick } from './types/bricks'
 import './App.css'
+
+const BrickScene = lazy(() => import('./components/BrickScene').then((module) => ({ default: module.BrickScene })))
+const ObjImportModal = lazy(() => import('./components/ObjImportModal').then((module) => ({ default: module.ObjImportModal })))
 
 const defaultFinishedAssetI18nKeys = new Map(
   defaultFinishedAssets
@@ -245,6 +252,25 @@ const findNearestOpenBrickGroupAround = (
 }
 
 const workspaceDraftStorageKey = 'brick-flow-agent:workspace-draft:v1'
+const workspaceDraftIndexedDbKey = 'workspace-draft:v1'
+
+type WorkspaceDraft = {
+  plan: BuildPlan
+  prompt: string
+}
+
+const normalizeWorkspaceDraft = (value: unknown): WorkspaceDraft | undefined => {
+  if (!isRecord(value)) return undefined
+  const plan = parseImportedPlan(value.plan)
+  if (!plan) return undefined
+  const issues = validateBuildPlan(plan)
+  if (getBlockingBuildPlanIssues(issues).length > 0) return undefined
+
+  return {
+    plan,
+    prompt: typeof value.prompt === 'string' ? value.prompt : plan.prompt,
+  }
+}
 
 const loadWorkspaceDraft = () => {
   if (typeof window === 'undefined') return undefined
@@ -252,33 +278,61 @@ const loadWorkspaceDraft = () => {
   try {
     const stored = window.localStorage.getItem(workspaceDraftStorageKey)
     if (!stored) return undefined
-    const parsed = JSON.parse(stored) as unknown
-    if (!isRecord(parsed)) return undefined
-    const plan = parseImportedPlan(parsed.plan)
-    if (!plan) return undefined
-    const issues = validateBuildPlan(plan)
-    if (getBlockingBuildPlanIssues(issues).length > 0) return undefined
-
-    return {
-      plan,
-      prompt: typeof parsed.prompt === 'string' ? parsed.prompt : plan.prompt,
-    }
+    if (isIndexedDbStorageMarker(stored)) return undefined
+    return normalizeWorkspaceDraft(JSON.parse(stored) as unknown)
   } catch {
     return undefined
   }
 }
 
-const saveWorkspaceDraft = (plan: BuildPlan, prompt: string) => {
-  if (typeof window === 'undefined') return
+const hasIndexedDbWorkspaceDraft = () => {
+  if (typeof window === 'undefined') return false
+  try {
+    return isIndexedDbStorageMarker(window.localStorage.getItem(workspaceDraftStorageKey))
+  } catch {
+    return false
+  }
+}
 
-  window.localStorage.setItem(
-    workspaceDraftStorageKey,
-    JSON.stringify({
-      schemaVersion: 1,
-      prompt,
-      plan,
-    }),
-  )
+const loadWorkspaceDraftFromIndexedDb = async () => {
+  try {
+    return normalizeWorkspaceDraft(await readLargeStoredValue<unknown>(workspaceDraftIndexedDbKey))
+  } catch {
+    return undefined
+  }
+}
+
+let workspaceDraftSaveQueue = Promise.resolve(true)
+
+const persistWorkspaceDraft = async (plan: BuildPlan, prompt: string) => {
+  if (typeof window === 'undefined') return true
+  const value = { schemaVersion: 1, prompt, plan }
+  const serialized = JSON.stringify(value)
+
+  if (serialized.length <= localStorageComfortLimit) {
+    try {
+      window.localStorage.setItem(workspaceDraftStorageKey, serialized)
+      await removeLargeStoredValue(workspaceDraftIndexedDbKey).catch(() => undefined)
+      return true
+    } catch {
+      // Fall through to IndexedDB when localStorage is unavailable or full.
+    }
+  }
+
+  try {
+    await writeLargeStoredValue(workspaceDraftIndexedDbKey, value)
+    window.localStorage.removeItem(workspaceDraftStorageKey)
+    window.localStorage.setItem(workspaceDraftStorageKey, indexedDbStorageMarker)
+    return true
+  } catch {
+    return false
+  }
+}
+
+const saveWorkspaceDraft = (plan: BuildPlan, prompt: string) => {
+  const nextSave = workspaceDraftSaveQueue.then(() => persistWorkspaceDraft(plan, prompt))
+  workspaceDraftSaveQueue = nextSave.catch(() => false)
+  return nextSave
 }
 
 function App() {
@@ -307,6 +361,7 @@ function App() {
   const [selectedId, setSelectedId] = useState('')
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([])
   const [llmConfig, setLlmConfig] = useState<LlmConfig>(() => loadLlmConfig())
+  const [inventoryOverrides, setInventoryOverrides] = useState(() => loadInventoryOverrides())
   const [isTestingLlmConfig, setIsTestingLlmConfig] = useState(false)
   const [llmConfigFeedback, setLlmConfigFeedback] = useState<{
     tone: 'error' | 'warning' | 'success'
@@ -326,6 +381,9 @@ function App() {
   const [manualCopyStatus, setManualCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
   const [promptCopyStatus, setPromptCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
   const [finishedAssets, setFinishedAssets] = useState<FinishedAsset[]>(() => loadFinishedAssets())
+  const [isWorkspaceStorageHydrated, setIsWorkspaceStorageHydrated] = useState(() => !hasIndexedDbWorkspaceDraft())
+  const [isAssetStorageHydrated, setIsAssetStorageHydrated] = useState(() => !hasIndexedDbFinishedAssets())
+  const storageWarningShownRef = useRef(false)
   const [assetTitle, setAssetTitle] = useState('')
   const [assetCategory, setAssetCategory] = useState(() => t('asset.customCategory'))
   const [assetDescription, setAssetDescription] = useState('')
@@ -472,10 +530,14 @@ function App() {
   const manualIssueSummary = useMemo(() => summarizeBuildPlanIssues(manualIssues, locale), [locale, manualIssues])
   const selectedManualStep = buildManual?.steps[Math.min(manualStepIndex, Math.max(0, buildManual.steps.length - 1))]
   const manualPreviewBricks = useMemo(() => {
-    if (!manualSourcePlan || !selectedManualStep) return []
-    const cumulativeIds = new Set(selectedManualStep.cumulativePieceIds)
+    if (!manualSourcePlan || !buildManual || !selectedManualStep) return []
+    const cumulativeIds = new Set(
+      buildManual.steps
+        .slice(0, manualStepIndex + 1)
+        .flatMap((step) => step.addPieces.map((piece) => piece.instanceId)),
+    )
     return manualSourcePlan.bricks.filter((brick) => cumulativeIds.has(brick.id))
-  }, [manualSourcePlan, selectedManualStep])
+  }, [buildManual, manualSourcePlan, manualStepIndex, selectedManualStep])
   const localizedFinishedAssets = useMemo(
     () => finishedAssets.map((asset) => localizeFinishedAsset(asset, t)),
     [finishedAssets, t],
@@ -506,13 +568,17 @@ function App() {
     })
   }, [assetCategoryFilter, assetQuery, localizedFinishedAssets])
   const llmPromptPreview = useMemo(
-    () => buildLlmUserPrompt({ prompt: prompt.trim() || fallbackPrompt, imageName }),
-    [fallbackPrompt, imageName, prompt],
+    () => buildLlmUserPrompt({ prompt: prompt.trim() || fallbackPrompt, imageName, inventoryOverrides }),
+    [fallbackPrompt, imageName, inventoryOverrides, prompt],
   )
 
   useEffect(() => {
     saveLlmConfig(llmConfig)
   }, [llmConfig])
+
+  useEffect(() => {
+    saveInventoryOverrides(inventoryOverrides)
+  }, [inventoryOverrides])
 
   useEffect(() => {
     let isCanceled = false
@@ -526,6 +592,40 @@ function App() {
       isCanceled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (isWorkspaceStorageHydrated) return
+    let isCanceled = false
+
+    loadWorkspaceDraftFromIndexedDb().then((storedDraft) => {
+      if (isCanceled) return
+      if (storedDraft && planRef.current === initialPlan && planHistoryRef.current.past.length === 0) {
+        planRef.current = storedDraft.plan
+        setPlanState(storedDraft.plan)
+        setPrompt(storedDraft.prompt)
+      }
+      setIsWorkspaceStorageHydrated(true)
+    })
+
+    return () => {
+      isCanceled = true
+    }
+  }, [initialPlan, isWorkspaceStorageHydrated])
+
+  useEffect(() => {
+    if (isAssetStorageHydrated) return
+    let isCanceled = false
+
+    loadFinishedAssetsFromIndexedDb().then((storedAssets) => {
+      if (isCanceled) return
+      if (storedAssets) setFinishedAssets((current) => mergeWithDefaultAssets(storedAssets, current.filter(isDefaultFinishedAsset)))
+      setIsAssetStorageHydrated(true)
+    })
+
+    return () => {
+      isCanceled = true
+    }
+  }, [isAssetStorageHydrated])
 
   useEffect(() => {
     setAssetCategory((current) => defaultAssetCategoryLabels.has(current) ? t('asset.customCategory') : current)
@@ -542,13 +642,20 @@ function App() {
   }, [plan])
 
   useEffect(() => {
+    if (!isWorkspaceStorageHydrated) return
     const timeoutId = window.setTimeout(
-      () => saveWorkspaceDraft(plan, prompt),
+      () => {
+        void saveWorkspaceDraft(plan, prompt).then((saved) => {
+          if (saved || storageWarningShownRef.current) return
+          storageWarningShownRef.current = true
+          setGenerationWarning(t('error.storageUnavailable'))
+        })
+      },
       workspaceDraftSaveDebounceMs,
     )
 
     return () => window.clearTimeout(timeoutId)
-  }, [plan, prompt])
+  }, [isWorkspaceStorageHydrated, plan, prompt, t])
 
   useEffect(() => {
     setFinishedAssets((current) => {
@@ -563,8 +670,13 @@ function App() {
   }, [])
 
   useEffect(() => {
-    saveFinishedAssets(finishedAssets)
-  }, [finishedAssets])
+    if (!isAssetStorageHydrated) return
+    void saveFinishedAssets(finishedAssets).then((saved) => {
+      if (saved || storageWarningShownRef.current) return
+      storageWarningShownRef.current = true
+      setGenerationWarning(t('error.storageUnavailable'))
+    })
+  }, [finishedAssets, isAssetStorageHydrated, t])
 
   useEffect(() => {
     if (!isManualOpen) return
@@ -634,12 +746,26 @@ function App() {
 
 
 
-  const handleImage = (file?: File) => {
-    if (!file) return
-    setImageName(file.name)
-    const reader = new FileReader()
-    reader.onload = () => setImagePreview(String(reader.result))
-    reader.readAsDataURL(file)
+  const handleImage = async (file?: File) => {
+    if (!file) {
+      setImageName(undefined)
+      setImagePreview(undefined)
+      return
+    }
+
+    try {
+      const prepared = await prepareReferenceImage(file)
+      setImageName(prepared.name)
+      setImagePreview(prepared.dataUrl)
+      clearGenerationFeedback()
+    } catch (error) {
+      const code = error instanceof Error ? error.message : ''
+      setGenerationFailure(code === 'REFERENCE_IMAGE_SIZE'
+        ? t('error.referenceImageSize')
+        : code === 'REFERENCE_IMAGE_TYPE'
+          ? t('error.referenceImageType')
+          : t('error.referenceImageRead'))
+    }
   }
 
   const handleImportPlan = (file?: File) => {
@@ -647,11 +773,17 @@ function App() {
 
     const reader = new FileReader()
     reader.onload = () => {
+      const isLDrawFile = /\.(?:ldr|mpd)$/i.test(file.name)
       try {
-        const parsed = JSON.parse(String(reader.result)) as unknown
-        const importedPlan = parseImportedPlan(parsed, importText)
+        const text = String(reader.result)
+        const ldrawResult = isLDrawFile
+          ? parseLDrawPlan(text, file.name.replace(/\.(?:ldr|mpd)$/i, ''))
+          : undefined
+        const importedPlan = isLDrawFile
+          ? ldrawResult?.plan
+          : parseImportedPlan(JSON.parse(text) as unknown, importText)
         if (!importedPlan) {
-          setGenerationFailure(t('error.importInvalid'))
+          setGenerationFailure(t(isLDrawFile ? 'error.importLDrawInvalid' : 'error.importInvalid'))
           return
         }
 
@@ -666,11 +798,20 @@ function App() {
         setPrompt(importedPlan.prompt)
         selectBrick('')
         clearGenerationFeedback()
-        if (issues.length > 0) {
-          setGenerationWarning(summarizeBuildPlanIssues(issues, locale))
+        const warnings = [
+          issues.length > 0 ? summarizeBuildPlanIssues(issues, locale) : '',
+          ldrawResult && ldrawResult.ignoredParts > 0
+            ? t('error.importLDrawIgnored', {
+                count: ldrawResult.ignoredParts,
+                parts: ldrawResult.unknownPartNumbers.slice(0, 6).join(', ') || '-',
+              })
+            : '',
+        ].filter(Boolean)
+        if (warnings.length > 0) {
+          setGenerationWarning(warnings.join('；'))
         }
       } catch {
-        setGenerationFailure(t('error.importParse'))
+        setGenerationFailure(t(isLDrawFile ? 'error.importLDrawInvalid' : 'error.importParse'))
       }
     }
     reader.readAsText(file)
@@ -680,6 +821,7 @@ function App() {
     if (!window.confirm(t('error.resetConfirm'))) return
 
     window.localStorage.removeItem(workspaceDraftStorageKey)
+    void removeLargeStoredValue(workspaceDraftIndexedDbKey).catch(() => undefined)
     setPlan(generateBuildPlan({ prompt: defaultPrompt }))
     setPrompt(defaultPrompt)
     selectBrick('')
@@ -692,6 +834,8 @@ function App() {
     const input = {
       prompt: prompt.trim() || fallbackPrompt,
       imageName,
+      imageDataUrl: imagePreview,
+      inventoryOverrides,
     }
 
     clearGenerationFeedback()
@@ -707,27 +851,61 @@ function App() {
     generationAbortRef.current = generationController
 
     try {
-      const nextPlan = await generateLlmBuildPlan({ ...input, config: llmConfig, signal: generationController.signal, locale })
-      const issues = validateBuildPlan(nextPlan)
-      const blockingIssues = getBlockingBuildPlanIssues(issues)
-      if (blockingIssues.length > 0) {
-        const repairedPlan = repairBuildPlan(nextPlan)
-        const repairIssues = validateBuildPlan(repairedPlan)
-        if (repairedPlan.bricks.length === 0 || getBlockingBuildPlanIssues(repairIssues).length > 0) {
-          setGenerationFailure(t('error.generationBlocked', { summary: summarizeBuildPlanIssues(issues, locale) }))
-          return
+      const validateCandidate = (candidate: BuildPlan) => {
+        const issues = validateBuildPlan(candidate)
+        if (getBlockingBuildPlanIssues(issues).length === 0) {
+          return { plan: candidate, issues, repairedLocally: false }
         }
 
-        setPlan(repairedPlan)
+        const repairedPlan = repairBuildPlan(candidate)
+        const repairIssues = validateBuildPlan(repairedPlan)
+        return {
+          plan: repairedPlan.bricks.length > 0 && getBlockingBuildPlanIssues(repairIssues).length === 0
+            ? repairedPlan
+            : undefined,
+          issues,
+          repairedLocally: true,
+        }
+      }
+
+      const initialPlan = await generateLlmBuildPlan({ ...input, config: llmConfig, signal: generationController.signal, locale })
+      const initialResult = validateCandidate(initialPlan)
+      if (initialResult.plan) {
+        setPlan(initialResult.plan)
         selectBrick('')
-        setGenerationWarning(t('error.generationRepaired', { summary: summarizeBuildPlanIssues(issues, locale) }))
+        if (initialResult.repairedLocally) {
+          setGenerationWarning(t('error.generationRepaired', { summary: summarizeBuildPlanIssues(initialResult.issues, locale) }))
+        } else if (initialResult.issues.length > 0) {
+          setGenerationWarning(summarizeBuildPlanIssues(initialResult.issues, locale))
+        }
         return
       }
-      setPlan(nextPlan)
-      selectBrick('')
-      if (issues.length > 0) {
-        setGenerationWarning(summarizeBuildPlanIssues(issues, locale))
+
+      const initialSummary = summarizeBuildPlanIssues(initialResult.issues, locale)
+      if (!llmConfig.autoRepair) {
+        setGenerationFailure(t('error.generationBlocked', { summary: initialSummary }))
+        return
       }
+
+      const retryPlan = await generateLlmBuildPlan({
+        ...input,
+        config: llmConfig,
+        signal: generationController.signal,
+        locale,
+        repairFeedback: initialSummary,
+        previousPlan: initialPlan,
+      })
+      const retryResult = validateCandidate(retryPlan)
+      if (!retryResult.plan) {
+        setGenerationFailure(t('error.generationBlocked', {
+          summary: summarizeBuildPlanIssues(retryResult.issues, locale),
+        }))
+        return
+      }
+
+      setPlan(retryResult.plan)
+      selectBrick('')
+      setGenerationWarning(t('error.generationRetried', { summary: initialSummary }))
     } catch (error) {
       setGenerationFailure(error instanceof Error ? error.message : t('error.generationFailed'))
     } finally {
@@ -1039,8 +1217,9 @@ function App() {
   const addBrick = (brickId: string) => {
     const definition = brickById.get(brickId)
     if (!definition) return
-    if (isInventoryLimited(definition.inventory) && (brickCounts[brickId] ?? 0) >= definition.inventory) {
-      setGenerationFailure(t('error.inventoryLimit', { name: definition.name, inventory: definition.inventory }))
+    const inventory = getEffectiveInventory(brickId, definition.inventory, inventoryOverrides)
+    if (isInventoryLimited(inventory) && (brickCounts[brickId] ?? 0) >= inventory) {
+      setGenerationFailure(t('error.inventoryLimit', { name: definition.name, inventory }))
       return
     }
     const nextBrick = makeBrick(brickId, definition.colors[0], 0, 0, 0)
@@ -1066,8 +1245,11 @@ function App() {
   const duplicateSelected = () => {
     if (!selectedBrick) return
     const definition = brickById.get(selectedBrick.brickId)
-    if (definition && isInventoryLimited(definition.inventory) && (brickCounts[selectedBrick.brickId] ?? 0) >= definition.inventory) {
-      setGenerationFailure(t('error.inventoryLimit', { name: definition.name, inventory: definition.inventory }))
+    const inventory = definition
+      ? getEffectiveInventory(selectedBrick.brickId, definition.inventory, inventoryOverrides)
+      : Number.POSITIVE_INFINITY
+    if (definition && isInventoryLimited(inventory) && (brickCounts[selectedBrick.brickId] ?? 0) >= inventory) {
+      setGenerationFailure(t('error.inventoryLimit', { name: definition.name, inventory }))
       return
     }
     const nextBrick = duplicateBrick(selectedBrick)
@@ -1241,11 +1423,15 @@ function App() {
   const exportPlan = () => {
     const manual = serializeBuildManual(plan, locale)
     downloadJson(`${plan.title || 'brick-plan'}.json`, {
-      schemaVersion: 3,
+      schemaVersion: 4,
       exportedAt: new Date().toISOString(),
       plan,
       manual,
     })
+  }
+
+  const exportLDraw = () => {
+    downloadFile(`${plan.title || 'brick-plan'}.ldr`, formatLDrawPlan(plan), 'text/plain')
   }
 
   const exportManual = () => {
@@ -1524,6 +1710,9 @@ function App() {
         </header>
 
         <div className="viewer">
+          {plan.bricks.length >= simplifiedBrickThreshold && sceneViewMode !== 'voxel' && (
+            <div className="performance-badge">{t('scene.performanceMode')}</div>
+          )}
           {sceneViewMode === 'voxel' && (
             <div className="voxel-legend" aria-label={t('voxel.legend')}>
               <span><i style={{ background: '#ef4444' }} />{t('voxel.solid')}</span>
@@ -1533,18 +1722,20 @@ function App() {
               <span><i style={{ background: '#10b981' }} />{t('voxel.studsocket')}</span>
             </div>
           )}
-          <BrickScene
-            bricks={plan.bricks}
-            selectedId={selectedId}
-            cameraFrameKey={plan.id}
-            viewMode={sceneViewMode}
-            highlightedIds={activeSelectedIds.filter((id) => id !== selectedId)}
-            onSelect={selectBrick}
-            onSelectConnected={selectConnectedGroup}
-            onNudgeSelected={nudgeSelected}
-            onRotateSelected={rotateSelected}
-            onDeleteSelected={deleteSelected}
-          />
+          <Suspense fallback={<div className="scene-loading">{t('scene.loading')}</div>}>
+            <BrickScene
+              bricks={plan.bricks}
+              selectedId={selectedId}
+              cameraFrameKey={plan.id}
+              viewMode={sceneViewMode}
+              highlightedIds={activeSelectedIds.filter((id) => id !== selectedId)}
+              onSelect={selectBrick}
+              onSelectConnected={selectConnectedGroup}
+              onNudgeSelected={nudgeSelected}
+              onRotateSelected={rotateSelected}
+              onDeleteSelected={deleteSelected}
+            />
+          </Suspense>
           <BrickEditorPanel
             plan={plan}
             selectedBrick={selectedBrick}
@@ -1564,7 +1755,7 @@ function App() {
           <div className="brick-count-list">
             {usedBricks.map((brick) => (
               <article key={brick.id}>
-                <BrickGlyph brickId={brick.id} kind={brick.kind} footprint={brick.footprint} className="count-glyph" />
+                <LazyBrickGlyph brickId={brick.id} kind={brick.kind} footprint={brick.footprint} className="count-glyph" />
                 <div>
                   <h3>{brick.name}</h3>
                   <p>{t('counts.quantity', { count: brickCounts[brick.id] })}</p>
@@ -1595,7 +1786,18 @@ function App() {
         plan={plan}
         onRenamePlan={renamePlan}
         onAddBrick={addBrick}
+        inventoryOverrides={inventoryOverrides}
+        onInventoryChange={(brickId, inventory) => {
+          setInventoryOverrides((current) => {
+            const next = { ...current }
+            if (inventory === undefined) delete next[brickId]
+            else if (Number.isFinite(inventory)) next[brickId] = Math.max(0, Math.floor(inventory))
+            return next
+          })
+        }}
+        onResetInventory={() => setInventoryOverrides({})}
         onExport={exportPlan}
+        onExportLDraw={exportLDraw}
         onImportPlan={handleImportPlan}
         onResetWorkspace={resetWorkspace}
         onOpenManual={() => openManual()}
@@ -1618,11 +1820,15 @@ function App() {
         </div>
       )}
 
-      <ObjImportModal
-        open={isObjImportOpen}
-        onClose={() => setIsObjImportOpen(false)}
-        onImported={importObjResult}
-      />
+      {isObjImportOpen && (
+        <Suspense fallback={null}>
+          <ObjImportModal
+            open
+            onClose={() => setIsObjImportOpen(false)}
+            onImported={importObjResult}
+          />
+        </Suspense>
+      )}
 
       {isConfigOpen && (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setIsConfigOpen(false)}>
@@ -1747,6 +1953,20 @@ function App() {
                   <span>
                     <strong>{t('config.thinkingMode')}</strong>
                     <small>{t(`config.thinkingModeDescription.${llmConfig.enableThinking ? 'on' : 'off'}`)}</small>
+                  </span>
+                </label>
+                <label className="config-toggle">
+                  <input
+                    type="checkbox"
+                    checked={llmConfig.autoRepair}
+                    onChange={(event) => {
+                      setLlmConfigFeedback(undefined)
+                      setLlmConfig({ ...llmConfig, autoRepair: event.target.checked })
+                    }}
+                  />
+                  <span>
+                    <strong>{t('config.autoRepair')}</strong>
+                    <small>{t(`config.autoRepairDescription.${llmConfig.autoRepair ? 'on' : 'off'}`)}</small>
                   </span>
                 </label>
                 <div className="config-actions">
@@ -1973,16 +2193,18 @@ function App() {
                   </p>
                 </div>
                 <div className="manual-preview-viewer">
-                  <BrickScene
-                    bricks={manualPreviewBricks}
-                    selectedId=""
-                    highlightedIds={selectedManualStep.addPieces.map((piece) => piece.instanceId)}
-                    cameraFrameKey={`${manualPlan?.id ?? 'manual'}:${selectedManualStep.stepNumber}`}
-                    onSelect={() => {}}
-                    onNudgeSelected={() => {}}
-                    onRotateSelected={() => {}}
-                    onDeleteSelected={() => {}}
-                  />
+                  <Suspense fallback={<div className="scene-loading">{t('scene.loading')}</div>}>
+                    <BrickScene
+                      bricks={manualPreviewBricks}
+                      selectedId=""
+                      highlightedIds={selectedManualStep.addPieces.map((piece) => piece.instanceId)}
+                      cameraFrameKey={`${manualPlan?.id ?? 'manual'}:${selectedManualStep.stepNumber}`}
+                      onSelect={() => {}}
+                      onNudgeSelected={() => {}}
+                      onRotateSelected={() => {}}
+                      onDeleteSelected={() => {}}
+                    />
+                  </Suspense>
                 </div>
                 <div className="manual-page-controls">
                   <button
@@ -2048,7 +2270,7 @@ function App() {
                     ))}
                   </div>
                   <p className="manual-step-meta">
-                    {t('manual.stepMeta', { added: step.addPieces.length, total: step.cumulativePieceIds.length })}
+                    {t('manual.stepMeta', { added: step.addPieces.length, total: step.completedPieceCount })}
                   </p>
                   <p className={`structure-status ${step.validation.ok ? (step.validation.issueCount > 0 ? 'notice' : 'ok') : 'warn'}`}>
                     {step.validation.summary}

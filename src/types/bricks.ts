@@ -114,6 +114,7 @@ export type LlmConfig = {
   apiKey: string
   requestMode: 'direct' | 'proxy'
   enableThinking: boolean
+  autoRepair: boolean
 }
 
 export type FinishedAsset = {
@@ -130,4 +131,6 @@ export type FinishedAsset = {
 export type GeneratorInput = {
   prompt: string
   imageName?: string
+  imageDataUrl?: string
+  inventoryOverrides?: Record<string, number>
 }

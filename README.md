@@ -15,15 +15,20 @@ The app uses React + Three.js for the editor, LDraw data for part rendering, and
 
 ## ✨ Highlights
 
-- Prompt-to-build generation through OpenAI-compatible LLM endpoints
+- Prompt- and reference-image-to-build generation through multimodal OpenAI-compatible LLM endpoints
+- Structural validation, local repair, and an optional single LLM feedback retry for invalid generations
 - Static-hosting friendly browser-direct LLM requests, with an optional local proxy for CORS-restricted APIs
 - Part-pack switching, currently with a LEGO-compatible LDraw pack and an early Minecraft pack
 - LDraw-derived visual and structural data for part rendering, collision, and support checks
 - Brick-level editing: add, select, move, rotate, recolor, duplicate, delete, import, and export
 - Connector validation for studs, tubes, bars, pins, axles, and bidirectional block faces
 - Structural voxel debug view for solids, sockets, studs, bidirectional faces, and enterable cells
-- Built-in asset library with local persistence for user models
-- Build manuals generated as one part per step, with Markdown, HTML, and JSON export
+- Editable per-part inventory limits shared by manual editing and LLM generation
+- Built-in asset library with IndexedDB-backed persistence for large user models
+- Browser-side OBJ import with size, brick-budget, edge-style, silhouette, and quality previews
+- JSON and LDraw/MPD import plus lossless LDraw export for application round trips
+- Build manuals with grouped layer steps and delta-only storage, plus Markdown, HTML, and JSON export
+- Adaptive rendering for large scenes and lazy loading for 3D/OBJ-heavy modules
 - Bilingual UI with browser-language defaults and manual language selection
 
 <p align="center">
@@ -34,7 +39,7 @@ The app uses React + Three.js for the editor, LDraw data for part rendering, and
 ## 🧱 Part Packs
 
 - **LEGO-compatible pack:** the main pack today. It uses bundled LDraw data where possible for visuals and structure, with regression checks for official colors, connector positions, collision, support, and default assets
-- **Minecraft pack:** an early voxel-first pack. It currently includes a basic `1 x 1 x 1` block
+- **Minecraft pack:** a voxel-first pack with face-to-face connectivity and semantic `1 x 1 x 1` grass, dirt, stone, oak, sand, water, glass, and redstone blocks, plus a configurable basic block
 
 ## 🚀 Quick Start
 
@@ -81,6 +86,8 @@ node scripts/generate-obj-assets.mjs --dry-run --source=stanford-bunny --profile
 
 The pipeline uses four-sample solid voxelization, removes isolated mesh noise, adds only minimal bridge/support cells, prunes boundary voxels that cannot be connected, replaces suitable stair-step boundaries with oriented slopes, and tiles each layer with a connectivity-aware brick scorer. Its console metrics include voxel and multi-view silhouette IoU, voxel dimensions, shape modifications, unresolved supports, connected components, slope/brick counts, and odd scan-ray ratio. Default publishing is quality-gated per source; experimental profiles remain available through explicit `--source` and `--profile` arguments.
 
+The same conversion core powers the in-browser **Import OBJ** dialog. Files stay local; the dialog accepts OBJ files up to 100 MB, adapts voxel resolution to a selected brick budget, and shows source/result silhouettes before the plan is loaded.
+
 ## 🤖 LLM Configuration
 
 Open **Config** in the app and set:
@@ -94,6 +101,7 @@ Open **Config** in the app and set:
 - Model name: any model supported by your endpoint
 - Request mode: browser direct or local proxy
 - Thinking mode: optional, off by default for faster and more predictable generation
+- Structural feedback retry: on by default; if deterministic repair still fails, the validator feedback and previous candidate are sent for one corrected retry
 
 ## ⌨️ Keyboard Controls
 
@@ -129,7 +137,6 @@ Issues and patches are welcome. Useful contribution areas include:
 
 - Improving the agent workflow
 - Expanding the part library and correcting part data
-- Adding asset-library inventory management
 - Creating polished demo assets
 - Improving import and export format compatibility
 - Optimizing performance

@@ -16,7 +16,7 @@ await writeFile(entry, `
   import { getLDrawGeneratedVisualTriangles } from ${JSON.stringify(`${workspace}/src/lib/ldrawGeneratedVisual.ts`)};
   import { normalizeLDrawPartNumber } from ${JSON.stringify(`${workspace}/src/lib/ldrawPartNumbers.ts`)};
 
-  export const auditInput = brickDefinitions.map((definition) => {
+  export const auditInput = brickDefinitions.filter((definition) => definition.pack === 'lego').map((definition) => {
     const normalizedPartNumber = normalizeLDrawPartNumber(definition.partNumber);
     const generatedTriangles = getLDrawGeneratedVisualTriangles(normalizedPartNumber);
     const generatedConnectors = getLDrawGeneratedConnectors(normalizedPartNumber, definition.id);

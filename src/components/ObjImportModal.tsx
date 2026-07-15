@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { Box, FileUp, X } from 'lucide-react'
+import { Box, Check, FileUp, RotateCcw, X } from 'lucide-react'
 import {
   objImportProfiles,
+  type ObjImportEdgeStyle,
   type ObjImportOrientation,
   type ObjImportProfileId,
   type ObjImportProgress,
+  type ObjImportProjection,
   type ObjImportResult,
   type ObjImportWorkerRequest,
   type ObjImportWorkerResponse,
@@ -21,6 +23,24 @@ const maxObjFileBytes = 100 * 1024 * 1024
 
 const stripObjExtension = (fileName: string) => fileName.replace(/\.obj$/i, '')
 
+const ObjProjectionGraphic = ({ projection, variant, label }: {
+  projection: ObjImportProjection
+  variant: 'source' | 'final'
+  label: string
+}) => {
+  const rows = variant === 'source' ? projection.sourceRows : projection.finalRows
+  const occupied = rows.flatMap((row, y) => [...row].flatMap((value, x) => value === '1' ? [{ x, y }] : []))
+  return (
+    <figure>
+      <svg viewBox={`0 0 ${projection.width} ${projection.height}`} role="img" aria-label={label} preserveAspectRatio="xMidYMid meet">
+        <rect width={projection.width} height={projection.height} fill="#e2e8f0" />
+        {occupied.map((cell) => <rect key={`${cell.x}-${cell.y}`} x={cell.x} y={cell.y} width={1} height={1} fill={variant === 'source' ? '#64748b' : '#2563eb'} />)}
+      </svg>
+      <figcaption>{label}</figcaption>
+    </figure>
+  )
+}
+
 export const ObjImportModal = ({ open, onClose, onImported }: ObjImportModalProps) => {
   const { locale, t } = useI18n()
   const workerRef = useRef<Worker>()
@@ -29,10 +49,13 @@ export const ObjImportModal = ({ open, onClose, onImported }: ObjImportModalProp
   const [title, setTitle] = useState('')
   const [profileId, setProfileId] = useState<ObjImportProfileId>('s')
   const [orientation, setOrientation] = useState<ObjImportOrientation>('upright')
+  const [edgeStyle, setEdgeStyle] = useState<ObjImportEdgeStyle>('angular')
+  const [brickBudget, setBrickBudget] = useState('2000')
   const [saveToLibrary, setSaveToLibrary] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
   const [progress, setProgress] = useState<ObjImportProgress>({ stage: 'parse', progress: 0 })
   const [error, setError] = useState('')
+  const [result, setResult] = useState<ObjImportResult>()
 
   const stopWorker = () => {
     workerRef.current?.terminate()
@@ -45,9 +68,12 @@ export const ObjImportModal = ({ open, onClose, onImported }: ObjImportModalProp
       setTitle('')
       setProfileId('s')
       setOrientation('upright')
+      setEdgeStyle('angular')
+      setBrickBudget('2000')
       setSaveToLibrary(false)
       setProgress({ stage: 'parse', progress: 0 })
       setError('')
+      setResult(undefined)
       return
     }
 
@@ -73,6 +99,7 @@ export const ObjImportModal = ({ open, onClose, onImported }: ObjImportModalProp
   const chooseFile = (nextFile?: File) => {
     if (isImporting) return
     setError('')
+    setResult(undefined)
     if (!nextFile) return
     if (!/\.obj$/i.test(nextFile.name)) {
       setFile(undefined)
@@ -123,7 +150,7 @@ export const ObjImportModal = ({ open, onClose, onImported }: ObjImportModalProp
           setError(getWorkerError(event.data.code))
           return
         }
-        onImported(event.data.result, saveToLibrary)
+        setResult(event.data.result)
       }
       worker.onerror = () => {
         if (importRunRef.current !== importRun) return
@@ -141,6 +168,8 @@ export const ObjImportModal = ({ open, onClose, onImported }: ObjImportModalProp
           color: 'gray',
           locale: locale === 'zh-CN' ? 'zh' : 'en',
           idPrefix: `${stripObjExtension(file.name)}-${Date.now().toString(36)}`,
+          edgeStyle,
+          maxBricks: brickBudget === 'unlimited' ? undefined : Number(brickBudget),
         },
       }
       worker.postMessage(request)
@@ -192,14 +221,30 @@ export const ObjImportModal = ({ open, onClose, onImported }: ObjImportModalProp
         <div className="obj-import-fields">
           <label>
             <span>{t('objImport.modelName')}</span>
-            <input value={title} disabled={isImporting} onChange={(event) => setTitle(event.target.value)} placeholder={t('objImport.modelNamePlaceholder')} />
+            <input value={title} disabled={isImporting} onChange={(event) => { setTitle(event.target.value); setResult(undefined) }} placeholder={t('objImport.modelNamePlaceholder')} />
           </label>
           <label>
             <span>{t('objImport.orientation')}</span>
-            <select value={orientation} disabled={isImporting} onChange={(event) => setOrientation(event.target.value as ObjImportOrientation)}>
+            <select value={orientation} disabled={isImporting} onChange={(event) => { setOrientation(event.target.value as ObjImportOrientation); setResult(undefined) }}>
               <option value="upright">{t('objImport.orientation.upright')}</option>
               <option value="lay-side">{t('objImport.orientation.laySide')}</option>
               <option value="lay-back">{t('objImport.orientation.layBack')}</option>
+            </select>
+          </label>
+          <label>
+            <span>{t('objImport.edgeStyle')}</span>
+            <select value={edgeStyle} disabled={isImporting} onChange={(event) => { setEdgeStyle(event.target.value as ObjImportEdgeStyle); setResult(undefined) }}>
+              <option value="angular">{t('objImport.edgeStyle.angular')}</option>
+              <option value="curved">{t('objImport.edgeStyle.curved')}</option>
+            </select>
+          </label>
+          <label>
+            <span>{t('objImport.brickBudget')}</span>
+            <select value={brickBudget} disabled={isImporting} onChange={(event) => { setBrickBudget(event.target.value); setResult(undefined) }}>
+              <option value="250">250</option>
+              <option value="750">750</option>
+              <option value="2000">2000</option>
+              <option value="unlimited">{t('objImport.brickBudget.unlimited')}</option>
             </select>
           </label>
         </div>
@@ -212,7 +257,7 @@ export const ObjImportModal = ({ open, onClose, onImported }: ObjImportModalProp
                 key={profile.id}
                 type="button"
                 className={profileId === profile.id ? 'active' : ''}
-                onClick={() => setProfileId(profile.id)}
+                onClick={() => { setProfileId(profile.id); setResult(undefined) }}
               >
                 <strong>{profile.label}</strong>
                 <small>{t('objImport.resolution', { resolution: profile.resolution })}</small>
@@ -238,13 +283,43 @@ export const ObjImportModal = ({ open, onClose, onImported }: ObjImportModalProp
           </div>
         )}
 
+        {result && (
+          <section className="obj-result-preview" aria-label={t('objImport.preview')}>
+            <header>
+              <div>
+                <h3>{t('objImport.preview')}</h3>
+                <p>{t('objImport.previewDescription')}</p>
+              </div>
+              <span>{result.stats.dimensions.width}×{result.stats.dimensions.height}×{result.stats.dimensions.depth}</span>
+            </header>
+            <div className="obj-preview-comparison">
+              <ObjProjectionGraphic projection={result.preview.front} variant="source" label={t('objImport.preview.source')} />
+              <ObjProjectionGraphic projection={result.preview.front} variant="final" label={t('objImport.preview.result')} />
+            </div>
+            <div className="obj-preview-metrics">
+              <span><strong>{result.stats.brickCount}</strong>{t('objImport.metric.bricks')}</span>
+              <span><strong>{result.stats.resolution}</strong>{t('objImport.metric.resolution')}</span>
+              <span><strong>{(result.stats.voxelIoU * 100).toFixed(1)}%</strong>{t('objImport.metric.voxelIoU')}</span>
+              <span><strong>{(((result.stats.frontSilhouetteIoU + result.stats.sideSilhouetteIoU + result.stats.topSilhouetteIoU) / 3) * 100).toFixed(1)}%</strong>{t('objImport.metric.silhouetteIoU')}</span>
+              <span><strong>{(result.stats.structuralChangeRatio * 100).toFixed(1)}%</strong>{t('objImport.metric.structuralChange')}</span>
+              <span><strong>{result.stats.curvedSlopeCount}</strong>{t('objImport.metric.curvedSlopes')}</span>
+            </div>
+          </section>
+        )}
+
         {error && <p className="obj-import-error" role="alert">{error}</p>}
 
         <div className="obj-import-actions">
           <button className="secondary" type="button" onClick={close}>{isImporting ? t('control.cancel') : t('common.close')}</button>
-          <button className="primary" type="button" disabled={!file || isImporting} onClick={startImport}>
-            <FileUp size={17} />
-            {isImporting ? t('objImport.importing') : t('objImport.import')}
+          {result && !isImporting && (
+            <button className="secondary" type="button" onClick={startImport}>
+              <RotateCcw size={16} />
+              {t('objImport.regenerate')}
+            </button>
+          )}
+          <button className="primary" type="button" disabled={!file || isImporting} onClick={result ? () => onImported(result, saveToLibrary) : startImport}>
+            {result ? <Check size={17} /> : <FileUp size={17} />}
+            {isImporting ? t('objImport.importing') : result ? t('objImport.confirmImport') : t('objImport.generatePreview')}
           </button>
         </div>
       </section>

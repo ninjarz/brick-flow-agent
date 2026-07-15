@@ -30,6 +30,8 @@ const manualText: Record<ManualLocale, {
   stepCount: (added: number, total: number) => string
   placeTitle: (name: string) => string
   placeDescription: (index: number, name: string) => string
+  placeGroupTitle: (count: number, layer: number) => string
+  placeGroupDescription: (count: number, layer: number) => string
   diagramAria: (page: number) => string
 }> = {
   'zh-CN': {
@@ -52,6 +54,8 @@ const manualText: Record<ManualLocale, {
     stepCount: (added, total) => `本步新增 ${added} 个，完成后累计 ${total} 个。`,
     placeTitle: (name) => `放置 ${name}`,
     placeDescription: (index, name) => `放置第 ${index + 1} 个零件：${name}。`,
+    placeGroupTitle: (count, layer) => `第 ${layer + 1} 层 · ${count} 个零件`,
+    placeGroupDescription: (count, layer) => `在第 ${layer + 1} 层连续放置 ${count} 个相互关联的零件。`,
     diagramAria: (page) => `第 ${page} 页等距示意图`,
   },
   'en-US': {
@@ -74,6 +78,8 @@ const manualText: Record<ManualLocale, {
     stepCount: (added, total) => `${added} added, ${total} total after this step.`,
     placeTitle: (name) => `Place ${name}`,
     placeDescription: (index, name) => `Place part ${index + 1}: ${name}.`,
+    placeGroupTitle: (count, layer) => `Layer ${layer + 1} · ${count} parts`,
+    placeGroupDescription: (count, layer) => `Place ${count} connected parts on layer ${layer + 1}.`,
     diagramAria: (page) => `Isometric diagram for page ${page}`,
   },
 }
@@ -110,8 +116,7 @@ export type ManualStepPage = {
   description: string
   addPieces: ManualPiece[]
   stepInventory: ManualPartCount[]
-  cumulativePieceIds: string[]
-  cumulativePieces: ManualPiece[]
+  completedPieceCount: number
   validation: {
     ok: boolean
     issueCount: number
@@ -122,7 +127,7 @@ export type ManualStepPage = {
 }
 
 export type BuildManual = {
-  schemaVersion: 3
+  schemaVersion: 4
   planId: string
   title: string
   prompt: string
@@ -220,6 +225,8 @@ const emptyManualValidation = (locale: ManualLocale): ManualStepPage['validation
 const shouldTrustManualPlanOrder = (plan: BuildPlan) =>
   plan.source === 'template-local'
 
+const maxPiecesPerManualStep = 6
+
 const sequenceBricksForManual = (plan: BuildPlan, locale: ManualLocale) => {
   if (shouldTrustManualPlanOrder(plan)) {
     const validation = emptyManualValidation(locale)
@@ -282,27 +289,38 @@ const sequenceBricksForManual = (plan: BuildPlan, locale: ManualLocale) => {
   return ordered
 }
 
+const groupManualSequence = (sequence: ReturnType<typeof sequenceBricksForManual>) => {
+  const groups: Array<typeof sequence> = []
+  for (const item of sequence) {
+    const current = groups.at(-1)
+    const currentLayer = current?.[0]?.brick.pose.yStud
+    if (current && current.length < maxPiecesPerManualStep && Math.abs((currentLayer ?? 0) - item.brick.pose.yStud) < 0.000001) {
+      current.push(item)
+    } else {
+      groups.push([item])
+    }
+  }
+  return groups
+}
+
 export const serializeBuildManual = (plan: BuildPlan, locale: ManualLocale = 'zh-CN'): BuildManual => {
   const labels = manualText[locale]
-  const cumulativePieceIds = new Set<string>()
-  const cumulativePieces: ManualPiece[] = []
+  let completedPieceCount = 0
 
-  const steps: ManualStepPage[] = sequenceBricksForManual(plan, locale).map(({ brick, validation }, index) => {
-    const piece = toManualPiece(brick)
-    const addPieces = [piece]
-
-    cumulativePieceIds.add(piece.instanceId)
-    cumulativePieces.push(piece)
+  const steps: ManualStepPage[] = groupManualSequence(sequenceBricksForManual(plan, locale)).map((group, index) => {
+    const addPieces = group.map(({ brick }) => toManualPiece(brick))
+    const layer = Math.max(0, Math.round(Math.min(...group.map(({ brick }) => brick.pose.yStud)) / 0.4))
+    const singlePiece = addPieces.length === 1 ? addPieces[0] : undefined
+    completedPieceCount += addPieces.length
 
     return {
       stepNumber: index + 1,
-      title: labels.placeTitle(piece.name),
-      description: labels.placeDescription(index, piece.name),
+      title: singlePiece ? labels.placeTitle(singlePiece.name) : labels.placeGroupTitle(addPieces.length, layer),
+      description: singlePiece ? labels.placeDescription(completedPieceCount - 1, singlePiece.name) : labels.placeGroupDescription(addPieces.length, layer),
       addPieces,
       stepInventory: countPieces(addPieces),
-      cumulativePieceIds: [...cumulativePieceIds],
-      cumulativePieces: [...cumulativePieces],
-      validation,
+      completedPieceCount,
+      validation: group.at(-1)?.validation ?? emptyManualValidation(locale),
     }
   })
 
@@ -311,7 +329,7 @@ export const serializeBuildManual = (plan: BuildPlan, locale: ManualLocale = 'zh
   const blockingIssues = getBlockingBuildPlanIssues(issues)
 
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     planId: plan.id,
     title: plan.title,
     prompt: plan.prompt,
@@ -352,7 +370,7 @@ export const formatBuildManualMarkdown = (manual: BuildManual, locale: ManualLoc
     lines.push('')
     lines.push(`${labels.structureCheck}: ${step.validation.summary}`)
     lines.push('')
-    lines.push(labels.stepCount(step.addPieces.length, step.cumulativePieces.length))
+    lines.push(labels.stepCount(step.addPieces.length, step.completedPieceCount))
     lines.push('')
     lines.push(`### ${labels.addedParts}`)
     for (const piece of step.addPieces) {
@@ -413,9 +431,9 @@ type DiagramCuboid = {
 
 const pointList = (points: DiagramPoint[]) => points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ')
 
-const renderStepDiagram = (step: ManualStepPage, locale: ManualLocale) => {
+const renderStepDiagram = (step: ManualStepPage, cumulativePieces: ManualPiece[], locale: ManualLocale) => {
   const labels = manualText[locale]
-  if (step.cumulativePieces.length === 0) return ''
+  if (cumulativePieces.length === 0) return ''
 
   const studX = 34
   const studZ = 17
@@ -428,7 +446,7 @@ const renderStepDiagram = (step: ManualStepPage, locale: ManualLocale) => {
     y: (xStud + zStud) * studZ - yStud * heightScale,
   })
 
-  const cuboids: DiagramCuboid[] = [...step.cumulativePieces]
+  const cuboids: DiagramCuboid[] = [...cumulativePieces]
     .sort((source, target) =>
       (source.pose.xStud + source.pose.zStud + source.pose.yStud) -
       (target.pose.xStud + target.pose.zStud + target.pose.yStud),
@@ -501,6 +519,20 @@ const renderStepDiagram = (step: ManualStepPage, locale: ManualLocale) => {
 
 export const formatBuildManualHtml = (manual: BuildManual, locale: ManualLocale = 'zh-CN') => {
   const labels = manualText[locale]
+  const cumulativePieces: ManualPiece[] = []
+  const manualStepsHtml = manual.steps.map((step) => {
+    cumulativePieces.push(...step.addPieces)
+    return `<section class="step">
+      <h2>${escapeHtml(labels.pageTitle(step.stepNumber, step.title))}</h2>
+      <p>${escapeHtml(step.description)}</p>
+      <p class="step-status${step.validation.ok ? (step.validation.issueCount > 0 ? ' notice' : '') : ' warn'}">${escapeHtml(step.validation.summary)}</p>
+      <p class="count">${escapeHtml(labels.stepCount(step.addPieces.length, step.completedPieceCount))}</p>
+      ${renderStepDiagram(step, cumulativePieces, locale)}
+      <ul>
+        ${step.addPieces.map((piece) => `<li><strong>${escapeHtml(piece.name)}</strong><br /><small>${escapeHtml(piece.brickId)} · ${escapeHtml(piece.color)} · x${piece.pose.xStud} y${piece.pose.yStud} z${piece.pose.zStud} · ${escapeHtml(labels.horizontal)} ${piece.rotationDegrees}° · ${escapeHtml(labels.vertical)} ${piece.verticalRotationDegrees}°</small></li>`).join('\n        ')}
+      </ul>
+    </section>`
+  }).join('\n    ')
 
   return `<!doctype html>
 <html lang="${labels.lang}">
@@ -541,16 +573,7 @@ export const formatBuildManualHtml = (manual: BuildManual, locale: ManualLocale 
         ${manual.inventory.map((item) => `<li><strong>${escapeHtml(item.name)}</strong><br /><small>${escapeHtml(item.brickId)} · ${escapeHtml(item.color)} × ${item.quantity}</small></li>`).join('\n        ')}
       </ul>
     </section>
-    ${manual.steps.map((step) => `<section class="step">
-      <h2>${escapeHtml(labels.pageTitle(step.stepNumber, step.title))}</h2>
-      <p>${escapeHtml(step.description)}</p>
-      <p class="step-status${step.validation.ok ? (step.validation.issueCount > 0 ? ' notice' : '') : ' warn'}">${escapeHtml(step.validation.summary)}</p>
-      <p class="count">${escapeHtml(labels.stepCount(step.addPieces.length, step.cumulativePieces.length))}</p>
-      ${renderStepDiagram(step, locale)}
-      <ul>
-        ${step.addPieces.map((piece) => `<li><strong>${escapeHtml(piece.name)}</strong><br /><small>${escapeHtml(piece.brickId)} · ${escapeHtml(piece.color)} · x${piece.pose.xStud} y${piece.pose.yStud} z${piece.pose.zStud} · ${escapeHtml(labels.horizontal)} ${piece.rotationDegrees}° · ${escapeHtml(labels.vertical)} ${piece.verticalRotationDegrees}°</small></li>`).join('\n        ')}
-      </ul>
-    </section>`).join('\n    ')}
+    ${manualStepsHtml}
   </main>
 </body>
 </html>`

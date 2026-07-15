@@ -32,6 +32,8 @@ type LlmGenerateInput = GeneratorInput & {
   config: LlmConfig
   signal?: AbortSignal
   locale?: LlmLocale
+  repairFeedback?: string
+  previousPlan?: BuildPlan
 }
 
 type LlmRequestPayload = Record<string, unknown>
@@ -168,12 +170,12 @@ const formatInventoryForPrompt = (inventory: number) =>
 const formatLegoHeightForPrompt = (heightStuds: number) =>
   Number((heightStuds / PLATE_HEIGHT_WORLD).toFixed(3))
 
-const inventorySummary = brickDefinitions
+const getInventorySummary = (inventoryOverrides?: Record<string, number>) => brickDefinitions
   .filter((brick) => brick.pack === 'lego')
-  .map(
-    (brick) =>
-      `${brick.id}: ${brick.name}, footprint ${brick.footprint.widthStuds}x${brick.footprint.depthStuds}, height ${formatLegoHeightForPrompt(brick.footprint.heightStuds)} plates, colors ${brick.colors.join('/')}, inventory ${formatInventoryForPrompt(brick.inventory)}`,
-  )
+  .map((brick) => {
+    const inventory = inventoryOverrides?.[brick.id] ?? brick.inventory
+    return `${brick.id}: ${brick.name}, footprint ${brick.footprint.widthStuds}x${brick.footprint.depthStuds}, height ${formatLegoHeightForPrompt(brick.footprint.heightStuds)} plates, colors ${brick.colors.join('/')}, inventory ${formatInventoryForPrompt(inventory)}`
+  })
   .join('\n')
 
 export const llmSystemPrompt = 'You are a brick build-planning engine. Return compact valid JSON only. Do not include reasoning.'
@@ -196,13 +198,13 @@ const formatOfficialReplicaExample = () => {
   return JSON.stringify(example, null, 2)
 }
 
-export const buildLlmUserPrompt = ({ prompt, imageName }: GeneratorInput) => `You generate small brick build plans for a browser 3D editor.
+export const buildLlmUserPrompt = ({ prompt, imageName, inventoryOverrides }: GeneratorInput) => `You generate small brick build plans for a browser 3D editor.
 
 User request: ${prompt}
 Reference image file name: ${imageName || 'none'}
 
 Available parts:
-${inventorySummary}
+${getInventorySummary(inventoryOverrides)}
 
 Return only valid JSON with this exact shape:
 {
@@ -233,11 +235,29 @@ Rules:
 - Avoid overlapping bricks. Never place disconnected decorative islands far away from the main object.
 - The final model must be one connected structure through vertical stud support or connector alignment. Do not place separate ground-level islands unless they are connected by a shared base plate.
 - Wheel and axle pieces are currently disabled, so do not build wheeled vehicles. Prefer static models such as houses, trees, bridges, benches, castles, flowers, rockets, animals, or robots.
+- Rotating or side-mounted mechanical parts must attach through compatible pin, bar, clip, stud, or socket connectors; never leave a propeller or decoration floating.
 - Use only available brick ids and their listed colors.
 - Do not include markdown or explanatory text.
 
 Good official-replica example, calibrated from LEGO Classic 10696 Ghost:
 ${formatOfficialReplicaExample()}`
+
+export const buildLlmRepairPrompt = (previousPlan: BuildPlan, repairFeedback: string) => `
+
+The previous candidate failed the editor's structural validator.
+Validation feedback: ${repairFeedback}
+
+Previous candidate:
+${JSON.stringify({
+  title: previousPlan.title,
+  bricks: previousPlan.bricks.map((brick) => ({
+    brickId: brick.brickId,
+    color: brick.color,
+    ...brick.pose,
+  })),
+})}
+
+Return a corrected full replacement JSON plan. Preserve the recognizable subject, but remove collisions, below-ground parts, unsupported parts, disconnected islands, and impossible mechanical attachments. Follow every original rule and do not explain the changes.`
 
 const extractTextContent = (value: unknown): string => {
   if (typeof value === 'string') return value
@@ -434,7 +454,7 @@ const lowerUntilSupported = (brick: PlacedBrick, placed: PlacedBrick[]) => {
   return undefined
 }
 
-const normalizeBricks = (rawBricks: unknown, locale: LlmLocale): PlacedBrick[] => {
+const normalizeBricks = (rawBricks: unknown, locale: LlmLocale, inventoryOverrides?: Record<string, number>): PlacedBrick[] => {
   if (!Array.isArray(rawBricks)) throw new Error(llmText[locale].missingBricks)
 
   const placed: PlacedBrick[] = []
@@ -447,7 +467,8 @@ const normalizeBricks = (rawBricks: unknown, locale: LlmLocale): PlacedBrick[] =
     const definition = brickById.get(brickId)
     if (!definition) continue
     const currentCount = placedCounts.get(brickId) ?? 0
-    if (Number.isFinite(definition.inventory) && currentCount >= definition.inventory) continue
+    const inventory = inventoryOverrides?.[brickId] ?? definition.inventory
+    if (Number.isFinite(inventory) && currentCount >= inventory) continue
 
     const pose = isRecord(brick.pose) ? brick.pose : {}
     const color = asColor(brick.color, definition.colors[0])
@@ -538,7 +559,7 @@ export const testLlmConnection = async (config: LlmConfig, locale: LlmLocale = '
   if (!content) throw new Error(formatEmptyContentError(payload, llmText[locale].configTestContext, locale))
 }
 
-export const generateLlmBuildPlan = async ({ prompt, imageName, config, signal, locale = 'zh-CN' }: LlmGenerateInput): Promise<BuildPlan> => {
+export const generateLlmBuildPlan = async ({ prompt, imageName, imageDataUrl, inventoryOverrides, config, signal, locale = 'zh-CN', repairFeedback, previousPlan }: LlmGenerateInput): Promise<BuildPlan> => {
   if (!isLlmConfigComplete(config)) throw new Error(llmText[locale].incompleteConfig)
 
   const controller = new AbortController()
@@ -546,6 +567,9 @@ export const generateLlmBuildPlan = async ({ prompt, imageName, config, signal, 
   signal?.addEventListener('abort', abortFromCaller)
   const timeout = window.setTimeout(() => controller.abort(), clientRequestTimeoutMs)
   let response: Response
+  const userPrompt = `${buildLlmUserPrompt({ prompt, imageName, inventoryOverrides })}${
+    repairFeedback && previousPlan ? buildLlmRepairPrompt(previousPlan, repairFeedback) : ''
+  }`
 
   try {
     response = await requestLlmChat(config, applyThinkingMode({
@@ -557,7 +581,12 @@ export const generateLlmBuildPlan = async ({ prompt, imageName, config, signal, 
         },
         {
           role: 'user',
-          content: buildLlmUserPrompt({ prompt, imageName }),
+          content: imageDataUrl
+            ? [
+                { type: 'text', text: userPrompt },
+                { type: 'image_url', image_url: { url: imageDataUrl, detail: 'low' } },
+              ]
+            : userPrompt,
         },
       ],
       temperature: 0.2,
@@ -588,7 +617,7 @@ export const generateLlmBuildPlan = async ({ prompt, imageName, config, signal, 
   if (!content) throw new Error(formatEmptyContentError(payload, llmText[locale].responseContext, locale))
 
   const rawPlan = parseJsonContent(content, locale)
-  const bricks = normalizeBricks(rawPlan.bricks, locale)
+  const bricks = normalizeBricks(rawPlan.bricks, locale, inventoryOverrides)
   const steps = normalizeSteps(bricks)
 
   return {

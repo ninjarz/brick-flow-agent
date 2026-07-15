@@ -619,7 +619,31 @@ const withUnlimitedInventory = (definition: BrickDefinition): BrickDefinition =>
   inventory: Number.POSITIVE_INFINITY,
 })
 
+const makeMinecraftBlockDefinition = (
+  id: string,
+  name: string,
+  color: BrickColor,
+): BrickDefinitionDraft => ({
+  id,
+  pack: 'minecraft',
+  partNumber: id,
+  name,
+  kind: 'block',
+  footprint: { widthStuds: 1, depthStuds: 1, heightStuds: 1 },
+  connectors: makeStudSocketFaceConnectors(id, 1, 1, 1),
+  colors: [color],
+  inventory: 64,
+})
+
 const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
+  makeMinecraftBlockDefinition('minecraft-grass-block', 'Grass Block', 'green'),
+  makeMinecraftBlockDefinition('minecraft-dirt-block', 'Dirt Block', 'brown'),
+  makeMinecraftBlockDefinition('minecraft-stone-block', 'Stone Block', 'gray'),
+  makeMinecraftBlockDefinition('minecraft-oak-planks', 'Oak Planks', 'tan'),
+  makeMinecraftBlockDefinition('minecraft-sand-block', 'Sand Block', 'yellow'),
+  makeMinecraftBlockDefinition('minecraft-water-block', 'Water Block', 'cyan'),
+  makeMinecraftBlockDefinition('minecraft-glass-block', 'Glass Block', 'white'),
+  makeMinecraftBlockDefinition('minecraft-redstone-block', 'Redstone Block', 'red'),
   {
     id: 'minecraft-basic-block',
     pack: 'minecraft',

@@ -9,6 +9,7 @@ import { getBrickWorldBoundsFrame } from '../lib/ldrawBounds'
 import { loadLDrawGeneratedVisual } from '../lib/ldrawGeneratedVisualLoader'
 import { createLoadedLDrawPartGeometry } from '../lib/ldrawVisualGeometry'
 import { createBuildGraph, getBrickBounds } from '../lib/planUtils'
+import { getScenePerformanceSettings } from '../lib/scenePerformance'
 import { getBrickWorldStructuralCellBoxes, type StructuralCellKind, type WorldStructuralCellBox } from '../lib/structuralGrid'
 import { WORLD_EDIT_STEP_STUDS, getBrickConnectors, getBrickWorldFrame, poseToWorld } from '../lib/brickUnits'
 import { useI18n } from '../lib/i18n'
@@ -1240,8 +1241,9 @@ const StructuralVoxelScene = ({ bricks, selectedId, highlightedIdSet, boundsVers
   )
 }
 
-const SimplifiedBrickInstances = memo(function SimplifiedBrickInstances({ group, onSelect, onSelectConnected }: {
+const SimplifiedBrickInstances = memo(function SimplifiedBrickInstances({ group, showEdges, onSelect, onSelectConnected }: {
   group: SimplifiedBrickInstanceGroup
+  showEdges: boolean
   onSelect: (id: string) => void
   onSelectConnected?: (id: string) => void
 }) {
@@ -1316,17 +1318,19 @@ const SimplifiedBrickInstances = memo(function SimplifiedBrickInstances({ group,
           opacity={group.opacity}
         />
       </instancedMesh>
-      <instancedMesh
-        ref={wireRef}
-        args={[undefined, undefined, group.instances.length]}
-        frustumCulled={false}
-        renderOrder={2}
-        onClick={handleClick}
-        onDoubleClick={handleDoubleClick}
-      >
-        <boxGeometry args={[1, 1, 1]} />
-        <meshBasicMaterial color={edgeColor} wireframe transparent opacity={0.22} depthWrite={false} />
-      </instancedMesh>
+      {showEdges && (
+        <instancedMesh
+          ref={wireRef}
+          args={[undefined, undefined, group.instances.length]}
+          frustumCulled={false}
+          renderOrder={2}
+          onClick={handleClick}
+          onDoubleClick={handleDoubleClick}
+        >
+          <boxGeometry args={[1, 1, 1]} />
+          <meshBasicMaterial color={edgeColor} wireframe transparent opacity={0.22} depthWrite={false} />
+        </instancedMesh>
+      )}
     </>
   )
 })
@@ -1344,10 +1348,11 @@ const SimplifiedSelectionBox = ({ bounds, selected }: {
   )
 }
 
-const SimplifiedBrickScene = ({ bricks, selectedId, highlightedIdSet, onSelect, onSelectConnected }: {
+const SimplifiedBrickScene = ({ bricks, selectedId, highlightedIdSet, showEdges, onSelect, onSelectConnected }: {
   bricks: PlacedBrick[]
   selectedId?: string
   highlightedIdSet: Set<string>
+  showEdges: boolean
   onSelect: (id: string) => void
   onSelectConnected?: (id: string) => void
 }) => {
@@ -1382,6 +1387,7 @@ const SimplifiedBrickScene = ({ bricks, selectedId, highlightedIdSet, onSelect, 
         <SimplifiedBrickInstances
           key={`${group.color}-${group.opacity}`}
           group={group}
+          showEdges={showEdges}
           onSelect={onSelect}
           onSelectConnected={onSelectConnected}
         />
@@ -1417,9 +1423,10 @@ export const BrickScene = ({
   const [ldrawBoundsVersion, setLDrawBoundsVersion] = useState(0)
   const deferredFrameBricks = useDeferredValue(bricks)
   const frameBricks = deferredFrameBricks
-  const enableRealtimeShadows = true
+  const performanceSettings = getScenePerformanceSettings(bricks.length, viewMode)
+  const enableRealtimeShadows = performanceSettings.enableRealtimeShadows
   const preferDetailedGeometry = ldrawBoundsVersion > 0
-  const useSimplifiedInteractionView = false
+  const useSimplifiedInteractionView = performanceSettings.useSimplifiedView
   const resolvedCameraFrameKey = useMemo(
     () => cameraFrameKey ?? frameBricks.map((brick) => brick.id).join('|'),
     [cameraFrameKey, frameBricks],
@@ -1491,7 +1498,7 @@ export const BrickScene = ({
     <Canvas
       shadows={enableRealtimeShadows}
       frameloop="demand"
-      dpr={[1, 1.5]}
+      dpr={[1, performanceSettings.maxDevicePixelRatio]}
       camera={{ position: [8, 7, 9], fov: 42 }}
       onPointerMissed={() => onSelect('')}
     >
@@ -1523,6 +1530,7 @@ export const BrickScene = ({
             bricks={bricks}
             selectedId={selectedId}
             highlightedIdSet={highlightedIdSet}
+            showEdges={showBrickEdges}
             onSelect={onSelect}
             onSelectConnected={onSelectConnected}
           />

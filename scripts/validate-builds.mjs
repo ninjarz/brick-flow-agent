@@ -30,11 +30,14 @@ await writeFile(entry, `
   import { officialPartColorsByPartNumber } from ${JSON.stringify(`${workspace}/src/data/officialPartColors.ts`)};
   import { loadAllDefaultFinishedAssets } from ${JSON.stringify(`${workspace}/src/lib/finishedAssets.ts`)};
   import { generateBuildPlan } from ${JSON.stringify(`${workspace}/src/lib/localGenerator.ts`)};
-  import { buildLlmUserPrompt, maxLlmBricks } from ${JSON.stringify(`${workspace}/src/lib/llmGenerator.ts`)};
+  import { buildLlmRepairPrompt, buildLlmUserPrompt, maxLlmBricks } from ${JSON.stringify(`${workspace}/src/lib/llmGenerator.ts`)};
   import { getBrickConnectors } from ${JSON.stringify(`${workspace}/src/lib/brickUnits.ts`)};
   import { serializeBuildManual } from ${JSON.stringify(`${workspace}/src/lib/manualSerializer.ts`)};
   import { normalizeImportedPlan, normalizeImportedPose, tryNormalizeImportedPlan } from ${JSON.stringify(`${workspace}/src/lib/planImport.ts`)};
   import { importObjToBrickPlan } from ${JSON.stringify(`${workspace}/src/lib/objImport.ts`)};
+  import { getScenePerformanceSettings, shadowBrickThreshold, simplifiedBrickThreshold } from ${JSON.stringify(`${workspace}/src/lib/scenePerformance.ts`)};
+  import { formatLDrawPlan, parseLDrawPlan } from ${JSON.stringify(`${workspace}/src/lib/ldrawPlan.ts`)};
+  import { getEffectiveInventory, normalizeInventoryOverrides } from ${JSON.stringify(`${workspace}/src/lib/userInventory.ts`)};
   import { findNearestOpenPoseAround, findOpenPose, getBlockingBuildPlanIssues, getBrickBounds, hasBrickCollision, isBrickAboveGround, isBrickSupported, summarizeBuildPlanIssues, validateBuildPlan } from ${JSON.stringify(`${workspace}/src/lib/planUtils.ts`)};
   import { createLDrawStudConnector, ldrawPointToBrickLocal } from ${JSON.stringify(`${workspace}/src/lib/ldrawConnectors.ts`)};
   import { parseLDrawColorDefinitions } from ${JSON.stringify(`${workspace}/src/lib/ldrawColors.ts`)};
@@ -69,6 +72,41 @@ await writeFile(entry, `
   }, (progress) => objImportProgress.push(progress));
   const objImportIssues = validateBuildPlan(objImportRegression.plan);
   const objImportBlockingIssues = getBlockingBuildPlanIssues(objImportIssues);
+  const objImportManual = serializeBuildManual(objImportRegression.plan);
+  const ldrawExport = formatLDrawPlan(objImportRegression.plan);
+  const embeddedLDrawRoundTrip = parseLDrawPlan(ldrawExport, 'Embedded LDraw regression');
+  const standardLDrawText = ldrawExport
+    .split('\\n')
+    .filter((line) => !line.startsWith('0 !BRICK_FLOW_AGENT_PLAN'))
+    .join('\\n');
+  const standardLDrawRoundTrip = parseLDrawPlan(standardLDrawText, 'Standard LDraw regression');
+  const standardLDrawIssues = standardLDrawRoundTrip ? validateBuildPlan(standardLDrawRoundTrip.plan) : [];
+  const nestedMpdRoundTrip = parseLDrawPlan([
+    '0 FILE main.ldr',
+    '1 16 40 0 0 1 0 0 0 1 0 0 0 1 assembly.ldr',
+    '0 FILE assembly.ldr',
+    '1 4 10 -24 10 1 0 0 0 1 0 0 0 1 3005.dat',
+    '0 NOFILE',
+  ].join('\\n'), 'Nested MPD regression');
+  const smallScenePerformance = getScenePerformanceSettings(shadowBrickThreshold - 1, 'border');
+  const shadowReducedPerformance = getScenePerformanceSettings(shadowBrickThreshold, 'border');
+  const largeScenePerformance = getScenePerformanceSettings(simplifiedBrickThreshold, 'border');
+  const largeVoxelPerformance = getScenePerformanceSettings(simplifiedBrickThreshold, 'voxel');
+  const normalizedInventoryOverrides = normalizeInventoryOverrides({
+    'brick-2x4': 3.9,
+    'missing-part': 8,
+    'brick-1x1': -2,
+  });
+  const semanticMinecraftBlocks = [
+    'minecraft-grass-block',
+    'minecraft-dirt-block',
+    'minecraft-stone-block',
+    'minecraft-oak-planks',
+    'minecraft-sand-block',
+    'minecraft-water-block',
+    'minecraft-glass-block',
+    'minecraft-redstone-block',
+  ].map((id) => brickById.get(id));
 
   const defaultFinishedAssets = await loadAllDefaultFinishedAssets();
   const results = defaultFinishedAssets.map((asset) => {
@@ -248,6 +286,8 @@ await writeFile(entry, `
   );
   const ghostReferencePlan = generateBuildPlan({ prompt: '一个 Classic 小幽灵' });
   const llmPrompt = buildLlmUserPrompt({ prompt: 'test prompt' });
+  const limitedInventoryPrompt = buildLlmUserPrompt({ prompt: 'limited inventory', inventoryOverrides: { 'brick-2x4': 0 } });
+  const llmRepairPrompt = buildLlmRepairPrompt(objImportRegression.plan, '2 disconnected structures, 1 collision');
   const llmPromptGhostExampleMatch = llmPrompt.match(/Good official-replica example[\\s\\S]*?\\n(\\{[\\s\\S]*\\})$/);
   const llmPromptGhostExample = llmPromptGhostExampleMatch ? JSON.parse(llmPromptGhostExampleMatch[1]) : undefined;
   const duplicateDefinitionIds = brickDefinitions
@@ -620,6 +660,54 @@ await writeFile(entry, `
   );
 
   const regressionFailures = [
+    normalizedInventoryOverrides['brick-2x4'] !== 3 ||
+      Object.keys(normalizedInventoryOverrides).length !== 1 ||
+      getEffectiveInventory('brick-2x4', 99, normalizedInventoryOverrides) !== 3 ||
+      getEffectiveInventory('brick-1x2', 99, normalizedInventoryOverrides) !== 99
+      ? 'User inventory overrides must sanitize values and preserve defaults for untouched parts'
+      : '',
+    semanticMinecraftBlocks.some((definition) =>
+      !definition || definition.pack !== 'minecraft' || definition.kind !== 'block' ||
+      definition.connectors.filter((connector) => connector.kind === 'studsocket').length !== 6
+    )
+      ? 'Semantic Minecraft blocks must expose six bidirectional face connectors'
+      : '',
+    !embeddedLDrawRoundTrip?.usedEmbeddedPlan ||
+      embeddedLDrawRoundTrip.plan.bricks.length !== objImportRegression.plan.bricks.length ||
+      JSON.stringify(embeddedLDrawRoundTrip.plan.bricks.map((brick) => brick.pose)) !==
+        JSON.stringify(objImportRegression.plan.bricks.map((brick) => brick.pose))
+      ? 'LDraw export must round-trip the exact editable plan through embedded metadata'
+      : '',
+    !standardLDrawRoundTrip || standardLDrawRoundTrip.usedEmbeddedPlan || standardLDrawRoundTrip.ignoredParts > 0 ||
+      standardLDrawRoundTrip.plan.bricks.length !== objImportRegression.plan.bricks.length
+      ? 'Standard LDraw type-1 lines must import all supported exported parts without metadata'
+      : '',
+    standardLDrawRoundTrip && getBlockingBuildPlanIssues(standardLDrawIssues).length > 0
+      ? 'Standard LDraw round-trip must remain structurally valid: ' + summarizeBuildPlanIssues(standardLDrawIssues)
+      : '',
+    !nestedMpdRoundTrip || nestedMpdRoundTrip.ignoredParts > 0 ||
+      nestedMpdRoundTrip.plan.bricks.length !== 1 ||
+      !approx(nestedMpdRoundTrip.plan.bricks[0].pose.xStud, 2) ||
+      !approx(nestedMpdRoundTrip.plan.bricks[0].pose.zStud, 0)
+      ? 'MPD import must recursively apply parent submodel transforms to supported parts'
+      : '',
+    objImportManual.schemaVersion !== 4 || objImportManual.steps.length >= objImportRegression.plan.bricks.length
+      ? 'Manual schema v4 must group same-layer pieces into fewer build pages'
+      : '',
+    objImportManual.steps.at(-1)?.completedPieceCount !== objImportRegression.plan.bricks.length ||
+      JSON.stringify(objImportManual).includes('cumulativePieces') ||
+      JSON.stringify(objImportManual).includes('cumulativePieceIds')
+      ? 'Manual schema v4 must keep linear delta-only steps with a final completed piece count'
+      : '',
+    !smallScenePerformance.enableRealtimeShadows || smallScenePerformance.useSimplifiedView || smallScenePerformance.maxDevicePixelRatio !== 1.5
+      ? 'Small scenes must retain detailed rendering, shadows, and 1.5 DPR'
+      : '',
+    shadowReducedPerformance.enableRealtimeShadows || shadowReducedPerformance.maxDevicePixelRatio !== 1
+      ? 'Large scenes must disable realtime shadows and cap DPR at 1'
+      : '',
+    !largeScenePerformance.useSimplifiedView || largeVoxelPerformance.useSimplifiedView
+      ? 'Very large solid scenes must simplify while voxel debug keeps its instanced structural renderer'
+      : '',
     objImportRegression.stats.dimensions.width !== 16 ||
       objImportRegression.stats.dimensions.height !== 1 ||
       objImportRegression.stats.dimensions.depth !== 16
@@ -734,6 +822,13 @@ await writeFile(entry, `
       : '',
     llmPrompt.includes('minecraft-basic-block')
       ? 'Default LLM prompt should not include Minecraft parts until generation supports pack selection'
+      : '',
+    !limitedInventoryPrompt.includes('brick-2x4:') || !limitedInventoryPrompt.match(/brick-2x4:[^\\n]*inventory 0/)
+      ? 'LLM prompt must respect per-part inventory overrides'
+      : '',
+    !llmRepairPrompt.includes('2 disconnected structures, 1 collision') ||
+      !llmRepairPrompt.includes(objImportRegression.plan.bricks[0].brickId)
+      ? 'LLM retry prompt must include structural feedback and the previous candidate'
       : '',
     missing10696PartNumbers.length > 0
       ? '10696 part coverage is missing: ' + missing10696PartNumbers.join(', ')
@@ -994,7 +1089,7 @@ await writeFile(entry, `
     result.planRoundTripBlockingIssues.length > 0 ||
     result.manualRoundTripBlockingIssues.length > 0 ||
     result.invalidManualSteps.length > 0 ||
-    (!result.manualSkipped && result.manualSchema !== 3),
+    (!result.manualSkipped && result.manualSchema !== 4),
   );
 
   console.log(JSON.stringify(results.map((result) => ({

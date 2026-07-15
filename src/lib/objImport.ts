@@ -2,6 +2,7 @@ import type { BrickColor, BuildPlan, PlacedBrick } from '../types/bricks'
 
 export type ObjImportProfileId = 's' | 'm' | 'l'
 export type ObjImportOrientation = 'upright' | 'lay-back' | 'lay-side'
+export type ObjImportEdgeStyle = 'angular' | 'curved'
 export type ObjImportStage = 'parse' | 'voxelize' | 'repair' | 'tile' | 'finalize'
 
 export type ObjImportOptions = {
@@ -11,6 +12,8 @@ export type ObjImportOptions = {
   color: BrickColor
   locale: 'zh' | 'en'
   idPrefix: string
+  edgeStyle?: ObjImportEdgeStyle
+  maxBricks?: number
 }
 
 export type ObjImportProgress = {
@@ -20,6 +23,7 @@ export type ObjImportProgress = {
 
 export type ObjImportStats = {
   dimensions: { width: number; height: number; depth: number }
+  resolution: number
   sourceVoxels: number
   finalVoxels: number
   removedComponentVoxels: number
@@ -27,14 +31,33 @@ export type ObjImportStats = {
   prunedUnsupportedVoxels: number
   brickCount: number
   slopeCount: number
+  curvedSlopeCount: number
   componentCount: number
   structuralChangeRatio: number
   oddRayRatio: number
+  voxelIoU: number
+  frontSilhouetteIoU: number
+  sideSilhouetteIoU: number
+  topSilhouetteIoU: number
+}
+
+export type ObjImportProjection = {
+  width: number
+  height: number
+  sourceRows: string[]
+  finalRows: string[]
+}
+
+export type ObjImportPreview = {
+  front: ObjImportProjection
+  side: ObjImportProjection
+  top: ObjImportProjection
 }
 
 export type ObjImportResult = {
   plan: BuildPlan
   stats: ObjImportStats
+  preview: ObjImportPreview
 }
 
 type Point3 = { x: number; y: number; z: number }
@@ -319,6 +342,49 @@ const keepLargestComponent = (occupied: Set<string>) => {
   return { occupied: largest, removed: occupied.size - largest.size }
 }
 
+const setIoU = (source: Set<string>, target: Set<string>) => {
+  let intersection = 0
+  for (const key of source) if (target.has(key)) intersection += 1
+  return intersection / Math.max(1, source.size + target.size - intersection)
+}
+
+const projectVoxels = (occupied: Set<string>, axes: [number, number]) => {
+  const projection = new Set<string>()
+  for (const key of occupied) {
+    const coordinates = parseCellKey(key)
+    projection.add(`${coordinates[axes[0]]},${coordinates[axes[1]]}`)
+  }
+  return projection
+}
+
+const createProjection = (
+  source: Set<string>,
+  target: Set<string>,
+  axes: [number, number],
+  width: number,
+  height: number,
+): ObjImportProjection => {
+  const sourceProjection = projectVoxels(source, axes)
+  const finalProjection = projectVoxels(target, axes)
+  const rows = (projection: Set<string>) => Array.from({ length: height }, (_, rowIndex) => {
+    const coordinateY = height - rowIndex - 1
+    return Array.from({ length: width }, (_, x) => projection.has(`${x},${coordinateY}`) ? '1' : '0').join('')
+  })
+  return {
+    width,
+    height,
+    sourceRows: rows(sourceProjection),
+    finalRows: rows(finalProjection),
+  }
+}
+
+const getShapeMetrics = (source: Set<string>, target: Set<string>) => ({
+  voxelIoU: setIoU(source, target),
+  frontSilhouetteIoU: setIoU(projectVoxels(source, [0, 1]), projectVoxels(target, [0, 1])),
+  sideSilhouetteIoU: setIoU(projectVoxels(source, [2, 1]), projectVoxels(target, [2, 1])),
+  topSilhouetteIoU: setIoU(projectVoxels(source, [0, 2]), projectVoxels(target, [0, 2])),
+})
+
 const placementCells = (placement: Pick<Placement, 'x' | 'z' | 'width' | 'depth'>) => {
   const cells: string[] = []
   for (let dz = 0; dz < placement.depth; dz += 1) {
@@ -552,16 +618,12 @@ const sanitizeId = (value: string) => value
   .replace(/^-+|-+$/g, '')
   .slice(0, 48) || 'model'
 
-export const importObjToBrickPlan = (
-  text: string,
-  options: ObjImportOptions,
-  onProgress: (progress: ObjImportProgress) => void = () => undefined,
-): ObjImportResult => {
-  const profile = objImportProfiles.find((candidate) => candidate.id === options.profileId) ?? objImportProfiles[0]
-  onProgress({ stage: 'parse', progress: 0.08 })
-  const mesh = parseObj(text)
-  const normalized = normalizeMesh(orientMesh(mesh, options.orientation), profile.resolution)
-
+const convertMeshAtResolution = (
+  mesh: Mesh,
+  resolution: number,
+  onProgress: (progress: ObjImportProgress) => void,
+) => {
+  const normalized = normalizeMesh(mesh, resolution)
   onProgress({ stage: 'voxelize', progress: 0.25 })
   const voxelized = voxelizeMesh(normalized)
   const connected = keepLargestComponent(voxelized.occupied)
@@ -587,14 +649,39 @@ export const importObjToBrickPlan = (
       }
     }
     if (removedThisAttempt === 0) break
+    if (attempt === 7) tiled = tileVoxels(finalOccupied, normalized.dimensions)
   }
+
+  return { normalized, voxelized, connected, repaired, finalOccupied, prunedUnsupportedVoxels, tiled }
+}
+
+export const importObjToBrickPlan = (
+  text: string,
+  options: ObjImportOptions,
+  onProgress: (progress: ObjImportProgress) => void = () => undefined,
+): ObjImportResult => {
+  const profile = objImportProfiles.find((candidate) => candidate.id === options.profileId) ?? objImportProfiles[0]
+  onProgress({ stage: 'parse', progress: 0.08 })
+  const orientedMesh = orientMesh(parseObj(text), options.orientation)
+  const maxBricks = Number.isFinite(options.maxBricks) ? Math.max(1, options.maxBricks ?? Infinity) : Infinity
+  let resolution = profile.resolution
+  let converted = convertMeshAtResolution(orientedMesh, resolution, onProgress)
+  for (let attempt = 0; attempt < 5 && converted.tiled.bricks.length > maxBricks && resolution > 8; attempt += 1) {
+    const scale = Math.cbrt(maxBricks / converted.tiled.bricks.length) * 0.96
+    const nextResolution = Math.max(8, Math.min(resolution - 1, Math.floor(resolution * scale)))
+    if (nextResolution >= resolution) break
+    resolution = nextResolution
+    converted = convertMeshAtResolution(orientedMesh, resolution, onProgress)
+  }
+  const { normalized, voxelized, connected, repaired, finalOccupied, prunedUnsupportedVoxels, tiled } = converted
   if (tiled.bricks.length === 0) throw new Error('OBJ_EMPTY_PLAN')
 
   onProgress({ stage: 'finalize', progress: 0.94 })
   const prefix = sanitizeId(options.idPrefix)
+  const useCurvedEdges = options.edgeStyle === 'curved'
   const bricks: PlacedBrick[] = tiled.bricks.map((placement, index) => ({
     id: `piece-${prefix}-${index + 1}`,
-    brickId: placement.id,
+    brickId: useCurvedEdges && placement.id === 'slope-1x2' ? 'curved-slope-1x2' : placement.id,
     color: options.color,
     pose: {
       xStud: placement.x,
@@ -604,7 +691,10 @@ export const importObjToBrickPlan = (
       verticalQuarterTurns: 0,
     },
   }))
-  const nameById = new Map([...baseBrickTypes, ...slopeBrickTypes].map((brick) => [brick.id, brick.name]))
+  const nameById = new Map([
+    ...[...baseBrickTypes, ...slopeBrickTypes].map((brick) => [brick.id, brick.name] as const),
+    ['curved-slope-1x2', '1x2 Curved Slope'] as const,
+  ])
   const title = options.title.trim() || 'Imported OBJ'
   const steps = bricks.map((brick, index) => {
     const name = nameById.get(brick.brickId) ?? brick.brickId
@@ -618,18 +708,27 @@ export const importObjToBrickPlan = (
     }
   })
   const structuralChanges = repaired.added + prunedUnsupportedVoxels
+  const shapeMetrics = getShapeMetrics(connected.occupied, finalOccupied)
+  const preview: ObjImportPreview = {
+    front: createProjection(connected.occupied, finalOccupied, [0, 1], normalized.dimensions.width, normalized.dimensions.height),
+    side: createProjection(connected.occupied, finalOccupied, [2, 1], normalized.dimensions.depth, normalized.dimensions.height),
+    top: createProjection(connected.occupied, finalOccupied, [0, 2], normalized.dimensions.width, normalized.dimensions.depth),
+  }
   const stats: ObjImportStats = {
     dimensions: normalized.dimensions,
+    resolution,
     sourceVoxels: connected.occupied.size,
     finalVoxels: finalOccupied.size,
     removedComponentVoxels: connected.removed,
     addedSupportVoxels: repaired.added,
     prunedUnsupportedVoxels,
     brickCount: bricks.length,
-    slopeCount: bricks.filter((brick) => brick.brickId === 'slope-1x2').length,
+    slopeCount: bricks.filter((brick) => brick.brickId === 'slope-1x2' || brick.brickId === 'curved-slope-1x2').length,
+    curvedSlopeCount: bricks.filter((brick) => brick.brickId === 'curved-slope-1x2').length,
     componentCount: tiled.componentCount,
     structuralChangeRatio: structuralChanges / Math.max(1, connected.occupied.size),
     oddRayRatio: voxelized.diagnostics.oddRays / Math.max(1, voxelized.diagnostics.rays),
+    ...shapeMetrics,
   }
   const plan: BuildPlan = {
     id: `plan-obj-${prefix}`,
@@ -640,7 +739,7 @@ export const importObjToBrickPlan = (
     steps,
   }
   onProgress({ stage: 'finalize', progress: 1 })
-  return { plan, stats }
+  return { plan, stats, preview }
 }
 
 export type ObjImportWorkerRequest = {

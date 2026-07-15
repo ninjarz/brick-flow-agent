@@ -8,6 +8,7 @@ export const defaultLlmConfig: LlmConfig = {
   apiKey: '',
   requestMode: 'direct',
   enableThinking: false,
+  autoRepair: true,
 }
 
 const isLlmRequestMode = (value: unknown): value is LlmConfig['requestMode'] =>
@@ -27,6 +28,7 @@ export const loadLlmConfig = (): LlmConfig => {
       apiKey: parsed.apiKey ?? '',
       requestMode: isLlmRequestMode(parsed.requestMode) ? parsed.requestMode : defaultLlmConfig.requestMode,
       enableThinking: parsed.enableThinking === true,
+      autoRepair: parsed.autoRepair !== false,
     }
   } catch {
     return defaultLlmConfig

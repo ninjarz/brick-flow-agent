@@ -1,10 +1,10 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
-import { BookOpen, Box, Download, ImageUp, Plus, Sparkles, Trash2, Upload } from 'lucide-react'
+import { BookOpen, Box, Download, ImageUp, Plus, RotateCcw, Sparkles, Trash2, Upload, X } from 'lucide-react'
 import { brickDefinitions } from '../data/basicBricks'
 import { PLATE_HEIGHT_WORLD } from '../lib/brickUnits'
 import { countBricks, getBlockingBuildPlanIssues, summarizeBuildPlanIssues, validateBuildPlan, validateBuildPlanBasics } from '../lib/planUtils'
 import { useI18n } from '../lib/i18n'
-import { BrickGlyph } from './BrickGlyph'
+import { LazyBrickGlyph } from './LazyBrickGlyph'
 import type { BrickPack, BuildPlan } from '../types/bricks'
 
 type ControlPanelProps = {
@@ -23,7 +23,11 @@ type ControlPanelProps = {
   plan: BuildPlan
   onRenamePlan: (title: string) => void
   onAddBrick: (brickId: string) => void
+  inventoryOverrides: Record<string, number>
+  onInventoryChange: (brickId: string, inventory?: number) => void
+  onResetInventory: () => void
   onExport: () => void
+  onExportLDraw: () => void
   onImportPlan: (file?: File) => void
   onResetWorkspace: () => void
   onOpenManual: () => void
@@ -57,7 +61,11 @@ export const ControlPanel = ({
   plan,
   onRenamePlan,
   onAddBrick,
+  inventoryOverrides,
+  onInventoryChange,
+  onResetInventory,
   onExport,
+  onExportLDraw,
   onImportPlan,
   onResetWorkspace,
   onOpenManual,
@@ -174,7 +182,14 @@ export const ControlPanel = ({
             <span>{imageName || t('control.uploadImage')}</span>
             <input type="file" accept="image/*" onChange={(event) => onImage(event.target.files?.[0])} />
           </label>
-          {imagePreview && <img src={imagePreview} alt={t('control.imagePreview')} />}
+          {imagePreview && (
+            <div className="reference-image-preview">
+              <img src={imagePreview} alt={t('control.imagePreview')} />
+              <button type="button" aria-label={t('control.removeImage')} title={t('control.removeImage')} onClick={() => onImage(undefined)}>
+                <X size={13} />
+              </button>
+            </div>
+          )}
         </div>
         <div className="generator-actions">
           <button className="primary" type="button" onClick={onGenerate} disabled={isGenerating}>
@@ -231,30 +246,59 @@ export const ControlPanel = ({
               </button>
             ))}
           </div>
+          <div className="inventory-tools">
+            <span>{t('control.inventoryHint')}</span>
+            {Object.keys(inventoryOverrides).length > 0 && (
+              <button type="button" onClick={onResetInventory}>
+                <RotateCcw size={13} />
+                {t('control.inventoryReset')}
+              </button>
+            )}
+          </div>
         </div>
         <div className="parts-list">
           {visibleBrickDefinitions.map((brick) => {
             const usedCount = brickCounts[brick.id] ?? 0
-            const isOutOfStock = isInventoryLimited(brick.inventory) && usedCount >= brick.inventory
+            const hasInventoryOverride = Object.prototype.hasOwnProperty.call(inventoryOverrides, brick.id)
+            const inventory = inventoryOverrides[brick.id] ?? brick.inventory
+            const isOutOfStock = isInventoryLimited(inventory) && usedCount >= inventory
 
             return (
-              <button
-                key={brick.id}
-                type="button"
-                title={isOutOfStock ? t('control.partOut', { name: brick.name }) : t('control.addPart', { name: brick.name })}
-                disabled={isOutOfStock}
-                onClick={() => onAddBrick(brick.id)}
-              >
-                <BrickGlyph brickId={brick.id} kind={brick.kind} footprint={brick.footprint} className="part-glyph" />
-                <span className="part-copy">
-                  <strong>{brick.name}</strong>
-                  <small>{t('control.partNumber', { number: brick.partNumber })}</small>
-                  <small>
-                    {getFootprintLabel(brick.footprint.widthStuds, brick.footprint.depthStuds)} · {getHeightLabel(brick)} · {usedCount}/{formatInventory(brick.inventory)}
-                  </small>
-                </span>
-                <Plus size={15} />
-              </button>
+              <article className="part-list-item" key={brick.id}>
+                <button
+                  className="part-add-button"
+                  type="button"
+                  title={isOutOfStock ? t('control.partOut', { name: brick.name }) : t('control.addPart', { name: brick.name })}
+                  disabled={isOutOfStock}
+                  onClick={() => onAddBrick(brick.id)}
+                >
+                  <LazyBrickGlyph brickId={brick.id} kind={brick.kind} footprint={brick.footprint} className="part-glyph" />
+                  <span className="part-copy">
+                    <strong>{brick.name}</strong>
+                    <small>{t('control.partNumber', { number: brick.partNumber })}</small>
+                    <small>
+                      {getFootprintLabel(brick.footprint.widthStuds, brick.footprint.depthStuds)} · {getHeightLabel(brick)} · {usedCount}/{formatInventory(inventory)}
+                    </small>
+                  </span>
+                  <Plus size={15} />
+                </button>
+                <label className="part-inventory-field" title={t('control.inventoryFor', { name: brick.name })}>
+                  <span>{t('control.inventoryShort')}</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    step="1"
+                    value={hasInventoryOverride ? inventory : ''}
+                    placeholder={formatInventory(brick.inventory)}
+                    aria-label={t('control.inventoryFor', { name: brick.name })}
+                    onChange={(event) => {
+                      const value = event.target.value
+                      onInventoryChange(brick.id, value === '' ? undefined : Number(value))
+                    }}
+                  />
+                </label>
+              </article>
             )
           })}
           {packBrickDefinitions.length === 0 && <p className="muted">{t('control.noPackParts')}</p>}
@@ -288,12 +332,16 @@ export const ControlPanel = ({
           <Download size={16} />
           {t('common.exportJson')}
         </button>
+        <button type="button" onClick={onExportLDraw}>
+          <Download size={16} />
+          {t('control.exportLDraw')}
+        </button>
         <label className="file-button plan-import-button">
           <Upload size={16} />
-          <span>{t('control.importJson')}</span>
+          <span>{t('control.importPlan')}</span>
           <input
             type="file"
-            accept="application/json,.json"
+            accept="application/json,text/plain,.json,.ldr,.mpd"
             onChange={(event) => {
               onImportPlan(event.target.files?.[0])
               event.target.value = ''

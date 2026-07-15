@@ -10,15 +10,20 @@
 
 ## ✨ 功能亮点
 
-- 通过 OpenAI-compatible 接口按提示词生成搭建方案
+- 通过多模态 OpenAI-compatible 接口按提示词和参考图生成搭建方案
+- 生成后执行结构校验、本地修复，并可在仍不合格时反馈问题自动重试一次
 - 默认支持浏览器直连 LLM，适合纯静态部署；也支持本地代理绕过 CORS
 - 支持零件包切换，目前有 LEGO-compatible LDraw 包和早期 Minecraft 包
 - 使用 LDraw 数据生成零件视觉和结构数据
 - 支持积木级编辑：添加、选择、移动、旋转、换色、复制、删除、导入、导出
 - 支持 stud、tube、bar、pin、axle 和双向连接面等连接语义的校验
 - 支持结构体素调试视图，可查看 solid、socket、stud、双向连接面、enterable 等单元
-- 内置成品素材库，并支持本地保存用户素材
-- 搭建手册按“一步一个零件”生成，支持预览、复制 Markdown、导出 HTML/Markdown/JSON
+- 支持按零件编辑个人库存，手动添加和 LLM 生成共用同一约束
+- 内置成品素材库，大型用户素材通过 IndexedDB 持久化
+- 支持浏览器本地导入 OBJ，可配置尺寸、砖块预算和边缘风格，并预览轮廓与质量指标
+- 支持 JSON、LDraw/MPD 导入，以及可无损回到应用内编辑状态的 LDraw 导出
+- 搭建手册按同层零件分组，采用只存增量的线性结构，支持预览和 HTML/Markdown/JSON 导出
+- 大型场景自适应简化渲染，3D 与 OBJ 重模块按需加载
 - 中英文 UI，默认跟随浏览器语言，也可以在配置里手动切换
 
 <p align="center">
@@ -29,7 +34,7 @@
 ## 🧱 零件包
 
 - **LEGO-compatible 包：** 当前主要零件包。尽可能使用内置 LDraw 数据生成视觉和结构信息，并通过回归测试覆盖官方颜色数据、连接点位置、碰撞、支撑和默认素材
-- **Minecraft 包：** 早期体素优先零件包。目前包含一个基础 `1 x 1 x 1` 方块
+- **Minecraft 包：** 体素优先零件包，支持面对面连接，包含草方块、泥土、石头、橡木板、沙子、水、玻璃、红石和可换色基础方块
 
 ## 🚀 快速开始
 
@@ -76,6 +81,8 @@ node scripts/generate-obj-assets.mjs --dry-run --source=stanford-bunny --profile
 
 流水线包含四点采样实体体素化、孤立网格噪点清理、最少桥接与支撑、不可连接边界裁剪、适合位置的定向斜坡替换，以及连接组件感知的逐层分砖。控制台指标会输出体素与三视图轮廓 IoU、体素尺寸、形状改动、未解决支撑、连接组件、斜坡/零件数量和异常扫描射线比例。默认发布档位会按源模型进行质量筛选，实验档仍可通过显式传入 `--source` 和 `--profile` 生成。
 
+应用内的 **导入 OBJ** 使用同一套转换核心。文件只在本机处理，最大支持 100 MB；可根据砖块预算自适应降低体素分辨率，并在正式加载前对比源模型与生成结果的三视图轮廓。
+
 ## 🤖 LLM 配置
 
 在应用内打开 **配置**，填写：
@@ -89,6 +96,7 @@ node scripts/generate-obj-assets.mjs --dry-run --source=stanford-bunny --profile
 - Model name：接口支持的模型名
 - Request mode：浏览器直连或本地代理
 - Thinking mode：思考模式，默认关闭，让生成更快也更稳定
+- Structural feedback retry：结构反馈重试，默认开启；确定性修复仍失败时，会把校验摘要和上一版方案交给模型纠正一次
 
 ## ⌨️ 键盘操作
 
@@ -124,7 +132,6 @@ node scripts/generate-obj-assets.mjs --dry-run --source=stanford-bunny --profile
 
 - 改进优化 agent 能力
 - 迭代零件库，修正错误数据
-- 素材库库存管理功能
 - 制作素材库 demo
 - 导入导出多格式兼容
 - 性能优化

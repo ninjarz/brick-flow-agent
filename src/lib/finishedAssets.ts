@@ -1,9 +1,11 @@
 import type { FinishedAsset } from '../types/bricks'
+import { indexedDbStorageMarker, isIndexedDbStorageMarker, localStorageComfortLimit, readLargeStoredValue, removeLargeStoredValue, writeLargeStoredValue } from './browserStorage'
 import { generateBuildPlan } from './localGenerator'
 import { tryNormalizeImportedPlan } from './planImport'
 import { getBlockingBuildPlanIssues, validateBuildPlan } from './planUtils'
 
 const storageKey = 'brick-flow-agent:finished-assets:v18'
+const indexedDbKey = 'finished-assets:v18'
 const generatedObjAssetIdPrefix = 'finished-obj-'
 const retiredDefaultAssetIds = new Set([
   'finished-tiger',
@@ -110,21 +112,32 @@ export const loadAllDefaultFinishedAssets = async () => {
   return [...defaultFinishedAssets, ...await generatedObjAssetsPromise]
 }
 
-export const loadFinishedAssets = (): FinishedAsset[] => {
-  if (typeof window === 'undefined') return defaultFinishedAssets
-
-  const stored = window.localStorage.getItem(storageKey)
-  if (!stored) return defaultFinishedAssets
-
-  try {
-    const parsed = JSON.parse(stored) as unknown
-    if (!Array.isArray(parsed)) return defaultFinishedAssets
-
-    const validStoredAssets = parsed
+const normalizeStoredAssets = (value: unknown) => {
+  if (!Array.isArray(value)) return []
+  return value
       .filter(isFinishedAsset)
       .map(normalizeAsset)
       .filter((asset): asset is FinishedAsset => Boolean(asset))
       .filter((asset) => getBlockingBuildPlanIssues(validateBuildPlan(asset.plan)).length === 0)
+}
+
+export const hasIndexedDbFinishedAssets = () => {
+  if (typeof window === 'undefined') return false
+  try {
+    return isIndexedDbStorageMarker(window.localStorage.getItem(storageKey))
+  } catch {
+    return false
+  }
+}
+
+export const loadFinishedAssets = (): FinishedAsset[] => {
+  if (typeof window === 'undefined') return defaultFinishedAssets
+
+  const stored = window.localStorage.getItem(storageKey)
+  if (!stored || isIndexedDbStorageMarker(stored)) return defaultFinishedAssets
+
+  try {
+    const validStoredAssets = normalizeStoredAssets(JSON.parse(stored) as unknown)
 
     return mergeWithDefaultAssets(validStoredAssets)
   } catch {
@@ -132,7 +145,43 @@ export const loadFinishedAssets = (): FinishedAsset[] => {
   }
 }
 
-export const saveFinishedAssets = (assets: FinishedAsset[]) => {
+export const loadFinishedAssetsFromIndexedDb = async () => {
+  try {
+    const stored = await readLargeStoredValue<unknown>(indexedDbKey)
+    return stored === undefined ? undefined : mergeWithDefaultAssets(normalizeStoredAssets(stored))
+  } catch {
+    return undefined
+  }
+}
+
+let finishedAssetsSaveQueue = Promise.resolve(true)
+
+const persistFinishedAssets = async (assets: FinishedAsset[]) => {
   const customAssets = assets.filter((asset) => !isDefaultFinishedAsset(asset))
-  window.localStorage.setItem(storageKey, JSON.stringify(customAssets))
+  const serialized = JSON.stringify(customAssets)
+
+  if (serialized.length <= localStorageComfortLimit) {
+    try {
+      window.localStorage.setItem(storageKey, serialized)
+      await removeLargeStoredValue(indexedDbKey).catch(() => undefined)
+      return true
+    } catch {
+      // Fall through to IndexedDB when localStorage is unavailable or full.
+    }
+  }
+
+  try {
+    await writeLargeStoredValue(indexedDbKey, customAssets)
+    window.localStorage.removeItem(storageKey)
+    window.localStorage.setItem(storageKey, indexedDbStorageMarker)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export const saveFinishedAssets = (assets: FinishedAsset[]) => {
+  const nextSave = finishedAssetsSaveQueue.then(() => persistFinishedAssets(assets))
+  finishedAssetsSaveQueue = nextSave.catch(() => false)
+  return nextSave
 }
