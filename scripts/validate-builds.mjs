@@ -215,6 +215,91 @@ await writeFile(entry, `
     !partNumbers.has(partNumber),
   );
   const approx = (source, target) => Math.abs(source - target) <= 0.000001;
+  const structuralRound = (value) => Number(value.toFixed(6));
+  const structuralCellKey = (cell) => [cell.minX, cell.minY, cell.minZ].join(',');
+  const structuralNeighborOffsets = [-0.2, 0, 0.2]
+    .flatMap((x) => [-0.2, 0, 0.2]
+      .flatMap((y) => [-0.2, 0, 0.2]
+        .map((z) => [x, y, z])))
+    .filter(([x, y, z]) => x !== 0 || y !== 0 || z !== 0);
+  const getTouchingStructuralComponentCount = (cells) => {
+    const cellsByKey = new Map(cells.map((cell) => [structuralCellKey(cell), cell]));
+    const visited = new Set();
+    let componentCount = 0;
+
+    for (const cell of cells) {
+      const startKey = structuralCellKey(cell);
+      if (visited.has(startKey)) continue;
+      componentCount += 1;
+      const queue = [cell];
+      visited.add(startKey);
+
+      while (queue.length > 0) {
+        const current = queue.pop();
+        for (const [offsetX, offsetY, offsetZ] of structuralNeighborOffsets) {
+          const key = [
+            structuralRound(current.minX + offsetX),
+            structuralRound(current.minY + offsetY),
+            structuralRound(current.minZ + offsetZ),
+          ].join(',');
+          const neighbor = cellsByKey.get(key);
+          if (!neighbor || visited.has(key)) continue;
+          visited.add(key);
+          queue.push(neighbor);
+        }
+      }
+    }
+
+    return componentCount;
+  };
+  const structuralCellVolume = (cell) =>
+    (cell.maxX - cell.minX) * (cell.maxY - cell.minY) * (cell.maxZ - cell.minZ);
+  const structuralCellContains = (container, cell) =>
+    container.minX <= cell.minX + 0.000001 && container.maxX >= cell.maxX - 0.000001 &&
+    container.minY <= cell.minY + 0.000001 && container.maxY >= cell.maxY - 0.000001 &&
+    container.minZ <= cell.minZ + 0.000001 && container.maxZ >= cell.maxZ - 0.000001;
+  const uniqueStructuralDefinitions = brickDefinitions.filter((definition, index, definitions) =>
+    definitions.findIndex((candidate) => candidate.partNumber === definition.partNumber) === index,
+  );
+  const structuralAudit = uniqueStructuralDefinitions.map((definition) => {
+    const cells = getBrickStructuralCells(definition);
+    const blockingCells = cells.filter((cell) => cell.kind === 'solid' || cell.kind === 'studsocket');
+    const solidCells = cells.filter((cell) => cell.kind === 'solid');
+    const interactionCells = getBrickInteractionStructuralCells(definition);
+    const localBounds = getBrickLocalBounds(definition);
+    const gridBounds = {
+      minX: Math.min(...cells.map((cell) => cell.minX)),
+      maxX: Math.max(...cells.map((cell) => cell.maxX)),
+      minY: Math.min(...cells.map((cell) => cell.minY)),
+      maxY: Math.max(...cells.map((cell) => cell.maxY)),
+      minZ: Math.min(...cells.map((cell) => cell.minZ)),
+      maxZ: Math.max(...cells.map((cell) => cell.maxZ)),
+    };
+    const detailedVolume = blockingCells.reduce((total, cell) => total + structuralCellVolume(cell), 0);
+    const interactionVolume = interactionCells.reduce((total, cell) => total + structuralCellVolume(cell), 0);
+
+    return {
+      id: definition.id,
+      disconnected: solidCells.length > 1 && getTouchingStructuralComponentCount(solidCells) > 1,
+      clipsVisualBounds:
+        gridBounds.minX > localBounds.minX + 0.0001 || gridBounds.maxX < localBounds.maxX - 0.0001 ||
+        gridBounds.minY > localBounds.minY + 0.0001 || gridBounds.maxY < localBounds.maxY - 0.0001 ||
+        gridBounds.minZ > localBounds.minZ + 0.0001 || gridBounds.maxZ < localBounds.maxZ - 0.0001,
+      changesCompactedVolume: !approx(detailedVolume, interactionVolume),
+      missesDetailedCell: blockingCells.some((cell) =>
+        !interactionCells.some((container) => structuralCellContains(container, cell)),
+      ),
+    };
+  });
+  const disconnectedStructuralPartIds = structuralAudit
+    .filter((result) => result.disconnected)
+    .map((result) => result.id);
+  const clippedStructuralPartIds = structuralAudit
+    .filter((result) => result.clipsVisualBounds)
+    .map((result) => result.id);
+  const invalidStructuralCompactionIds = structuralAudit
+    .filter((result) => result.changesCompactedVolume || result.missesDetailedCell)
+    .map((result) => result.id);
   const hasVertex = (geometry, expected) => {
     const positions = geometry.getAttribute('position');
     for (let index = 0; index < positions.count; index += 1) {
@@ -470,8 +555,6 @@ await writeFile(entry, `
   const openPropellerDefinition = getDefinition('propeller-4-blade-open');
   const closedPropellerDefinition = getDefinition('propeller-4-blade-closed');
   const openPropellerLocalBounds = getBrickLocalBounds(openPropellerDefinition);
-  const structuralCellVolume = (cell) =>
-    (cell.maxX - cell.minX) * (cell.maxY - cell.minY) * (cell.maxZ - cell.minZ);
   const openPropellerDetailedCollisionCells = getBrickStructuralCells(openPropellerDefinition)
     .filter((cell) => cell.kind === 'solid' || cell.kind === 'studsocket');
   const openPropellerInteractionCells = getBrickInteractionStructuralCells(openPropellerDefinition);
@@ -483,6 +566,12 @@ await writeFile(entry, `
     openPropellerDefinition.footprint.widthStuds *
     openPropellerDefinition.footprint.heightStuds *
     openPropellerDefinition.footprint.depthStuds;
+  const closedPropellerSolidCells = getBrickStructuralCells(closedPropellerDefinition)
+    .filter((cell) => cell.kind === 'solid');
+  const closedPropellerLowerBladeLayerCount = closedPropellerSolidCells
+    .filter((cell) => approx(cell.minY, 0.8)).length;
+  const closedPropellerMainBladeLayerCount = closedPropellerSolidCells
+    .filter((cell) => approx(cell.minY, 1)).length;
   const closedPropellerFlippedBounds = getBrickWorldBounds(
     closedPropellerDefinition,
     { xStud: 0, yStud: 0, zStud: 0, rotationQuarterTurns: 0, verticalQuarterTurns: 2 },
@@ -545,6 +634,9 @@ await writeFile(entry, `
     )
       ? '2479 propeller interaction shape must preserve empty space inside its footprint'
       : '',
+    closedPropellerLowerBladeLayerCount * 2 >= closedPropellerMainBladeLayerCount
+      ? '67737 blade voxelization must not inflate its shallow blade surface into two full vertical layers'
+      : '',
     closedPropellerFlippedBounds.minY < -0.000001
       ? '67737 vertical 180-degree rotation at ground level must not render below ground'
       : '',
@@ -556,6 +648,15 @@ await writeFile(entry, `
       : '',
     pinPropellerBlockingIssues.length > 0
       ? 'Pin/propeller regression plan failed validation: ' + summarizeBuildPlanIssues(pinPropellerIssues)
+      : '',
+    disconnectedStructuralPartIds.length > 0
+      ? 'Structural voxelization created detached collision islands: ' + disconnectedStructuralPartIds.join(', ')
+      : '',
+    clippedStructuralPartIds.length > 0
+      ? 'Structural voxel grids clip LDraw geometry bounds: ' + clippedStructuralPartIds.join(', ')
+      : '',
+    invalidStructuralCompactionIds.length > 0
+      ? 'Compacted interaction cells do not exactly preserve detailed voxels: ' + invalidStructuralCompactionIds.join(', ')
       : '',
     duplicateDefinitionIds.length > 0
       ? 'Brick definitions contain duplicate ids: ' + duplicateDefinitionIds.join(', ')

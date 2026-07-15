@@ -276,12 +276,23 @@ const overlayStructuralCells = (...cellGroups: StructuralCell[][]) => {
 
 const makeMeshStructuralCells = (definition: BrickDefinition, triangles: MeshTriangle[]) => {
   const triangleBounds = getTriangleBounds(triangles)
+  const bounds = triangleBounds ?? {
+    minX: 0,
+    maxX: definition.footprint.widthStuds,
+    minY: 0,
+    maxY: definition.footprint.heightStuds,
+    minZ: 0,
+    maxZ: definition.footprint.depthStuds,
+  }
 
   return overlayStructuralCells(
     voxelizeMeshStructuralCells({
-      widthStuds: triangleBounds?.maxX ?? definition.footprint.widthStuds,
-      heightStuds: triangleBounds?.maxY ?? definition.footprint.heightStuds,
-      depthStuds: triangleBounds?.maxZ ?? definition.footprint.depthStuds,
+      minXStuds: bounds.minX,
+      maxXStuds: bounds.maxX,
+      minYStuds: bounds.minY,
+      maxYStuds: bounds.maxY,
+      minZStuds: bounds.minZ,
+      maxZStuds: bounds.maxZ,
       voxelSize: STRUCTURAL_VOXEL_SIZE,
       triangles,
     }),

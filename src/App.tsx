@@ -1420,7 +1420,7 @@ function App() {
             </button>
             <button
               type="button"
-              className={`icon-button view-mode-button ${sceneViewMode === 'normal' ? '' : 'active'}`}
+              className={`icon-button ${sceneViewMode === 'normal' ? '' : 'active'}`}
               aria-label={t('top.switchViewMode', {
                 current: t(`top.viewMode.${sceneViewMode}`),
                 next: t(`top.viewMode.${getNextSceneViewMode(sceneViewMode)}`),
@@ -1432,7 +1432,6 @@ function App() {
               onClick={() => setSceneViewMode((mode) => getNextSceneViewMode(mode))}
             >
               {sceneViewMode === 'normal' ? <Eye size={18} /> : sceneViewMode === 'outline' ? <Box size={18} /> : <Boxes size={18} />}
-              <span>{t(`top.viewMode.${sceneViewMode}`)}</span>
             </button>
             <button
               className={`icon-button ${isAutoSnapEnabled ? 'active' : ''}`}

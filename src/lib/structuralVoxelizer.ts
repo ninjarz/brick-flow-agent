@@ -9,18 +9,42 @@ type Point3 = {
 export type MeshTriangle = [Point3, Point3, Point3]
 
 type VoxelizeMeshOptions = {
-  widthStuds: number
-  heightStuds: number
-  depthStuds: number
+  minXStuds: number
+  maxXStuds: number
+  minYStuds: number
+  maxYStuds: number
+  minZStuds: number
+  maxZStuds: number
   voxelSize: number
   triangles: MeshTriangle[]
+}
+
+type VoxelSample = {
+  minX: number
+  minY: number
+  minZ: number
+  centerIsInside: boolean
+  surfaceIntersects: boolean
 }
 
 const allEntryDirections: StructuralEntryDirection[] = ['top', 'bottom', 'left', 'right', 'front', 'back']
 const epsilon = 0.000001
 const voxelBoundaryTolerance = 0.00001
+const gridBoundarySnapTolerance = 0.0001
 
 const round = (value: number) => Number(value.toFixed(6))
+
+const snapGridBoundary = (value: number, voxelSize: number, direction: 'min' | 'max') => {
+  // LDraw transforms can leave nominal grid boundaries a few decimal places off.
+  // Snap those values, but expand genuinely protruding geometry to the next voxel.
+  const nearestBoundary = Math.round(value / voxelSize) * voxelSize
+  if (Math.abs(value - nearestBoundary) <= gridBoundarySnapTolerance) return round(nearestBoundary)
+
+  const gridIndex = direction === 'min'
+    ? Math.floor(value / voxelSize)
+    : Math.ceil(value / voxelSize)
+  return round(gridIndex * voxelSize)
+}
 
 const makeCell = (
   kind: StructuralCell['kind'],
@@ -203,39 +227,104 @@ const pointIsInsideMesh = (point: Point3, triangles: MeshTriangle[]) => {
 }
 
 export const voxelizeMeshStructuralCells = ({
-  widthStuds,
-  heightStuds,
-  depthStuds,
+  minXStuds,
+  maxXStuds,
+  minYStuds,
+  maxYStuds,
+  minZStuds,
+  maxZStuds,
   voxelSize,
   triangles,
 }: VoxelizeMeshOptions): StructuralCell[] => {
-  const cells: StructuralCell[] = []
-  const xCount = Math.max(1, Math.round(widthStuds / voxelSize))
-  const yCount = Math.max(1, Math.round(heightStuds / voxelSize))
-  const zCount = Math.max(1, Math.round(depthStuds / voxelSize))
+  const gridMinX = snapGridBoundary(minXStuds, voxelSize, 'min')
+  const gridMaxX = snapGridBoundary(maxXStuds, voxelSize, 'max')
+  const gridMinY = snapGridBoundary(minYStuds, voxelSize, 'min')
+  const gridMaxY = snapGridBoundary(maxYStuds, voxelSize, 'max')
+  const gridMinZ = snapGridBoundary(minZStuds, voxelSize, 'min')
+  const gridMaxZ = snapGridBoundary(maxZStuds, voxelSize, 'max')
+  const xCount = Math.max(1, Math.round((gridMaxX - gridMinX) / voxelSize))
+  const yCount = Math.max(1, Math.round((gridMaxY - gridMinY) / voxelSize))
+  const zCount = Math.max(1, Math.round((gridMaxZ - gridMinZ) / voxelSize))
+  const samples: VoxelSample[] = []
 
   for (let x = 0; x < xCount; x += 1) {
     for (let y = 0; y < yCount; y += 1) {
       for (let z = 0; z < zCount; z += 1) {
-        const minX = x * voxelSize
-        const minY = y * voxelSize
-        const minZ = z * voxelSize
+        const minX = gridMinX + x * voxelSize
+        const minY = gridMinY + y * voxelSize
+        const minZ = gridMinZ + z * voxelSize
         const center = {
           x: minX + voxelSize / 2,
           y: minY + voxelSize / 2,
           z: minZ + voxelSize / 2,
         }
+        const centerIsInside = pointIsInsideMesh(center, triangles)
 
-        const kind =
-          pointIsInsideMesh(center, triangles) ||
-          voxelIntersectsMesh(triangles, minX, minY, minZ, voxelSize)
-            ? 'solid'
-            : 'enterable'
-
-        cells.push(makeCell(kind, minX, minY, minZ, voxelSize))
+        samples.push({
+          minX,
+          minY,
+          minZ,
+          centerIsInside,
+          surfaceIntersects: centerIsInside
+            ? false
+            : voxelIntersectsMesh(triangles, minX, minY, minZ, voxelSize),
+        })
       }
     }
   }
 
-  return cells
+  const sampleIndex = (x: number, y: number, z: number) =>
+    (x * yCount + y) * zCount + z
+  const interiorColumns = new Set<number>()
+  samples.forEach((sample, index) => {
+    if (!sample.centerIsInside) return
+    const x = Math.floor(index / (yCount * zCount))
+    const z = index % zCount
+    interiorColumns.add(x * zCount + z)
+  })
+  const solidMask = samples.map((sample, index) => {
+    const x = Math.floor(index / (yCount * zCount))
+    const z = index % zCount
+    // Center occupancy avoids doubling the vertical thickness of shallow curved
+    // parts. Surface-only columns remain filled so sub-voxel bars and rims survive.
+    return sample.centerIsInside || (
+      sample.surfaceIntersects && !interiorColumns.has(x * zCount + z)
+    )
+  })
+  const solidCount = solidMask.filter(Boolean).length
+  const hasTouchingSolid = (x: number, y: number, z: number) => {
+    for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
+      for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
+        for (let offsetZ = -1; offsetZ <= 1; offsetZ += 1) {
+          if (offsetX === 0 && offsetY === 0 && offsetZ === 0) continue
+          const neighborX = x + offsetX
+          const neighborY = y + offsetY
+          const neighborZ = z + offsetZ
+          if (
+            neighborX < 0 || neighborX >= xCount ||
+            neighborY < 0 || neighborY >= yCount ||
+            neighborZ < 0 || neighborZ >= zCount
+          ) continue
+          if (solidMask[sampleIndex(neighborX, neighborY, neighborZ)]) return true
+        }
+      }
+    }
+    return false
+  }
+
+  return samples.map((sample, index) => {
+    const x = Math.floor(index / (yCount * zCount))
+    const remainder = index % (yCount * zCount)
+    const y = Math.floor(remainder / zCount)
+    const z = remainder % zCount
+    // A lone voxel that does not even touch the rest of the part diagonally is a
+    // ray/triangle precision artifact, not a usable collision island.
+    const kind = solidMask[index] && (
+      solidCount === 1 || hasTouchingSolid(x, y, z)
+    )
+      ? 'solid'
+      : 'enterable'
+
+    return makeCell(kind, sample.minX, sample.minY, sample.minZ, voxelSize)
+  })
 }

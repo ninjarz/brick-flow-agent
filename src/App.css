@@ -126,13 +126,6 @@ button.status-pill:hover {
   color: #2563eb;
 }
 
-.icon-button.view-mode-button {
-  width: auto;
-  gap: 7px;
-  padding: 0 11px;
-  white-space: nowrap;
-}
-
 .icon-button.github-link {
   border: 1px solid var(--line);
   border-radius: 7px;
@@ -456,7 +449,8 @@ button.status-pill:hover {
 .asset-modal {
   width: min(760px, 100%);
   max-height: min(760px, calc(100svh - 36px));
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .prompt-preview-modal {
@@ -669,6 +663,7 @@ button.status-pill:hover {
 }
 
 .asset-list {
+  min-width: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
@@ -676,6 +671,7 @@ button.status-pill:hover {
 
 .asset-card {
   min-width: 0;
+  overflow: hidden;
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   gap: 12px;
@@ -683,6 +679,10 @@ button.status-pill:hover {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff;
+}
+
+.asset-card > * {
+  min-width: 0;
 }
 
 .asset-card span {
@@ -720,14 +720,17 @@ button.status-pill:hover {
 
 .asset-card p {
   display: -webkit-box;
+  max-width: 100%;
   margin-bottom: 8px;
   overflow: hidden;
+  overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
 }
 
 .asset-card small {
   display: block;
+  max-width: 100%;
   overflow: hidden;
   color: var(--muted);
   font-size: 12px;
@@ -737,6 +740,8 @@ button.status-pill:hover {
 }
 
 .asset-actions {
+  width: 100%;
+  min-width: 0;
   display: flex;
   gap: 8px;
 }
