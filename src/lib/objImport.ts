@@ -1,8 +1,10 @@
+import { officialPartColorsByPartNumber } from '../data/officialPartColors'
 import type { BrickColor, BuildPlan, PlacedBrick } from '../types/bricks'
 
 export type ObjImportProfileId = 's' | 'm' | 'l'
 export type ObjImportOrientation = 'upright' | 'lay-back' | 'lay-side'
 export type ObjImportEdgeStyle = 'angular' | 'curved'
+export type ObjImportColorMode = 'single' | 'materials'
 export type ObjImportStage = 'parse' | 'voxelize' | 'repair' | 'tile' | 'finalize'
 
 export type ObjImportOptions = {
@@ -14,6 +16,8 @@ export type ObjImportOptions = {
   idPrefix: string
   edgeStyle?: ObjImportEdgeStyle
   maxBricks?: number
+  colorMode?: ObjImportColorMode
+  materialText?: string
 }
 
 export type ObjImportProgress = {
@@ -39,6 +43,13 @@ export type ObjImportStats = {
   frontSilhouetteIoU: number
   sideSilhouetteIoU: number
   topSilhouetteIoU: number
+  materialCount: number
+  materialPalette: Array<{
+    material: string
+    sourceHex: string
+    mappedColor: BrickColor
+    brickCount: number
+  }>
 }
 
 export type ObjImportProjection = {
@@ -62,7 +73,7 @@ export type ObjImportResult = {
 
 type Point3 = { x: number; y: number; z: number }
 type Triangle = [Point3, Point3, Point3]
-type Mesh = { vertices: Point3[]; triangles: Triangle[] }
+type Mesh = { vertices: Point3[]; triangles: Triangle[]; triangleMaterialNames: Array<string | undefined> }
 type Dimensions = { width: number; height: number; depth: number }
 type NormalizedMesh = Mesh & { dimensions: Dimensions }
 type BrickType = {
@@ -140,15 +151,103 @@ const cellKey = (x: number, y: number, z: number) => `${x},${y},${z}`
 const layerCellKey = (x: number, z: number) => `${x},${z}`
 const parseCellKey = (key: string) => key.split(',').map(Number) as [number, number, number]
 
+type RgbColor = { r: number; g: number; b: number }
+
+const objBrickPartNumberById: Record<string, string> = {
+  'brick-2x8': '3007',
+  'brick-1x6': '3009',
+  'brick-2x4': '3001',
+  'brick-1x4': '3010',
+  'brick-2x3': '3002',
+  'brick-1x3': '3622',
+  'brick-2x2': '3003',
+  'brick-1x2': '3004',
+  'brick-1x1': '3005',
+  'slope-1x2': '3040',
+  'curved-slope-1x2': '11477',
+}
+
+const colorHex: Record<BrickColor, string> = {
+  red: '#d62828',
+  blue: '#1d4ed8',
+  yellow: '#f7c948',
+  green: '#2f9e44',
+  white: '#f8fafc',
+  black: '#171717',
+  gray: '#8b949e',
+  brown: '#7c4a28',
+  orange: '#f97316',
+  tan: '#d6b98c',
+  cyan: '#06b6d4',
+  lime: '#84cc16',
+  pink: '#ec4899',
+  'trans-pink': '#f5a3c7',
+}
+
+const brickColorRgb = Object.fromEntries(Object.entries(colorHex).map(([color, hex]) => {
+  const value = Number.parseInt(hex.slice(1), 16)
+  return [color, { r: (value >> 16) & 255, g: (value >> 8) & 255, b: value & 255 }]
+})) as Record<BrickColor, RgbColor>
+
+const rgbToHex = (color: RgbColor) => `#${[color.r, color.g, color.b]
+  .map((value) => Math.max(0, Math.min(255, Math.round(value))).toString(16).padStart(2, '0'))
+  .join('')}`
+
+export const parseMtlPalette = (text = '') => {
+  const palette = new Map<string, RgbColor>()
+  let currentMaterial = ''
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim()
+    const materialMatch = line.match(/^newmtl\s+(.+)$/i)
+    if (materialMatch) {
+      currentMaterial = materialMatch[1].trim()
+      continue
+    }
+    const diffuseMatch = line.match(/^Kd\s+([\d.+-eE]+)\s+([\d.+-eE]+)\s+([\d.+-eE]+)/)
+    if (!currentMaterial || !diffuseMatch) continue
+    const components = diffuseMatch.slice(1, 4).map(Number)
+    if (!components.every(Number.isFinite)) continue
+    const scale = Math.max(...components) <= 1 ? 255 : 1
+    palette.set(currentMaterial, {
+      r: components[0] * scale,
+      g: components[1] * scale,
+      b: components[2] * scale,
+    })
+  }
+  return palette
+}
+
+const colorDistance = (source: RgbColor, target: RgbColor) => (
+  (source.r - target.r) ** 2 * 0.3 +
+  (source.g - target.g) ** 2 * 0.59 +
+  (source.b - target.b) ** 2 * 0.11
+)
+
+const mapMaterialColorToBrick = (source: RgbColor, brickId: string, fallback: BrickColor) => {
+  const partNumber = objBrickPartNumberById[brickId]
+  const availableColors = (officialPartColorsByPartNumber[partNumber] ?? [fallback]).filter((color) => color !== 'trans-pink')
+  const initialColor: BrickColor = availableColors.find((color) => color === fallback) ?? availableColors[0] ?? 'gray'
+  return availableColors.reduce<BrickColor>((closest, color) => (
+    colorDistance(source, brickColorRgb[color]) < colorDistance(source, brickColorRgb[closest]) ? color : closest
+  ), initialColor)
+}
+
 const parseObj = (text: string): Mesh => {
   const vertices: Point3[] = []
   const triangles: Triangle[] = []
+  const triangleMaterialNames: Array<string | undefined> = []
+  let currentMaterialName: string | undefined
 
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.trim()
     if (/^v\s/.test(line)) {
       const [x, y, z] = line.split(/\s+/).slice(1, 4).map(Number)
       if ([x, y, z].every(Number.isFinite)) vertices.push({ x, y, z })
+      continue
+    }
+    const materialMatch = line.match(/^usemtl\s+(.+)$/i)
+    if (materialMatch) {
+      currentMaterialName = materialMatch[1].trim()
       continue
     }
     if (!/^f\s/.test(line)) continue
@@ -163,11 +262,12 @@ const parseObj = (text: string): Mesh => {
       const c = vertices[indices[index + 1]]
       if (!a || !b || !c) continue
       triangles.push([a, b, c])
+      triangleMaterialNames.push(currentMaterialName)
     }
   }
 
   if (vertices.length === 0 || triangles.length === 0) throw new Error('OBJ_EMPTY_GEOMETRY')
-  return { vertices, triangles }
+  return { vertices, triangles, triangleMaterialNames }
 }
 
 const getBounds = (vertices: Point3[]) => {
@@ -198,6 +298,7 @@ const orientMesh = (mesh: Mesh, orientation: ObjImportOrientation): Mesh => {
   return {
     vertices: mesh.vertices.map(transform),
     triangles: mesh.triangles.map((triangle) => triangle.map(transform) as Triangle),
+    triangleMaterialNames: mesh.triangleMaterialNames,
   }
 }
 
@@ -222,6 +323,7 @@ const normalizeMesh = (mesh: Mesh, resolution: number): NormalizedMesh => {
   return {
     vertices: mesh.vertices.map(transform),
     triangles: mesh.triangles.map((triangle) => triangle.map(transform) as Triangle),
+    triangleMaterialNames: mesh.triangleMaterialNames,
     dimensions,
   }
 }
@@ -283,7 +385,7 @@ const intervalOverlap = (intervals: Array<[number, number]>, minY: number, maxY:
 )
 
 const voxelizeMesh = (mesh: NormalizedMesh) => {
-  const { triangles, dimensions } = mesh
+  const { triangles, triangleMaterialNames, dimensions } = mesh
   const bins = buildTriangleBins(triangles, dimensions)
   const occupied = new Set<string>()
   const diagnostics = { rays: dimensions.width * dimensions.depth * raySamples.length, oddRays: 0 }
@@ -308,7 +410,31 @@ const voxelizeMesh = (mesh: NormalizedMesh) => {
     }
   }
   if (occupied.size === 0) throw new Error('OBJ_EMPTY_VOXELS')
-  return { occupied, diagnostics }
+  const materialByCell = new Map<string, string>()
+  if (triangleMaterialNames.some(Boolean)) {
+    for (const key of occupied) {
+      const [x, y, z] = parseCellKey(key)
+      const candidates = bins[z * dimensions.width + x]
+      let closestMaterial: string | undefined
+      let closestDistance = Infinity
+      for (const triangleIndex of candidates) {
+        const material = triangleMaterialNames[triangleIndex]
+        if (!material) continue
+        const triangle = triangles[triangleIndex]
+        const center = {
+          x: (triangle[0].x + triangle[1].x + triangle[2].x) / 3,
+          y: (triangle[0].y + triangle[1].y + triangle[2].y) / 3,
+          z: (triangle[0].z + triangle[1].z + triangle[2].z) / 3,
+        }
+        const distance = (center.x - x - 0.5) ** 2 + (center.y - y - 0.5) ** 2 + (center.z - z - 0.5) ** 2
+        if (distance >= closestDistance) continue
+        closestDistance = distance
+        closestMaterial = material
+      }
+      if (closestMaterial) materialByCell.set(key, closestMaterial)
+    }
+  }
+  return { occupied, diagnostics, materialByCell }
 }
 
 const getNeighbors = (x: number, y: number, z: number) => [
@@ -679,10 +805,30 @@ export const importObjToBrickPlan = (
   onProgress({ stage: 'finalize', progress: 0.94 })
   const prefix = sanitizeId(options.idPrefix)
   const useCurvedEdges = options.edgeStyle === 'curved'
+  const materialPalette = parseMtlPalette(options.materialText)
+  const useMaterials = options.colorMode === 'materials' && materialPalette.size > 0
+  const materialColorCounts = new Map<string, Map<BrickColor, number>>()
   const bricks: PlacedBrick[] = tiled.bricks.map((placement, index) => ({
     id: `piece-${prefix}-${index + 1}`,
     brickId: useCurvedEdges && placement.id === 'slope-1x2' ? 'curved-slope-1x2' : placement.id,
-    color: options.color,
+    color: (() => {
+      if (!useMaterials) return options.color
+      const counts = new Map<string, number>()
+      for (const layerKey of placement.cells) {
+        const [x, z] = layerKey.split(',').map(Number)
+        const material = voxelized.materialByCell.get(cellKey(x, placement.y, z))
+        if (material && materialPalette.has(material)) counts.set(material, (counts.get(material) ?? 0) + 1)
+      }
+      const material = [...counts.entries()].sort((source, target) => target[1] - source[1])[0]?.[0]
+      const sourceColor = material ? materialPalette.get(material) : undefined
+      if (!material || !sourceColor) return options.color
+      const brickId = useCurvedEdges && placement.id === 'slope-1x2' ? 'curved-slope-1x2' : placement.id
+      const mappedColor = mapMaterialColorToBrick(sourceColor, brickId, options.color)
+      const mappedCounts = materialColorCounts.get(material) ?? new Map<BrickColor, number>()
+      mappedCounts.set(mappedColor, (mappedCounts.get(mappedColor) ?? 0) + 1)
+      materialColorCounts.set(material, mappedCounts)
+      return mappedColor
+    })(),
     pose: {
       xStud: placement.x,
       yStud: round(placement.y * layerHeightStuds),
@@ -728,12 +874,19 @@ export const importObjToBrickPlan = (
     componentCount: tiled.componentCount,
     structuralChangeRatio: structuralChanges / Math.max(1, connected.occupied.size),
     oddRayRatio: voxelized.diagnostics.oddRays / Math.max(1, voxelized.diagnostics.rays),
+    materialCount: materialColorCounts.size,
+    materialPalette: [...materialColorCounts.entries()].map(([material, counts]) => ({
+      material,
+      sourceHex: rgbToHex(materialPalette.get(material) ?? brickColorRgb[options.color]),
+      mappedColor: [...counts.entries()].sort((source, target) => target[1] - source[1])[0]?.[0] ?? options.color,
+      brickCount: [...counts.values()].reduce((total, count) => total + count, 0),
+    })).sort((source, target) => target.brickCount - source.brickCount),
     ...shapeMetrics,
   }
   const plan: BuildPlan = {
     id: `plan-obj-${prefix}`,
     title,
-    prompt: `${title} imported OBJ shape-preserving brick model ${profile.label}`,
+    prompt: `${title} imported OBJ shape-preserving ${useMaterials ? 'multi-material ' : ''}brick model ${profile.label}`,
     source: 'template-local',
     bricks,
     steps,
@@ -745,6 +898,7 @@ export const importObjToBrickPlan = (
 export type ObjImportWorkerRequest = {
   type: 'import'
   file: File
+  materialFiles?: File[]
   options: ObjImportOptions
 }
 

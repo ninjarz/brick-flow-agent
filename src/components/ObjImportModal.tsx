@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Box, Check, FileUp, RotateCcw, X } from 'lucide-react'
 import {
   objImportProfiles,
+  type ObjImportColorMode,
   type ObjImportEdgeStyle,
   type ObjImportOrientation,
   type ObjImportProfileId,
@@ -20,6 +21,7 @@ type ObjImportModalProps = {
 }
 
 const maxObjFileBytes = 100 * 1024 * 1024
+const maxMtlFileBytes = 20 * 1024 * 1024
 
 const stripObjExtension = (fileName: string) => fileName.replace(/\.obj$/i, '')
 
@@ -46,10 +48,12 @@ export const ObjImportModal = ({ open, onClose, onImported }: ObjImportModalProp
   const workerRef = useRef<Worker>()
   const importRunRef = useRef(0)
   const [file, setFile] = useState<File>()
+  const [materialFiles, setMaterialFiles] = useState<File[]>([])
   const [title, setTitle] = useState('')
   const [profileId, setProfileId] = useState<ObjImportProfileId>('s')
   const [orientation, setOrientation] = useState<ObjImportOrientation>('upright')
   const [edgeStyle, setEdgeStyle] = useState<ObjImportEdgeStyle>('angular')
+  const [colorMode, setColorMode] = useState<ObjImportColorMode>('single')
   const [brickBudget, setBrickBudget] = useState('2000')
   const [saveToLibrary, setSaveToLibrary] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
@@ -65,10 +69,12 @@ export const ObjImportModal = ({ open, onClose, onImported }: ObjImportModalProp
   useEffect(() => {
     if (open) {
       setFile(undefined)
+      setMaterialFiles([])
       setTitle('')
       setProfileId('s')
       setOrientation('upright')
       setEdgeStyle('angular')
+      setColorMode('single')
       setBrickBudget('2000')
       setSaveToLibrary(false)
       setProgress({ stage: 'parse', progress: 0 })
@@ -123,6 +129,23 @@ export const ObjImportModal = ({ open, onClose, onImported }: ObjImportModalProp
     return t('objImport.error.failed')
   }
 
+  const chooseMaterialFiles = (files: File[]) => {
+    if (isImporting) return
+    setResult(undefined)
+    setError('')
+    const validFiles = files.filter((candidate) => /\.mtl$/i.test(candidate.name))
+    if (validFiles.length !== files.length) {
+      setError(t('objImport.error.mtlType'))
+      return
+    }
+    if (validFiles.reduce((total, candidate) => total + candidate.size, 0) > maxMtlFileBytes) {
+      setError(t('objImport.error.mtlSize'))
+      return
+    }
+    setMaterialFiles(validFiles)
+    if (validFiles.length > 0) setColorMode('materials')
+  }
+
   const startImport = () => {
     if (!file) {
       setError(t('objImport.error.noFile'))
@@ -161,6 +184,7 @@ export const ObjImportModal = ({ open, onClose, onImported }: ObjImportModalProp
       const request: ObjImportWorkerRequest = {
         type: 'import',
         file,
+        materialFiles,
         options: {
           title: title.trim() || stripObjExtension(file.name),
           profileId,
@@ -170,6 +194,7 @@ export const ObjImportModal = ({ open, onClose, onImported }: ObjImportModalProp
           idPrefix: `${stripObjExtension(file.name)}-${Date.now().toString(36)}`,
           edgeStyle,
           maxBricks: brickBudget === 'unlimited' ? undefined : Number(brickBudget),
+          colorMode,
         },
       }
       worker.postMessage(request)
@@ -247,7 +272,33 @@ export const ObjImportModal = ({ open, onClose, onImported }: ObjImportModalProp
               <option value="unlimited">{t('objImport.brickBudget.unlimited')}</option>
             </select>
           </label>
+          <label>
+            <span>{t('objImport.colorMode')}</span>
+            <select value={colorMode} disabled={isImporting} onChange={(event) => { setColorMode(event.target.value as ObjImportColorMode); setResult(undefined) }}>
+              <option value="single">{t('objImport.colorMode.single')}</option>
+              <option value="materials">{t('objImport.colorMode.materials')}</option>
+            </select>
+          </label>
+          <label className="obj-material-file">
+            <span>{t('objImport.materialFiles')}</span>
+            <span className="file-button">
+              <FileUp size={15} />
+              {materialFiles.length > 0
+                ? t('objImport.materialFilesSelected', { count: materialFiles.length })
+                : t('objImport.chooseMaterialFiles')}
+              <input
+                type="file"
+                accept=".mtl,text/plain"
+                multiple
+                disabled={isImporting}
+                onChange={(event) => chooseMaterialFiles(Array.from(event.target.files ?? []))}
+              />
+            </span>
+          </label>
         </div>
+        {colorMode === 'materials' && materialFiles.length === 0 && (
+          <p className="muted obj-material-hint">{t('objImport.materialMissingHint')}</p>
+        )}
 
         <fieldset className="obj-profile-options" disabled={isImporting}>
           <legend>{t('objImport.size')}</legend>
@@ -303,7 +354,20 @@ export const ObjImportModal = ({ open, onClose, onImported }: ObjImportModalProp
               <span><strong>{(((result.stats.frontSilhouetteIoU + result.stats.sideSilhouetteIoU + result.stats.topSilhouetteIoU) / 3) * 100).toFixed(1)}%</strong>{t('objImport.metric.silhouetteIoU')}</span>
               <span><strong>{(result.stats.structuralChangeRatio * 100).toFixed(1)}%</strong>{t('objImport.metric.structuralChange')}</span>
               <span><strong>{result.stats.curvedSlopeCount}</strong>{t('objImport.metric.curvedSlopes')}</span>
+              <span><strong>{result.stats.materialCount}</strong>{t('objImport.metric.materials')}</span>
             </div>
+            {result.stats.materialPalette.length > 0 && (
+              <div className="obj-material-palette" aria-label={t('objImport.materialPalette')}>
+                {result.stats.materialPalette.map((item) => (
+                  <span key={item.material} title={`${item.material}: ${item.sourceHex} → ${item.mappedColor}`}>
+                    <i style={{ background: item.sourceHex }} />
+                    <b>→</b>
+                    <i style={{ background: `var(--brick-${item.mappedColor})` }} />
+                    {item.material} · {item.brickCount}
+                  </span>
+                ))}
+              </div>
+            )}
           </section>
         )}
 

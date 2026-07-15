@@ -19,7 +19,10 @@ workerScope.onmessage = async (event: MessageEvent<ObjImportWorkerRequest>) => {
       workerScope.postMessage({ type: 'error', code: 'OBJ_READ_FAILED' } satisfies ObjImportWorkerResponse)
       return
     }
-    const result = importObjToBrickPlan(text, event.data.options, (progress) => {
+    const materialText = event.data.materialFiles?.length
+      ? (await Promise.all(event.data.materialFiles.map((file) => file.text()))).join('\n')
+      : event.data.options.materialText
+    const result = importObjToBrickPlan(text, { ...event.data.options, materialText }, (progress) => {
       workerScope.postMessage({ type: 'progress', progress } satisfies ObjImportWorkerResponse)
     })
     workerScope.postMessage({ type: 'result', result } satisfies ObjImportWorkerResponse)
