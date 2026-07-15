@@ -1676,6 +1676,37 @@ button.status-pill:hover {
   color: #fff;
 }
 
+.manual-page-gap {
+  min-width: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-weight: 850;
+}
+
+.manual-step-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.manual-step-list-header > strong {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.manual-step-list-header > div {
+  display: flex;
+  gap: 7px;
+}
+
+.manual-step-list-header button {
+  min-height: 32px;
+  padding: 0 10px;
+}
+
 .manual-step-list {
   display: grid;
   gap: 10px;

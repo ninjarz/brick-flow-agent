@@ -11,6 +11,7 @@ import { buildLlmUserPrompt, generateLlmBuildPlan, isLlmConfigComplete, llmSyste
 import { loadLlmConfig, saveLlmConfig } from './lib/llmConfig'
 import { defaultFinishedAssets, hasIndexedDbFinishedAssets, isDefaultFinishedAsset, loadAllDefaultFinishedAssets, loadFinishedAssets, loadFinishedAssetsFromIndexedDb, mergeWithDefaultAssets, saveFinishedAssets } from './lib/finishedAssets'
 import { formatBuildManualHtml, formatBuildManualMarkdown, serializeBuildManual } from './lib/manualSerializer'
+import { getManualPageTabItems, getManualStepPage, manualStepPageSize } from './lib/manualPagination'
 import { countBricks, createBrickCollisionIndex, createPlanSpatialState, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickPlacementDiagnostics, getBrickRawOverlapScore, getConnectedBrickComponents, hasBrickCollision, isBrickAboveGround, makeBrick, repairBuildPlan, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
 import { footprintToWorld, getBrickWorldFrame, normalizeHorizontalStud, normalizeQuarterTurns, normalizeVerticalQuarterTurns, normalizeYStud } from './lib/brickUnits'
 import { useI18n } from './lib/i18n'
@@ -319,6 +320,9 @@ function App() {
   const manualBlockingIssues = useMemo(() => getBlockingBuildPlanIssues(manualIssues), [manualIssues])
   const manualIssueSummary = useMemo(() => summarizeBuildPlanIssues(manualIssues, locale), [locale, manualIssues])
   const selectedManualStep = buildManual?.steps[Math.min(manualStepIndex, Math.max(0, buildManual.steps.length - 1))]
+  const manualStepPage = getManualStepPage(buildManual?.steps.length ?? 0, manualStepIndex)
+  const visibleManualSteps = buildManual?.steps.slice(manualStepPage.start, manualStepPage.end) ?? []
+  const manualPageTabItems = getManualPageTabItems(buildManual?.steps.length ?? 0, manualStepIndex)
   const manualPreviewBricks = useMemo(() => {
     if (!manualSourcePlan || !buildManual || !selectedManualStep) return []
     const cumulativeIds = new Set(
@@ -2126,22 +2130,55 @@ function App() {
                   </button>
                 </div>
                 <div className="manual-page-tabs" aria-label={t('manual.pageTabs')}>
-                  {buildManual.steps.map((step, index) => (
+                  {manualPageTabItems.map((item) => item.kind === 'gap' ? (
+                    <span key={item.key} className="manual-page-gap" aria-hidden="true">…</span>
+                  ) : (
                     <button
-                      key={`${step.stepNumber}-${step.title}`}
+                      key={`${buildManual.steps[item.index].stepNumber}-${buildManual.steps[item.index].title}`}
                       type="button"
-                      className={index === manualStepIndex ? 'active' : ''}
-                      onClick={() => { setIsManualPlaying(false); setManualStepIndex(index) }}
+                      className={item.index === manualStepIndex ? 'active' : ''}
+                      onClick={() => { setIsManualPlaying(false); setManualStepIndex(item.index) }}
                     >
-                      {step.stepNumber}
+                      {buildManual.steps[item.index].stepNumber}
                     </button>
                   ))}
                 </div>
               </section>
             )}
 
+            <div className="manual-step-list-header">
+              <strong>{t('manual.stepRange', {
+                start: manualStepPage.total > 0 ? manualStepPage.start + 1 : 0,
+                end: manualStepPage.end,
+                total: manualStepPage.total,
+              })}</strong>
+              <div>
+                <button
+                  type="button"
+                  disabled={!manualStepPage.hasPrevious}
+                  onClick={() => {
+                    setIsManualPlaying(false)
+                    setManualStepIndex(Math.max(0, manualStepPage.start - manualStepPageSize))
+                  }}
+                >
+                  {t('manual.prevGroup')}
+                </button>
+                <button
+                  type="button"
+                  disabled={!manualStepPage.hasNext}
+                  onClick={() => {
+                    setIsManualPlaying(false)
+                    setManualStepIndex(manualStepPage.end)
+                  }}
+                >
+                  {t('manual.nextGroup')}
+                </button>
+              </div>
+            </div>
             <div className="manual-step-list">
-              {buildManual.steps.map((step, index) => (
+              {visibleManualSteps.map((step, visibleIndex) => {
+                const index = manualStepPage.start + visibleIndex
+                return (
                 <article
                   key={`${step.stepNumber}-${step.title}`}
                   className={`manual-step-card ${index === manualStepIndex ? 'active' : ''}`}
@@ -2180,7 +2217,8 @@ function App() {
                     {step.validation.summary}
                   </p>
                 </article>
-              ))}
+                )
+              })}
             </div>
 
             <div className="manual-actions">
