@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "test": "vitest run",
     "audit:ldraw": "node scripts/audit-ldraw-coverage.mjs",
     "download:ldraw": "node scripts/download-ldraw-parts.mjs",
     "generate:part-colors": "node scripts/generate-official-part-colors.mjs",
@@ -37,6 +38,7 @@
     "globals": "15.14.0",
     "typescript": "5.7.2",
     "typescript-eslint": "8.18.2",
-    "vite": "5.4.11"
+    "vite": "5.4.11",
+    "vitest": "^2.1.8"
   }
 }
