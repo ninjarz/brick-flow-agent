@@ -4,7 +4,7 @@ import { LazyBrickGlyph } from './components/LazyBrickGlyph'
 import { BrickEditorPanel } from './components/BrickEditorPanel'
 import type { BrickSceneViewMode } from './components/BrickScene'
 import { ControlPanel } from './components/ControlPanel'
-import { brickById, brickDefinitions } from './data/basicBricks'
+import { brickById, brickDefinitions, getDefaultBrickColor } from './data/basicBricks'
 import { generateBuildPlan } from './lib/localGenerator'
 import { buildLlmUserPrompt, generateLlmBuildPlan, isLlmConfigComplete, llmSystemPrompt, testLlmConnection } from './lib/llmGenerator'
 import { loadLlmConfig, saveLlmConfig } from './lib/llmConfig'
@@ -1222,7 +1222,7 @@ function App() {
       setGenerationFailure(t('error.inventoryLimit', { name: definition.name, inventory }))
       return
     }
-    const nextBrick = makeBrick(brickId, definition.colors[0], 0, 0, 0)
+    const nextBrick = makeBrick(brickId, getDefaultBrickColor(definition), 0, 0, 0)
     let placedBrick = nextBrick
     setPlan((current) => {
       const nextPlan = {
@@ -1755,7 +1755,13 @@ function App() {
           <div className="brick-count-list">
             {usedBricks.map((brick) => (
               <article key={brick.id}>
-                <LazyBrickGlyph brickId={brick.id} kind={brick.kind} footprint={brick.footprint} className="count-glyph" />
+                <LazyBrickGlyph
+                  brickId={brick.id}
+                  kind={brick.kind}
+                  footprint={brick.footprint}
+                  color={plan.bricks.find((placedBrick) => placedBrick.brickId === brick.id)?.color ?? getDefaultBrickColor(brick)}
+                  className="count-glyph"
+                />
                 <div>
                   <h3>{brick.name}</h3>
                   <p>{t('counts.quantity', { count: brickCounts[brick.id] })}</p>

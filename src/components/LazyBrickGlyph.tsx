@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import type { BrickFootprint, BrickKind } from '../types/bricks'
+import type { BrickColor, BrickFootprint, BrickKind } from '../types/bricks'
 
 const BrickGlyph = lazy(() => import('./BrickGlyph').then((module) => ({ default: module.BrickGlyph })))
 
@@ -7,6 +7,7 @@ type LazyBrickGlyphProps = {
   brickId?: string
   kind: BrickKind
   footprint: BrickFootprint
+  color?: BrickColor
   className?: string
 }
 

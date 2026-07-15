@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { BookOpen, Box, Download, ImageUp, Plus, RotateCcw, Sparkles, Trash2, Upload, X } from 'lucide-react'
-import { brickDefinitions } from '../data/basicBricks'
+import { brickDefinitions, getDefaultBrickColor } from '../data/basicBricks'
 import { PLATE_HEIGHT_WORLD } from '../lib/brickUnits'
 import { countBricks, getBlockingBuildPlanIssues, summarizeBuildPlanIssues, validateBuildPlan, validateBuildPlanBasics } from '../lib/planUtils'
 import { useI18n } from '../lib/i18n'
@@ -272,7 +272,7 @@ export const ControlPanel = ({
                   disabled={isOutOfStock}
                   onClick={() => onAddBrick(brick.id)}
                 >
-                  <LazyBrickGlyph brickId={brick.id} kind={brick.kind} footprint={brick.footprint} className="part-glyph" />
+                  <LazyBrickGlyph brickId={brick.id} kind={brick.kind} footprint={brick.footprint} color={getDefaultBrickColor(brick)} className="part-glyph" />
                   <span className="part-copy">
                     <strong>{brick.name}</strong>
                     <small>{t('control.partNumber', { number: brick.partNumber })}</small>

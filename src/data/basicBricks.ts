@@ -960,3 +960,9 @@ export const brickDefinitions: BrickDefinition[] = fallbackBrickDefinitions
   .map(withUnlimitedInventory)
 
 export const brickById = new Map(brickDefinitions.map((brick) => [brick.id, brick]))
+
+export const getDefaultBrickColor = (definition: BrickDefinition): BrickColor => (
+  definition.pack === 'lego' && definition.colors.includes('gray')
+    ? 'gray'
+    : definition.colors[0]
+)

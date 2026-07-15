@@ -26,7 +26,7 @@ const outfile = join(tempDir, 'entry.mjs')
 const ldrawConfigSource = await readFile(join(workspace, 'public/ldraw/LDConfig.ldr'), 'utf8')
 
 await writeFile(entry, `
-  import { brickById, brickDefinitions } from ${JSON.stringify(`${workspace}/src/data/basicBricks.ts`)};
+  import { brickById, brickDefinitions, getDefaultBrickColor } from ${JSON.stringify(`${workspace}/src/data/basicBricks.ts`)};
   import { officialPartColorsByPartNumber } from ${JSON.stringify(`${workspace}/src/data/officialPartColors.ts`)};
   import { loadAllDefaultFinishedAssets } from ${JSON.stringify(`${workspace}/src/lib/finishedAssets.ts`)};
   import { generateBuildPlan } from ${JSON.stringify(`${workspace}/src/lib/localGenerator.ts`)};
@@ -660,6 +660,11 @@ await writeFile(entry, `
   );
 
   const regressionFailures = [
+    brickDefinitions.some((definition) =>
+      definition.pack === 'lego' && definition.colors.includes('gray') && getDefaultBrickColor(definition) !== 'gray'
+    ) || getDefaultBrickColor(brickById.get('minecraft-grass-block')) !== 'green'
+      ? 'Default preview and creation colors must prefer gray for LEGO while preserving Minecraft semantic colors'
+      : '',
     normalizedInventoryOverrides['brick-2x4'] !== 3 ||
       Object.keys(normalizedInventoryOverrides).length !== 1 ||
       getEffectiveInventory('brick-2x4', 99, normalizedInventoryOverrides) !== 3 ||

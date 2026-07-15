@@ -19,8 +19,8 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three'
-import type { BrickFootprint, BrickKind } from '../types/bricks'
-import { brickById } from '../data/basicBricks'
+import type { BrickColor, BrickFootprint, BrickKind } from '../types/bricks'
+import { brickById, colorHex } from '../data/basicBricks'
 import { createRound2x2AxleBodyGeometry, createRound2x2AxleGrilleBodyGeometry } from '../lib/csgBrickGeometry'
 import { createLoadedLDrawPartGeometry, loadLDrawPartGeometry } from '../lib/ldrawVisualGeometry'
 import {
@@ -37,6 +37,7 @@ type BrickGlyphProps = {
   brickId?: string
   kind: BrickKind
   footprint: BrickFootprint
+  color?: BrickColor
   className?: string
 }
 
@@ -58,9 +59,10 @@ const getCacheKey = (
   kind: BrickKind,
   footprint: BrickFootprint,
   brickId?: string,
+  bodyColor = previewColor,
   ldrawLoaded = false,
 ) =>
-  `${brickId ?? kind}:${kind}:${footprint.widthStuds}x${footprint.depthStuds}x${footprint.heightStuds}:${ldrawLoaded ? 'ldraw' : 'fallback'}`
+  `${brickId ?? kind}:${kind}:${footprint.widthStuds}x${footprint.depthStuds}x${footprint.heightStuds}:${bodyColor}:${ldrawLoaded ? 'ldraw' : 'fallback'}`
 
 const getRenderer = () => {
   if (!sharedRenderer) {
@@ -179,8 +181,8 @@ const addRoundEyeTileBody = (group: Group, brickId: string, height: number) => {
   group.add(iris, pupil)
 }
 
-const addGrilleTile1x2Body = (group: Group, height: number) => {
-  const body = makeMesh(new BoxGeometry(2, height, 1), previewColor, 12)
+const addGrilleTile1x2Body = (group: Group, height: number, bodyColor: string) => {
+  const body = makeMesh(new BoxGeometry(2, height, 1), bodyColor, 12)
   body.position.set(1, height / 2, 0.5)
   group.add(body)
   for (const x of [0.7, 1, 1.3]) {
@@ -238,7 +240,7 @@ const localBrickPosition = (
   zStud - depthStuds / 2,
 )
 
-const buildPreviewGroup = (kind: BrickKind, footprint: BrickFootprint, brickId?: string) => {
+const buildPreviewGroup = (kind: BrickKind, footprint: BrickFootprint, brickId?: string, bodyColor = previewColor) => {
   const width = footprint.widthStuds
   const depth = footprint.depthStuds
   const height = footprint.heightStuds
@@ -246,7 +248,7 @@ const buildPreviewGroup = (kind: BrickKind, footprint: BrickFootprint, brickId?:
   group.rotation.y = modelRotationY
 
   if (kind === 'wheel') {
-    const wheel = makeMesh(new CylinderGeometry(0.48, 0.48, 0.34, 36), previewColor, 18)
+    const wheel = makeMesh(new CylinderGeometry(0.48, 0.48, 0.34, 36), bodyColor, 18)
     const hub = makeMesh(new CylinderGeometry(0.22, 0.22, 0.04, 28), '#eef2f7', 18)
     const wheelGroup = new Group()
     wheelGroup.rotation.z = Math.PI / 2
@@ -257,7 +259,7 @@ const buildPreviewGroup = (kind: BrickKind, footprint: BrickFootprint, brickId?:
   }
 
   if (kind === 'axle') {
-    const axle = makeMesh(new CylinderGeometry(0.09, 0.09, Math.max(width + 2, 3), 18), previewColor, 12)
+    const axle = makeMesh(new CylinderGeometry(0.09, 0.09, Math.max(width + 2, 3), 18), bodyColor, 12)
     axle.rotation.z = Math.PI / 2
     group.add(axle)
     return group
@@ -271,13 +273,13 @@ const buildPreviewGroup = (kind: BrickKind, footprint: BrickFootprint, brickId?:
 
     for (let index = 0; index < 4; index += 1) {
       const angle = (index * Math.PI) / 2
-      const blade = makeMesh(new BoxGeometry(bladeLength, bladeThickness, bladeWidth), previewColor, 12)
+      const blade = makeMesh(new BoxGeometry(bladeLength, bladeThickness, bladeWidth), bodyColor, 12)
       blade.position.set(Math.cos(angle) * bladeOffset, 0, Math.sin(angle) * bladeOffset)
       blade.rotation.y = -angle
       group.add(blade)
     }
 
-    const hub = makeMesh(new CylinderGeometry(0.46, 0.46, height, 36), previewColor, 18)
+    const hub = makeMesh(new CylinderGeometry(0.46, 0.46, height, 36), bodyColor, 18)
     const hole = makeMesh(new TorusGeometry(0.24, 0.055, 12, 32), '#64748b', 16)
     hole.rotation.x = Math.PI / 2
     hole.position.y = height / 2 + 0.012
@@ -287,23 +289,23 @@ const buildPreviewGroup = (kind: BrickKind, footprint: BrickFootprint, brickId?:
 
   if (brickId === 'plate-bar-end-1x2' || brickId === 'plate-clip-open-1x1') {
     const brickGroup = new Group()
-    const body = makeMesh(new BoxGeometry(width, height, depth), previewColor, 12)
+    const body = makeMesh(new BoxGeometry(width, height, depth), bodyColor, 12)
     brickGroup.add(body)
 
     if (brickId === 'plate-bar-end-1x2') {
-      const handle = makeMesh(new CylinderGeometry(0.1, 0.1, 0.72, 18), previewColor, 14)
+      const handle = makeMesh(new CylinderGeometry(0.1, 0.1, 0.72, 18), bodyColor, 14)
       handle.position.copy(localBrickPosition(1.5, height / 2, -0.35, width, height, depth))
       handle.rotation.z = Math.PI / 2
-      const neck = makeMesh(new BoxGeometry(0.35, 0.16, 0.34), previewColor, 12)
+      const neck = makeMesh(new BoxGeometry(0.35, 0.16, 0.34), bodyColor, 12)
       neck.position.copy(localBrickPosition(1.22, height / 2, -0.18, width, height, depth))
       brickGroup.add(handle, neck)
     } else {
       for (const xOffset of [-0.18, 0.18]) {
-        const jaw = makeMesh(new BoxGeometry(0.18, 0.18, 0.52), previewColor, 12)
+        const jaw = makeMesh(new BoxGeometry(0.18, 0.18, 0.52), bodyColor, 12)
         jaw.position.copy(localBrickPosition(0.5 + xOffset, height / 2, 1.05, width, height, depth))
         brickGroup.add(jaw)
       }
-      const bridge = makeMesh(new CylinderGeometry(0.12, 0.12, 0.52, 18), previewColor, 14)
+      const bridge = makeMesh(new CylinderGeometry(0.12, 0.12, 0.52, 18), bodyColor, 14)
       bridge.position.copy(localBrickPosition(0.5, height / 2, 1.22, width, height, depth))
       bridge.rotation.z = Math.PI / 2
       brickGroup.add(bridge)
@@ -311,7 +313,7 @@ const buildPreviewGroup = (kind: BrickKind, footprint: BrickFootprint, brickId?:
 
     for (let studX = 0; studX < width; studX += 1) {
       for (let studZ = 0; studZ < depth; studZ += 1) {
-        const stud = makeMesh(new CylinderGeometry(studRadius, studRadius, studHeight, 24), previewColor, 18)
+        const stud = makeMesh(new CylinderGeometry(studRadius, studRadius, studHeight, 24), bodyColor, 18)
         stud.position.copy(localBrickPosition(studX + 0.5, height + studHeight / 2, studZ + 0.5, width, height, depth))
         brickGroup.add(stud)
       }
@@ -324,9 +326,9 @@ const buildPreviewGroup = (kind: BrickKind, footprint: BrickFootprint, brickId?:
   if (brickId === 'brick-round-2x2-axle' || brickId === 'plate-round-2x2-axle' || brickId === 'brick-round-2x2-axle-grille' || brickId === 'cone-1x1-groove') {
     const brickGroup = new Group()
     if (brickId === 'brick-round-2x2-axle' || brickId === 'plate-round-2x2-axle' || brickId === 'brick-round-2x2-axle-grille') {
-      addRound2x2AxleBody(brickGroup, previewColor, height, brickId === 'brick-round-2x2-axle-grille')
+      addRound2x2AxleBody(brickGroup, bodyColor, height, brickId === 'brick-round-2x2-axle-grille')
     } else {
-      addGroovedCone1x1Body(brickGroup, previewColor, height)
+      addGroovedCone1x1Body(brickGroup, bodyColor, height)
     }
 
     group.add(brickGroup)
@@ -336,9 +338,9 @@ const buildPreviewGroup = (kind: BrickKind, footprint: BrickFootprint, brickId?:
   if (brickId === 'plate-jumper-2x2' || brickId === 'plate-jumper-1x2') {
     const brickGroup = new Group()
     brickGroup.position.set(-width / 2, -height / 2, -depth / 2)
-    const body = makeMesh(new BoxGeometry(width, height, depth), previewColor, 12)
+    const body = makeMesh(new BoxGeometry(width, height, depth), bodyColor, 12)
     body.position.set(width / 2, height / 2, depth / 2)
-    const stud = makeMesh(new CylinderGeometry(studRadius, studRadius, studHeight, 24), previewColor, 18)
+    const stud = makeMesh(new CylinderGeometry(studRadius, studRadius, studHeight, 24), bodyColor, 18)
     stud.position.set(width / 2, height + studHeight / 2, depth / 2)
     brickGroup.add(body, stud)
     group.add(brickGroup)
@@ -356,7 +358,7 @@ const buildPreviewGroup = (kind: BrickKind, footprint: BrickFootprint, brickId?:
   if (brickId === 'tile-grille-1x2') {
     const brickGroup = new Group()
     brickGroup.position.set(-width / 2, -height / 2, -depth / 2)
-    addGrilleTile1x2Body(brickGroup, height)
+    addGrilleTile1x2Body(brickGroup, height, bodyColor)
     group.add(brickGroup)
     return group
   }
@@ -379,12 +381,12 @@ const buildPreviewGroup = (kind: BrickKind, footprint: BrickFootprint, brickId?:
     }
 
     const showEdges = brickId !== 'curved-slope-1x2' && brickId !== 'slope-curved-3x1'
-    const body = makeMesh(geometry, previewColor, 12, showEdges, showEdges)
+    const body = makeMesh(geometry, bodyColor, 12, showEdges, showEdges)
     body.position.set(width / 2, height / 2, depth / 2)
     brickGroup.add(body)
 
     if (brickId === 'slope-1x2') {
-      const stud = makeMesh(new CylinderGeometry(studRadius, studRadius, studHeight, 24), previewColor, 18)
+      const stud = makeMesh(new CylinderGeometry(studRadius, studRadius, studHeight, 24), bodyColor, 18)
       stud.position.set(width - 0.5, height + studHeight / 2, depth / 2)
       brickGroup.add(stud)
     } else if (brickId === 'curved-slope-1x2') {
@@ -400,7 +402,7 @@ const buildPreviewGroup = (kind: BrickKind, footprint: BrickFootprint, brickId?:
       )
       recess.rotation.x = Math.PI / 2
       recess.position.set(width - 0.5, platformTopY + 0.01, depth / 2)
-      const stud = makeMesh(new CylinderGeometry(studRadius, studRadius, studHeight * 0.6, 24), previewColor, 18)
+      const stud = makeMesh(new CylinderGeometry(studRadius, studRadius, studHeight * 0.6, 24), bodyColor, 18)
       stud.position.set(width - 0.5, platformTopY + studHeight * 0.3, depth / 2)
       brickGroup.add(outline)
       brickGroup.add(recess)
@@ -428,7 +430,7 @@ const buildPreviewGroup = (kind: BrickKind, footprint: BrickFootprint, brickId?:
       : kind === 'slope'
         ? makeSlopeGeometry(width, height, depth)
         : new BoxGeometry(width, height, depth),
-    previewColor,
+    bodyColor,
     kind === 'round' ? 20 : 12,
     kind === 'slope',
   )
@@ -436,14 +438,14 @@ const buildPreviewGroup = (kind: BrickKind, footprint: BrickFootprint, brickId?:
   brickGroup.add(body)
 
   if (kind === 'cone') {
-    const stud = makeMesh(new CylinderGeometry(studRadius, studRadius, studHeight, 24), previewColor, 18)
+    const stud = makeMesh(new CylinderGeometry(studRadius, studRadius, studHeight, 24), bodyColor, 18)
     stud.position.set(width / 2, height + studHeight / 2, depth / 2)
     brickGroup.add(stud)
   } else if (kind !== 'tile' && kind !== 'block') {
     for (let studX = 0; studX < width; studX += 1) {
       for (let studZ = 0; studZ < depth; studZ += 1) {
         if (kind === 'slope' && studZ !== depth - 1) continue
-        const stud = makeMesh(new CylinderGeometry(studRadius, studRadius, studHeight, 24), previewColor, 18)
+        const stud = makeMesh(new CylinderGeometry(studRadius, studRadius, studHeight, 24), bodyColor, 18)
         stud.position.set(studX + 0.5, height + studHeight / 2, studZ + 0.5)
         brickGroup.add(stud)
       }
@@ -471,9 +473,10 @@ const renderGlyph = (
   kind: BrickKind,
   footprint: BrickFootprint,
   brickId?: string,
+  bodyColor = previewColor,
   ldrawLoaded = false,
 ) => {
-  const cacheKey = getCacheKey(kind, footprint, brickId, ldrawLoaded)
+  const cacheKey = getCacheKey(kind, footprint, brickId, bodyColor, ldrawLoaded)
   const cached = imageCache.get(cacheKey)
   if (cached) return cached
 
@@ -503,10 +506,10 @@ const renderGlyph = (
   if (ldrawLoaded && ldrawGeometry) {
     const group = new Group()
     group.rotation.y = modelRotationY
-    group.add(makeMesh(ldrawGeometry, previewColor, 12, false, true))
+    group.add(makeMesh(ldrawGeometry, bodyColor, 12, false, true))
     scene.add(group)
   } else {
-    scene.add(buildPreviewGroup(kind, footprint, brickId))
+    scene.add(buildPreviewGroup(kind, footprint, brickId, bodyColor))
   }
 
   const renderer = getRenderer()
@@ -518,25 +521,26 @@ const renderGlyph = (
   return url
 }
 
-export const BrickGlyph = ({ brickId, kind, footprint, className }: BrickGlyphProps) => {
-  const [imageUrl, setImageUrl] = useState(() => imageCache.get(getCacheKey(kind, footprint, brickId)))
+export const BrickGlyph = ({ brickId, kind, footprint, color, className }: BrickGlyphProps) => {
+  const bodyColor = color ? colorHex[color] : previewColor
+  const [imageUrl, setImageUrl] = useState(() => imageCache.get(getCacheKey(kind, footprint, brickId, bodyColor)))
 
   useEffect(() => {
     let cancelled = false
-    setImageUrl(renderGlyph(kind, footprint, brickId))
+    setImageUrl(renderGlyph(kind, footprint, brickId, bodyColor))
     const ldrawDefinition = brickId ? brickById.get(brickId) : undefined
     if (!ldrawDefinition) return () => {
       cancelled = true
     }
 
     loadLDrawPartGeometry(ldrawDefinition.partNumber, ldrawDefinition.footprint).then(() => {
-      if (!cancelled) setImageUrl(renderGlyph(kind, footprint, brickId, true))
+      if (!cancelled) setImageUrl(renderGlyph(kind, footprint, brickId, bodyColor, true))
     })
 
     return () => {
       cancelled = true
     }
-  }, [brickId, footprint, kind])
+  }, [bodyColor, brickId, footprint, kind])
 
   return (
     <span className={className} aria-hidden="true">
