@@ -44,6 +44,7 @@ const isInventoryLimited = (inventory: number) => Number.isFinite(inventory)
 const formatInventory = (inventory: number) => isInventoryLimited(inventory) ? String(inventory) : '∞'
 const partPackOptions: BrickPack[] = ['lego', 'minecraft']
 const validationDebounceMs = 120
+const initialVisiblePartCount = 12
 
 export const ControlPanel = ({
   engineStatusLabel,
@@ -74,6 +75,7 @@ export const ControlPanel = ({
   const [partQuery, setPartQuery] = useState('')
   const [partKindFilter, setPartKindFilter] = useState('all')
   const [partPackFilter, setPartPackFilter] = useState<BrickPack>('lego')
+  const [visiblePartLimit, setVisiblePartLimit] = useState(initialVisiblePartCount)
   const [backgroundValidation, setBackgroundValidation] = useState<{
     plan: BuildPlan
     issues: ReturnType<typeof validateBuildPlan>
@@ -151,6 +153,12 @@ export const ControlPanel = ({
       return matchesKind && matchesQuery
     })
   }, [packBrickDefinitions, partKindFilter, partQuery, t])
+  const renderedBrickDefinitions = visibleBrickDefinitions.slice(0, visiblePartLimit)
+  const remainingPartCount = Math.max(0, visibleBrickDefinitions.length - renderedBrickDefinitions.length)
+
+  useEffect(() => {
+    setVisiblePartLimit(initialVisiblePartCount)
+  }, [partKindFilter, partPackFilter, partQuery])
 
   return (
     <aside className="control-panel">
@@ -256,8 +264,16 @@ export const ControlPanel = ({
             )}
           </div>
         </div>
+        {visibleBrickDefinitions.length > 0 && (
+          <div className="parts-list-summary">
+            {t('control.visibleParts', {
+              visible: renderedBrickDefinitions.length,
+              total: visibleBrickDefinitions.length,
+            })}
+          </div>
+        )}
         <div className="parts-list">
-          {visibleBrickDefinitions.map((brick) => {
+          {renderedBrickDefinitions.map((brick) => {
             const usedCount = brickCounts[brick.id] ?? 0
             const hasInventoryOverride = Object.prototype.hasOwnProperty.call(inventoryOverrides, brick.id)
             const inventory = inventoryOverrides[brick.id] ?? brick.inventory
@@ -303,6 +319,17 @@ export const ControlPanel = ({
           })}
           {packBrickDefinitions.length === 0 && <p className="muted">{t('control.noPackParts')}</p>}
           {packBrickDefinitions.length > 0 && visibleBrickDefinitions.length === 0 && <p className="muted">{t('control.noParts')}</p>}
+          {remainingPartCount > 0 && (
+            <button
+              className="parts-load-more"
+              type="button"
+              onClick={() => setVisiblePartLimit((current) => current + initialVisiblePartCount)}
+            >
+              <Plus size={14} />
+              {t('control.showMoreParts', { count: Math.min(initialVisiblePartCount, remainingPartCount) })}
+              <small>{t('control.remainingParts', { count: remainingPartCount })}</small>
+            </button>
+          )}
         </div>
       </section>
 
