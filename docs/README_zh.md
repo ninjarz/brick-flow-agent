@@ -61,7 +61,20 @@ npm run build                # 类型检查并构建
 npm run lint                 # 运行 ESLint
 npm run validate:builds      # 校验默认素材和回归用例
 npm run profile:performance  # 性能分析
+npm run generate:obj         # 重新生成 OBJ 默认素材
 ```
+
+### OBJ 转积木素材
+
+OBJ 生成器读取 `.ignored/objs/stanford-bunny.obj` 和 `.ignored/objs/armadillo.obj`，并写入 `src/data/generatedObjAssets.ts`。源网格因为体积和授权来源不进入 Git。
+
+```bash
+npm run generate:obj
+node scripts/generate-obj-assets.mjs --dry-run
+node scripts/generate-obj-assets.mjs --dry-run --source=stanford-bunny --profile=m
+```
+
+流水线包含四点采样实体体素化、孤立网格噪点清理、最少桥接与支撑、不可连接边界裁剪、适合位置的定向斜坡替换，以及连接组件感知的逐层分砖。控制台指标会输出体素与三视图轮廓 IoU、体素尺寸、形状改动、未解决支撑、连接组件、斜坡/零件数量和异常扫描射线比例。默认发布档位会按源模型进行质量筛选，实验档仍可通过显式传入 `--source` 和 `--profile` 生成。
 
 ## 🤖 LLM 配置
 

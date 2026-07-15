@@ -66,7 +66,20 @@ npm run build                # type-check and build
 npm run lint                 # run ESLint
 npm run validate:builds      # validate default assets and regression cases
 npm run profile:performance  # profile performance-sensitive routines
+npm run generate:obj         # rebuild OBJ-derived default assets
 ```
+
+### OBJ to brick assets
+
+The OBJ generator reads `.ignored/objs/stanford-bunny.obj` and `.ignored/objs/armadillo.obj`, then writes `src/data/generatedObjAssets.ts`. Source meshes stay outside Git because of their size and licensing provenance.
+
+```bash
+npm run generate:obj
+node scripts/generate-obj-assets.mjs --dry-run
+node scripts/generate-obj-assets.mjs --dry-run --source=stanford-bunny --profile=m
+```
+
+The pipeline uses four-sample solid voxelization, removes isolated mesh noise, adds only minimal bridge/support cells, prunes boundary voxels that cannot be connected, replaces suitable stair-step boundaries with oriented slopes, and tiles each layer with a connectivity-aware brick scorer. Its console metrics include voxel and multi-view silhouette IoU, voxel dimensions, shape modifications, unresolved supports, connected components, slope/brick counts, and odd scan-ray ratio. Default publishing is quality-gated per source; experimental profiles remain available through explicit `--source` and `--profile` arguments.
 
 ## 🤖 LLM Configuration
 

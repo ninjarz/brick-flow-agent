@@ -469,7 +469,7 @@ const CameraFrame = ({ centerX, centerY, centerZ, size, frameKey }: {
 
   useEffect(() => {
     const { centerX, centerY, centerZ, size } = frameRef.current
-    const distance = Math.max(9, size * 0.72)
+    const distance = Math.max(9, size)
     camera.position.set(centerX + distance * 0.35, centerY + distance * 0.62 + 4, centerZ + distance * 1.08)
     camera.near = 0.1
     camera.far = Math.max(100, distance * 8)
@@ -1445,22 +1445,28 @@ export const BrickScene = ({
     const brickBounds = frameBricks.map(getBrickBounds).filter((bounds) => Boolean(bounds))
     const modelMinX = Math.min(0, ...brickBounds.map((bounds) => bounds.minX))
     const modelMaxX = Math.max(0, ...brickBounds.map((bounds) => bounds.maxX))
+    const modelMinY = Math.min(0, ...brickBounds.map((bounds) => bounds.minY))
+    const modelMaxY = Math.max(0, ...brickBounds.map((bounds) => bounds.maxY))
     const modelMinZ = Math.min(0, ...brickBounds.map((bounds) => bounds.minZ))
     const modelMaxZ = Math.max(0, ...brickBounds.map((bounds) => bounds.maxZ))
     const minX = Math.min(defaultGridExtent * -1, modelMinX - gridPadding)
     const maxX = Math.max(defaultGridExtent, modelMaxX + gridPadding)
-    const maxY = Math.max(3, ...brickBounds.map((bounds) => bounds.maxY))
     const minZ = Math.min(defaultGridExtent * -1, modelMinZ - gridPadding)
     const maxZ = Math.max(defaultGridExtent, modelMaxZ + gridPadding)
     const size = Math.ceil(Math.max(maxX - minX, maxZ - minZ))
-    const cameraSize = Math.max(8, Math.max(modelMaxX - modelMinX, modelMaxZ - modelMinZ) + gridPadding * 2)
+    const modelHeight = modelMaxY - modelMinY
+    const cameraSize = Math.max(
+      8,
+      Math.max(modelMaxX - modelMinX, modelMaxZ - modelMinZ) + gridPadding * 2,
+      modelHeight * 1.4 + gridPadding * 2,
+    )
 
     return {
       size,
       cameraSize,
       centerX: (minX + maxX) / 2,
       modelCenterX: (modelMinX + modelMaxX) / 2,
-      centerY: Math.max(1, maxY / 6),
+      centerY: Math.max(1, (modelMinY + modelMaxY) / 2),
       centerZ: (minZ + maxZ) / 2,
       modelCenterZ: (modelMinZ + modelMaxZ) / 2,
     }

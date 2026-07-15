@@ -39,7 +39,7 @@ await writeFile(entry, `
   import { parseLDrawColorDefinitions } from ${JSON.stringify(`${workspace}/src/lib/ldrawColors.ts`)};
   import { loadLDrawGeneratedVisual } from ${JSON.stringify(`${workspace}/src/lib/ldrawGeneratedVisualLoader.ts`)};
   import { getBrickLocalBounds, getBrickWorldBounds } from ${JSON.stringify(`${workspace}/src/lib/ldrawBounds.ts`)};
-  import { getBrickStructuralCells, getBrickWorldSupportBounds } from ${JSON.stringify(`${workspace}/src/lib/structuralGrid.ts`)};
+  import { getBrickInteractionStructuralCells, getBrickStructuralCells, getBrickWorldSupportBounds } from ${JSON.stringify(`${workspace}/src/lib/structuralGrid.ts`)};
   import {
     createCurvedSlope1x2Geometry,
     createCurvedSlope1x2OutlineGeometry,
@@ -144,13 +144,7 @@ await writeFile(entry, `
     'finished-obj-stanford-bunny-s',
     'finished-obj-stanford-bunny-m',
     'finished-obj-stanford-bunny-l',
-    'finished-obj-stanford-bunny-xl',
-    'finished-obj-stanford-bunny-xxl',
     'finished-obj-armadillo-s',
-    'finished-obj-armadillo-m',
-    'finished-obj-armadillo-l',
-    'finished-obj-armadillo-xl',
-    'finished-obj-armadillo-xxl',
   ]);
   const expectedDefaultAssetPieceCounts = {
     'finished-ghost': 26,
@@ -476,6 +470,19 @@ await writeFile(entry, `
   const openPropellerDefinition = getDefinition('propeller-4-blade-open');
   const closedPropellerDefinition = getDefinition('propeller-4-blade-closed');
   const openPropellerLocalBounds = getBrickLocalBounds(openPropellerDefinition);
+  const structuralCellVolume = (cell) =>
+    (cell.maxX - cell.minX) * (cell.maxY - cell.minY) * (cell.maxZ - cell.minZ);
+  const openPropellerDetailedCollisionCells = getBrickStructuralCells(openPropellerDefinition)
+    .filter((cell) => cell.kind === 'solid' || cell.kind === 'studsocket');
+  const openPropellerInteractionCells = getBrickInteractionStructuralCells(openPropellerDefinition);
+  const openPropellerDetailedCollisionVolume = openPropellerDetailedCollisionCells
+    .reduce((total, cell) => total + structuralCellVolume(cell), 0);
+  const openPropellerInteractionVolume = openPropellerInteractionCells
+    .reduce((total, cell) => total + structuralCellVolume(cell), 0);
+  const openPropellerFootprintVolume =
+    openPropellerDefinition.footprint.widthStuds *
+    openPropellerDefinition.footprint.heightStuds *
+    openPropellerDefinition.footprint.depthStuds;
   const closedPropellerFlippedBounds = getBrickWorldBounds(
     closedPropellerDefinition,
     { xStud: 0, yStud: 0, zStud: 0, rotationQuarterTurns: 0, verticalQuarterTurns: 2 },
@@ -523,6 +530,20 @@ await writeFile(entry, `
       : '',
     openPropellerDefinition.footprint.heightStuds < openPropellerLocalBounds.maxY - 0.000001
       ? '2479 propeller footprint height must cover its LDraw hub and blade geometry'
+      : '',
+    openPropellerInteractionCells.length <= 1
+      ? '2479 propeller interaction shape must not collapse into one bounding box'
+      : '',
+    openPropellerInteractionCells.length >= openPropellerDetailedCollisionCells.length
+      ? '2479 propeller interaction voxels should be compacted into fewer exact cuboids'
+      : '',
+    !approx(openPropellerInteractionVolume, openPropellerDetailedCollisionVolume)
+      ? '2479 compacted interaction cuboids must preserve detailed collision volume'
+      : '',
+    openPropellerInteractionCells.some((cell) =>
+      structuralCellVolume(cell) >= openPropellerFootprintVolume - 0.000001
+    )
+      ? '2479 propeller interaction shape must preserve empty space inside its footprint'
       : '',
     closedPropellerFlippedBounds.minY < -0.000001
       ? '67737 vertical 180-degree rotation at ground level must not render below ground'

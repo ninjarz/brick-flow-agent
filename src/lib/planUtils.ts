@@ -16,6 +16,7 @@ import { PlanSpatialState, type WorldBrickConnector } from './planSpatialState'
 import {
   createStructuralCollisionIndex,
   doBrickStructuralCellsCollide,
+  getStructuralCacheVersion,
   getBrickWorldSupportBounds,
   getBrickWorldSupportFaces,
   getStructuralCollisionCandidateIds,
@@ -394,6 +395,7 @@ const hasVerticalLoadContact = (
   boundsById?: Map<string, NonNullable<ReturnType<typeof getBrickBounds>>>,
 ) => {
   const cacheKey = [
+    getStructuralCacheVersion(),
     getBrickPoseGeometryCacheKey(brick),
     getBrickPoseGeometryCacheKey(support),
   ].join('>')

@@ -20,11 +20,23 @@ const worldSupportFaceCache = new Map<string, WorldStructuralSupportFaces>()
 const worldSupportBoundsCache = new Map<string, BrickBounds | undefined>()
 const worldCollisionCellBoxCache = new Map<string, WorldStructuralCellBox[]>()
 const worldCollisionKeyCache = new Map<string, Set<string>>()
+let structuralCacheVersion = 0
 
 onLDrawGeneratedVisualLoaded(() => {
+  structuralCacheVersion += 1
   structuralCellCache.clear()
+  interactionStructuralCellCache.clear()
+  localSupportBoundsCache.clear()
+  localSupportFaceCache.clear()
   worldStructuralCellBoxCache.clear()
+  worldSupportCellBoxCache.clear()
+  worldSupportFaceCache.clear()
+  worldSupportBoundsCache.clear()
+  worldCollisionCellBoxCache.clear()
+  worldCollisionKeyCache.clear()
 })
+
+export const getStructuralCacheVersion = () => structuralCacheVersion
 
 export type StructuralCellKind = 'solid' | 'stud' | 'socket' | 'studsocket' | 'enterable'
 export type StructuralEntryDirection = 'top' | 'bottom' | 'left' | 'right' | 'front' | 'back'
@@ -303,12 +315,88 @@ export const getBrickStructuralCells = (definition: BrickDefinition): Structural
   return cells
 }
 
-const getBrickInteractionStructuralCells = (definition: BrickDefinition) => {
+type StructuralMergeAxis = 'x' | 'y' | 'z'
+
+const getStructuralMergeGroupKey = (cell: StructuralCell, axis: StructuralMergeAxis) => {
+  const metadata = `${cell.kind}:${cell.accepts?.join(',') ?? ''}:${cell.entersFrom?.join(',') ?? ''}`
+  if (axis === 'x') return `${metadata}:${cell.minY},${cell.maxY}:${cell.minZ},${cell.maxZ}`
+  if (axis === 'y') return `${metadata}:${cell.minX},${cell.maxX}:${cell.minZ},${cell.maxZ}`
+  return `${metadata}:${cell.minX},${cell.maxX}:${cell.minY},${cell.maxY}`
+}
+
+const getStructuralAxisStart = (cell: StructuralCell, axis: StructuralMergeAxis) =>
+  axis === 'x' ? cell.minX : axis === 'y' ? cell.minY : cell.minZ
+
+const getStructuralAxisEnd = (cell: StructuralCell, axis: StructuralMergeAxis) =>
+  axis === 'x' ? cell.maxX : axis === 'y' ? cell.maxY : cell.maxZ
+
+const extendStructuralCell = (
+  cell: StructuralCell,
+  next: StructuralCell,
+  axis: StructuralMergeAxis,
+): StructuralCell => {
+  if (axis === 'x') return { ...cell, maxX: next.maxX }
+  if (axis === 'y') return { ...cell, maxY: next.maxY }
+  return { ...cell, maxZ: next.maxZ }
+}
+
+const mergeStructuralCellsAlongAxis = (
+  cells: StructuralCell[],
+  axis: StructuralMergeAxis,
+) => {
+  const groups = new Map<string, StructuralCell[]>()
+
+  for (const cell of cells) {
+    const key = getStructuralMergeGroupKey(cell, axis)
+    const group = groups.get(key)
+    if (group) group.push(cell)
+    else groups.set(key, [cell])
+  }
+
+  const merged: StructuralCell[] = []
+  for (const group of groups.values()) {
+    group.sort((source, target) => getStructuralAxisStart(source, axis) - getStructuralAxisStart(target, axis))
+    let current = group[0]
+
+    for (let index = 1; index < group.length; index += 1) {
+      const next = group[index]
+      if (Math.abs(getStructuralAxisEnd(current, axis) - getStructuralAxisStart(next, axis)) <= STRUCTURAL_OVERLAP_TOLERANCE) {
+        current = extendStructuralCell(current, next, axis)
+      } else {
+        merged.push(current)
+        current = next
+      }
+    }
+
+    if (current) merged.push(current)
+  }
+
+  return merged
+}
+
+const compactStructuralCells = (cells: StructuralCell[]) => {
+  const passthroughCells = cells.filter((cell) => cell.kind !== 'solid')
+  let solidCells = cells.filter((cell) => cell.kind === 'solid')
+  let previousCount = -1
+
+  while (solidCells.length !== previousCount) {
+    previousCount = solidCells.length
+    solidCells = mergeStructuralCellsAlongAxis(solidCells, 'x')
+    solidCells = mergeStructuralCellsAlongAxis(solidCells, 'z')
+    solidCells = mergeStructuralCellsAlongAxis(solidCells, 'y')
+  }
+
+  return [...solidCells, ...passthroughCells]
+}
+
+export const getBrickInteractionStructuralCells = (definition: BrickDefinition) => {
   const cacheKey = makeStructuralDefinitionCacheKey(definition)
   const cached = interactionStructuralCellCache.get(cacheKey)
   if (cached) return cached
 
-  const cells = makeDefaultStructuralCells(definition)
+  const cells = compactStructuralCells(
+    getBrickStructuralCells(definition).filter(structuralCellBlocksCollision),
+  )
   interactionStructuralCellCache.set(cacheKey, cells)
   return cells
 }
