@@ -5,22 +5,23 @@ import { BrickEditorPanel } from './components/BrickEditorPanel'
 import type { BrickSceneViewMode } from './components/BrickScene'
 import { ControlPanel } from './components/ControlPanel'
 import { brickById, brickDefinitions, getDefaultBrickColor } from './data/basicBricks'
+import { findNearestOpenBrickGroupAround, rotationRepositionSearchRadiusStuds, type StationaryPlanSpatialData } from './lib/brickGroupPlacement'
 import { generateBuildPlan } from './lib/localGenerator'
 import { buildLlmUserPrompt, generateLlmBuildPlan, isLlmConfigComplete, llmSystemPrompt, testLlmConnection } from './lib/llmGenerator'
 import { loadLlmConfig, saveLlmConfig } from './lib/llmConfig'
 import { defaultFinishedAssets, hasIndexedDbFinishedAssets, isDefaultFinishedAsset, loadAllDefaultFinishedAssets, loadFinishedAssets, loadFinishedAssetsFromIndexedDb, mergeWithDefaultAssets, saveFinishedAssets } from './lib/finishedAssets'
 import { formatBuildManualHtml, formatBuildManualMarkdown, serializeBuildManual } from './lib/manualSerializer'
-import { isValidImportedPose, normalizeImportedPose, tryNormalizeImportedPlan } from './lib/planImport'
-import { countBricks, createBrickCollisionIndex, createPlanSpatialState, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickBounds, getBrickPlacementDiagnostics, getBrickRawOverlapScore, getConnectedBrickComponents, getNearestHorizontalSearchOffsets, hasBrickCollision, isBrickAboveGround, makeBrick, repairBuildPlan, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
-import { WORLD_SNAP_STEP_STUDS, footprintToWorld, getBrickWorldFrame, normalizeHorizontalStud, normalizeQuarterTurns, normalizeVerticalQuarterTurns, normalizeYStud } from './lib/brickUnits'
+import { countBricks, createBrickCollisionIndex, createPlanSpatialState, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickPlacementDiagnostics, getBrickRawOverlapScore, getConnectedBrickComponents, hasBrickCollision, isBrickAboveGround, makeBrick, repairBuildPlan, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
+import { footprintToWorld, getBrickWorldFrame, normalizeHorizontalStud, normalizeQuarterTurns, normalizeVerticalQuarterTurns, normalizeYStud } from './lib/brickUnits'
 import { useI18n } from './lib/i18n'
 import type { ObjImportResult } from './lib/objImport'
+import { parseImportedPlan, type ImportText } from './lib/planFileIO'
 import { prepareReferenceImage } from './lib/referenceImage'
-import { indexedDbStorageMarker, isIndexedDbStorageMarker, localStorageComfortLimit, readLargeStoredValue, removeLargeStoredValue, writeLargeStoredValue } from './lib/browserStorage'
 import { simplifiedBrickThreshold } from './lib/scenePerformance'
 import { analyzeBuildStability } from './lib/stabilityAnalysis'
 import { formatLDrawPlan, parseLDrawPlan } from './lib/ldrawPlan'
 import { getEffectiveInventory, loadInventoryOverrides, saveInventoryOverrides } from './lib/userInventory'
+import { clearWorkspaceDraft, hasIndexedDbWorkspaceDraft, loadWorkspaceDraft, loadWorkspaceDraftFromIndexedDb, saveWorkspaceDraft } from './lib/workspaceDraft'
 import type { BuildPlan, FinishedAsset, LlmConfig, PlacedBrick } from './types/bricks'
 import './App.css'
 
@@ -43,24 +44,6 @@ type LocalizedFinishedAsset = {
   displayPrompt: string
   displayPlan: BuildPlan
 }
-type ImportText = {
-  importedPlanTitle: string
-  importedStepTitle: (stepNumber: number) => string
-}
-
-type StationaryPlanSpatialData = {
-  excludedKey: string
-  stationaryBricks: PlacedBrick[]
-  spatialState: ReturnType<typeof createPlanSpatialState>
-}
-
-const defaultImportText: ImportText = {
-  importedPlanTitle: '导入的手册方案',
-  importedStepTitle: (stepNumber) => `第 ${stepNumber} 步`,
-}
-
-const ROTATION_REPOSITION_SEARCH_RADIUS_STUDS = 5
-const ROTATION_REPOSITION_BOUNDS_TOLERANCE = 0.000001
 const workspaceDraftSaveDebounceMs = 120
 const sceneViewModeOrder: BrickSceneViewMode[] = ['border', 'borderless', 'xray', 'voxel']
 
@@ -131,210 +114,6 @@ const addBrickToManualStep = (
 const isTypingElement = (target: EventTarget | null) => {
   if (!(target instanceof HTMLElement)) return false
   return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
-}
-
-const isBuildPlan = (value: unknown): value is BuildPlan => {
-  if (typeof value !== 'object' || value === null) return false
-  const plan = value as Partial<BuildPlan>
-  return Boolean(
-    plan.id &&
-      plan.title &&
-      typeof plan.prompt === 'string' &&
-      (plan.source === 'template-local' || plan.source === 'llm') &&
-      Array.isArray(plan.bricks) &&
-      Array.isArray(plan.steps),
-  )
-}
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null
-
-const isValidSource = (value: unknown): value is BuildPlan['source'] =>
-  value === 'template-local' || value === 'llm'
-
-const buildPlanFromManualJson = (value: unknown, text: ImportText = defaultImportText): BuildPlan | undefined => {
-  if (!isRecord(value) || ![1, 2, 3, 4, 5].includes(Number(value.schemaVersion)) || !Array.isArray(value.steps)) return undefined
-
-  const bricks: PlacedBrick[] = []
-  const steps: BuildPlan['steps'] = []
-
-  value.steps.forEach((rawStep, stepIndex) => {
-    if (!isRecord(rawStep) || !Array.isArray(rawStep.addPieces)) return
-
-    const brickIds: string[] = []
-    rawStep.addPieces.forEach((rawPiece) => {
-      if (!isRecord(rawPiece) || typeof rawPiece.instanceId !== 'string' || typeof rawPiece.brickId !== 'string') return
-      if (typeof rawPiece.color !== 'string' || !isValidImportedPose(rawPiece.pose)) return
-
-      bricks.push({
-        id: rawPiece.instanceId,
-        brickId: rawPiece.brickId,
-        color: rawPiece.color as PlacedBrick['color'],
-        pose: normalizeImportedPose(rawPiece.pose),
-      })
-      brickIds.push(rawPiece.instanceId)
-    })
-
-    steps.push({
-      id: `manual-step-${stepIndex + 1}`,
-      title: typeof rawStep.title === 'string' ? rawStep.title : text.importedStepTitle(stepIndex + 1),
-      description: typeof rawStep.description === 'string' ? rawStep.description : '',
-      brickIds,
-    })
-  })
-
-  if (bricks.length === 0 || steps.length === 0) return undefined
-
-  return {
-    id: typeof value.planId === 'string' ? value.planId : `imported-manual-${Date.now().toString(36)}`,
-    title: typeof value.title === 'string' ? value.title : text.importedPlanTitle,
-    prompt: typeof value.prompt === 'string' ? value.prompt : '',
-    source: isValidSource(value.source) ? value.source : 'template-local',
-    bricks,
-    steps,
-  }
-}
-
-const parseImportedPlan = (value: unknown, text: ImportText = defaultImportText): BuildPlan | undefined => {
-  if (isBuildPlan(value)) return tryNormalizeImportedPlan(value)
-  if (isRecord(value)) {
-    const nestedPlan = parseImportedPlan(value.plan, text)
-    if (nestedPlan) return nestedPlan
-  }
-  return buildPlanFromManualJson(value, text)
-}
-
-const liftBrickGroupAboveGround = (bricks: PlacedBrick[]) => {
-  const minY = bricks.reduce((lowest, brick) => {
-    const bounds = getBrickBounds(brick)
-    return bounds ? Math.min(lowest, bounds.minY) : lowest
-  }, Infinity)
-  if (!Number.isFinite(minY) || minY >= -ROTATION_REPOSITION_BOUNDS_TOLERANCE) return bricks
-
-  const liftSteps = Math.ceil(Math.max(0, -minY) / WORLD_SNAP_STEP_STUDS)
-  const liftStuds = liftSteps * WORLD_SNAP_STEP_STUDS
-  return bricks.map((brick) => ({
-    ...brick,
-    pose: {
-      ...brick.pose,
-      yStud: normalizeYStud(brick.pose.yStud + liftStuds),
-    },
-  }))
-}
-
-const findNearestOpenBrickGroupAround = (
-  rotatedBricks: PlacedBrick[],
-  allBricks: PlacedBrick[],
-  selectedIds: Set<string>,
-  stationaryData?: StationaryPlanSpatialData,
-) => {
-  const stationaryBricks = stationaryData?.stationaryBricks ?? allBricks.filter((brick) => !selectedIds.has(brick.id))
-  const stationaryCollisionIndex = stationaryData?.spatialState.collisionIndex ?? createBrickCollisionIndex(stationaryBricks)
-
-  for (const offset of getNearestHorizontalSearchOffsets(ROTATION_REPOSITION_SEARCH_RADIUS_STUDS)) {
-    const candidateBricks = liftBrickGroupAboveGround(rotatedBricks.map((brick) => ({
-      ...brick,
-      pose: {
-        ...brick.pose,
-        xStud: normalizeHorizontalStud(brick.pose.xStud + offset.xStud),
-        zStud: normalizeHorizontalStud(brick.pose.zStud + offset.zStud),
-      },
-    })))
-
-    if (candidateBricks.some((brick) => !isBrickAboveGround(brick))) continue
-    if (candidateBricks.some((brick) => hasBrickCollision(brick, stationaryBricks, stationaryCollisionIndex))) continue
-
-    const groupCollisionIndex = createBrickCollisionIndex(candidateBricks)
-    if (candidateBricks.some((brick) => hasBrickCollision(brick, candidateBricks, groupCollisionIndex))) continue
-
-    return candidateBricks
-  }
-
-  return undefined
-}
-
-const workspaceDraftStorageKey = 'brick-flow-agent:workspace-draft:v1'
-const workspaceDraftIndexedDbKey = 'workspace-draft:v1'
-
-type WorkspaceDraft = {
-  plan: BuildPlan
-  prompt: string
-}
-
-const normalizeWorkspaceDraft = (value: unknown): WorkspaceDraft | undefined => {
-  if (!isRecord(value)) return undefined
-  const plan = parseImportedPlan(value.plan)
-  if (!plan) return undefined
-  const issues = validateBuildPlan(plan)
-  if (getBlockingBuildPlanIssues(issues).length > 0) return undefined
-
-  return {
-    plan,
-    prompt: typeof value.prompt === 'string' ? value.prompt : plan.prompt,
-  }
-}
-
-const loadWorkspaceDraft = () => {
-  if (typeof window === 'undefined') return undefined
-
-  try {
-    const stored = window.localStorage.getItem(workspaceDraftStorageKey)
-    if (!stored) return undefined
-    if (isIndexedDbStorageMarker(stored)) return undefined
-    return normalizeWorkspaceDraft(JSON.parse(stored) as unknown)
-  } catch {
-    return undefined
-  }
-}
-
-const hasIndexedDbWorkspaceDraft = () => {
-  if (typeof window === 'undefined') return false
-  try {
-    return isIndexedDbStorageMarker(window.localStorage.getItem(workspaceDraftStorageKey))
-  } catch {
-    return false
-  }
-}
-
-const loadWorkspaceDraftFromIndexedDb = async () => {
-  try {
-    return normalizeWorkspaceDraft(await readLargeStoredValue<unknown>(workspaceDraftIndexedDbKey))
-  } catch {
-    return undefined
-  }
-}
-
-let workspaceDraftSaveQueue = Promise.resolve(true)
-
-const persistWorkspaceDraft = async (plan: BuildPlan, prompt: string) => {
-  if (typeof window === 'undefined') return true
-  const value = { schemaVersion: 1, prompt, plan }
-  const serialized = JSON.stringify(value)
-
-  if (serialized.length <= localStorageComfortLimit) {
-    try {
-      window.localStorage.setItem(workspaceDraftStorageKey, serialized)
-      await removeLargeStoredValue(workspaceDraftIndexedDbKey).catch(() => undefined)
-      return true
-    } catch {
-      // Fall through to IndexedDB when localStorage is unavailable or full.
-    }
-  }
-
-  try {
-    await writeLargeStoredValue(workspaceDraftIndexedDbKey, value)
-    window.localStorage.removeItem(workspaceDraftStorageKey)
-    window.localStorage.setItem(workspaceDraftStorageKey, indexedDbStorageMarker)
-    return true
-  } catch {
-    return false
-  }
-}
-
-const saveWorkspaceDraft = (plan: BuildPlan, prompt: string) => {
-  const nextSave = workspaceDraftSaveQueue.then(() => persistWorkspaceDraft(plan, prompt))
-  workspaceDraftSaveQueue = nextSave.catch(() => false)
-  return nextSave
 }
 
 function App() {
@@ -866,8 +645,7 @@ function App() {
   const resetWorkspace = () => {
     if (!window.confirm(t('error.resetConfirm'))) return
 
-    window.localStorage.removeItem(workspaceDraftStorageKey)
-    void removeLargeStoredValue(workspaceDraftIndexedDbKey).catch(() => undefined)
+    void clearWorkspaceDraft()
     setPlan(generateBuildPlan({ prompt: defaultPrompt }))
     setPrompt(defaultPrompt)
     selectBrick('')
@@ -1419,7 +1197,7 @@ function App() {
         : rotatedBrick
       const acceptedBrick = canAcceptBrickPose(selected, nextBrick, current.bricks, { action: 'rotateSelected', axis, deltaQuarterTurns }, stationaryData)
         ? nextBrick
-        : findNearestOpenPoseAround(nextBrick, stationaryData.stationaryBricks, { radiusStuds: ROTATION_REPOSITION_SEARCH_RADIUS_STUDS })
+        : findNearestOpenPoseAround(nextBrick, stationaryData.stationaryBricks, { radiusStuds: rotationRepositionSearchRadiusStuds })
       if (!acceptedBrick) return current
 
       return {
