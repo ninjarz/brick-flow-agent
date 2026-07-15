@@ -99,6 +99,8 @@ export const runDisasterSimulation = (
     directionDegrees: options.directionDegrees ?? 25,
   }
   const intensity = resolvedOptions.intensity / 100
+  const windRadians = resolvedOptions.directionDegrees * Math.PI / 180
+  const windDirection = { x: Math.cos(windRadians), z: Math.sin(windRadians) }
   const graph = createBuildGraph(bricks)
   const analysis = analyzeBuildStability(bricks, graph)
   const rootIds = new Set([...graph.boundsById]
@@ -111,13 +113,15 @@ export const runDisasterSimulation = (
     const width = Math.max(epsilon, bounds.maxX - bounds.minX)
     const height = Math.max(epsilon, bounds.maxY - bounds.minY)
     const depth = Math.max(epsilon, bounds.maxZ - bounds.minZ)
-    const exposedArea = Math.max(width * height, depth * height)
+    const windExposedArea = height * (
+      Math.abs(windDirection.x) * depth + Math.abs(windDirection.z) * width
+    )
     const topArea = width * depth
     const rootBoost = rootIds.has(brick.id) ? 2 : 0
     const connectionCapacity = (
       0.9 + stability.connectionCount * 0.7 + stability.supportCoverage * 1.8 + rootBoost
     ) * (0.7 + Math.pow(stability.mass, 0.35))
-    return [{ brick, bounds, stability, exposedArea, topArea, connectionCapacity }]
+    return [{ brick, bounds, stability, windExposedArea, topArea, connectionCapacity }]
   })
   const failureTimeByBrickId = new Map<string, number>()
   const peakStressByBrickId = new Map<string, number>()
@@ -152,7 +156,7 @@ export const runDisasterSimulation = (
       let demand = 0
       let grip = 1
       if (resolvedOptions.scenario === 'wind') {
-        demand = item.exposedArea * (0.2 + 2.15 * intensity ** 2) * (0.28 + item.stability.heightRatio * 0.92)
+        demand = item.windExposedArea * (0.2 + 2.15 * intensity ** 2) * (0.28 + item.stability.heightRatio * 0.92)
       } else if (resolvedOptions.scenario === 'rain') {
         demand = item.topArea * (0.12 + 1.7 * intensity) * (0.34 + item.stability.heightRatio * 0.35)
         grip = 1 - intensity * 0.38

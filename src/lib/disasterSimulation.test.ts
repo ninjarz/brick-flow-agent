@@ -43,4 +43,20 @@ describe('disaster simulation', () => {
 
     expect(Math.abs(highOffset)).toBeGreaterThan(Math.abs(lowOffset))
   })
+
+  it('applies wind load using the projected area from the selected direction', () => {
+    const wall = [
+      makeBrick('brick-2x8', 'gray', 0, 0, 0),
+      makeBrick('brick-1x6', 'gray', 1, 1.2, 0),
+      makeBrick('brick-1x6', 'gray', 1, 2.4, 0),
+      makeBrick('brick-1x6', 'gray', 1, 3.6, 0),
+    ]
+    const narrowSide = runDisasterSimulation(wall, { scenario: 'wind', intensity: 65, directionDegrees: 0 })
+    const broadSide = runDisasterSimulation(wall, { scenario: 'wind', intensity: 65, directionDegrees: 90 })
+    const topId = wall.at(-1)!.id
+    const narrowStress = narrowSide.peakStressByBrickId.get(topId) ?? 0
+    const broadStress = broadSide.peakStressByBrickId.get(topId) ?? 0
+
+    expect(broadStress).toBeGreaterThan(narrowStress * 2)
+  })
 })
