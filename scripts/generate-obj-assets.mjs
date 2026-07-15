@@ -18,6 +18,7 @@ const sources = [
     id: 'stanford-bunny',
     title: 'Stanford Bunny',
     path: resolve(root, '.ignored/objs/stanford-bunny.obj'),
+    edgeStyle: 'curved',
   },
   {
     id: 'armadillo',
@@ -100,7 +101,7 @@ const createAsset = (source, profile, orientation, result) => {
     title: `${source.title} ${profile.label}`,
     category: 'OBJ',
     description: [
-      `从 ${source.title} OBJ 通过四点超采样实体体素化和轮廓优先分砖生成的灰色积木雕像。`,
+      `从 ${source.title} OBJ 通过四点超采样实体体素化和轮廓优先分砖生成的灰色积木雕像${source.edgeStyle === 'curved' ? '，边缘使用弧形坡砖柔化' : ''}。`,
       `档位 ${profile.label}，${orientation === 'lay-side' ? '侧卧' : orientation === 'lay-back' ? '后躺' : '直立'}构建，网格 ${dimensions}，保形体素 ${stats.sourceVoxels} 个，结构调整 ${(stats.structuralChangeRatio * 100).toFixed(1)}%，生成 ${stats.brickCount} 个零件。`,
     ].join(' '),
     plan: {
@@ -210,7 +211,7 @@ const main = async () => {
         color: 'gray',
         locale: 'zh',
         idPrefix: `${source.id}-${profile.id}`,
-        edgeStyle: 'angular',
+        edgeStyle: source.edgeStyle ?? 'angular',
       })
       assets.push(createAsset(source, profile, orientation, result))
       console.log(JSON.stringify(formatMetrics(source, profile, orientation, result)))

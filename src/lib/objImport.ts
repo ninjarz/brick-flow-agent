@@ -166,7 +166,7 @@ const objBrickPartNumberById: Record<string, string> = {
   'brick-1x2': '3004',
   'brick-1x1': '3005',
   'slope-1x2': '3040',
-  'curved-slope-1x2': '11477',
+  'slope-curved-2x1-low': '11477',
 }
 
 const colorHex: Record<BrickColor, string> = {
@@ -1108,13 +1108,18 @@ export const importObjToBrickPlan = (
   onProgress: (progress: ObjImportProgress) => void = () => undefined,
 ): ObjImportResult => {
   const profile = objImportProfiles.find((candidate) => candidate.id === options.profileId) ?? objImportProfiles[0]
+  const useCurvedEdges = options.edgeStyle === 'curved'
+  const getConvertedBrickCount = (converted: ReturnType<typeof convertMeshAtResolution>) => converted.tiled.bricks.reduce(
+    (total, placement) => total + (useCurvedEdges && placement.id === 'slope-1x2' ? 2 : 1),
+    0,
+  )
   onProgress({ stage: 'parse', progress: 0.08 })
   const orientedMesh = orientMesh(parseObj(text), options.orientation)
   const maxBricks = Number.isFinite(options.maxBricks) ? Math.max(1, options.maxBricks ?? Infinity) : Infinity
   let resolution = profile.resolution
   let converted = convertMeshAtResolution(orientedMesh, resolution, onProgress)
-  for (let attempt = 0; attempt < 5 && converted.tiled.bricks.length > maxBricks && resolution > 8; attempt += 1) {
-    const scale = Math.cbrt(maxBricks / converted.tiled.bricks.length) * 0.96
+  for (let attempt = 0; attempt < 5 && getConvertedBrickCount(converted) > maxBricks && resolution > 8; attempt += 1) {
+    const scale = Math.cbrt(maxBricks / getConvertedBrickCount(converted)) * 0.96
     const nextResolution = Math.max(8, Math.min(resolution - 1, Math.floor(resolution * scale)))
     if (nextResolution >= resolution) break
     resolution = nextResolution
@@ -1125,14 +1130,10 @@ export const importObjToBrickPlan = (
 
   onProgress({ stage: 'finalize', progress: 0.94 })
   const prefix = sanitizeId(options.idPrefix)
-  const useCurvedEdges = options.edgeStyle === 'curved'
   const materialPalette = parseMtlPalette(options.materialText)
   const useMaterials = options.colorMode === 'materials' && materialPalette.size > 0
   const materialColorCounts = new Map<string, Map<BrickColor, number>>()
-  const bricks: PlacedBrick[] = tiled.bricks.map((placement, index) => ({
-    id: `piece-${prefix}-${index + 1}`,
-    brickId: useCurvedEdges && placement.id === 'slope-1x2' ? 'curved-slope-1x2' : placement.id,
-    color: (() => {
+  const getPlacementColor = (placement: (typeof tiled.bricks)[number], brickId: string): BrickColor => {
       if (!useMaterials) return options.color
       const counts = new Map<string, number>()
       for (const layerKey of placement.cells) {
@@ -1143,16 +1144,27 @@ export const importObjToBrickPlan = (
       const material = [...counts.entries()].sort((source, target) => target[1] - source[1])[0]?.[0]
       const sourceColor = material ? materialPalette.get(material) : undefined
       if (!material || !sourceColor) return options.color
-      const brickId = useCurvedEdges && placement.id === 'slope-1x2' ? 'curved-slope-1x2' : placement.id
       const mappedColor = mapMaterialColorToBrick(sourceColor, brickId, options.color)
       const mappedCounts = materialColorCounts.get(material) ?? new Map<BrickColor, number>()
       mappedCounts.set(mappedColor, (mappedCounts.get(mappedColor) ?? 0) + 1)
       materialColorCounts.set(material, mappedCounts)
       return mappedColor
-    })(),
+  }
+  const brickSpecs = tiled.bricks.flatMap((placement) => (
+    useCurvedEdges && placement.id === 'slope-1x2'
+      ? [
+          { placement, brickId: 'plate-1x2', yOffsetStud: 0 },
+          { placement, brickId: 'slope-curved-2x1-low', yOffsetStud: 0.4 },
+        ]
+      : [{ placement, brickId: placement.id, yOffsetStud: 0 }]
+  ))
+  const bricks: PlacedBrick[] = brickSpecs.map(({ placement, brickId, yOffsetStud }, index) => ({
+    id: `piece-${prefix}-${index + 1}`,
+    brickId,
+    color: getPlacementColor(placement, brickId),
     pose: {
       xStud: placement.x,
-      yStud: round(placement.y * layerHeightStuds),
+      yStud: round(placement.y * layerHeightStuds + yOffsetStud),
       zStud: placement.z,
       rotationQuarterTurns: placement.rotationQuarterTurns as 0 | 1 | 2 | 3,
       verticalQuarterTurns: 0,
@@ -1160,7 +1172,8 @@ export const importObjToBrickPlan = (
   }))
   const nameById = new Map([
     ...[...baseBrickTypes, ...slopeBrickTypes].map((brick) => [brick.id, brick.name] as const),
-    ['curved-slope-1x2', '1x2 Curved Slope'] as const,
+    ['plate-1x2', '1x2 Plate'] as const,
+    ['slope-curved-2x1-low', '2x1 Low Curved Slope'] as const,
   ])
   const title = options.title.trim() || 'Imported OBJ'
   const steps = bricks.map((brick, index) => {
@@ -1191,8 +1204,8 @@ export const importObjToBrickPlan = (
     addedConnectivityVoxels,
     prunedUnsupportedVoxels,
     brickCount: bricks.length,
-    slopeCount: bricks.filter((brick) => brick.brickId === 'slope-1x2' || brick.brickId === 'curved-slope-1x2').length,
-    curvedSlopeCount: bricks.filter((brick) => brick.brickId === 'curved-slope-1x2').length,
+    slopeCount: bricks.filter((brick) => brick.brickId === 'slope-1x2' || brick.brickId === 'slope-curved-2x1-low').length,
+    curvedSlopeCount: bricks.filter((brick) => brick.brickId === 'slope-curved-2x1-low').length,
     componentCount: tiled.componentCount,
     structuralChangeRatio: structuralChanges / Math.max(1, connected.occupied.size),
     oddRayRatio: voxelized.diagnostics.oddRays / Math.max(1, voxelized.diagnostics.rays),
