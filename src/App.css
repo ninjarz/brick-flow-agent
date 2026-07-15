@@ -1119,6 +1119,75 @@ button.status-pill:hover {
   background: #e8edf2;
 }
 
+.manual-timeline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 9px;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  background: #fff7ed;
+}
+
+.manual-timeline-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.manual-timeline-actions button {
+  min-height: 32px;
+  padding: 0 9px;
+}
+
+.manual-timeline-actions label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.manual-timeline-actions label input {
+  width: 15px;
+  height: 15px;
+}
+
+.manual-timeline-actions select {
+  width: auto;
+  min-height: 32px;
+  padding: 0 26px 0 8px;
+}
+
+.manual-timeline > input[type='range'] {
+  width: 100%;
+}
+
+.manual-timeline > span {
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.manual-assembly-guides {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.manual-assembly-guides span {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #ffedd5;
+  color: #9a3412;
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .manual-page-tabs {
   display: flex;
   flex-wrap: wrap;

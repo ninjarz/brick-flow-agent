@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, Box, Boxes, Download, Eye, FileUp, Github, Globe2, KeyRound, Link, Plus, Redo2, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
+import { BookOpen, Box, Boxes, Download, Eye, FileUp, Github, Globe2, KeyRound, Link, Pause, Play, Plus, Redo2, RotateCcw, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
 import { LazyBrickGlyph } from './components/LazyBrickGlyph'
 import { BrickEditorPanel } from './components/BrickEditorPanel'
 import type { BrickSceneViewMode } from './components/BrickScene'
@@ -151,7 +151,7 @@ const isValidSource = (value: unknown): value is BuildPlan['source'] =>
   value === 'template-local' || value === 'llm'
 
 const buildPlanFromManualJson = (value: unknown, text: ImportText = defaultImportText): BuildPlan | undefined => {
-  if (!isRecord(value) || ![1, 2, 3].includes(Number(value.schemaVersion)) || !Array.isArray(value.steps)) return undefined
+  if (!isRecord(value) || ![1, 2, 3, 4, 5].includes(Number(value.schemaVersion)) || !Array.isArray(value.steps)) return undefined
 
   const bricks: PlacedBrick[] = []
   const steps: BuildPlan['steps'] = []
@@ -378,6 +378,9 @@ function App() {
   const [isManualOpen, setIsManualOpen] = useState(false)
   const [manualPlan, setManualPlan] = useState<BuildPlan>()
   const [manualStepIndex, setManualStepIndex] = useState(0)
+  const [isManualPlaying, setIsManualPlaying] = useState(false)
+  const [isManualExploded, setIsManualExploded] = useState(true)
+  const [manualPlaybackIntervalMs, setManualPlaybackIntervalMs] = useState(1200)
   const [manualCopyStatus, setManualCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
   const [promptCopyStatus, setPromptCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
   const [finishedAssets, setFinishedAssets] = useState<FinishedAsset[]>(() => loadFinishedAssets())
@@ -409,6 +412,7 @@ function App() {
     setIsManualOpen(false)
     setManualPlan(undefined)
     setManualCopyStatus('idle')
+    setIsManualPlaying(false)
   }, [])
 
   const clearGenerationFeedback = useCallback(() => {
@@ -538,6 +542,23 @@ function App() {
     )
     return manualSourcePlan.bricks.filter((brick) => cumulativeIds.has(brick.id))
   }, [buildManual, manualSourcePlan, manualStepIndex, selectedManualStep])
+  const manualDisplayBricks = useMemo(() => {
+    if (!isManualExploded || !selectedManualStep) return manualPreviewBricks
+    const guideByBrickId = new Map(selectedManualStep.addPieces.map((piece) => [piece.instanceId, piece.assembly]))
+    return manualPreviewBricks.map((brick) => {
+      const guide = guideByBrickId.get(brick.id)
+      if (!guide) return brick
+      return {
+        ...brick,
+        pose: {
+          ...brick.pose,
+          xStud: brick.pose.xStud + guide.explodedOffset.xStud,
+          yStud: brick.pose.yStud + guide.explodedOffset.yStud,
+          zStud: brick.pose.zStud + guide.explodedOffset.zStud,
+        },
+      }
+    })
+  }, [isManualExploded, manualPreviewBricks, selectedManualStep])
   const localizedFinishedAssets = useMemo(
     () => finishedAssets.map((asset) => localizeFinishedAsset(asset, t)),
     [finishedAssets, t],
@@ -685,9 +706,11 @@ function App() {
       if (isTypingElement(event.target)) return
       if (event.key === 'ArrowLeft') {
         event.preventDefault()
+        setIsManualPlaying(false)
         setManualStepIndex((current) => Math.max(0, current - 1))
       } else if (event.key === 'ArrowRight') {
         event.preventDefault()
+        setIsManualPlaying(false)
         setManualStepIndex((current) => Math.min((buildManual?.steps.length ?? 1) - 1, current + 1))
       }
     }
@@ -695,6 +718,20 @@ function App() {
     window.addEventListener('keydown', handleManualKeyDown)
     return () => window.removeEventListener('keydown', handleManualKeyDown)
   }, [buildManual?.steps.length, isManualOpen])
+
+  useEffect(() => {
+    if (!isManualOpen || !isManualPlaying || !buildManual || buildManual.steps.length <= 1) return
+    const timeoutId = window.setTimeout(() => {
+      setManualStepIndex((current) => {
+        if (current >= buildManual.steps.length - 1) {
+          setIsManualPlaying(false)
+          return current
+        }
+        return current + 1
+      })
+    }, manualPlaybackIntervalMs)
+    return () => window.clearTimeout(timeoutId)
+  }, [buildManual, isManualOpen, isManualPlaying, manualPlaybackIntervalMs, manualStepIndex])
 
   useEffect(() => {
     if (!isConfigOpen && !isPromptPreviewOpen && !isAssetLibraryOpen && !isObjImportOpen && !isManualOpen) return
@@ -1423,7 +1460,7 @@ function App() {
   const exportPlan = () => {
     const manual = serializeBuildManual(plan, locale)
     downloadJson(`${plan.title || 'brick-plan'}.json`, {
-      schemaVersion: 4,
+      schemaVersion: 5,
       exportedAt: new Date().toISOString(),
       plan,
       manual,
@@ -1612,6 +1649,8 @@ function App() {
 
     setManualPlan(sourcePlan)
     setManualStepIndex(0)
+    setIsManualPlaying(false)
+    setIsManualExploded(true)
     setManualCopyStatus('idle')
     setIsManualOpen(true)
   }
@@ -2198,13 +2237,53 @@ function App() {
                     {selectedManualStep.validation.summary}
                   </p>
                 </div>
+                <div className="manual-timeline">
+                  <div className="manual-timeline-actions">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!isManualPlaying && manualStepIndex >= buildManual.steps.length - 1) setManualStepIndex(0)
+                        setIsManualPlaying((playing) => !playing)
+                      }}
+                    >
+                      {isManualPlaying ? <Pause size={15} /> : <Play size={15} />}
+                      {t(isManualPlaying ? 'manual.pauseTimeline' : 'manual.playTimeline')}
+                    </button>
+                    <button type="button" onClick={() => { setIsManualPlaying(false); setManualStepIndex(0) }}>
+                      <RotateCcw size={15} />
+                      {t('manual.restartTimeline')}
+                    </button>
+                    <label>
+                      <input type="checkbox" checked={isManualExploded} onChange={(event) => setIsManualExploded(event.target.checked)} />
+                      {t('manual.explodedView')}
+                    </label>
+                    <select value={manualPlaybackIntervalMs} onChange={(event) => setManualPlaybackIntervalMs(Number(event.target.value))} aria-label={t('manual.playbackSpeed')}>
+                      <option value={2000}>0.5×</option>
+                      <option value={1200}>1×</option>
+                      <option value={650}>2×</option>
+                    </select>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={Math.max(0, buildManual.steps.length - 1)}
+                    value={manualStepIndex}
+                    onChange={(event) => { setIsManualPlaying(false); setManualStepIndex(Number(event.target.value)) }}
+                    aria-label={t('manual.timeline')}
+                  />
+                  <span>{t('manual.timelineProgress', { current: manualStepIndex + 1, total: buildManual.steps.length })}</span>
+                </div>
+                <div className="manual-assembly-guides">
+                  {[...new Set(selectedManualStep.addPieces.map((piece) => piece.assembly.label))].map((label) => <span key={label}>{label}</span>)}
+                </div>
                 <div className="manual-preview-viewer">
                   <Suspense fallback={<div className="scene-loading">{t('scene.loading')}</div>}>
                     <BrickScene
-                      bricks={manualPreviewBricks}
+                      bricks={manualDisplayBricks}
                       selectedId=""
                       highlightedIds={selectedManualStep.addPieces.map((piece) => piece.instanceId)}
-                      cameraFrameKey={`${manualPlan?.id ?? 'manual'}:${selectedManualStep.stepNumber}`}
+                      cameraFrameKey={`${manualPlan?.id ?? 'manual'}:${selectedManualStep.stepNumber}:${isManualExploded ? 'exploded' : 'assembled'}`}
+                      initialCameraAzimuthDegrees={selectedManualStep.cameraAzimuthDegrees}
                       onSelect={() => {}}
                       onNudgeSelected={() => {}}
                       onRotateSelected={() => {}}
@@ -2215,14 +2294,14 @@ function App() {
                 <div className="manual-page-controls">
                   <button
                     type="button"
-                    onClick={() => setManualStepIndex((current) => Math.max(0, current - 1))}
+                    onClick={() => { setIsManualPlaying(false); setManualStepIndex((current) => Math.max(0, current - 1)) }}
                     disabled={manualStepIndex === 0}
                   >
                     {t('manual.prev')}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setManualStepIndex((current) => Math.min(buildManual.steps.length - 1, current + 1))}
+                    onClick={() => { setIsManualPlaying(false); setManualStepIndex((current) => Math.min(buildManual.steps.length - 1, current + 1)) }}
                     disabled={manualStepIndex >= buildManual.steps.length - 1}
                   >
                     {t('manual.next')}
@@ -2234,7 +2313,7 @@ function App() {
                       key={`${step.stepNumber}-${step.title}`}
                       type="button"
                       className={index === manualStepIndex ? 'active' : ''}
-                      onClick={() => setManualStepIndex(index)}
+                      onClick={() => { setIsManualPlaying(false); setManualStepIndex(index) }}
                     >
                       {step.stepNumber}
                     </button>
@@ -2250,10 +2329,11 @@ function App() {
                   className={`manual-step-card ${index === manualStepIndex ? 'active' : ''}`}
                   role="button"
                   tabIndex={0}
-                  onClick={() => setManualStepIndex(index)}
+                  onClick={() => { setIsManualPlaying(false); setManualStepIndex(index) }}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault()
+                      setIsManualPlaying(false)
                       setManualStepIndex(index)
                     }
                   }}
@@ -2270,7 +2350,7 @@ function App() {
                       <div key={piece.instanceId}>
                         <strong>{piece.name}</strong>
                         <small>
-                          {piece.color} · x{piece.pose.xStud} y{piece.pose.yStud} z{piece.pose.zStud} · {piece.rotationDegrees}°
+                          {piece.color} · x{piece.pose.xStud} y{piece.pose.yStud} z{piece.pose.zStud} · {piece.rotationDegrees}° · {piece.assembly.label}
                         </small>
                       </div>
                     ))}

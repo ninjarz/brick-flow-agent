@@ -24,6 +24,7 @@ const manualText: Record<ManualLocale, {
   horizontal: string
   vertical: string
   newPieceCaption: string
+  placementDirection: Record<ManualPlacementDirection, string>
   sourceTemplateLocal: string
   sourceLlm: string
   pageTitle: (page: number, title: string) => string
@@ -47,7 +48,15 @@ const manualText: Record<ManualLocale, {
     addedParts: '新增零件',
     horizontal: '水平',
     vertical: '垂直',
-    newPieceCaption: '橙色描边为本步新增零件',
+    newPieceCaption: '橙色描边为本步新增零件；箭头表示安装方向',
+    placementDirection: {
+      down: '从上向下安装',
+      up: '从下向上安装',
+      left: '从右向左安装',
+      right: '从左向右安装',
+      front: '从后向前安装',
+      back: '从前向后安装',
+    },
     sourceTemplateLocal: '本地模板',
     sourceLlm: 'LLM 生成',
     pageTitle: (page, title) => `第 ${page} 页 · ${title}`,
@@ -71,7 +80,15 @@ const manualText: Record<ManualLocale, {
     addedParts: 'Added parts',
     horizontal: 'Horizontal',
     vertical: 'Vertical',
-    newPieceCaption: 'Orange outline marks the new part in this step',
+    newPieceCaption: 'Orange outlines mark new parts; arrows show installation direction',
+    placementDirection: {
+      down: 'Install downward from above',
+      up: 'Install upward from below',
+      left: 'Install from right to left',
+      right: 'Install from left to right',
+      front: 'Install from back to front',
+      back: 'Install from front to back',
+    },
     sourceTemplateLocal: 'Local template',
     sourceLlm: 'LLM generated',
     pageTitle: (page, title) => `Page ${page} · ${title}`,
@@ -108,6 +125,15 @@ export type ManualPiece = {
   }
   rotationDegrees: number
   verticalRotationDegrees: number
+  assembly: ManualAssemblyGuide
+}
+
+export type ManualPlacementDirection = 'down' | 'up' | 'left' | 'right' | 'front' | 'back'
+
+export type ManualAssemblyGuide = {
+  direction: ManualPlacementDirection
+  label: string
+  explodedOffset: { xStud: number; yStud: number; zStud: number }
 }
 
 export type ManualStepPage = {
@@ -117,6 +143,7 @@ export type ManualStepPage = {
   addPieces: ManualPiece[]
   stepInventory: ManualPartCount[]
   completedPieceCount: number
+  cameraAzimuthDegrees: number
   validation: {
     ok: boolean
     issueCount: number
@@ -127,7 +154,7 @@ export type ManualStepPage = {
 }
 
 export type BuildManual = {
-  schemaVersion: 4
+  schemaVersion: 5
   planId: string
   title: string
   prompt: string
@@ -169,7 +196,39 @@ const countPieces = (pieces: ManualPiece[]): ManualPartCount[] => {
   )
 }
 
-const toManualPiece = (brick: BuildPlan['bricks'][number]): ManualPiece => {
+const getAssemblyGuide = (
+  brick: BuildPlan['bricks'][number],
+  locale: ManualLocale,
+): ManualAssemblyGuide => {
+  const vertical = brick.pose.verticalQuarterTurns ?? 0
+  let direction: ManualPlacementDirection = 'down'
+
+  if (vertical === 2) {
+    direction = 'up'
+  } else if (vertical === 1 || vertical === 3) {
+    const horizontalDirections: ManualPlacementDirection[] = vertical === 1
+      ? ['back', 'right', 'front', 'left']
+      : ['front', 'left', 'back', 'right']
+    direction = horizontalDirections[brick.pose.rotationQuarterTurns]
+  }
+
+  const offsetByDirection: Record<ManualPlacementDirection, ManualAssemblyGuide['explodedOffset']> = {
+    down: { xStud: 0, yStud: 1.6, zStud: 0 },
+    up: { xStud: 0, yStud: -1.6, zStud: 0 },
+    left: { xStud: 1.6, yStud: 0, zStud: 0 },
+    right: { xStud: -1.6, yStud: 0, zStud: 0 },
+    front: { xStud: 0, yStud: 0, zStud: 1.6 },
+    back: { xStud: 0, yStud: 0, zStud: -1.6 },
+  }
+
+  return {
+    direction,
+    label: manualText[locale].placementDirection[direction],
+    explodedOffset: offsetByDirection[direction],
+  }
+}
+
+const toManualPiece = (brick: BuildPlan['bricks'][number], locale: ManualLocale): ManualPiece => {
   const definition = brickById.get(brick.brickId)
   const footprint = definition
     ? footprintToWorld(definition, brick.pose.rotationQuarterTurns, brick.pose.verticalQuarterTurns ?? 0)
@@ -188,6 +247,7 @@ const toManualPiece = (brick: BuildPlan['bricks'][number]): ManualPiece => {
     },
     rotationDegrees: brick.pose.rotationQuarterTurns * 90,
     verticalRotationDegrees: (brick.pose.verticalQuarterTurns ?? 0) * 90,
+    assembly: getAssemblyGuide(brick, locale),
   }
 }
 
@@ -306,12 +366,20 @@ const groupManualSequence = (sequence: ReturnType<typeof sequenceBricksForManual
 export const serializeBuildManual = (plan: BuildPlan, locale: ManualLocale = 'zh-CN'): BuildManual => {
   const labels = manualText[locale]
   let completedPieceCount = 0
+  const planCenterX = plan.bricks.reduce((total, brick) => total + brick.pose.xStud, 0) / Math.max(1, plan.bricks.length)
+  const planCenterZ = plan.bricks.reduce((total, brick) => total + brick.pose.zStud, 0) / Math.max(1, plan.bricks.length)
 
   const steps: ManualStepPage[] = groupManualSequence(sequenceBricksForManual(plan, locale)).map((group, index) => {
-    const addPieces = group.map(({ brick }) => toManualPiece(brick))
+    const addPieces = group.map(({ brick }) => toManualPiece(brick, locale))
     const layer = Math.max(0, Math.round(Math.min(...group.map(({ brick }) => brick.pose.yStud)) / 0.4))
     const singlePiece = addPieces.length === 1 ? addPieces[0] : undefined
     completedPieceCount += addPieces.length
+    const groupCenterX = group.reduce((total, item) => total + item.brick.pose.xStud, 0) / group.length
+    const groupCenterZ = group.reduce((total, item) => total + item.brick.pose.zStud, 0) / group.length
+    const cameraAzimuthDegrees = Math.round((Math.atan2(
+      groupCenterX - planCenterX,
+      groupCenterZ - planCenterZ,
+    ) * 180) / Math.PI + 180)
 
     return {
       stepNumber: index + 1,
@@ -320,16 +388,17 @@ export const serializeBuildManual = (plan: BuildPlan, locale: ManualLocale = 'zh
       addPieces,
       stepInventory: countPieces(addPieces),
       completedPieceCount,
+      cameraAzimuthDegrees,
       validation: group.at(-1)?.validation ?? emptyManualValidation(locale),
     }
   })
 
-  const allPieces = plan.bricks.map(toManualPiece)
+  const allPieces = plan.bricks.map((brick) => toManualPiece(brick, locale))
   const issues = validateBuildPlan(plan)
   const blockingIssues = getBlockingBuildPlanIssues(issues)
 
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     planId: plan.id,
     title: plan.title,
     prompt: plan.prompt,
@@ -375,7 +444,7 @@ export const formatBuildManualMarkdown = (manual: BuildManual, locale: ManualLoc
     lines.push(`### ${labels.addedParts}`)
     for (const piece of step.addPieces) {
       lines.push(
-        `- ${piece.name} (${piece.brickId}) · ${piece.color} · x${piece.pose.xStud} y${piece.pose.yStud} z${piece.pose.zStud} · ${labels.horizontal} ${piece.rotationDegrees}° · ${labels.vertical} ${piece.verticalRotationDegrees}°`,
+        `- ${piece.name} (${piece.brickId}) · ${piece.color} · x${piece.pose.xStud} y${piece.pose.yStud} z${piece.pose.zStud} · ${labels.horizontal} ${piece.rotationDegrees}° · ${labels.vertical} ${piece.verticalRotationDegrees}° · ${piece.assembly.label}`,
       )
     }
     lines.push('')
@@ -427,6 +496,8 @@ type DiagramCuboid = {
   top: DiagramPoint[]
   right: DiagramPoint[]
   front: DiagramPoint[]
+  arrowStart?: DiagramPoint
+  arrowEnd?: DiagramPoint
 }
 
 const pointList = (points: DiagramPoint[]) => points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ')
@@ -453,13 +524,17 @@ const renderStepDiagram = (step: ManualStepPage, cumulativePieces: ManualPiece[]
     )
     .map((piece) => {
       const footprint = getPlanFootprint(piece)
-      const x = piece.pose.xStud
-      const y = piece.pose.yStud
-      const z = piece.pose.zStud
+      const finalX = piece.pose.xStud
+      const finalY = piece.pose.yStud
+      const finalZ = piece.pose.zStud
       const width = footprint.widthStuds
       const depth = footprint.depthStuds
       const height = piece.footprint.heightStuds
       const isNew = newPieceIds.has(piece.instanceId)
+      const offset = isNew ? piece.assembly.explodedOffset : { xStud: 0, yStud: 0, zStud: 0 }
+      const x = finalX + offset.xStud
+      const y = finalY + offset.yStud
+      const z = finalZ + offset.zStud
 
       return {
         piece,
@@ -482,9 +557,17 @@ const renderStepDiagram = (step: ManualStepPage, cumulativePieces: ManualPiece[]
           project(x + width, z + depth, y),
           project(x, z + depth, y),
         ],
+        arrowStart: isNew ? project(x + width / 2, z + depth / 2, y + height / 2) : undefined,
+        arrowEnd: isNew ? project(finalX + width / 2, finalZ + depth / 2, finalY + height / 2) : undefined,
       }
     })
-  const projectedPoints = cuboids.flatMap((cuboid) => [...cuboid.top, ...cuboid.right, ...cuboid.front])
+  const projectedPoints = cuboids.flatMap((cuboid) => [
+    ...cuboid.top,
+    ...cuboid.right,
+    ...cuboid.front,
+    ...(cuboid.arrowStart ? [cuboid.arrowStart] : []),
+    ...(cuboid.arrowEnd ? [cuboid.arrowEnd] : []),
+  ])
   const minX = Math.min(...projectedPoints.map((point) => point.x))
   const minY = Math.min(...projectedPoints.map((point) => point.y))
   const maxX = Math.max(...projectedPoints.map((point) => point.x))
@@ -498,9 +581,13 @@ const renderStepDiagram = (step: ManualStepPage, cumulativePieces: ManualPiece[]
       const stroke = cuboid.isNew ? '#f97316' : '#334155'
       const strokeWidth = cuboid.isNew ? 4 : 1.2
       const color = manualColorHex[cuboid.piece.color]
+      const arrow = cuboid.arrowStart && cuboid.arrowEnd
+        ? `<line x1="${cuboid.arrowStart.x.toFixed(1)}" y1="${cuboid.arrowStart.y.toFixed(1)}" x2="${cuboid.arrowEnd.x.toFixed(1)}" y2="${cuboid.arrowEnd.y.toFixed(1)}" stroke="#ea580c" stroke-width="4" marker-end="url(#assembly-arrow)" />`
+        : ''
 
       return `<g transform="translate(${translateX.toFixed(1)} ${translateY.toFixed(1)})">
           <title>${escapeHtml(cuboid.piece.name)} · ${escapeHtml(cuboid.piece.color)} · x${cuboid.piece.pose.xStud} y${cuboid.piece.pose.yStud} z${cuboid.piece.pose.zStud}</title>
+          ${arrow}
           <polygon points="${pointList(cuboid.right)}" fill="${color}" fill-opacity="0.72" stroke="${stroke}" stroke-width="${strokeWidth}" />
           <polygon points="${pointList(cuboid.front)}" fill="${color}" fill-opacity="0.86" stroke="${stroke}" stroke-width="${strokeWidth}" />
           <polygon points="${pointList(cuboid.top)}" fill="${color}" stroke="${stroke}" stroke-width="${strokeWidth}" />
@@ -510,6 +597,7 @@ const renderStepDiagram = (step: ManualStepPage, cumulativePieces: ManualPiece[]
 
   return `<figure class="diagram">
       <svg viewBox="0 0 ${width.toFixed(1)} ${height.toFixed(1)}" role="img" aria-label="${escapeHtml(labels.diagramAria(step.stepNumber))}">
+        <defs><marker id="assembly-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#ea580c" /></marker></defs>
         <rect width="${width}" height="${height}" rx="10" fill="#f8fafc" />
         ${pieces}
       </svg>
@@ -529,7 +617,7 @@ export const formatBuildManualHtml = (manual: BuildManual, locale: ManualLocale 
       <p class="count">${escapeHtml(labels.stepCount(step.addPieces.length, step.completedPieceCount))}</p>
       ${renderStepDiagram(step, cumulativePieces, locale)}
       <ul>
-        ${step.addPieces.map((piece) => `<li><strong>${escapeHtml(piece.name)}</strong><br /><small>${escapeHtml(piece.brickId)} · ${escapeHtml(piece.color)} · x${piece.pose.xStud} y${piece.pose.yStud} z${piece.pose.zStud} · ${escapeHtml(labels.horizontal)} ${piece.rotationDegrees}° · ${escapeHtml(labels.vertical)} ${piece.verticalRotationDegrees}°</small></li>`).join('\n        ')}
+        ${step.addPieces.map((piece) => `<li><strong>${escapeHtml(piece.name)}</strong><br /><small>${escapeHtml(piece.brickId)} · ${escapeHtml(piece.color)} · x${piece.pose.xStud} y${piece.pose.yStud} z${piece.pose.zStud} · ${escapeHtml(labels.horizontal)} ${piece.rotationDegrees}° · ${escapeHtml(labels.vertical)} ${piece.verticalRotationDegrees}° · ${escapeHtml(piece.assembly.label)}</small></li>`).join('\n        ')}
       </ul>
     </section>`
   }).join('\n    ')

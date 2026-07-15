@@ -29,6 +29,7 @@ type BrickSceneProps = {
   selectedId?: string
   highlightedIds?: string[]
   cameraFrameKey?: string
+  initialCameraAzimuthDegrees?: number
   viewMode?: BrickSceneViewMode
   onSelect: (id: string) => void
   onSelectConnected?: (id: string) => void
@@ -457,21 +458,28 @@ const KeyboardShortcuts = ({
   return null
 }
 
-const CameraFrame = ({ centerX, centerY, centerZ, size, frameKey }: {
+const CameraFrame = ({ centerX, centerY, centerZ, size, frameKey, azimuthDegrees = 18 }: {
   centerX: number
   centerY: number
   centerZ: number
   size: number
   frameKey: string
+  azimuthDegrees?: number
 }) => {
   const { camera } = useThree()
-  const frameRef = useRef({ centerX, centerY, centerZ, size })
-  frameRef.current = { centerX, centerY, centerZ, size }
+  const frameRef = useRef({ centerX, centerY, centerZ, size, azimuthDegrees })
+  frameRef.current = { centerX, centerY, centerZ, size, azimuthDegrees }
 
   useEffect(() => {
-    const { centerX, centerY, centerZ, size } = frameRef.current
+    const { centerX, centerY, centerZ, size, azimuthDegrees } = frameRef.current
     const distance = Math.max(9, size)
-    camera.position.set(centerX + distance * 0.35, centerY + distance * 0.62 + 4, centerZ + distance * 1.08)
+    const azimuth = (azimuthDegrees * Math.PI) / 180
+    const horizontalDistance = distance * 1.14
+    camera.position.set(
+      centerX + Math.sin(azimuth) * horizontalDistance,
+      centerY + distance * 0.62 + 4,
+      centerZ + Math.cos(azimuth) * horizontalDistance,
+    )
     camera.near = 0.1
     camera.far = Math.max(100, distance * 8)
     camera.lookAt(centerX, centerY, centerZ)
@@ -1409,6 +1417,7 @@ export const BrickScene = ({
   selectedId,
   highlightedIds = [],
   cameraFrameKey,
+  initialCameraAzimuthDegrees,
   viewMode = 'border',
   onSelect,
   onSelectConnected,
@@ -1565,6 +1574,7 @@ export const BrickScene = ({
         centerZ={gridFrame.modelCenterZ}
         size={gridFrame.cameraSize}
         frameKey={boundsCameraFrameKey}
+        azimuthDegrees={initialCameraAzimuthDegrees}
       />
       <OrbitControls target={orbitTargetRef.current} makeDefault />
     </Canvas>
