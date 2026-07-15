@@ -32,6 +32,7 @@ export type ObjImportStats = {
   finalVoxels: number
   removedComponentVoxels: number
   addedSupportVoxels: number
+  addedConnectivityVoxels: number
   prunedUnsupportedVoxels: number
   brickCount: number
   slopeCount: number
@@ -100,6 +101,7 @@ type TiledVoxels = {
   bricks: Array<Placement & { y: number }>
   unsupported: Array<{ x: number; y: number; z: number; cells: string[] }>
   componentCount: number
+  componentByBrickIndex: number[]
 }
 
 const layerHeightStuds = 1.2
@@ -594,7 +596,6 @@ const placementsContaining = (
   aboveLayer: Set<string>,
   belowConnectors: Set<string>,
   unassigned: Set<string>,
-  requireSupport: boolean,
   forcedColumns: Set<string>,
 ) => {
   const placements: Placement[] = []
@@ -612,7 +613,6 @@ const placementsContaining = (
         }
         const connectorCells = placementTopConnectorCells(placement)
         const supportCells = cells.filter((key) => belowConnectors.has(key))
-        if (requireSupport && supportCells.length === 0) continue
         placements.push({ ...placement, cells, connectorCells, supportCells })
       }
     }
@@ -632,6 +632,15 @@ const tileLayer = (
   const placements: Placement[] = []
   const brickByConnector = new Map<string, number>()
   const belowConnectors = new Set(belowBrickByConnector.keys())
+  const candidatesByCell = new Map<string, Placement[]>()
+  const supportedCandidatesByCell = new Map<string, Placement[]>()
+
+  for (const key of layer) {
+    const [x, z] = key.split(',').map(Number)
+    const candidates = placementsContaining(x, z, layer, aboveLayer, belowConnectors, layer, forcedColumns)
+    candidatesByCell.set(key, candidates)
+    supportedCandidatesByCell.set(key, y === 0 ? candidates : candidates.filter((candidate) => candidate.supportCells.length > 0))
+  }
 
   while (unassigned.size > 0) {
     let selectedTarget: { x: number; z: number; key: string } | undefined
@@ -639,7 +648,8 @@ const tileLayer = (
     let selectedPriority = Infinity
     for (const key of unassigned) {
       const [x, z] = key.split(',').map(Number)
-      const candidates = placementsContaining(x, z, layer, aboveLayer, belowConnectors, unassigned, y > 0, forcedColumns)
+      const candidates = (supportedCandidatesByCell.get(key) ?? [])
+        .filter((candidate) => candidate.cells.every((cell) => unassigned.has(cell)))
       const forcedPenalty = forcedColumns.has(key) ? -2000 : 0
       const unsupportedPenalty = y > 0 && !belowConnectors.has(key) ? -1000 : 0
       const priority = forcedPenalty + unsupportedPenalty + candidates.length
@@ -652,7 +662,8 @@ const tileLayer = (
 
     const candidates = selectedCandidates.length > 0
       ? selectedCandidates
-      : placementsContaining(selectedTarget.x, selectedTarget.z, layer, aboveLayer, belowConnectors, unassigned, false, forcedColumns)
+      : (candidatesByCell.get(selectedTarget.key) ?? [])
+        .filter((candidate) => candidate.cells.every((cell) => unassigned.has(cell)))
     const scored = candidates.map((candidate) => {
       const area = candidate.cells.length
       const boundaryCount = candidate.cells.filter((key) => isBoundaryCell(key, layer)).length
@@ -682,6 +693,305 @@ const tileLayer = (
     placement.connectorCells.forEach((key) => brickByConnector.set(key, placementIndex))
   }
   return { placements, brickByConnector }
+}
+
+const analyzeTiledBricks = (
+  sourceBricks: Array<Placement & { y: number }>,
+  dimensions: Dimensions,
+): TiledVoxels => {
+  const bricks = sourceBricks.map((brick) => ({ ...brick, supportCells: [...brick.supportCells] }))
+  const brickIndicesByLayer = Array.from({ length: dimensions.height }, () => [] as number[])
+  bricks.forEach((brick, index) => brickIndicesByLayer[brick.y]?.push(index))
+  const parents = bricks.map((_, index) => index)
+  const findComponent = (sourceIndex: number) => {
+    let index = sourceIndex
+    let root = index
+    while (parents[root] !== root) root = parents[root]
+    while (parents[index] !== index) {
+      const next = parents[index]
+      parents[index] = root
+      index = next
+    }
+    return root
+  }
+  const unionComponents = (source: number, target: number) => {
+    const sourceRoot = findComponent(source)
+    const targetRoot = findComponent(target)
+    if (sourceRoot !== targetRoot) parents[targetRoot] = sourceRoot
+  }
+  const unsupported: TiledVoxels['unsupported'] = []
+  let previousBrickByConnector = new Map<string, number>()
+
+  for (let y = 0; y < dimensions.height; y += 1) {
+    const layerBrickIndices = brickIndicesByLayer[y]
+    if (layerBrickIndices.length === 0) {
+      previousBrickByConnector = new Map()
+      continue
+    }
+
+    const globalBrickByConnector = new Map<string, number>()
+    for (const brickIndex of layerBrickIndices) {
+      const brick = bricks[brickIndex]
+      brick.supportCells = brick.cells.filter((key) => previousBrickByConnector.has(key))
+      const supportingBricks = new Set(brick.supportCells
+        .map((key) => previousBrickByConnector.get(key))
+        .filter((value): value is number => value !== undefined))
+      for (const supportingBrick of supportingBricks) unionComponents(brickIndex, supportingBrick)
+      if (y > 0 && brick.supportCells.length === 0) {
+        const [x, z] = brick.connectorCells[0].split(',').map(Number)
+        unsupported.push({ x, y, z, cells: brick.cells })
+      }
+      brick.connectorCells.forEach((key) => globalBrickByConnector.set(key, brickIndex))
+    }
+    previousBrickByConnector = globalBrickByConnector
+  }
+
+  const componentByBrickIndex = bricks.map((_, index) => findComponent(index))
+  return {
+    bricks,
+    unsupported,
+    componentByBrickIndex,
+    componentCount: new Set(componentByBrickIndex).size,
+  }
+}
+
+const mergeDisconnectedPlacements = (tiled: TiledVoxels, dimensions: Dimensions) => {
+  let current = tiled
+
+  for (let attempt = 0; attempt < 24 && current.componentCount > 1; attempt += 1) {
+    const brickIndexByLayerCell = new Map<string, number>()
+    current.bricks.forEach((brick, brickIndex) => {
+      brick.cells.forEach((key) => brickIndexByLayerCell.set(`${brick.y}:${key}`, brickIndex))
+    })
+    const candidates: Array<{
+      placement: Placement & { y: number }
+      ownerIndices: number[]
+      bridgedComponentCount: number
+    }> = []
+    const seenPlacements = new Set<string>()
+
+    for (let y = 0; y < dimensions.height; y += 1) {
+      for (const brick of regularBrickTypes) {
+        for (let z = 0; z <= dimensions.depth - brick.depth; z += 1) {
+          for (let x = 0; x <= dimensions.width - brick.width; x += 1) {
+            const placementKey = `${y}:${brick.id}:${x},${z}:${brick.rotationQuarterTurns}`
+            if (seenPlacements.has(placementKey)) continue
+            seenPlacements.add(placementKey)
+            const placement = { ...brick, x, y, z }
+            const cells = placementCells(placement)
+            const ownerIndices = [...new Set(cells
+              .map((key) => brickIndexByLayerCell.get(`${y}:${key}`))
+              .filter((value): value is number => value !== undefined))]
+            if (ownerIndices.length < 2 || cells.some((key) => !brickIndexByLayerCell.has(`${y}:${key}`))) continue
+            if (ownerIndices.some((index) => current.bricks[index].isSlope)) continue
+            const cellSet = new Set(cells)
+            if (ownerIndices.some((index) => current.bricks[index].cells.some((key) => !cellSet.has(key)))) continue
+            const bridgedComponents = new Set(ownerIndices.map((index) => current.componentByBrickIndex[index]))
+            if (bridgedComponents.size < 2) continue
+            candidates.push({
+              placement: {
+                ...placement,
+                cells,
+                connectorCells: placementTopConnectorCells(placement),
+                supportCells: [],
+              },
+              ownerIndices,
+              bridgedComponentCount: bridgedComponents.size,
+            })
+          }
+        }
+      }
+    }
+
+    candidates.sort((source, target) =>
+      target.bridgedComponentCount - source.bridgedComponentCount ||
+      source.placement.cells.length - target.placement.cells.length ||
+      target.ownerIndices.length - source.ownerIndices.length ||
+      source.placement.id.localeCompare(target.placement.id)
+    )
+    let merged = false
+    for (const candidate of candidates) {
+      const ownerIndexSet = new Set(candidate.ownerIndices)
+      const insertionIndex = Math.min(...candidate.ownerIndices)
+      const nextBricks = current.bricks.flatMap((brick, index) => {
+        if (index === insertionIndex) return [candidate.placement]
+        return ownerIndexSet.has(index) ? [] : [brick]
+      })
+      const analyzed = analyzeTiledBricks(nextBricks, dimensions)
+      if (analyzed.componentCount >= current.componentCount) continue
+      current = analyzed
+      merged = true
+      break
+    }
+    if (!merged) break
+  }
+
+  return current
+}
+
+const addMinimalComponentBridges = (
+  tiled: TiledVoxels,
+  occupied: Set<string>,
+  dimensions: Dimensions,
+) => {
+  let current = tiled
+  let added = 0
+
+  for (let attempt = 0; attempt < 24 && current.componentCount > 1; attempt += 1) {
+    const brickIndexByLayerCell = new Map<string, number>()
+    current.bricks.forEach((brick, brickIndex) => {
+      brick.cells.forEach((key) => brickIndexByLayerCell.set(`${brick.y}:${key}`, brickIndex))
+    })
+    const candidates: Array<{
+      placement: Placement & { y: number }
+      ownerIndices: number[]
+      missingCells: string[]
+      bridgedComponentCount: number
+    }> = []
+
+    for (let y = 1; y < dimensions.height; y += 1) {
+      const belowComponentByConnector = new Map<string, number>()
+      current.bricks.forEach((brick, brickIndex) => {
+        if (brick.y !== y - 1) return
+        const component = current.componentByBrickIndex[brickIndex]
+        brick.connectorCells.forEach((key) => belowComponentByConnector.set(key, component))
+      })
+      if (belowComponentByConnector.size === 0) continue
+
+      for (const brick of regularBrickTypes) {
+        for (let z = 0; z <= dimensions.depth - brick.depth; z += 1) {
+          for (let x = 0; x <= dimensions.width - brick.width; x += 1) {
+            const placement = { ...brick, x, y, z }
+            const cells = placementCells(placement)
+            const bridgedComponents = new Set(cells
+              .map((key) => belowComponentByConnector.get(key))
+              .filter((value): value is number => value !== undefined))
+            if (bridgedComponents.size < 2) continue
+            const ownerIndices = [...new Set(cells
+              .map((key) => brickIndexByLayerCell.get(`${y}:${key}`))
+              .filter((value): value is number => value !== undefined))]
+            if (ownerIndices.some((index) => current.bricks[index].isSlope)) continue
+            const cellSet = new Set(cells)
+            if (ownerIndices.some((index) => current.bricks[index].cells.some((key) => !cellSet.has(key)))) continue
+            const missingCells = cells
+              .filter((key) => !brickIndexByLayerCell.has(`${y}:${key}`))
+              .map((key) => {
+                const [cellX, cellZ] = key.split(',').map(Number)
+                return cellKey(cellX, y, cellZ)
+              })
+            if (missingCells.length > 2) continue
+
+            const candidatePlacement: Placement & { y: number } = {
+              ...placement,
+              cells,
+              connectorCells: placementTopConnectorCells(placement),
+              supportCells: [],
+            }
+            candidates.push({
+              placement: candidatePlacement,
+              ownerIndices,
+              missingCells,
+              bridgedComponentCount: bridgedComponents.size,
+            })
+          }
+        }
+      }
+    }
+
+    candidates.sort((source, target) =>
+      source.missingCells.length - target.missingCells.length ||
+      target.bridgedComponentCount - source.bridgedComponentCount ||
+      source.placement.cells.length - target.placement.cells.length ||
+      target.ownerIndices.length - source.ownerIndices.length ||
+      source.placement.y - target.placement.y
+    )
+    let selected: { candidate: (typeof candidates)[number]; analyzed: TiledVoxels } | undefined
+    for (const candidate of candidates) {
+      const ownerIndexSet = new Set(candidate.ownerIndices)
+      const insertionIndex = candidate.ownerIndices.length > 0 ? Math.min(...candidate.ownerIndices) : current.bricks.length
+      const nextBricks = current.bricks.flatMap((source, index) => {
+        if (index === insertionIndex) return [candidate.placement]
+        return ownerIndexSet.has(index) ? [] : [source]
+      })
+      if (insertionIndex === current.bricks.length) nextBricks.push(candidate.placement)
+      const analyzed = analyzeTiledBricks(nextBricks, dimensions)
+      if (analyzed.componentCount >= current.componentCount) continue
+      selected = { candidate, analyzed }
+      break
+    }
+    if (selected) {
+      selected.candidate.missingCells.forEach((key) => occupied.add(key))
+      added += selected.candidate.missingCells.length
+      current = selected.analyzed
+      continue
+    }
+
+    const componentSizes = new Map<number, number>()
+    current.componentByBrickIndex.forEach((component) => {
+      componentSizes.set(component, (componentSizes.get(component) ?? 0) + 1)
+    })
+    const extensionComponents = [...componentSizes]
+      .sort((source, target) => source[1] - target[1])
+      .map(([component]) => component)
+    let extended = false
+    for (const component of extensionComponents) {
+      const componentBricks = current.bricks.flatMap((brick, index) =>
+        current.componentByBrickIndex[index] === component ? [{ brick, index }] : [])
+      const topY = Math.max(...componentBricks.map(({ brick }) => brick.y))
+      const nextY = topY + 1
+      if (nextY >= dimensions.height) continue
+      const sourceBricks = componentBricks.filter(({ brick }) => brick.y === topY)
+      const targetBricks = current.bricks.flatMap((brick, index) => (
+        brick.y === nextY && current.componentByBrickIndex[index] !== component
+          ? [{ brick, index }]
+          : []
+      ))
+      const extensionOptions = sourceBricks.flatMap(({ brick: source }) =>
+        source.connectorCells.flatMap((sourceKey) => {
+          const [sourceX, sourceZ] = sourceKey.split(',').map(Number)
+          if (brickIndexByLayerCell.has(`${nextY}:${sourceKey}`)) return []
+          return targetBricks.flatMap(({ brick: target }) =>
+            target.connectorCells.flatMap((targetKey) => {
+              const [targetX, targetZ] = targetKey.split(',').map(Number)
+              const spanWidth = Math.abs(targetX - sourceX) + 1
+              const spanDepth = Math.abs(targetZ - sourceZ) + 1
+              const bridgeArea = regularBrickTypes.reduce((smallest, candidate) => (
+                candidate.width >= spanWidth && candidate.depth >= spanDepth
+                  ? Math.min(smallest, candidate.width * candidate.depth)
+                  : smallest
+              ), Infinity)
+              return Number.isFinite(bridgeArea)
+                ? [{ sourceX, sourceZ, bridgeArea, distance: spanWidth + spanDepth - 2 }]
+                : []
+            })
+          )
+        })
+      ).sort((source, target) =>
+        source.bridgeArea - target.bridgeArea || source.distance - target.distance
+      )
+      const extension = extensionOptions[0]
+      if (!extension) continue
+      const placement: Placement & { y: number } = {
+        ...oneByOneBrick,
+        x: extension.sourceX,
+        y: nextY,
+        z: extension.sourceZ,
+        cells: [layerCellKey(extension.sourceX, extension.sourceZ)],
+        connectorCells: [layerCellKey(extension.sourceX, extension.sourceZ)],
+        supportCells: [layerCellKey(extension.sourceX, extension.sourceZ)],
+      }
+      const analyzed = analyzeTiledBricks([...current.bricks, placement], dimensions)
+      if (analyzed.componentCount > current.componentCount) continue
+      occupied.add(cellKey(extension.sourceX, nextY, extension.sourceZ))
+      added += 1
+      current = analyzed
+      extended = true
+      break
+    }
+    if (!extended) break
+  }
+
+  return { tiled: current, added }
 }
 
 const tileVoxels = (occupied: Set<string>, dimensions: Dimensions, forcedColumns = new Set<string>()): TiledVoxels => {
@@ -734,8 +1044,7 @@ const tileVoxels = (occupied: Set<string>, dimensions: Dimensions, forcedColumns
     })
     previousBrickByConnector = globalBrickByConnector
   }
-  const componentCount = new Set(bricks.map((_, index) => findComponent(index))).size
-  return { bricks, unsupported, componentCount }
+  return analyzeTiledBricks(bricks, dimensions)
 }
 
 const sanitizeId = (value: string) => value
@@ -758,7 +1067,7 @@ const convertMeshAtResolution = (
   const repaired = addMinimalSupports(connected.occupied, normalized.dimensions)
   const finalOccupied = new Set(repaired.occupied)
   let prunedUnsupportedVoxels = 0
-  let tiled: TiledVoxels = { bricks: [], unsupported: [], componentCount: 0 }
+  let tiled: TiledVoxels = { bricks: [], unsupported: [], componentCount: 0, componentByBrickIndex: [] }
 
   onProgress({ stage: 'tile', progress: 0.68 })
   for (let attempt = 0; attempt < 8; attempt += 1) {
@@ -777,8 +1086,20 @@ const convertMeshAtResolution = (
     if (removedThisAttempt === 0) break
     if (attempt === 7) tiled = tileVoxels(finalOccupied, normalized.dimensions)
   }
+  tiled = mergeDisconnectedPlacements(tiled, normalized.dimensions)
+  const connectivityRepair = addMinimalComponentBridges(tiled, finalOccupied, normalized.dimensions)
+  tiled = connectivityRepair.tiled
 
-  return { normalized, voxelized, connected, repaired, finalOccupied, prunedUnsupportedVoxels, tiled }
+  return {
+    normalized,
+    voxelized,
+    connected,
+    repaired,
+    finalOccupied,
+    prunedUnsupportedVoxels,
+    addedConnectivityVoxels: connectivityRepair.added,
+    tiled,
+  }
 }
 
 export const importObjToBrickPlan = (
@@ -799,7 +1120,7 @@ export const importObjToBrickPlan = (
     resolution = nextResolution
     converted = convertMeshAtResolution(orientedMesh, resolution, onProgress)
   }
-  const { normalized, voxelized, connected, repaired, finalOccupied, prunedUnsupportedVoxels, tiled } = converted
+  const { normalized, voxelized, connected, repaired, finalOccupied, prunedUnsupportedVoxels, addedConnectivityVoxels, tiled } = converted
   if (tiled.bricks.length === 0) throw new Error('OBJ_EMPTY_PLAN')
 
   onProgress({ stage: 'finalize', progress: 0.94 })
@@ -853,7 +1174,7 @@ export const importObjToBrickPlan = (
       brickIds: [brick.id],
     }
   })
-  const structuralChanges = repaired.added + prunedUnsupportedVoxels
+  const structuralChanges = repaired.added + addedConnectivityVoxels + prunedUnsupportedVoxels
   const shapeMetrics = getShapeMetrics(connected.occupied, finalOccupied)
   const preview: ObjImportPreview = {
     front: createProjection(connected.occupied, finalOccupied, [0, 1], normalized.dimensions.width, normalized.dimensions.height),
@@ -867,6 +1188,7 @@ export const importObjToBrickPlan = (
     finalVoxels: finalOccupied.size,
     removedComponentVoxels: connected.removed,
     addedSupportVoxels: repaired.added,
+    addedConnectivityVoxels,
     prunedUnsupportedVoxels,
     brickCount: bricks.length,
     slopeCount: bricks.filter((brick) => brick.brickId === 'slope-1x2' || brick.brickId === 'curved-slope-1x2').length,

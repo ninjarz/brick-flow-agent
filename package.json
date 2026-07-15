@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "audit:ldraw": "node scripts/audit-ldraw-coverage.mjs",
+    "audit:obj-connectivity": "node scripts/audit-obj-connectivity.mjs",
     "download:ldraw": "node scripts/download-ldraw-parts.mjs",
     "generate:part-colors": "node scripts/generate-official-part-colors.mjs",
     "generate:ldraw": "node scripts/generate-ldraw-structural.mjs",

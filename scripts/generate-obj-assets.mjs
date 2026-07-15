@@ -77,6 +77,7 @@ const formatMetrics = (source, profile, orientation, result) => {
     finalVoxels: stats.finalVoxels,
     removedComponents: stats.removedComponentVoxels,
     supports: stats.addedSupportVoxels,
+    connectivityVoxels: stats.addedConnectivityVoxels,
     prunedUnsupportedVoxels: stats.prunedUnsupportedVoxels,
     componentCount: stats.componentCount,
     structuralChangeRatio: stats.structuralChangeRatio,
