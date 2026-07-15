@@ -1,4 +1,4 @@
-import { Edges, OrbitControls, Text } from '@react-three/drei'
+import { Edges, Line, OrbitControls, Text } from '@react-three/drei'
 import { Canvas, useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
 import { memo, type ReactNode, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -10,6 +10,7 @@ import { loadLDrawGeneratedVisual } from '../lib/ldrawGeneratedVisualLoader'
 import { createLoadedLDrawPartGeometry } from '../lib/ldrawVisualGeometry'
 import { createBuildGraph, getBrickBounds } from '../lib/planUtils'
 import { getScenePerformanceSettings } from '../lib/scenePerformance'
+import { analyzeBuildStability, getStabilityRiskColor, type StabilityAnalysis } from '../lib/stabilityAnalysis'
 import { getBrickWorldStructuralCellBoxes, type StructuralCellKind, type WorldStructuralCellBox } from '../lib/structuralGrid'
 import { WORLD_EDIT_STEP_STUDS, getBrickConnectors, getBrickWorldFrame, poseToWorld } from '../lib/brickUnits'
 import { useI18n } from '../lib/i18n'
@@ -22,7 +23,7 @@ import {
 } from '../lib/slopeGeometries'
 import type { BrickDefinition, PlacedBrick } from '../types/bricks'
 
-export type BrickSceneViewMode = 'border' | 'borderless' | 'voxel'
+export type BrickSceneViewMode = 'border' | 'borderless' | 'xray' | 'voxel'
 
 type BrickSceneProps = {
   bricks: PlacedBrick[]
@@ -31,6 +32,7 @@ type BrickSceneProps = {
   cameraFrameKey?: string
   initialCameraAzimuthDegrees?: number
   viewMode?: BrickSceneViewMode
+  stabilityAnalysis?: StabilityAnalysis
   onSelect: (id: string) => void
   onSelectConnected?: (id: string) => void
   onNudgeSelected: (delta: { xStud?: number; yStud?: number; zStud?: number }) => void
@@ -550,13 +552,14 @@ const SceneLighting = ({
   )
 }
 
-const BrickMesh = memo(function BrickMesh({ brick, selected, highlighted, floating, preferDetailedGeometry, showEdges, onSelect, onSelectConnected }: {
+const BrickMesh = memo(function BrickMesh({ brick, selected, highlighted, floating, preferDetailedGeometry, showEdges, displayColor, onSelect, onSelectConnected }: {
   brick: PlacedBrick
   selected: boolean
   highlighted: boolean
   floating: boolean
   preferDetailedGeometry: boolean
   showEdges: boolean
+  displayColor?: string
   onSelect: (id: string) => void
   onSelectConnected?: (id: string) => void
 }) {
@@ -572,13 +575,14 @@ const BrickMesh = memo(function BrickMesh({ brick, selected, highlighted, floati
       floating={floating}
       preferDetailedGeometry={preferDetailedGeometry}
       showEdges={showEdges}
+      displayColor={displayColor}
       onSelect={onSelect}
       onSelectConnected={onSelectConnected}
     />
   )
 })
 
-const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, preferDetailedGeometry, showEdges, onSelect, onSelectConnected }: {
+const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, preferDetailedGeometry, showEdges, displayColor, onSelect, onSelectConnected }: {
   brick: PlacedBrick
   definition: BrickDefinition
   selected: boolean
@@ -586,6 +590,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
   floating: boolean
   preferDetailedGeometry: boolean
   showEdges: boolean
+  displayColor?: string
   onSelect: (id: string) => void
   onSelectConnected?: (id: string) => void
 }) => {
@@ -621,8 +626,8 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
     || brick.brickId === 'curved-slope-1x2'
   const visibleStuds = connectors.filter((connector) => connector.kind === 'stud' && !rendersOwnStuds)
   const visiblePins = connectors.filter((connector) => connector.kind === 'pin' && connector.gender === 'male')
-  const bodyColor = colorHex[brick.color]
-  const bodyOpacity = colorOpacity[brick.color]
+  const bodyColor = displayColor ?? colorHex[brick.color]
+  const bodyOpacity = displayColor ? 0.92 : colorOpacity[brick.color]
   const isEyeTile = brick.brickId === 'tile-eye-1x1' || brick.brickId === 'tile-eye-closed-1x1' || brick.brickId === 'tile-eye-offset-1x1' || brick.brickId === 'tile-eye-centered-1x1'
   const baseWidth = definition.footprint.widthStuds
   const baseDepth = definition.footprint.depthStuds
@@ -699,7 +704,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
       <group position={[frame.x, origin.y + 0.14, frame.z]} rotation={[0, rotation, Math.PI / 2]} onClick={handleClick} onDoubleClick={handleDoubleClick}>
         <mesh castShadow receiveShadow>
           <cylinderGeometry args={[0.42, 0.42, 0.32, 32]} />
-          <meshStandardMaterial color={colorHex[brick.color]} roughness={0.72} metalness={0.05} />
+          <meshStandardMaterial color={bodyColor} roughness={0.72} metalness={0.05} />
           <Edges color={edgeColor} threshold={20} />
         </mesh>
         <mesh position={[0, 0, 0.17]}>
@@ -728,7 +733,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
       <group position={[frame.x, origin.y + frame.height / 2, frame.z]} rotation={[0, rotation, Math.PI / 2]} onClick={handleClick} onDoubleClick={handleDoubleClick}>
         <mesh castShadow receiveShadow>
           <cylinderGeometry args={[0.09, 0.09, frame.width + 2, 16]} />
-          <meshStandardMaterial color={colorHex[brick.color]} roughness={0.54} metalness={0.05} />
+          <meshStandardMaterial color={bodyColor} roughness={0.54} metalness={0.05} />
           <Edges color={edgeColor} threshold={12} />
         </mesh>
         {selected && (
@@ -875,7 +880,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
               rotation={studRotation}
             >
               <cylinderGeometry args={[studRadius, studRadius, renderedStudHeight, 24]} />
-              <meshStandardMaterial color={colorHex[brick.color]} roughness={0.42} />
+              <meshStandardMaterial color={bodyColor} roughness={0.42} />
               <Edges color={edgeColor} threshold={20} />
             </mesh>
           )
@@ -1003,7 +1008,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
             rotation={studRotation}
           >
             <cylinderGeometry args={[studRadius, studRadius, renderedStudHeight, 24]} />
-            <meshStandardMaterial color={colorHex[brick.color]} roughness={0.42} />
+            <meshStandardMaterial color={bodyColor} roughness={0.42} />
             <Edges color={edgeColor} threshold={20} />
           </mesh>
         )
@@ -1031,7 +1036,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
             rotation={pinRotation}
           >
             <cylinderGeometry args={[0.14, 0.14, pinLength, 18]} />
-            <meshStandardMaterial color={colorHex[brick.color]} roughness={0.42} />
+            <meshStandardMaterial color={bodyColor} roughness={0.42} />
             <Edges color={edgeColor} threshold={18} />
           </mesh>
         )
@@ -1356,11 +1361,12 @@ const SimplifiedSelectionBox = ({ bounds, selected }: {
   )
 }
 
-const SimplifiedBrickScene = ({ bricks, selectedId, highlightedIdSet, showEdges, onSelect, onSelectConnected }: {
+const SimplifiedBrickScene = ({ bricks, selectedId, highlightedIdSet, showEdges, displayColorByBrickId, onSelect, onSelectConnected }: {
   bricks: PlacedBrick[]
   selectedId?: string
   highlightedIdSet: Set<string>
   showEdges: boolean
+  displayColorByBrickId?: Map<string, string>
   onSelect: (id: string) => void
   onSelectConnected?: (id: string) => void
 }) => {
@@ -1373,10 +1379,11 @@ const SimplifiedBrickScene = ({ bricks, selectedId, highlightedIdSet, showEdges,
       if (!bounds) continue
 
       nextBoundsByBrickId.set(brick.id, bounds)
-      const groupKey = brick.color
+      const displayColor = displayColorByBrickId?.get(brick.id)
+      const groupKey = displayColor ?? brick.color
       const group = nextGroups.get(groupKey) ?? {
-        color: colorHex[brick.color],
-        opacity: colorOpacity[brick.color],
+        color: displayColor ?? colorHex[brick.color],
+        opacity: displayColor ? 0.9 : colorOpacity[brick.color],
         instances: [],
       }
       group.instances.push({ brick, bounds })
@@ -1387,7 +1394,7 @@ const SimplifiedBrickScene = ({ bricks, selectedId, highlightedIdSet, showEdges,
       groups: [...nextGroups.values()],
       boundsByBrickId: nextBoundsByBrickId,
     }
-  }, [bricks])
+  }, [bricks, displayColorByBrickId])
 
   return (
     <>
@@ -1412,6 +1419,43 @@ const SimplifiedBrickScene = ({ bricks, selectedId, highlightedIdSet, showEdges,
   )
 }
 
+const StabilityOverlay = ({ analysis }: { analysis: StabilityAnalysis }) => {
+  if (analysis.totalMass <= 0) return null
+  const center = analysis.centerOfMass
+  const stable = analysis.tippingMargin >= 0
+  const markerColor = stable ? '#2563eb' : '#dc2626'
+  const hullPoints = analysis.supportHull.length >= 2
+    ? [...analysis.supportHull, analysis.supportHull[0]].map((point) => [point.x, 0.035, point.z] as [number, number, number])
+    : []
+
+  return (
+    <group renderOrder={30}>
+      {hullPoints.length > 0 && (
+        <Line points={hullPoints} color={stable ? '#16a34a' : '#dc2626'} lineWidth={3} depthTest={false} />
+      )}
+      <mesh position={[center.x, center.y, center.z]} renderOrder={31}>
+        <sphereGeometry args={[0.2, 20, 20]} />
+        <meshBasicMaterial color={markerColor} depthTest={false} />
+      </mesh>
+      {center.y > 0.1 && (
+        <mesh position={[center.x, center.y / 2, center.z]} renderOrder={30}>
+          <cylinderGeometry args={[0.025, 0.025, center.y, 10]} />
+          <meshBasicMaterial color={markerColor} transparent opacity={0.68} depthTest={false} />
+        </mesh>
+      )}
+      <Text
+        position={[center.x, center.y + 0.34, center.z]}
+        fontSize={0.2}
+        color={markerColor}
+        anchorX="center"
+        anchorY="bottom"
+      >
+        COM
+      </Text>
+    </group>
+  )
+}
+
 export const BrickScene = ({
   bricks,
   selectedId,
@@ -1419,6 +1463,7 @@ export const BrickScene = ({
   cameraFrameKey,
   initialCameraAzimuthDegrees,
   viewMode = 'border',
+  stabilityAnalysis,
   onSelect,
   onSelectConnected,
   onNudgeSelected,
@@ -1427,7 +1472,8 @@ export const BrickScene = ({
 }: BrickSceneProps) => {
   const { t } = useI18n()
   const structuralDebug = viewMode === 'voxel'
-  const showBrickEdges = viewMode === 'border'
+  const xrayDebug = viewMode === 'xray'
+  const showBrickEdges = viewMode === 'border' || xrayDebug
   const highlightedIdSet = useMemo(() => new Set(highlightedIds), [highlightedIds])
   const [ldrawBoundsVersion, setLDrawBoundsVersion] = useState(0)
   const deferredFrameBricks = useDeferredValue(bricks)
@@ -1488,15 +1534,30 @@ export const BrickScene = ({
     }
   }, [frameBricks, ldrawBoundsVersion])
   const deferredSupportBricks = useDeferredValue(bricks)
+  const resolvedStabilityAnalysis = useMemo(
+    () => xrayDebug ? stabilityAnalysis ?? analyzeBuildStability(deferredSupportBricks) : undefined,
+    [deferredSupportBricks, stabilityAnalysis, xrayDebug],
+  )
+  const xrayColorByBrickId = useMemo(() => {
+    if (!resolvedStabilityAnalysis) return undefined
+    return new Map([...resolvedStabilityAnalysis.riskByBrickId].map(([brickId, item]) => [
+      brickId,
+      getStabilityRiskColor(item.risk, item.grounded),
+    ]))
+  }, [resolvedStabilityAnalysis])
   const supportedByBrickId = useMemo(() => {
     void ldrawBoundsVersion
+
+    if (resolvedStabilityAnalysis) {
+      return new Map([...resolvedStabilityAnalysis.riskByBrickId].map(([brickId, item]) => [brickId, item.grounded]))
+    }
 
     const buildGraph = createBuildGraph(deferredSupportBricks)
     return new Map(deferredSupportBricks.map((brick) => [
       brick.id,
       buildGraph.groundedIds.has(brick.id),
     ]))
-  }, [deferredSupportBricks, ldrawBoundsVersion])
+  }, [deferredSupportBricks, ldrawBoundsVersion, resolvedStabilityAnalysis])
 
   if (orbitTargetKeyRef.current !== boundsCameraFrameKey) {
     orbitTargetKeyRef.current = boundsCameraFrameKey
@@ -1540,6 +1601,7 @@ export const BrickScene = ({
             selectedId={selectedId}
             highlightedIdSet={highlightedIdSet}
             showEdges={showBrickEdges}
+            displayColorByBrickId={xrayColorByBrickId}
             onSelect={onSelect}
             onSelectConnected={onSelectConnected}
           />
@@ -1552,10 +1614,12 @@ export const BrickScene = ({
               floating={supportedByBrickId.get(brick.id) === false}
               preferDetailedGeometry={preferDetailedGeometry}
               showEdges={showBrickEdges}
+              displayColor={xrayColorByBrickId?.get(brick.id)}
               onSelect={onSelect}
               onSelectConnected={onSelectConnected}
             />
         ))}
+        {xrayDebug && resolvedStabilityAnalysis && <StabilityOverlay analysis={resolvedStabilityAnalysis} />}
         {bricks.length === 0 && (
           <Text position={[0, 1.2, 0]} fontSize={0.35} color="#475569">
             {t('scene.empty')}

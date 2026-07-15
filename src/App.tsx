@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, Box, Boxes, Download, Eye, FileUp, Github, Globe2, KeyRound, Link, Pause, Play, Plus, Redo2, RotateCcw, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
+import { BookOpen, Box, Boxes, Download, Eye, FileUp, Github, Globe2, KeyRound, Link, Pause, Play, Plus, Redo2, RotateCcw, ScanLine, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
 import { LazyBrickGlyph } from './components/LazyBrickGlyph'
 import { BrickEditorPanel } from './components/BrickEditorPanel'
 import type { BrickSceneViewMode } from './components/BrickScene'
@@ -18,6 +18,7 @@ import type { ObjImportResult } from './lib/objImport'
 import { prepareReferenceImage } from './lib/referenceImage'
 import { indexedDbStorageMarker, isIndexedDbStorageMarker, localStorageComfortLimit, readLargeStoredValue, removeLargeStoredValue, writeLargeStoredValue } from './lib/browserStorage'
 import { simplifiedBrickThreshold } from './lib/scenePerformance'
+import { analyzeBuildStability } from './lib/stabilityAnalysis'
 import { formatLDrawPlan, parseLDrawPlan } from './lib/ldrawPlan'
 import { getEffectiveInventory, loadInventoryOverrides, saveInventoryOverrides } from './lib/userInventory'
 import type { BuildPlan, FinishedAsset, LlmConfig, PlacedBrick } from './types/bricks'
@@ -60,7 +61,7 @@ const defaultImportText: ImportText = {
 const ROTATION_REPOSITION_SEARCH_RADIUS_STUDS = 5
 const ROTATION_REPOSITION_BOUNDS_TOLERANCE = 0.000001
 const workspaceDraftSaveDebounceMs = 120
-const sceneViewModeOrder: BrickSceneViewMode[] = ['border', 'borderless', 'voxel']
+const sceneViewModeOrder: BrickSceneViewMode[] = ['border', 'borderless', 'xray', 'voxel']
 
 const getNextSceneViewMode = (mode: BrickSceneViewMode) =>
   sceneViewModeOrder[(sceneViewModeOrder.indexOf(mode) + 1) % sceneViewModeOrder.length]
@@ -394,6 +395,10 @@ function App() {
   const [assetCategoryFilter, setAssetCategoryFilter] = useState('all')
   const [sceneViewMode, setSceneViewMode] = useState<BrickSceneViewMode>('border')
   const [isAutoSnapEnabled, setIsAutoSnapEnabled] = useState(false)
+  const sceneStabilityAnalysis = useMemo(
+    () => sceneViewMode === 'xray' ? analyzeBuildStability(plan.bricks) : undefined,
+    [plan.bricks, sceneViewMode],
+  )
   const defaultAssetCategoryLabels = useMemo(() => new Set(['自定义', 'Custom']), [])
   const llmConfigComplete = isLlmConfigComplete(llmConfig)
   const llmEngineStatus: LlmEngineStatus = !llmConfigComplete
@@ -1697,7 +1702,13 @@ function App() {
               })}
               onClick={() => setSceneViewMode((mode) => getNextSceneViewMode(mode))}
             >
-              {sceneViewMode === 'border' ? <Box size={18} /> : sceneViewMode === 'borderless' ? <Eye size={18} /> : <Boxes size={18} />}
+              {sceneViewMode === 'border'
+                ? <Box size={18} />
+                : sceneViewMode === 'borderless'
+                  ? <Eye size={18} />
+                  : sceneViewMode === 'xray'
+                    ? <ScanLine size={18} />
+                    : <Boxes size={18} />}
             </button>
             <button
               className={`icon-button ${isAutoSnapEnabled ? 'active' : ''}`}
@@ -1761,12 +1772,22 @@ function App() {
               <span><i style={{ background: '#10b981' }} />{t('voxel.studsocket')}</span>
             </div>
           )}
+          {sceneViewMode === 'xray' && sceneStabilityAnalysis && (
+            <div className="xray-legend" aria-label={t('xray.legend')}>
+              <strong>{t('xray.score', { score: sceneStabilityAnalysis.stabilityScore })}</strong>
+              <span className="xray-risk-scale" aria-hidden="true" />
+              <span>{t('xray.stable')}</span>
+              <span>{t('xray.critical')}</span>
+              <span className="xray-com"><i />{t('xray.centerOfMass')}</span>
+            </div>
+          )}
           <Suspense fallback={<div className="scene-loading">{t('scene.loading')}</div>}>
             <BrickScene
               bricks={plan.bricks}
               selectedId={selectedId}
               cameraFrameKey={plan.id}
               viewMode={sceneViewMode}
+              stabilityAnalysis={sceneStabilityAnalysis}
               highlightedIds={activeSelectedIds.filter((id) => id !== selectedId)}
               onSelect={selectBrick}
               onSelectConnected={selectConnectedGroup}

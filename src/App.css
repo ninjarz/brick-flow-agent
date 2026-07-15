@@ -176,6 +176,52 @@ button.status-pill:hover {
   backdrop-filter: blur(8px);
 }
 
+.xray-legend {
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  left: 12px;
+  display: grid;
+  grid-template-columns: auto minmax(84px, 140px) auto auto;
+  align-items: center;
+  gap: 6px 8px;
+  max-width: calc(100% - 24px);
+  padding: 9px 10px;
+  border: 1px solid rgba(37, 99, 235, 0.24);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  backdrop-filter: blur(8px);
+}
+
+.xray-legend strong {
+  grid-column: 1 / -1;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.xray-risk-scale {
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #22c55e, #facc15 45%, #f97316 70%, #ef4444);
+}
+
+.xray-com {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.xray-com i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #2563eb;
+}
+
 .performance-badge {
   position: absolute;
   z-index: 2;

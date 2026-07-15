@@ -3,7 +3,7 @@ export const simplifiedBrickThreshold = 2500
 
 export const getScenePerformanceSettings = (
   brickCount: number,
-  viewMode: 'border' | 'borderless' | 'voxel',
+  viewMode: 'border' | 'borderless' | 'xray' | 'voxel',
 ) => ({
   enableRealtimeShadows: brickCount < shadowBrickThreshold,
   useSimplifiedView: viewMode !== 'voxel' && brickCount >= simplifiedBrickThreshold,
