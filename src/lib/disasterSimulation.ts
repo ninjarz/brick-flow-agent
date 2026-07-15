@@ -36,6 +36,17 @@ export type DisasterSimulationResult = {
   scoreBreakdown: DisasterScoreBreakdown
 }
 
+export type DisasterSimulationWorkerRequest = {
+  type: 'simulate'
+  requestId: number
+  bricks: PlacedBrick[]
+  options: DisasterSimulationOptions
+}
+
+export type DisasterSimulationWorkerResponse =
+  | { type: 'result'; requestId: number; result: DisasterSimulationResult }
+  | { type: 'error'; requestId: number; message: string }
+
 export type DisasterFrame = {
   timeSeconds: number
   loadFactor: number

@@ -1,7 +1,14 @@
-import { Activity, CloudRain, Pause, Play, RotateCcw, Wind, X, Zap } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { Activity, CloudRain, LoaderCircle, Pause, Play, RotateCcw, Wind, X, Zap } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { BrickScene } from './BrickScene'
-import { getDisasterFrame, runDisasterSimulation, type DisasterScenario } from '../lib/disasterSimulation'
+import {
+  getDisasterFrame,
+  type DisasterScenario,
+  type DisasterSimulationOptions,
+  type DisasterSimulationResult,
+  type DisasterSimulationWorkerRequest,
+  type DisasterSimulationWorkerResponse,
+} from '../lib/disasterSimulation'
 import { useI18n } from '../lib/i18n'
 import type { BuildPlan } from '../types/bricks'
 
@@ -17,23 +24,75 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
   const [scenario, setScenario] = useState<DisasterScenario>('wind')
   const [intensity, setIntensity] = useState(70)
   const [directionDegrees, setDirectionDegrees] = useState(25)
-  const [result, setResult] = useState(() => runDisasterSimulation(plan.bricks, {
-    scenario: 'wind',
-    intensity: 70,
-    directionDegrees: 25,
-  }))
+  const [result, setResult] = useState<DisasterSimulationResult>()
+  const [isSimulating, setIsSimulating] = useState(true)
+  const [simulationError, setSimulationError] = useState('')
   const [timeSeconds, setTimeSeconds] = useState(0)
-  const [isPlaying, setIsPlaying] = useState(true)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const workerRef = useRef<Worker>()
+  const simulationRunRef = useRef(0)
 
-  const restartSimulation = useCallback(() => {
-    const nextResult = runDisasterSimulation(plan.bricks, { scenario, intensity, directionDegrees })
-    setResult(nextResult)
+  const stopWorker = useCallback(() => {
+    workerRef.current?.terminate()
+    workerRef.current = undefined
+  }, [])
+
+  const runSimulation = useCallback((options: DisasterSimulationOptions) => {
+    const requestId = ++simulationRunRef.current
+    stopWorker()
+    setResult(undefined)
+    setIsSimulating(true)
+    setSimulationError('')
     setTimeSeconds(0)
-    setIsPlaying(true)
-  }, [directionDegrees, intensity, plan.bricks, scenario])
+    setIsPlaying(false)
+
+    try {
+      const worker = new Worker(new URL('../workers/stabilityWorker.ts', import.meta.url), { type: 'module' })
+      workerRef.current = worker
+      worker.onmessage = (event: MessageEvent<DisasterSimulationWorkerResponse>) => {
+        if (event.data.requestId !== simulationRunRef.current) return
+        stopWorker()
+        setIsSimulating(false)
+        if (event.data.type === 'error') {
+          setSimulationError(event.data.message)
+          return
+        }
+        setResult(event.data.result)
+        setIsPlaying(true)
+      }
+      worker.onerror = () => {
+        if (requestId !== simulationRunRef.current) return
+        stopWorker()
+        setIsSimulating(false)
+        setSimulationError('STABILITY_SIMULATION_WORKER_FAILED')
+      }
+      worker.postMessage({
+        type: 'simulate',
+        requestId,
+        bricks: plan.bricks,
+        options,
+      } satisfies DisasterSimulationWorkerRequest)
+    } catch (error) {
+      stopWorker()
+      setIsSimulating(false)
+      setSimulationError(error instanceof Error ? error.message : 'STABILITY_SIMULATION_WORKER_FAILED')
+    }
+  }, [plan.bricks, stopWorker])
 
   useEffect(() => {
-    if (!isPlaying) return
+    runSimulation({ scenario: 'wind', intensity: 70, directionDegrees: 25 })
+    return () => {
+      simulationRunRef.current += 1
+      stopWorker()
+    }
+  }, [runSimulation, stopWorker])
+
+  const restartSimulation = useCallback(() => {
+    runSimulation({ scenario, intensity, directionDegrees })
+  }, [directionDegrees, intensity, runSimulation, scenario])
+
+  useEffect(() => {
+    if (!isPlaying || !result) return
     let animationFrame = 0
     let previousTime = performance.now()
     const animate = (now: number) => {
@@ -51,14 +110,14 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
     }
     animationFrame = requestAnimationFrame(animate)
     return () => cancelAnimationFrame(animationFrame)
-  }, [isPlaying, result.options.durationSeconds])
+  }, [isPlaying, result])
 
-  const frame = useMemo(() => getDisasterFrame(result, timeSeconds), [result, timeSeconds])
+  const frame = useMemo(() => result ? getDisasterFrame(result, timeSeconds) : undefined, [result, timeSeconds])
   const displayBricks = useMemo(() => plan.bricks.map((brick) => {
-    const offset = frame.offsetsByBrickId.get(brick.id)
+    const offset = frame?.offsetsByBrickId.get(brick.id)
     return {
       ...brick,
-      color: frame.failedIds.has(brick.id) ? 'red' as const : brick.color,
+      color: frame?.failedIds.has(brick.id) ? 'red' as const : brick.color,
       pose: offset ? {
         ...brick.pose,
         xStud: brick.pose.xStud + offset.x,
@@ -66,8 +125,8 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
         zStud: brick.pose.zStud + offset.z,
       } : brick.pose,
     }
-  }), [frame.failedIds, frame.offsetsByBrickId, plan.bricks])
-  const currentFailedCount = frame.failedIds.size
+  }), [frame, plan.bricks])
+  const currentFailedCount = frame?.failedIds.size ?? 0
   const scenarioOptions: Array<{ value: DisasterScenario; icon: typeof Wind }> = [
     { value: 'wind', icon: Wind },
     { value: 'rain', icon: CloudRain },
@@ -118,84 +177,102 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
                 <input type="range" min={0} max={355} step={5} value={directionDegrees} onChange={(event) => setDirectionDegrees(Number(event.target.value))} />
               </label>
             )}
-            <button className="primary stability-run" type="button" onClick={restartSimulation} disabled={plan.bricks.length === 0}>
-              <Zap size={16} />
-              {t('stabilityLab.run')}
+            <button className="primary stability-run" type="button" onClick={restartSimulation} disabled={plan.bricks.length === 0 || isSimulating}>
+              {isSimulating ? <LoaderCircle className="spin" size={16} /> : <Zap size={16} />}
+              {t(isSimulating ? 'stabilityLab.calculating' : 'stabilityLab.run')}
             </button>
           </section>
 
-          <section className="stability-score-card">
-            <div className={`stability-grade grade-${result.grade.toLowerCase()}`}>
-              <span>{result.grade}</span>
-              <strong>{result.score}</strong>
-              <small>{t('stabilityLab.totalScore')}</small>
-            </div>
-            <div className="stability-score-breakdown">
-              {Object.entries(result.scoreBreakdown).map(([key, value]) => (
-                <div key={key}>
-                  <span>{t(`stabilityLab.score.${key}`)}</span>
-                  <strong>{value}</strong>
-                  <i><b style={{ width: `${value}%` }} /></i>
-                </div>
-              ))}
-            </div>
-          </section>
+          {result ? (
+            <section className="stability-score-card">
+              <div className={`stability-grade grade-${result.grade.toLowerCase()}`}>
+                <span>{result.grade}</span>
+                <strong>{result.score}</strong>
+                <small>{t('stabilityLab.totalScore')}</small>
+              </div>
+              <div className="stability-score-breakdown">
+                {Object.entries(result.scoreBreakdown).map(([key, value]) => (
+                  <div key={key}>
+                    <span>{t(`stabilityLab.score.${key}`)}</span>
+                    <strong>{value}</strong>
+                    <i><b style={{ width: `${value}%` }} /></i>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : (
+            <section className={`stability-compute-card ${simulationError ? 'error' : ''}`} role="status" aria-live="polite">
+              {isSimulating ? <LoaderCircle className="spin" size={24} /> : <Activity size={24} />}
+              <strong>{t(isSimulating ? 'stabilityLab.calculatingTitle' : 'stabilityLab.errorTitle')}</strong>
+              <span>{t(isSimulating ? 'stabilityLab.calculatingHint' : 'stabilityLab.errorHint')}</span>
+            </section>
+          )}
         </div>
 
-        <section className="stability-simulator">
-          <div className={`disaster-weather disaster-weather-${result.options.scenario} ${isPlaying ? '' : 'paused'}`} aria-hidden="true">
-            {Array.from({ length: weatherParticleCount }, (_, index) => <i key={index} style={{ '--particle-index': index } as CSSProperties} />)}
-          </div>
-          <BrickScene
-            bricks={displayBricks}
-            selectedId=""
-            cameraFrameKey={`${plan.id}:stability-lab`}
-            stabilityAnalysis={result.analysis}
-            onSelect={() => {}}
-            onNudgeSelected={() => {}}
-            onRotateSelected={() => {}}
-            onDeleteSelected={() => {}}
-          />
-          <div className="simulation-status">
-            <span>{t('stabilityLab.load', { load: Math.round(frame.loadFactor * result.options.intensity) })}</span>
-            <span className={currentFailedCount > 0 ? 'failed' : ''}>{t('stabilityLab.failedNow', { count: currentFailedCount })}</span>
-          </div>
-        </section>
+        {result && frame ? (
+          <>
+            <section className="stability-simulator">
+              <div className={`disaster-weather disaster-weather-${result.options.scenario} ${isPlaying ? '' : 'paused'}`} aria-hidden="true">
+                {Array.from({ length: weatherParticleCount }, (_, index) => <i key={index} style={{ '--particle-index': index } as CSSProperties} />)}
+              </div>
+              <BrickScene
+                bricks={displayBricks}
+                selectedId=""
+                cameraFrameKey={`${plan.id}:stability-lab`}
+                stabilityAnalysis={result.analysis}
+                onSelect={() => {}}
+                onNudgeSelected={() => {}}
+                onRotateSelected={() => {}}
+                onDeleteSelected={() => {}}
+              />
+              <div className="simulation-status">
+                <span>{t('stabilityLab.load', { load: Math.round(frame.loadFactor * result.options.intensity) })}</span>
+                <span className={currentFailedCount > 0 ? 'failed' : ''}>{t('stabilityLab.failedNow', { count: currentFailedCount })}</span>
+              </div>
+            </section>
 
-        <section className="simulation-timeline">
-          <div>
-            <button
-              type="button"
-              onClick={() => {
-                if (!isPlaying && timeSeconds >= result.options.durationSeconds) setTimeSeconds(0)
-                setIsPlaying((playing) => !playing)
-              }}
-            >
-              {isPlaying ? <Pause size={15} /> : <Play size={15} />}
-              {t(isPlaying ? 'stabilityLab.pause' : 'stabilityLab.play')}
-            </button>
-            <button type="button" onClick={() => { setIsPlaying(false); setTimeSeconds(0) }}>
-              <RotateCcw size={15} />
-              {t('stabilityLab.restart')}
-            </button>
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={result.options.durationSeconds}
-            step={0.05}
-            value={timeSeconds}
-            onChange={(event) => { setIsPlaying(false); setTimeSeconds(Number(event.target.value)) }}
-            aria-label={t('stabilityLab.timeline')}
-          />
-          <span>{timeSeconds.toFixed(1)}s / {result.options.durationSeconds.toFixed(1)}s</span>
-        </section>
+            <section className="simulation-timeline">
+              <div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isPlaying && timeSeconds >= result.options.durationSeconds) setTimeSeconds(0)
+                    setIsPlaying((playing) => !playing)
+                  }}
+                >
+                  {isPlaying ? <Pause size={15} /> : <Play size={15} />}
+                  {t(isPlaying ? 'stabilityLab.pause' : 'stabilityLab.play')}
+                </button>
+                <button type="button" onClick={() => { setIsPlaying(false); setTimeSeconds(0) }}>
+                  <RotateCcw size={15} />
+                  {t('stabilityLab.restart')}
+                </button>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={result.options.durationSeconds}
+                step={0.05}
+                value={timeSeconds}
+                onChange={(event) => { setIsPlaying(false); setTimeSeconds(Number(event.target.value)) }}
+                aria-label={t('stabilityLab.timeline')}
+              />
+              <span>{timeSeconds.toFixed(1)}s / {result.options.durationSeconds.toFixed(1)}s</span>
+            </section>
 
-        <footer className="stability-result-summary">
-          <span>{t('stabilityLab.survived', { survived: result.survivedBrickCount, total: plan.bricks.length })}</span>
-          <span>{t('stabilityLab.staticScore', { score: result.analysis.stabilityScore })}</span>
-          <span>{t('stabilityLab.tippingMargin', { margin: result.analysis.tippingMargin.toFixed(2) })}</span>
-        </footer>
+            <footer className="stability-result-summary">
+              <span>{t('stabilityLab.survived', { survived: result.survivedBrickCount, total: plan.bricks.length })}</span>
+              <span>{t('stabilityLab.staticScore', { score: result.analysis.stabilityScore })}</span>
+              <span>{t('stabilityLab.tippingMargin', { margin: result.analysis.tippingMargin.toFixed(2) })}</span>
+            </footer>
+          </>
+        ) : (
+          <section className={`stability-simulator stability-simulator-placeholder ${simulationError ? 'error' : ''}`} aria-hidden="true">
+            <div />
+            <div />
+            <div />
+          </section>
+        )}
       </section>
     </div>
   )
