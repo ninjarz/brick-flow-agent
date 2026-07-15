@@ -68,6 +68,7 @@ npm run build                # 类型检查并构建
 npm run lint                 # 运行 ESLint
 npm test                     # 运行 Vitest 定向回归测试
 npm run validate:builds      # 校验默认素材和回归用例
+npm run audit:obj-connectivity # 确保每个生成的 OBJ 素材保持单一连通结构
 npm run profile:performance  # 性能分析
 npm run generate:obj         # 重新生成 OBJ 默认素材
 ```

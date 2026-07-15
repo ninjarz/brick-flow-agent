@@ -73,6 +73,7 @@ npm run build                # type-check and build
 npm run lint                 # run ESLint
 npm test                     # run focused Vitest regressions
 npm run validate:builds      # validate default assets and regression cases
+npm run audit:obj-connectivity # require every generated OBJ asset to stay connected
 npm run profile:performance  # profile performance-sensitive routines
 npm run generate:obj         # rebuild OBJ-derived default assets
 ```

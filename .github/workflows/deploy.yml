@@ -35,8 +35,14 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Test
+        run: npm test
+
       - name: Validate builds
         run: npm run validate:builds
+
+      - name: Audit OBJ connectivity
+        run: npm run audit:obj-connectivity
 
       - name: Resolve Vite base path
         id: vite-base
