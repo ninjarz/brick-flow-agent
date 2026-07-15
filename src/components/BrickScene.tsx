@@ -1535,16 +1535,16 @@ export const BrickScene = ({
   }, [frameBricks, ldrawBoundsVersion])
   const deferredSupportBricks = useDeferredValue(bricks)
   const resolvedStabilityAnalysis = useMemo(
-    () => xrayDebug ? stabilityAnalysis ?? analyzeBuildStability(deferredSupportBricks) : undefined,
+    () => stabilityAnalysis ?? (xrayDebug ? analyzeBuildStability(deferredSupportBricks) : undefined),
     [deferredSupportBricks, stabilityAnalysis, xrayDebug],
   )
   const xrayColorByBrickId = useMemo(() => {
-    if (!resolvedStabilityAnalysis) return undefined
+    if (!xrayDebug || !resolvedStabilityAnalysis) return undefined
     return new Map([...resolvedStabilityAnalysis.riskByBrickId].map(([brickId, item]) => [
       brickId,
       getStabilityRiskColor(item.risk, item.grounded),
     ]))
-  }, [resolvedStabilityAnalysis])
+  }, [resolvedStabilityAnalysis, xrayDebug])
   const supportedByBrickId = useMemo(() => {
     void ldrawBoundsVersion
 

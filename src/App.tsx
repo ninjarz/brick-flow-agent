@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, Box, Boxes, Download, Eye, FileUp, Github, Globe2, KeyRound, Link, Pause, Play, Plus, Redo2, RotateCcw, ScanLine, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
+import { BookOpen, Box, Boxes, Download, Eye, FileUp, Gauge, Github, Globe2, KeyRound, Link, Pause, Play, Plus, Redo2, RotateCcw, ScanLine, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
 import { LazyBrickGlyph } from './components/LazyBrickGlyph'
 import { BrickEditorPanel } from './components/BrickEditorPanel'
 import type { BrickSceneViewMode } from './components/BrickScene'
@@ -26,6 +26,7 @@ import './App.css'
 
 const BrickScene = lazy(() => import('./components/BrickScene').then((module) => ({ default: module.BrickScene })))
 const ObjImportModal = lazy(() => import('./components/ObjImportModal').then((module) => ({ default: module.ObjImportModal })))
+const StabilityLab = lazy(() => import('./components/StabilityLab').then((module) => ({ default: module.StabilityLab })))
 
 const defaultFinishedAssetI18nKeys = new Map(
   defaultFinishedAssets
@@ -376,6 +377,7 @@ function App() {
   const [isPromptPreviewOpen, setIsPromptPreviewOpen] = useState(false)
   const [isAssetLibraryOpen, setIsAssetLibraryOpen] = useState(false)
   const [isObjImportOpen, setIsObjImportOpen] = useState(false)
+  const [isStabilityLabOpen, setIsStabilityLabOpen] = useState(false)
   const [isManualOpen, setIsManualOpen] = useState(false)
   const [manualPlan, setManualPlan] = useState<BuildPlan>()
   const [manualStepIndex, setManualStepIndex] = useState(0)
@@ -739,7 +741,7 @@ function App() {
   }, [buildManual, isManualOpen, isManualPlaying, manualPlaybackIntervalMs, manualStepIndex])
 
   useEffect(() => {
-    if (!isConfigOpen && !isPromptPreviewOpen && !isAssetLibraryOpen && !isObjImportOpen && !isManualOpen) return
+    if (!isConfigOpen && !isPromptPreviewOpen && !isAssetLibraryOpen && !isObjImportOpen && !isManualOpen && !isStabilityLabOpen) return
 
     const handleModalEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
@@ -747,6 +749,8 @@ function App() {
 
       if (isManualOpen) {
         closeManual()
+      } else if (isStabilityLabOpen) {
+        setIsStabilityLabOpen(false)
       } else if (isPromptPreviewOpen) {
         setIsPromptPreviewOpen(false)
         setPromptCopyStatus('idle')
@@ -761,11 +765,11 @@ function App() {
 
     window.addEventListener('keydown', handleModalEscape)
     return () => window.removeEventListener('keydown', handleModalEscape)
-  }, [closeManual, isAssetLibraryOpen, isConfigOpen, isManualOpen, isObjImportOpen, isPromptPreviewOpen])
+  }, [closeManual, isAssetLibraryOpen, isConfigOpen, isManualOpen, isObjImportOpen, isPromptPreviewOpen, isStabilityLabOpen])
 
   useEffect(() => {
     const handleHistoryKeyDown = (event: KeyboardEvent) => {
-      if (isConfigOpen || isPromptPreviewOpen || isAssetLibraryOpen || isObjImportOpen || isManualOpen) return
+      if (isConfigOpen || isPromptPreviewOpen || isAssetLibraryOpen || isObjImportOpen || isManualOpen || isStabilityLabOpen) return
       if (isTypingElement(event.target)) return
       if (!event.metaKey && !event.ctrlKey) return
 
@@ -784,7 +788,7 @@ function App() {
 
     window.addEventListener('keydown', handleHistoryKeyDown)
     return () => window.removeEventListener('keydown', handleHistoryKeyDown)
-  }, [isAssetLibraryOpen, isConfigOpen, isManualOpen, isObjImportOpen, isPromptPreviewOpen, redoPlan, undoPlan])
+  }, [isAssetLibraryOpen, isConfigOpen, isManualOpen, isObjImportOpen, isPromptPreviewOpen, isStabilityLabOpen, redoPlan, undoPlan])
 
 
 
@@ -1722,6 +1726,15 @@ function App() {
             <button
               className="icon-button"
               type="button"
+              aria-label={t('top.stabilityLab')}
+              title={t('top.stabilityLab')}
+              onClick={() => setIsStabilityLabOpen(true)}
+            >
+              <Gauge size={18} />
+            </button>
+            <button
+              className="icon-button"
+              type="button"
               aria-label={t('top.config')}
               title={t('top.config')}
               onClick={() => setIsConfigOpen(true)}
@@ -1893,6 +1906,12 @@ function App() {
             onClose={() => setIsObjImportOpen(false)}
             onImported={importObjResult}
           />
+        </Suspense>
+      )}
+
+      {isStabilityLabOpen && (
+        <Suspense fallback={null}>
+          <StabilityLab plan={plan} onClose={() => setIsStabilityLabOpen(false)} />
         </Suspense>
       )}
 
