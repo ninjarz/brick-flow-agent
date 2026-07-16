@@ -47,13 +47,28 @@ describe('structural collision index', () => {
     )).toBe(true)
   })
 
-  it('preserves the full 3747 sloped shell', () => {
+  it('builds 3747 as a stable inverted-slope profile instead of an internal LDraw shell', () => {
     const definition = brickById.get('inverted-slope-3x2')
     expect(definition).toBeDefined()
 
     const cells = getBrickStructuralCells(definition!)
-    expect(cells.filter((cell) => cell.kind === 'solid')).toHaveLength(574)
-    expect(cells.filter((cell) => cell.kind === 'enterable')).toHaveLength(468)
+    const solidCells = cells.filter((cell) => cell.kind === 'solid')
+    const centerSliceSolidKeys = new Set(solidCells
+      .filter((cell) => Math.abs(cell.minZ - 0.8) < 0.000001)
+      .map((cell) => `${Math.round(cell.minX / STRUCTURAL_VOXEL_SIZE)},${Math.round(cell.minY / STRUCTURAL_VOXEL_SIZE)}`))
+    const expectedRowStartByY = [8, 6, 4, 2, 0, 0]
+    const expectedCenterSliceKeys = new Set<string>()
+    expectedRowStartByY.forEach((startX, y) => {
+      for (let x = startX; x < 15; x += 1) expectedCenterSliceKeys.add(`${x},${y}`)
+    })
+    expect(centerSliceSolidKeys).toEqual(expectedCenterSliceKeys)
+
+    const renderedEnterableCells = getBrickRenderStructuralCells(definition!)
+      .filter((cell) => cell.kind === 'enterable')
+    expect(renderedEnterableCells).toHaveLength(16)
+    expect(renderedEnterableCells.every((cell) => cell.entersFrom?.length === 1)).toBe(true)
+    expect(cells.filter((cell) => cell.kind === 'enterable').length)
+      .toBeGreaterThan(renderedEnterableCells.length)
   }, 20_000)
 
   it('compacts complex collision cells without changing their occupied voxels', () => {

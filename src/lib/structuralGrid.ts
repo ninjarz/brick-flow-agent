@@ -290,6 +290,8 @@ const makeMeshStructuralCells = (definition: BrickDefinition, triangles: MeshTri
     maxZ: definition.footprint.depthStuds,
   }
 
+  const usesSlopeProfileEnvelope = definition.id === 'inverted-slope-3x2'
+
   return overlayStructuralCells(
     voxelizeMeshStructuralCells({
       minXStuds: bounds.minX,
@@ -300,7 +302,12 @@ const makeMeshStructuralCells = (definition: BrickDefinition, triangles: MeshTri
       maxZStuds: bounds.maxZ,
       voxelSize: STRUCTURAL_VOXEL_SIZE,
       triangles,
-      surfaceVoxelMode: definition.kind === 'slope' ? 'preserve-shell' : 'thin-aware',
+      surfaceVoxelMode: usesSlopeProfileEnvelope
+        ? 'profile-envelope-x'
+        : definition.kind === 'slope' ? 'preserve-shell' : 'thin-aware',
+      bodyMaxYStuds: usesSlopeProfileEnvelope
+        ? definition.footprint.heightStuds
+        : undefined,
     }),
     makeConnectorCells(definition),
   )
@@ -407,7 +414,14 @@ export const getBrickRenderStructuralCells = (definition: BrickDefinition) => {
   if (cached) return cached
 
   const structuralCells = getBrickStructuralCells(definition)
-  const hasMergedSolidBody = structuralCells.some((cell) =>
+  // Mesh voxelization records all in-bounds empty cells as enterable so collision
+  // and clearance analysis can distinguish arcs, cavities and open undersides.
+  // Rendering that entire negative volume produces a misleading translucent box;
+  // only directional connector clearances are useful in the visual voxel legend.
+  const visibleStructuralCells = structuralCells.filter((cell) =>
+    cell.kind !== 'enterable' || (cell.entersFrom?.length ?? 0) < 6
+  )
+  const hasMergedSolidBody = visibleStructuralCells.some((cell) =>
     cell.kind === 'solid' && (
       cell.maxX - cell.minX > STRUCTURAL_VOXEL_SIZE + STRUCTURAL_OVERLAP_TOLERANCE ||
       cell.maxY - cell.minY > STRUCTURAL_VOXEL_SIZE + STRUCTURAL_OVERLAP_TOLERANCE ||
@@ -416,12 +430,12 @@ export const getBrickRenderStructuralCells = (definition: BrickDefinition) => {
   )
   const cells = hasMergedSolidBody
     ? overlayStructuralCells(
-      structuralCells
+      visibleStructuralCells
         .filter((cell) => cell.kind === 'solid')
         .flatMap(subdivideStructuralCell),
-      structuralCells.filter((cell) => cell.kind !== 'solid'),
+      visibleStructuralCells.filter((cell) => cell.kind !== 'solid'),
     )
-    : structuralCells
+    : visibleStructuralCells
 
   renderStructuralCellCache.set(cacheKey, cells)
   return cells

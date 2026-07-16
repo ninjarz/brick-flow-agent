@@ -58,6 +58,18 @@ const gridPadding = 4
 const nudgeRepeatDelayMs = 280
 const nudgeRepeatIntervalMs = 90
 
+const BoundsOutline = ({ position, size, color }: {
+  position: [number, number, number]
+  size: [number, number, number]
+  color: string
+}) => (
+  <mesh position={position}>
+    <boxGeometry args={size} />
+    <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+    <Edges color={color} threshold={15} />
+  </mesh>
+)
+
 const connectorDirection = (connector: ReturnType<typeof getBrickConnectors>[number]) => (
   connector.direction ?? (
     connector.axis === 'x'
@@ -606,10 +618,11 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
     boundsFrame.z - frame.z,
   ]
   const renderBoundsBox = (paddingX: number, paddingY: number, paddingZ: number, color: string) => (
-    <mesh position={boundsBoxPosition}>
-      <boxGeometry args={[boundsFrame.width + paddingX, boundsFrame.height + paddingY, boundsFrame.depth + paddingZ]} />
-      <meshBasicMaterial color={color} wireframe />
-    </mesh>
+    <BoundsOutline
+      position={boundsBoxPosition}
+      size={[boundsFrame.width + paddingX, boundsFrame.height + paddingY, boundsFrame.depth + paddingZ]}
+      color={color}
+    />
   )
   const rotateWithPose = (children: ReactNode) => (
     <BrickPoseRotation
@@ -1191,10 +1204,11 @@ const StructuralVoxelSelectionBox = ({ bounds, selected }: {
   bounds: StructuralVoxelBounds
   selected: boolean
 }) => (
-  <mesh position={[(bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2, (bounds.minZ + bounds.maxZ) / 2]}>
-    <boxGeometry args={[bounds.maxX - bounds.minX + 0.04, bounds.maxY - bounds.minY + 0.04, bounds.maxZ - bounds.minZ + 0.04]} />
-    <meshBasicMaterial color={selected ? '#38bdf8' : '#f59e0b'} wireframe />
-  </mesh>
+  <BoundsOutline
+    position={[(bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2, (bounds.minZ + bounds.maxZ) / 2]}
+    size={[bounds.maxX - bounds.minX + 0.04, bounds.maxY - bounds.minY + 0.04, bounds.maxZ - bounds.minZ + 0.04]}
+    color={selected ? '#38bdf8' : '#f59e0b'}
+  />
 )
 
 const StructuralVoxelScene = ({ bricks, selectedId, highlightedIdSet, boundsVersion, onSelect, onSelectConnected }: {
@@ -1354,10 +1368,11 @@ const SimplifiedSelectionBox = ({ bounds, selected }: {
 }) => {
   const [width, height, depth] = getBoundsSize(bounds)
   return (
-    <mesh position={getBoundsCenter(bounds)}>
-      <boxGeometry args={[width + 0.12, height + 0.16, depth + 0.12]} />
-      <meshBasicMaterial color={selected ? '#38bdf8' : '#f59e0b'} wireframe />
-    </mesh>
+    <BoundsOutline
+      position={getBoundsCenter(bounds)}
+      size={[width + 0.12, height + 0.16, depth + 0.12]}
+      color={selected ? '#38bdf8' : '#f59e0b'}
+    />
   )
 }
 

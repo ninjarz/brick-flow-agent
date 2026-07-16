@@ -17,7 +17,8 @@ type VoxelizeMeshOptions = {
   maxZStuds: number
   voxelSize: number
   triangles: MeshTriangle[]
-  surfaceVoxelMode?: 'thin-aware' | 'preserve-shell'
+  surfaceVoxelMode?: 'thin-aware' | 'preserve-shell' | 'profile-envelope-x'
+  bodyMaxYStuds?: number
 }
 
 type VoxelSample = {
@@ -237,6 +238,7 @@ export const voxelizeMeshStructuralCells = ({
   voxelSize,
   triangles,
   surfaceVoxelMode = 'thin-aware',
+  bodyMaxYStuds,
 }: VoxelizeMeshOptions): StructuralCell[] => {
   const gridMinX = snapGridBoundary(minXStuds, voxelSize, 'min')
   const gridMaxX = snapGridBoundary(maxXStuds, voxelSize, 'max')
@@ -289,16 +291,57 @@ export const voxelizeMeshStructuralCells = ({
   // their stepped shell. Thin meshes (notably propeller blades) instead use the
   // center-filled layer when a column has one, avoiding a second full layer from
   // the two faces of a sub-voxel-thick sheet.
-  const solidMask = samples.map((sample, index) => {
+  let solidMask = samples.map((sample, index) => {
     const x = Math.floor(index / (yCount * zCount))
     const z = index % zCount
     return sample.centerIsInside || (
       sample.surfaceIntersects && (
-        surfaceVoxelMode === 'preserve-shell' ||
+        surfaceVoxelMode !== 'thin-aware' ||
         !interiorColumns.has(x * zCount + z)
       )
     )
   })
+
+  if (surfaceVoxelMode === 'profile-envelope-x' && bodyMaxYStuds !== undefined) {
+    const sourceMask = solidMask
+    const envelopeMask = [...sourceMask]
+    const bodyYCount = Math.max(0, Math.min(
+      yCount,
+      Math.round((bodyMaxYStuds - gridMinY) / voxelSize),
+    ))
+
+    for (let y = 0; y < bodyYCount; y += 1) {
+      for (let x = 0; x < xCount; x += 1) {
+        for (let z = 0; z < zCount; z += 1) envelopeMask[sampleIndex(x, y, z)] = false
+      }
+
+      const rowSpans: Array<{ minX: number; maxX: number }> = []
+      for (let z = 0; z < zCount; z += 1) {
+        let minX = xCount
+        let maxX = -1
+        for (let x = 0; x < xCount; x += 1) {
+          if (!sourceMask[sampleIndex(x, y, z)]) continue
+          minX = Math.min(minX, x)
+          maxX = Math.max(maxX, x)
+        }
+        if (maxX >= minX) rowSpans.push({ minX, maxX })
+      }
+      if (rowSpans.length === 0) continue
+
+      // Internal ribs and tubes can protrude into an individual slice. Taking
+      // the intersection of all slice spans recovers the stable exterior slope
+      // profile, then extends that profile through the full part depth.
+      const profileMinX = Math.max(...rowSpans.map((span) => span.minX))
+      const profileMaxX = Math.min(...rowSpans.map((span) => span.maxX))
+      if (profileMaxX < profileMinX) continue
+
+      for (let x = profileMinX; x <= profileMaxX; x += 1) {
+        for (let z = 0; z < zCount; z += 1) envelopeMask[sampleIndex(x, y, z)] = true
+      }
+    }
+
+    solidMask = envelopeMask
+  }
   const solidCount = solidMask.filter(Boolean).length
   const hasTouchingSolid = (x: number, y: number, z: number) => {
     for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
