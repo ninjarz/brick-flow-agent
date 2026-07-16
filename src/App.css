@@ -302,6 +302,12 @@ button.status-pill:hover {
   transform: translate(-50%, -50%);
 }
 
+.wind-direction-compass {
+  position: absolute;
+  inset: 0;
+  transform: rotate(var(--camera-angle, 0deg));
+}
+
 .wind-direction-arrow {
   position: absolute;
   z-index: 1;
@@ -328,10 +334,10 @@ button.status-pill:hover {
   line-height: 1;
 }
 
-.wind-axis-x-positive { top: 50%; right: 3px; transform: translateY(-50%); }
-.wind-axis-z-positive { bottom: 3px; left: 50%; transform: translateX(-50%); }
-.wind-axis-x-negative { top: 50%; left: 3px; transform: translateY(-50%); }
-.wind-axis-z-negative { top: 3px; left: 50%; transform: translateX(-50%); }
+.wind-axis-x-positive { top: 50%; right: 3px; transform: translateY(-50%) rotate(var(--camera-counter-angle, 0deg)); }
+.wind-axis-z-positive { bottom: 3px; left: 50%; transform: translateX(-50%) rotate(var(--camera-counter-angle, 0deg)); }
+.wind-axis-x-negative { top: 50%; left: 3px; transform: translateY(-50%) rotate(var(--camera-counter-angle, 0deg)); }
+.wind-axis-z-negative { top: 3px; left: 50%; transform: translateX(-50%) rotate(var(--camera-counter-angle, 0deg)); }
 
 .wind-direction-copy {
   min-width: 0;
@@ -671,7 +677,7 @@ button.status-pill:hover {
 
 .disaster-weather-wind {
   inset: -45%;
-  transform: rotate(var(--wind-angle));
+  transform: rotate(var(--wind-screen-angle));
   transform-origin: center;
 }
 

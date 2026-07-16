@@ -30,23 +30,38 @@ type WindDirectionIndicatorProps = {
   label: string
   hint?: string
   compact?: boolean
+  viewAzimuthDegrees?: number
 }
 
-const WindDirectionIndicator = ({ degrees, label, hint, compact = false }: WindDirectionIndicatorProps) => (
+const WindDirectionIndicator = ({
+  degrees,
+  label,
+  hint,
+  compact = false,
+  viewAzimuthDegrees = 0,
+}: WindDirectionIndicatorProps) => (
   <div
     className={`wind-direction-indicator ${compact ? 'compact' : ''}`}
     role="img"
     aria-label={`${label} ${degrees}°`}
   >
     <div className="wind-direction-dial" aria-hidden="true">
-      <span className="wind-axis wind-axis-x-positive">X+</span>
-      <span className="wind-axis wind-axis-z-positive">Z+</span>
-      <span className="wind-axis wind-axis-x-negative">X−</span>
-      <span className="wind-axis wind-axis-z-negative">Z−</span>
-      <ArrowRight
-        className="wind-direction-arrow"
-        style={{ '--wind-angle': `${degrees}deg` } as CSSProperties}
-      />
+      <div
+        className="wind-direction-compass"
+        style={{
+          '--camera-angle': `${viewAzimuthDegrees}deg`,
+          '--camera-counter-angle': `${-viewAzimuthDegrees}deg`,
+        } as CSSProperties}
+      >
+        <span className="wind-axis wind-axis-x-positive">X+</span>
+        <span className="wind-axis wind-axis-z-positive">Z+</span>
+        <span className="wind-axis wind-axis-x-negative">X−</span>
+        <span className="wind-axis wind-axis-z-negative">Z−</span>
+        <ArrowRight
+          className="wind-direction-arrow"
+          style={{ '--wind-angle': `${degrees}deg` } as CSSProperties}
+        />
+      </div>
     </div>
     <div className="wind-direction-copy">
       <span>{label}</span>
@@ -66,6 +81,7 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
   const [simulationError, setSimulationError] = useState('')
   const [timeSeconds, setTimeSeconds] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [cameraAzimuthDegrees, setCameraAzimuthDegrees] = useState(18)
   const workerRef = useRef<Worker>()
   const simulationRunRef = useRef(0)
 
@@ -164,6 +180,21 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
     }
   }), [frame, plan.bricks])
   const currentFailedCount = frame?.failedIds.size ?? 0
+  const windExposureSummary = useMemo(() => {
+    if (!result || !frame || result.options.scenario !== 'wind') return undefined
+    let projectedArea = 0
+    let exposedArea = 0
+    for (const [brickId, exposure] of frame.windExposureByBrickId) {
+      if (frame.failedIds.has(brickId)) continue
+      projectedArea += exposure.projectedArea
+      exposedArea += exposure.exposedArea
+    }
+    if (projectedArea <= 0) return undefined
+    return {
+      percent: Math.round(exposedArea / projectedArea * 100),
+      area: exposedArea.toFixed(1),
+    }
+  }, [frame, result])
   const scenarioOptions: Array<{ value: DisasterScenario; icon: typeof Wind }> = [
     { value: 'wind', icon: Wind },
     { value: 'rain', icon: CloudRain },
@@ -282,7 +313,7 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
               <div
                 className={`disaster-weather disaster-weather-${result.options.scenario} ${isPlaying ? '' : 'paused'}`}
                 style={result.options.scenario === 'wind'
-                  ? { '--wind-angle': `${result.options.directionDegrees}deg` } as CSSProperties
+                  ? { '--wind-screen-angle': `${result.options.directionDegrees + cameraAzimuthDegrees}deg` } as CSSProperties
                   : undefined}
                 aria-hidden="true"
               >
@@ -293,6 +324,7 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
                 selectedId=""
                 cameraFrameKey={`${plan.id}:stability-lab`}
                 stabilityAnalysis={result.analysis}
+                onCameraAzimuthChange={setCameraAzimuthDegrees}
                 onSelect={() => {}}
                 onNudgeSelected={() => {}}
                 onRotateSelected={() => {}}
@@ -303,11 +335,15 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
                   <WindDirectionIndicator
                     compact
                     degrees={result.options.directionDegrees}
+                    viewAzimuthDegrees={cameraAzimuthDegrees}
                     label={t('stabilityLab.directionActive')}
                   />
                 </div>
               )}
               <div className="simulation-status">
+                {windExposureSummary && (
+                  <span>{t('stabilityLab.windExposure', windExposureSummary)}</span>
+                )}
                 <span>{t('stabilityLab.load', { load: Math.round(frame.loadFactor * result.options.intensity) })}</span>
                 <span className={currentFailedCount > 0 ? 'failed' : ''}>{t('stabilityLab.failedNow', { count: currentFailedCount })}</span>
               </div>

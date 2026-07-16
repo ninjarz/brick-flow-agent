@@ -1,5 +1,5 @@
 import { Edges, Line, OrbitControls, Text } from '@react-three/drei'
-import { Canvas, useThree } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
 import { memo, type ReactNode, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { BufferGeometry, DoubleSide, Float32BufferAttribute, Object3D, Vector3, type DirectionalLight, type InstancedMesh } from 'three'
@@ -33,6 +33,7 @@ type BrickSceneProps = {
   initialCameraAzimuthDegrees?: number
   viewMode?: BrickSceneViewMode
   stabilityAnalysis?: StabilityAnalysis
+  onCameraAzimuthChange?: (degrees: number) => void
   onSelect: (id: string) => void
   onSelectConnected?: (id: string) => void
   onNudgeSelected: (delta: { xStud?: number; yStud?: number; zStud?: number }) => void
@@ -499,6 +500,35 @@ const CameraFrame = ({ centerX, centerY, centerZ, size, frameKey, azimuthDegrees
     camera.lookAt(centerX, centerY, centerZ)
     camera.updateProjectionMatrix()
   }, [camera, frameKey])
+
+  return null
+}
+
+const normalizeDegrees = (degrees: number) => (degrees % 360 + 360) % 360
+
+const angularDistance = (source: number, target: number) =>
+  Math.abs((source - target + 540) % 360 - 180)
+
+const CameraAzimuthObserver = ({ onChange }: {
+  onChange?: (degrees: number) => void
+}) => {
+  const { camera } = useThree()
+  const directionRef = useRef(new Vector3())
+  const previousDegreesRef = useRef<number>()
+  const onChangeRef = useRef(onChange)
+  onChangeRef.current = onChange
+
+  useFrame(() => {
+    if (!onChangeRef.current) return
+    camera.getWorldDirection(directionRef.current)
+    const direction = directionRef.current
+    const horizontalLength = Math.hypot(direction.x, direction.z)
+    if (horizontalLength <= 0.000001) return
+    const degrees = normalizeDegrees(Math.atan2(-direction.x, -direction.z) * 180 / Math.PI)
+    if (previousDegreesRef.current !== undefined && angularDistance(degrees, previousDegreesRef.current) < 0.2) return
+    previousDegreesRef.current = degrees
+    onChangeRef.current(Number(degrees.toFixed(1)))
+  })
 
   return null
 }
@@ -1479,6 +1509,7 @@ export const BrickScene = ({
   initialCameraAzimuthDegrees,
   viewMode = 'border',
   stabilityAnalysis,
+  onCameraAzimuthChange,
   onSelect,
   onSelectConnected,
   onNudgeSelected,
@@ -1656,6 +1687,7 @@ export const BrickScene = ({
         frameKey={boundsCameraFrameKey}
         azimuthDegrees={initialCameraAzimuthDegrees}
       />
+      <CameraAzimuthObserver onChange={onCameraAzimuthChange} />
       <OrbitControls target={orbitTargetRef.current} makeDefault />
     </Canvas>
   )

@@ -59,4 +59,39 @@ describe('disaster simulation', () => {
 
     expect(broadStress).toBeGreaterThan(narrowStress * 2)
   })
+
+  it('only loads the first brick hit by a fully blocked wind ray', () => {
+    const front = makeBrick('brick-1x2', 'gray', 0, 0, 0)
+    const rear = makeBrick('brick-1x2', 'gray', 3, 0, 0)
+    const result = runDisasterSimulation([front, rear], {
+      scenario: 'wind',
+      intensity: 70,
+      directionDegrees: 0,
+    })
+
+    expect(result.windExposureByBrickId.get(front.id)?.exposedRatio).toBe(1)
+    expect(result.windExposureByBrickId.get(rear.id)?.exposedRatio).toBe(0)
+    const frame = getDisasterFrame(result, 2)
+    expect(Math.abs(frame.offsetsByBrickId.get(front.id)?.x ?? 0)).toBeGreaterThan(0)
+    expect(frame.offsetsByBrickId.get(rear.id)?.x).toBe(0)
+
+    result.failureTimeByBrickId.set(front.id, 1)
+    const unshieldedFrame = getDisasterFrame(result, 2)
+    expect(unshieldedFrame.windExposureByBrickId.get(rear.id)?.exposedRatio).toBe(1)
+    expect(Math.abs(unshieldedFrame.offsetsByBrickId.get(rear.id)?.x ?? 0)).toBeGreaterThan(0)
+  })
+
+  it('scales wind load by the visible fraction of a partially blocked face', () => {
+    const front = makeBrick('brick-1x1', 'gray', 0, 0, 0)
+    const rear = makeBrick('brick-2x2', 'gray', 3, 0, 0)
+    const result = runDisasterSimulation([front, rear], {
+      scenario: 'wind',
+      intensity: 70,
+      directionDegrees: 0,
+    })
+    const rearExposure = result.windExposureByBrickId.get(rear.id)
+
+    expect(rearExposure?.exposedRatio).toBeCloseTo(0.5, 1)
+    expect(rearExposure?.exposedArea).toBeCloseTo((rearExposure?.projectedArea ?? 0) * 0.5, 1)
+  })
 })
