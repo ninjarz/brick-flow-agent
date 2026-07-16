@@ -12,10 +12,12 @@ const COLLISION_INDEX_HASH_STEP = 1
 const STRUCTURAL_OVERLAP_TOLERANCE = 0.000001
 const WORLD_STRUCTURAL_CACHE_LIMIT = 5000
 const structuralCellCache = new Map<string, StructuralCell[]>()
+const renderStructuralCellCache = new Map<string, StructuralCell[]>()
 const interactionStructuralCellCache = new Map<string, StructuralCell[]>()
 const localSupportBoundsCache = new Map<string, BrickBounds | undefined>()
 const localSupportFaceCache = new Map<string, WorldStructuralSupportFaces>()
 const worldStructuralCellBoxCache = new Map<string, WorldStructuralCellBox[]>()
+const worldRenderStructuralCellBoxCache = new Map<string, WorldStructuralCellBox[]>()
 const worldSupportCellBoxCache = new Map<string, WorldStructuralCellBox[]>()
 const worldSupportFaceCache = new Map<string, WorldStructuralSupportFaces>()
 const worldSupportBoundsCache = new Map<string, BrickBounds | undefined>()
@@ -26,10 +28,12 @@ let structuralCacheVersion = 0
 onLDrawGeneratedVisualLoaded(() => {
   structuralCacheVersion += 1
   structuralCellCache.clear()
+  renderStructuralCellCache.clear()
   interactionStructuralCellCache.clear()
   localSupportBoundsCache.clear()
   localSupportFaceCache.clear()
   worldStructuralCellBoxCache.clear()
+  worldRenderStructuralCellBoxCache.clear()
   worldSupportCellBoxCache.clear()
   worldSupportFaceCache.clear()
   worldSupportBoundsCache.clear()
@@ -296,6 +300,7 @@ const makeMeshStructuralCells = (definition: BrickDefinition, triangles: MeshTri
       maxZStuds: bounds.maxZ,
       voxelSize: STRUCTURAL_VOXEL_SIZE,
       triangles,
+      surfaceVoxelMode: definition.kind === 'slope' ? 'preserve-shell' : 'thin-aware',
     }),
     makeConnectorCells(definition),
   )
@@ -361,6 +366,64 @@ export const getBrickStructuralCells = (definition: BrickDefinition): Structural
     : makeDefaultStructuralCells(definition)
 
   structuralCellCache.set(cacheKey, cells)
+  return cells
+}
+
+const subdivideStructuralCell = (cell: StructuralCell) => {
+  const width = cell.maxX - cell.minX
+  const height = cell.maxY - cell.minY
+  const depth = cell.maxZ - cell.minZ
+  const xCount = Math.max(1, Math.ceil((width - STRUCTURAL_OVERLAP_TOLERANCE) / STRUCTURAL_VOXEL_SIZE))
+  const yCount = Math.max(1, Math.ceil((height - STRUCTURAL_OVERLAP_TOLERANCE) / STRUCTURAL_VOXEL_SIZE))
+  const zCount = Math.max(1, Math.ceil((depth - STRUCTURAL_OVERLAP_TOLERANCE) / STRUCTURAL_VOXEL_SIZE))
+  const cells: StructuralCell[] = []
+
+  for (let x = 0; x < xCount; x += 1) {
+    for (let y = 0; y < yCount; y += 1) {
+      for (let z = 0; z < zCount; z += 1) {
+        const minX = cell.minX + x * STRUCTURAL_VOXEL_SIZE
+        const minY = cell.minY + y * STRUCTURAL_VOXEL_SIZE
+        const minZ = cell.minZ + z * STRUCTURAL_VOXEL_SIZE
+        cells.push(makeCell(
+          cell.kind,
+          minX,
+          minY,
+          minZ,
+          Math.min(STRUCTURAL_VOXEL_SIZE, cell.maxX - minX),
+          Math.min(STRUCTURAL_VOXEL_SIZE, cell.maxY - minY),
+          Math.min(STRUCTURAL_VOXEL_SIZE, cell.maxZ - minZ),
+          { accepts: cell.accepts, entersFrom: cell.entersFrom },
+        ))
+      }
+    }
+  }
+
+  return cells
+}
+
+export const getBrickRenderStructuralCells = (definition: BrickDefinition) => {
+  const cacheKey = makeStructuralDefinitionCacheKey(definition)
+  const cached = renderStructuralCellCache.get(cacheKey)
+  if (cached) return cached
+
+  const structuralCells = getBrickStructuralCells(definition)
+  const hasMergedSolidBody = structuralCells.some((cell) =>
+    cell.kind === 'solid' && (
+      cell.maxX - cell.minX > STRUCTURAL_VOXEL_SIZE + STRUCTURAL_OVERLAP_TOLERANCE ||
+      cell.maxY - cell.minY > STRUCTURAL_VOXEL_SIZE + STRUCTURAL_OVERLAP_TOLERANCE ||
+      cell.maxZ - cell.minZ > STRUCTURAL_VOXEL_SIZE + STRUCTURAL_OVERLAP_TOLERANCE
+    ),
+  )
+  const cells = hasMergedSolidBody
+    ? overlayStructuralCells(
+      structuralCells
+        .filter((cell) => cell.kind === 'solid')
+        .flatMap(subdivideStructuralCell),
+      structuralCells.filter((cell) => cell.kind !== 'solid'),
+    )
+    : structuralCells
+
+  renderStructuralCellCache.set(cacheKey, cells)
   return cells
 }
 
@@ -554,6 +617,22 @@ export const getBrickWorldStructuralCellBoxes = (brick: PlacedBrick): WorldStruc
   return boxes
 }
 
+export const getBrickWorldRenderStructuralCellBoxes = (brick: PlacedBrick): WorldStructuralCellBox[] => {
+  const cacheKey = getPlacedBrickCacheKey(brick)
+  const cached = worldRenderStructuralCellBoxCache.get(cacheKey)
+  if (cached) return cached
+
+  const definition = brickById.get(brick.brickId)
+  if (!definition) return []
+
+  const boxes = getBrickRenderStructuralCells(definition).map((cell) =>
+    transformStructuralCellBox(definition, brick, cell)
+  )
+
+  setLimitedWorldCache(worldRenderStructuralCellBoxCache, cacheKey, boxes)
+  return boxes
+}
+
 export const getBrickWorldStructuralCells = (brick: PlacedBrick): WorldStructuralCell[] =>
   getBrickWorldStructuralCellBoxes(brick).flatMap((worldCell) =>
     getCellHashKeys(worldCell).map((key) => ({ ...worldCell, key }))
@@ -583,7 +662,7 @@ const supportCellCarriesLoad = (definition: BrickDefinition, cell: StructuralCel
   structuralCellBlocksCollision(cell) && cellCenterIsInsideNominalBody(definition, cell)
 
 const getBrickLocalSupportCellBoxes = (definition: BrickDefinition) =>
-  getBrickInteractionStructuralCells(definition).filter((cell) => supportCellCarriesLoad(definition, cell))
+  getBrickStructuralCells(definition).filter((cell) => supportCellCarriesLoad(definition, cell))
 
 export const getBrickWorldSupportCellBoxes = (brick: PlacedBrick): WorldStructuralCellBox[] => {
   const cacheKey = getPlacedBrickCacheKey(brick)

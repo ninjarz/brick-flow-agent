@@ -1,7 +1,14 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { brickById } from '../data/basicBricks'
 import { loadLDrawGeneratedVisual } from './ldrawGeneratedVisualLoader'
-import { getBrickInteractionStructuralCells } from './structuralGrid'
+import {
+  getBrickInteractionStructuralCells,
+  getBrickRenderStructuralCells,
+  getBrickStructuralCells,
+  structuralCellBlocksCollision,
+  STRUCTURAL_VOXEL_SIZE,
+  type StructuralCell,
+} from './structuralGrid'
 import {
   createBrickCollisionIndex,
   getBrickRawOverlapScore,
@@ -29,7 +36,44 @@ describe('structural collision index', () => {
       minZ: 0,
       maxZ: 2,
     })
+
+    const renderCells = getBrickRenderStructuralCells(definition!)
+    const renderSolidCells = renderCells.filter((cell) => cell.kind === 'solid')
+    expect(renderSolidCells.length).toBeGreaterThan(1)
+    expect(renderSolidCells.every((cell) =>
+      cell.maxX - cell.minX <= STRUCTURAL_VOXEL_SIZE + 0.000001 &&
+      cell.maxY - cell.minY <= STRUCTURAL_VOXEL_SIZE + 0.000001 &&
+      cell.maxZ - cell.minZ <= STRUCTURAL_VOXEL_SIZE + 0.000001
+    )).toBe(true)
   })
+
+  it('preserves the full 3747 sloped shell', () => {
+    const definition = brickById.get('inverted-slope-3x2')
+    expect(definition).toBeDefined()
+
+    const cells = getBrickStructuralCells(definition!)
+    expect(cells.filter((cell) => cell.kind === 'solid')).toHaveLength(574)
+    expect(cells.filter((cell) => cell.kind === 'enterable')).toHaveLength(468)
+  }, 20_000)
+
+  it('compacts complex collision cells without changing their occupied voxels', () => {
+    const complexDefinitionIds = [
+      'inverted-slope-3x2',
+      'slope-curved-3x2',
+      'slope-curved-2x1-low',
+      'propeller-4-blade-open',
+      'propeller-4-blade-closed',
+    ]
+
+    for (const definitionId of complexDefinitionIds) {
+      const definition = brickById.get(definitionId)
+      expect(definition, definitionId).toBeDefined()
+      const detailedCells = getBrickStructuralCells(definition!).filter(structuralCellBlocksCollision)
+      const compactCells = getBrickInteractionStructuralCells(definition!)
+      expect(expandOccupiedVoxelKeys(compactCells), definitionId)
+        .toEqual(expandOccupiedVoxelKeys(detailedCells))
+    }
+  }, 30_000)
 
   it('uses a coarse broad phase while preserving exact overlap scores', () => {
     const fixed = makeBrick('brick-2x4', 'gray', 0, 0, 0)
@@ -58,3 +102,24 @@ describe('structural collision index', () => {
     expect(hasBrickCollision(overlap, [fixed], index)).toBe(true)
   })
 })
+
+const expandOccupiedVoxelKeys = (cells: StructuralCell[]) => {
+  const keys = new Set<string>()
+
+  for (const cell of cells) {
+    const minX = Math.round(cell.minX / STRUCTURAL_VOXEL_SIZE)
+    const maxX = Math.round(cell.maxX / STRUCTURAL_VOXEL_SIZE)
+    const minY = Math.round(cell.minY / STRUCTURAL_VOXEL_SIZE)
+    const maxY = Math.round(cell.maxY / STRUCTURAL_VOXEL_SIZE)
+    const minZ = Math.round(cell.minZ / STRUCTURAL_VOXEL_SIZE)
+    const maxZ = Math.round(cell.maxZ / STRUCTURAL_VOXEL_SIZE)
+
+    for (let x = minX; x < maxX; x += 1) {
+      for (let y = minY; y < maxY; y += 1) {
+        for (let z = minZ; z < maxZ; z += 1) keys.add(`${x},${y},${z}`)
+      }
+    }
+  }
+
+  return [...keys].sort()
+}

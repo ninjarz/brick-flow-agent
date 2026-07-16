@@ -17,6 +17,7 @@ type VoxelizeMeshOptions = {
   maxZStuds: number
   voxelSize: number
   triangles: MeshTriangle[]
+  surfaceVoxelMode?: 'thin-aware' | 'preserve-shell'
 }
 
 type VoxelSample = {
@@ -235,6 +236,7 @@ export const voxelizeMeshStructuralCells = ({
   maxZStuds,
   voxelSize,
   triangles,
+  surfaceVoxelMode = 'thin-aware',
 }: VoxelizeMeshOptions): StructuralCell[] => {
   const gridMinX = snapGridBoundary(minXStuds, voxelSize, 'min')
   const gridMaxX = snapGridBoundary(maxXStuds, voxelSize, 'max')
@@ -282,13 +284,19 @@ export const voxelizeMeshStructuralCells = ({
     const z = index % zCount
     interiorColumns.add(x * zCount + z)
   })
+
+  // Volumetric sloped parts need every surface-intersecting voxel to preserve
+  // their stepped shell. Thin meshes (notably propeller blades) instead use the
+  // center-filled layer when a column has one, avoiding a second full layer from
+  // the two faces of a sub-voxel-thick sheet.
   const solidMask = samples.map((sample, index) => {
     const x = Math.floor(index / (yCount * zCount))
     const z = index % zCount
-    // Center occupancy avoids doubling the vertical thickness of shallow curved
-    // parts. Surface-only columns remain filled so sub-voxel bars and rims survive.
     return sample.centerIsInside || (
-      sample.surfaceIntersects && !interiorColumns.has(x * zCount + z)
+      sample.surfaceIntersects && (
+        surfaceVoxelMode === 'preserve-shell' ||
+        !interiorColumns.has(x * zCount + z)
+      )
     )
   })
   const solidCount = solidMask.filter(Boolean).length

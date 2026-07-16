@@ -11,7 +11,7 @@ import { createLoadedLDrawPartGeometry } from '../lib/ldrawVisualGeometry'
 import { createBuildGraph, getBrickBounds } from '../lib/planUtils'
 import { getScenePerformanceSettings } from '../lib/scenePerformance'
 import { analyzeBuildStability, getStabilityRiskColor, type StabilityAnalysis } from '../lib/stabilityAnalysis'
-import { getBrickWorldStructuralCellBoxes, type StructuralCellKind, type WorldStructuralCellBox } from '../lib/structuralGrid'
+import { getBrickWorldRenderStructuralCellBoxes, type StructuralCellKind, type WorldStructuralCellBox } from '../lib/structuralGrid'
 import { WORLD_EDIT_STEP_STUDS, getBrickConnectors, getBrickWorldFrame, poseToWorld } from '../lib/brickUnits'
 import { useI18n } from '../lib/i18n'
 import {
@@ -1214,7 +1214,7 @@ const StructuralVoxelScene = ({ bricks, selectedId, highlightedIdSet, boundsVers
     const nextBoundsByBrickId = new Map<string, StructuralVoxelBounds>()
 
     for (const brick of bricks) {
-      const cells = getBrickWorldStructuralCellBoxes(brick)
+      const cells = getBrickWorldRenderStructuralCellBoxes(brick)
       if (cells.length === 0) continue
 
       for (const cell of cells) {
