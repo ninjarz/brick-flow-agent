@@ -255,6 +255,151 @@ button.status-pill:hover {
 
 .stability-lab-controls label strong { color: var(--ink); }
 
+.wind-direction-control {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.wind-direction-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.wind-direction-dial {
+  position: relative;
+  width: 86px;
+  height: 86px;
+  flex: 0 0 auto;
+  border: 1px solid #93c5fd;
+  border-radius: 50%;
+  background:
+    linear-gradient(90deg, transparent calc(50% - 0.5px), rgba(37, 99, 235, 0.18) 50%, transparent calc(50% + 0.5px)),
+    linear-gradient(transparent calc(50% - 0.5px), rgba(37, 99, 235, 0.18) 50%, transparent calc(50% + 0.5px)),
+    radial-gradient(circle at center, #eff6ff 0 28%, rgba(219, 234, 254, 0.54) 29% 55%, #fff 56%);
+  box-shadow: inset 0 0 0 4px rgba(219, 234, 254, 0.42);
+}
+
+.wind-direction-dial::after {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #1d4ed8;
+  box-shadow: 0 0 0 1px #1d4ed8;
+  transform: translate(-50%, -50%);
+}
+
+.wind-direction-arrow {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 50%;
+  width: 42px;
+  height: 42px;
+  margin: -21px;
+  color: #2563eb;
+  stroke-width: 2.6;
+  transform: rotate(var(--wind-angle));
+  filter: drop-shadow(0 1px 1px rgba(30, 64, 175, 0.22));
+}
+
+.wind-axis {
+  position: absolute;
+  z-index: 3;
+  padding: 1px 2px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.86);
+  color: #475569;
+  font-size: 8px;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.wind-axis-x-positive { top: 50%; right: 3px; transform: translateY(-50%); }
+.wind-axis-z-positive { bottom: 3px; left: 50%; transform: translateX(-50%); }
+.wind-axis-x-negative { top: 50%; left: 3px; transform: translateY(-50%); }
+.wind-axis-z-negative { top: 3px; left: 50%; transform: translateX(-50%); }
+
+.wind-direction-copy {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.wind-direction-copy > span {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.wind-direction-copy > strong {
+  color: #1d4ed8;
+  font-size: 20px;
+  line-height: 1.05;
+}
+
+.wind-direction-copy > small {
+  max-width: 135px;
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.wind-direction-settings {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.wind-direction-presets {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.wind-direction-presets button {
+  min-width: 0;
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 5px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.wind-direction-presets button strong {
+  color: #334155;
+  font-size: 10px;
+}
+
+.wind-direction-presets button.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+  box-shadow: inset 0 0 0 1px #2563eb;
+}
+
+.wind-direction-presets button.active strong { color: #1d4ed8; }
+
 .disaster-scenarios {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -464,6 +609,37 @@ button.status-pill:hover {
   color: #b91c1c;
 }
 
+.simulation-wind-direction {
+  position: absolute;
+  z-index: 5;
+  top: 10px;
+  left: 10px;
+  padding: 7px 9px 7px 7px;
+  border: 1px solid rgba(37, 99, 235, 0.28);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1);
+}
+
+.wind-direction-indicator.compact { gap: 7px; }
+
+.wind-direction-indicator.compact .wind-direction-dial {
+  width: 58px;
+  height: 58px;
+}
+
+.wind-direction-indicator.compact .wind-direction-arrow {
+  width: 30px;
+  height: 30px;
+  margin: -15px;
+}
+
+.wind-direction-indicator.compact .wind-axis { font-size: 6px; }
+.wind-direction-indicator.compact .wind-direction-copy > strong { font-size: 16px; }
+.wind-direction-indicator.compact .wind-direction-copy > span { max-width: 64px; font-size: 9px; }
+
 .disaster-weather {
   position: absolute;
   inset: 0;
@@ -491,6 +667,12 @@ button.status-pill:hover {
   background: rgba(37, 99, 235, 0.3);
   animation: stability-wind 1.6s linear infinite;
   animation-delay: calc(var(--particle-index) * -0.11s);
+}
+
+.disaster-weather-wind {
+  inset: -45%;
+  transform: rotate(var(--wind-angle));
+  transform-origin: center;
 }
 
 .disaster-weather-rain {

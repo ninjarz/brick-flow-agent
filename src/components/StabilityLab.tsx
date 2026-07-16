@@ -1,4 +1,4 @@
-import { Activity, CloudRain, LoaderCircle, Pause, Play, RotateCcw, Wind, X, Zap } from 'lucide-react'
+import { Activity, ArrowRight, CloudRain, LoaderCircle, Pause, Play, RotateCcw, Wind, X, Zap } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { BrickScene } from './BrickScene'
 import {
@@ -18,6 +18,43 @@ type StabilityLabProps = {
 }
 
 const weatherParticleCount = 18
+const windDirectionPresets = [
+  { degrees: 0, axis: 'X+' },
+  { degrees: 90, axis: 'Z+' },
+  { degrees: 180, axis: 'X−' },
+  { degrees: 270, axis: 'Z−' },
+] as const
+
+type WindDirectionIndicatorProps = {
+  degrees: number
+  label: string
+  hint?: string
+  compact?: boolean
+}
+
+const WindDirectionIndicator = ({ degrees, label, hint, compact = false }: WindDirectionIndicatorProps) => (
+  <div
+    className={`wind-direction-indicator ${compact ? 'compact' : ''}`}
+    role="img"
+    aria-label={`${label} ${degrees}°`}
+  >
+    <div className="wind-direction-dial" aria-hidden="true">
+      <span className="wind-axis wind-axis-x-positive">X+</span>
+      <span className="wind-axis wind-axis-z-positive">Z+</span>
+      <span className="wind-axis wind-axis-x-negative">X−</span>
+      <span className="wind-axis wind-axis-z-negative">Z−</span>
+      <ArrowRight
+        className="wind-direction-arrow"
+        style={{ '--wind-angle': `${degrees}deg` } as CSSProperties}
+      />
+    </div>
+    <div className="wind-direction-copy">
+      <span>{label}</span>
+      <strong>{degrees}°</strong>
+      {hint && <small>{hint}</small>}
+    </div>
+  </div>
+)
 
 export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
   const { t } = useI18n()
@@ -172,10 +209,40 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
               <input type="range" min={10} max={100} step={5} value={intensity} onChange={(event) => setIntensity(Number(event.target.value))} />
             </label>
             {scenario === 'wind' && (
-              <label>
-                <span>{t('stabilityLab.direction')} <strong>{directionDegrees}°</strong></span>
-                <input type="range" min={0} max={355} step={5} value={directionDegrees} onChange={(event) => setDirectionDegrees(Number(event.target.value))} />
-              </label>
+              <div className="wind-direction-control">
+                <WindDirectionIndicator
+                  degrees={directionDegrees}
+                  label={t('stabilityLab.directionConfigured')}
+                  hint={t('stabilityLab.directionHint')}
+                />
+                <div className="wind-direction-settings">
+                  <label>
+                    <span>{t('stabilityLab.direction')} <strong>{directionDegrees}°</strong></span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={355}
+                      step={5}
+                      value={directionDegrees}
+                      onChange={(event) => setDirectionDegrees(Number(event.target.value))}
+                    />
+                  </label>
+                  <div className="wind-direction-presets" aria-label={t('stabilityLab.directionPresets')}>
+                    {windDirectionPresets.map(({ degrees, axis }) => (
+                      <button
+                        key={degrees}
+                        type="button"
+                        className={directionDegrees === degrees ? 'active' : ''}
+                        aria-pressed={directionDegrees === degrees}
+                        onClick={() => setDirectionDegrees(degrees)}
+                      >
+                        <strong>{axis}</strong>
+                        <span>{degrees}°</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
             )}
             <button className="primary stability-run" type="button" onClick={restartSimulation} disabled={plan.bricks.length === 0 || isSimulating}>
               {isSimulating ? <LoaderCircle className="spin" size={16} /> : <Zap size={16} />}
@@ -212,7 +279,13 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
         {result && frame ? (
           <>
             <section className="stability-simulator">
-              <div className={`disaster-weather disaster-weather-${result.options.scenario} ${isPlaying ? '' : 'paused'}`} aria-hidden="true">
+              <div
+                className={`disaster-weather disaster-weather-${result.options.scenario} ${isPlaying ? '' : 'paused'}`}
+                style={result.options.scenario === 'wind'
+                  ? { '--wind-angle': `${result.options.directionDegrees}deg` } as CSSProperties
+                  : undefined}
+                aria-hidden="true"
+              >
                 {Array.from({ length: weatherParticleCount }, (_, index) => <i key={index} style={{ '--particle-index': index } as CSSProperties} />)}
               </div>
               <BrickScene
@@ -225,6 +298,15 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
                 onRotateSelected={() => {}}
                 onDeleteSelected={() => {}}
               />
+              {result.options.scenario === 'wind' && (
+                <div className="simulation-wind-direction">
+                  <WindDirectionIndicator
+                    compact
+                    degrees={result.options.directionDegrees}
+                    label={t('stabilityLab.directionActive')}
+                  />
+                </div>
+              )}
               <div className="simulation-status">
                 <span>{t('stabilityLab.load', { load: Math.round(frame.loadFactor * result.options.intensity) })}</span>
                 <span className={currentFailedCount > 0 ? 'failed' : ''}>{t('stabilityLab.failedNow', { count: currentFailedCount })}</span>
