@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { BrickScene } from './BrickScene'
 import {
   getDisasterFrame,
+  type DisasterFailureMode,
   type DisasterScenario,
   type DisasterSimulationOptions,
   type DisasterSimulationResult,
@@ -210,6 +211,16 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
       area: exposedArea.toFixed(1),
     }
   }, [frame, result])
+  const primaryFailureMode = useMemo(() => {
+    if (!result || !frame || frame.failedIds.size === 0) return undefined
+    const counts = new Map<DisasterFailureMode, number>()
+    for (const brickId of frame.failedIds) {
+      const mode = result.failureModeByBrickId.get(brickId)
+      if (mode) counts.set(mode, (counts.get(mode) ?? 0) + 1)
+    }
+    const primary = [...counts].sort((left, right) => right[1] - left[1])[0]
+    return primary ? { mode: primary[0], count: primary[1] } : undefined
+  }, [frame, result])
   const scenarioOptions: Array<{ value: DisasterScenario; icon: typeof Wind }> = [
     { value: 'wind', icon: Wind },
     { value: 'rain', icon: CloudRain },
@@ -367,6 +378,14 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
                 )}
                 <span>{t('stabilityLab.load', { load: Math.round(frame.loadFactor * result.options.intensity) })}</span>
                 <span className={currentFailedCount > 0 ? 'failed' : ''}>{t('stabilityLab.failedNow', { count: currentFailedCount })}</span>
+                {primaryFailureMode && (
+                  <span className="failed">
+                    {t('stabilityLab.failureModeActive', {
+                      mode: t(`stabilityLab.failureMode.${primaryFailureMode.mode}`),
+                      count: primaryFailureMode.count,
+                    })}
+                  </span>
+                )}
               </div>
             </section>
 

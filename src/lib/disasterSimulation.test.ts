@@ -14,6 +14,7 @@ describe('disaster simulation', () => {
     const second = runDisasterSimulation(bricks, { scenario: 'earthquake', intensity: 82 })
 
     expect([...first.failureTimeByBrickId]).toEqual([...second.failureTimeByBrickId])
+    expect([...first.failureModeByBrickId]).toEqual([...second.failureModeByBrickId])
     expect(first.score).toBe(second.score)
     expect(first.score).toBeGreaterThanOrEqual(0)
     expect(first.score).toBeLessThanOrEqual(100)
@@ -27,6 +28,7 @@ describe('disaster simulation', () => {
     const finalFrame = getDisasterFrame(result, result.options.durationSeconds)
 
     expect(result.failureTimeByBrickId.get(detached.id)).toBe(0)
+    expect(result.failureModeByBrickId.get(detached.id)).toBe('detached')
     expect(finalFrame.failedIds.has(detached.id)).toBe(true)
     expect(finalFrame.offsetsByBrickId.get(detached.id)?.y).toBeLessThan(0)
   })
@@ -114,5 +116,21 @@ describe('disaster simulation', () => {
     const unshieldedFrame = getDisasterFrame(result, 2)
     expect(unshieldedFrame.rainExposureByBrickId.get(base.id)?.exposedRatio).toBe(1)
     expect(unshieldedFrame.waterAccumulation).toBeGreaterThan(0)
+  })
+
+  it('classifies wind failures from overturning moment separately from shear', () => {
+    const tower = [
+      makeBrick('brick-2x2', 'gray', 0, 0, 0),
+      makeBrick('brick-1x1', 'gray', 0.5, 1.2, 0.5),
+      makeBrick('brick-1x1', 'gray', 0.5, 2.4, 0.5),
+      makeBrick('brick-1x1', 'gray', 0.5, 3.6, 0.5),
+    ]
+    const result = runDisasterSimulation(tower, {
+      scenario: 'wind',
+      intensity: 100,
+      directionDegrees: 0,
+    })
+
+    expect([...result.failureModeByBrickId.values()]).toContain('overturn')
   })
 })

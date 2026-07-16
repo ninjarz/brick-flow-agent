@@ -4,6 +4,8 @@ import type { PlacedBrick } from '../types/bricks'
 
 export type DisasterScenario = 'wind' | 'rain' | 'earthquake'
 
+export type DisasterFailureMode = 'shear' | 'overturn' | 'slip' | 'water-load' | 'seismic' | 'detached'
+
 export type DisasterSimulationOptions = {
   scenario: DisasterScenario
   intensity: number
@@ -38,6 +40,7 @@ export type DisasterSimulationResult = {
   options: Required<DisasterSimulationOptions>
   analysis: StabilityAnalysis
   failureTimeByBrickId: Map<string, number>
+  failureModeByBrickId: Map<string, DisasterFailureMode>
   peakStressByBrickId: Map<string, number>
   windExposureByBrickId: Map<string, WindExposure>
   windOcclusionField?: WindOcclusionField
@@ -381,15 +384,18 @@ export const runDisasterSimulation = (
     const stability = analysis.riskByBrickId.get(brick.id)
     if (!bounds || !stability) return []
     const width = Math.max(epsilon, bounds.maxX - bounds.minX)
+    const height = Math.max(epsilon, bounds.maxY - bounds.minY)
     const depth = Math.max(epsilon, bounds.maxZ - bounds.minZ)
     const topArea = width * depth
+    const centerY = (bounds.minY + bounds.maxY) / 2
     const rootBoost = rootIds.has(brick.id) ? 2 : 0
     const connectionCapacity = (
       0.9 + stability.connectionCount * 0.7 + stability.supportCoverage * 1.8 + rootBoost
     ) * (0.7 + Math.pow(stability.mass, 0.35))
-    return [{ brick, bounds, stability, topArea, connectionCapacity }]
+    return [{ brick, bounds, stability, width, height, depth, topArea, centerY, connectionCapacity }]
   })
   const failureTimeByBrickId = new Map<string, number>()
+  const failureModeByBrickId = new Map<string, DisasterFailureMode>()
   const peakStressByBrickId = new Map<string, number>()
   const maxFallByBrickId = new Map(prepared.map(({ brick, bounds }) => [brick.id, Math.max(0, bounds.minY)]))
   const timeline: DisasterSimulationResult['timeline'] = []
@@ -408,6 +414,7 @@ export const runDisasterSimulation = (
     for (const { brick } of prepared) {
       if (!reachable.has(brick.id) && !failureTimeByBrickId.has(brick.id)) {
         failureTimeByBrickId.set(brick.id, timeSeconds)
+        failureModeByBrickId.set(brick.id, 'detached')
       }
     }
   }
@@ -430,26 +437,42 @@ export const runDisasterSimulation = (
     for (const item of prepared) {
       if (failureTimeByBrickId.has(item.brick.id)) continue
       const riskBias = item.stability.risk * (0.28 + intensity * 0.72)
-      let demand = 0
-      let grip = 1
+      let loadStress = 0
+      let failureMode: DisasterFailureMode
       if (resolvedOptions.scenario === 'wind') {
         const exposedArea = frameWindExposure.get(item.brick.id)?.exposedArea ?? 0
-        demand = exposedArea * (0.2 + 2.15 * intensity ** 2) * (0.28 + item.stability.heightRatio * 0.92)
+        const force = exposedArea * (0.2 + 2.15 * intensity ** 2)
+        const shearResistance = item.connectionCapacity * (0.78 + item.stability.supportCoverage * 0.62)
+        const shearStress = force * loadFactor / Math.max(epsilon, shearResistance)
+        const baseSpanAlongWind = Math.abs(windDirection.x) * item.width + Math.abs(windDirection.z) * item.depth
+        const overturnResistance = item.connectionCapacity * Math.max(0.2, baseSpanAlongWind / 2) *
+          (0.48 + item.stability.supportCoverage * 0.92)
+        const pressureCenterHeight = Math.max(item.height / 2, item.centerY)
+        const overturnStress = force * loadFactor * pressureCenterHeight / Math.max(epsilon, overturnResistance)
+        loadStress = Math.max(shearStress, overturnStress)
+        failureMode = overturnStress > shearStress ? 'overturn' : 'shear'
       } else if (resolvedOptions.scenario === 'rain') {
         const exposure = frameRainExposure.get(item.brick.id)
         const exposedArea = exposure?.exposedArea ?? item.topArea
         const exposedRatio = exposure?.exposedRatio ?? 1
-        demand = exposedArea * (0.12 + 1.7 * intensity) *
+        const demand = exposedArea * (0.12 + 1.7 * intensity) *
           (0.34 + item.stability.heightRatio * 0.35) *
           (1 + waterAccumulation * 1.15)
-        grip = 1 - intensity * 0.38 * (0.3 + exposedRatio * 0.7) * (0.4 + waterAccumulation * 0.6)
+        const grip = 1 - intensity * 0.38 * (0.3 + exposedRatio * 0.7) * (0.4 + waterAccumulation * 0.6)
+        loadStress = demand * loadFactor / Math.max(epsilon, item.connectionCapacity * grip)
+        failureMode = grip < 0.82 ? 'slip' : 'water-load'
       } else {
-        demand = item.stability.mass * (0.12 + 1.35 * intensity) * (0.18 + item.stability.heightRatio)
+        const demand = item.stability.mass * (0.12 + 1.35 * intensity) * (0.18 + item.stability.heightRatio)
+        loadStress = demand * loadFactor / Math.max(epsilon, item.connectionCapacity)
+        failureMode = 'seismic'
       }
-      const stress = demand * loadFactor / Math.max(epsilon, item.connectionCapacity * grip) + riskBias
+      const stress = loadStress + riskBias
       peakStressByBrickId.set(item.brick.id, Math.max(peakStressByBrickId.get(item.brick.id) ?? 0, stress))
       const deterministicTolerance = 0.94 + hashUnit(item.brick.id) * 0.18
-      if (stress >= deterministicTolerance) failureTimeByBrickId.set(item.brick.id, timeSeconds)
+      if (stress >= deterministicTolerance) {
+        failureTimeByBrickId.set(item.brick.id, timeSeconds)
+        failureModeByBrickId.set(item.brick.id, failureMode)
+      }
     }
 
     markDisconnectedBricks(timeSeconds)
@@ -475,6 +498,7 @@ export const runDisasterSimulation = (
     options: resolvedOptions,
     analysis,
     failureTimeByBrickId,
+    failureModeByBrickId,
     peakStressByBrickId,
     windExposureByBrickId,
     windOcclusionField,
