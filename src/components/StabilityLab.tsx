@@ -218,7 +218,9 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
       const mode = result.failureModeByBrickId.get(brickId)
       if (mode) counts.set(mode, (counts.get(mode) ?? 0) + 1)
     }
-    const primary = [...counts].sort((left, right) => right[1] - left[1])[0]
+    const directFailures = [...counts].filter(([mode]) => mode !== 'detached')
+    const primary = (directFailures.length > 0 ? directFailures : [...counts])
+      .sort((left, right) => right[1] - left[1])[0]
     return primary ? { mode: primary[0], count: primary[1] } : undefined
   }, [frame, result])
   const scenarioOptions: Array<{ value: DisasterScenario; icon: typeof Wind }> = [
@@ -265,16 +267,22 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
               <span>{t('stabilityLab.intensity')} <strong>{intensity}%</strong></span>
               <input type="range" min={10} max={100} step={5} value={intensity} onChange={(event) => setIntensity(Number(event.target.value))} />
             </label>
-            {scenario === 'wind' && (
+            {scenario !== 'rain' && (
               <div className="wind-direction-control">
                 <WindDirectionIndicator
                   degrees={directionDegrees}
-                  label={t('stabilityLab.directionConfigured')}
-                  hint={t('stabilityLab.directionHint')}
+                  label={t(scenario === 'earthquake'
+                    ? 'stabilityLab.shakeDirectionConfigured'
+                    : 'stabilityLab.directionConfigured')}
+                  hint={t(scenario === 'earthquake'
+                    ? 'stabilityLab.shakeDirectionHint'
+                    : 'stabilityLab.directionHint')}
                 />
                 <div className="wind-direction-settings">
                   <label>
-                    <span>{t('stabilityLab.direction')} <strong>{directionDegrees}°</strong></span>
+                    <span>{t(scenario === 'earthquake'
+                      ? 'stabilityLab.shakeDirection'
+                      : 'stabilityLab.direction')} <strong>{directionDegrees}°</strong></span>
                     <input
                       type="range"
                       min={0}
@@ -284,7 +292,9 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
                       onChange={(event) => setDirectionDegrees(Number(event.target.value))}
                     />
                   </label>
-                  <div className="wind-direction-presets" aria-label={t('stabilityLab.directionPresets')}>
+                  <div className="wind-direction-presets" aria-label={t(scenario === 'earthquake'
+                    ? 'stabilityLab.shakeDirectionPresets'
+                    : 'stabilityLab.directionPresets')}>
                     {windDirectionPresets.map(({ degrees, axis }) => (
                       <button
                         key={degrees}
@@ -356,13 +366,15 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
                 onRotateSelected={() => {}}
                 onDeleteSelected={() => {}}
               />
-              {result.options.scenario === 'wind' && (
+              {result.options.scenario !== 'rain' && (
                 <div className="simulation-wind-direction">
                   <WindDirectionIndicator
                     compact
                     degrees={result.options.directionDegrees}
                     viewAzimuthDegrees={cameraAzimuthDegrees}
-                    label={t('stabilityLab.directionActive')}
+                    label={t(result.options.scenario === 'earthquake'
+                      ? 'stabilityLab.shakeDirectionActive'
+                      : 'stabilityLab.directionActive')}
                   />
                 </div>
               )}

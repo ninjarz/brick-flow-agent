@@ -133,4 +133,22 @@ describe('disaster simulation', () => {
 
     expect([...result.failureModeByBrickId.values()]).toContain('overturn')
   })
+
+  it('transfers upper-storey inertia into the supporting connection during earthquakes', () => {
+    const tower = [
+      makeBrick('brick-1x1', 'gray', 0, 0, 0),
+      makeBrick('brick-1x1', 'gray', 0, 1.2, 0),
+      makeBrick('brick-1x1', 'gray', 0, 2.4, 0),
+      makeBrick('brick-1x1', 'gray', 0, 3.6, 0),
+    ]
+    const result = runDisasterSimulation(tower, {
+      scenario: 'earthquake',
+      intensity: 100,
+      directionDegrees: 0,
+    })
+
+    expect(result.peakStressByBrickId.get(tower[0].id) ?? 0)
+      .toBeGreaterThan(result.peakStressByBrickId.get(tower.at(-1)!.id) ?? 0)
+    expect([...result.failureModeByBrickId.values()]).toContain('seismic-overturn')
+  })
 })

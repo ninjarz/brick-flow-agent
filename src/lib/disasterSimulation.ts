@@ -4,7 +4,14 @@ import type { PlacedBrick } from '../types/bricks'
 
 export type DisasterScenario = 'wind' | 'rain' | 'earthquake'
 
-export type DisasterFailureMode = 'shear' | 'overturn' | 'slip' | 'water-load' | 'seismic' | 'detached'
+export type DisasterFailureMode =
+  | 'shear'
+  | 'overturn'
+  | 'slip'
+  | 'water-load'
+  | 'seismic-shear'
+  | 'seismic-overturn'
+  | 'detached'
 
 export type DisasterSimulationOptions = {
   scenario: DisasterScenario
@@ -85,6 +92,8 @@ const contactTolerance = 0.14
 const disasterOcclusionSampleSize = 0.5
 const epsilon = 0.000001
 const clamp = (value: number, min = 0, max = 1) => Math.min(max, Math.max(min, value))
+const overlapLength = (sourceMin: number, sourceMax: number, targetMin: number, targetMax: number) =>
+  Math.max(0, Math.min(sourceMax, targetMax) - Math.max(sourceMin, targetMin))
 
 const hashUnit = (value: string) => {
   let hash = 2166136261
@@ -387,13 +396,56 @@ export const runDisasterSimulation = (
     const height = Math.max(epsilon, bounds.maxY - bounds.minY)
     const depth = Math.max(epsilon, bounds.maxZ - bounds.minZ)
     const topArea = width * depth
+    const centerX = (bounds.minX + bounds.maxX) / 2
     const centerY = (bounds.minY + bounds.maxY) / 2
+    const centerZ = (bounds.minZ + bounds.maxZ) / 2
     const rootBoost = rootIds.has(brick.id) ? 2 : 0
     const connectionCapacity = (
       0.9 + stability.connectionCount * 0.7 + stability.supportCoverage * 1.8 + rootBoost
     ) * (0.7 + Math.pow(stability.mass, 0.35))
-    return [{ brick, bounds, stability, width, height, depth, topArea, centerY, connectionCapacity }]
+    return [{ brick, bounds, stability, width, height, depth, topArea, centerX, centerY, centerZ, connectionCapacity }]
   })
+  const preparedById = new Map(prepared.map((item) => [item.brick.id, item]))
+  const seismicLoadOrder = [...prepared].sort((source, target) => target.centerY - source.centerY)
+  const createSeismicLoadByBrickId = (failedIds: Set<string>) => {
+    const loads = new Map(prepared
+      .filter(({ brick }) => !failedIds.has(brick.id))
+      .map((item) => [item.brick.id, {
+        mass: item.stability.mass,
+        momentX: item.centerX * item.stability.mass,
+        momentY: item.centerY * item.stability.mass,
+        momentZ: item.centerZ * item.stability.mass,
+      }]))
+
+    for (const item of seismicLoadOrder) {
+      if (failedIds.has(item.brick.id)) continue
+      const load = loads.get(item.brick.id)
+      if (!load) continue
+      const supports = [...(graph.attachmentEdges.get(item.brick.id) ?? [])].flatMap((supportId) => {
+        if (failedIds.has(supportId)) return []
+        const support = preparedById.get(supportId)
+        if (!support || support.centerY >= item.centerY) return []
+        if (Math.abs(support.bounds.maxY - item.bounds.minY) > contactTolerance) return []
+        const overlapArea = overlapLength(item.bounds.minX, item.bounds.maxX, support.bounds.minX, support.bounds.maxX) *
+          overlapLength(item.bounds.minZ, item.bounds.maxZ, support.bounds.minZ, support.bounds.maxZ)
+        return overlapArea > epsilon ? [{ support, overlapArea }] : []
+      })
+      const totalOverlapArea = supports.reduce((sum, support) => sum + support.overlapArea, 0)
+      if (totalOverlapArea <= epsilon) continue
+
+      for (const { support, overlapArea } of supports) {
+        const share = overlapArea / totalOverlapArea
+        const supportLoad = loads.get(support.brick.id)
+        if (!supportLoad) continue
+        supportLoad.mass += load.mass * share
+        supportLoad.momentX += load.momentX * share
+        supportLoad.momentY += load.momentY * share
+        supportLoad.momentZ += load.momentZ * share
+      }
+    }
+
+    return loads
+  }
   const failureTimeByBrickId = new Map<string, number>()
   const failureModeByBrickId = new Map<string, DisasterFailureMode>()
   const peakStressByBrickId = new Map<string, number>()
@@ -433,6 +485,9 @@ export const runDisasterSimulation = (
       resolvedOptions.durationSeconds,
       intensity,
     )
+    const frameSeismicLoads = resolvedOptions.scenario === 'earthquake'
+      ? createSeismicLoadByBrickId(new Set(failureTimeByBrickId.keys()))
+      : undefined
 
     for (const item of prepared) {
       if (failureTimeByBrickId.has(item.brick.id)) continue
@@ -462,9 +517,26 @@ export const runDisasterSimulation = (
         loadStress = demand * loadFactor / Math.max(epsilon, item.connectionCapacity * grip)
         failureMode = grip < 0.82 ? 'slip' : 'water-load'
       } else {
-        const demand = item.stability.mass * (0.12 + 1.35 * intensity) * (0.18 + item.stability.heightRatio)
-        loadStress = demand * loadFactor / Math.max(epsilon, item.connectionCapacity)
-        failureMode = 'seismic'
+        const seismicLoad = frameSeismicLoads?.get(item.brick.id)
+        const transmittedMass = seismicLoad?.mass ?? item.stability.mass
+        const force = transmittedMass * (0.12 + 1.35 * intensity)
+        const shearResistance = item.connectionCapacity * (0.82 + item.stability.supportCoverage * 0.58)
+        const shearStress = force * loadFactor / Math.max(epsilon, shearResistance)
+        const tributaryCenterX = seismicLoad ? seismicLoad.momentX / transmittedMass : item.centerX
+        const tributaryCenterY = seismicLoad ? seismicLoad.momentY / transmittedMass : item.centerY
+        const tributaryCenterZ = seismicLoad ? seismicLoad.momentZ / transmittedMass : item.centerZ
+        const heightLever = Math.max(item.height / 2, tributaryCenterY - item.bounds.minY)
+        const eccentricity = Math.abs(
+          (tributaryCenterX - item.centerX) * windDirection.x +
+          (tributaryCenterZ - item.centerZ) * windDirection.z,
+        )
+        const baseSpanAlongShake = Math.abs(windDirection.x) * item.width + Math.abs(windDirection.z) * item.depth
+        const overturnResistance = item.connectionCapacity * Math.max(0.2, baseSpanAlongShake / 2) *
+          (0.52 + item.stability.supportCoverage * 0.9)
+        const overturnStress = force * loadFactor * (heightLever + eccentricity * 0.65) /
+          Math.max(epsilon, overturnResistance)
+        loadStress = Math.max(shearStress, overturnStress)
+        failureMode = overturnStress > shearStress ? 'seismic-overturn' : 'seismic-shear'
       }
       const stress = loadStress + riskBias
       peakStressByBrickId.set(item.brick.id, Math.max(peakStressByBrickId.get(item.brick.id) ?? 0, stress))

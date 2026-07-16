@@ -89,6 +89,9 @@ await writeFile(entry, `
   measure('simulate rain for largest finished asset', () =>
     disasterSimulation.runDisasterSimulation(largestAsset.plan.bricks, { scenario: 'rain', intensity: 70 })
   );
+  measure('simulate earthquake for largest finished asset', () =>
+    disasterSimulation.runDisasterSimulation(largestAsset.plan.bricks, { scenario: 'earthquake', intensity: 70 })
+  );
 
   const curvedDefinition = brickById.get('curved-slope-1x2')!;
   measure('6091 structural cells x100', () => {
