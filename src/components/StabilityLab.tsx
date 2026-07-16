@@ -195,6 +195,21 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
       area: exposedArea.toFixed(1),
     }
   }, [frame, result])
+  const rainExposureSummary = useMemo(() => {
+    if (!result || !frame || result.options.scenario !== 'rain') return undefined
+    let projectedArea = 0
+    let exposedArea = 0
+    for (const [brickId, exposure] of frame.rainExposureByBrickId) {
+      if (frame.failedIds.has(brickId)) continue
+      projectedArea += exposure.projectedArea
+      exposedArea += exposure.exposedArea
+    }
+    if (projectedArea <= 0) return undefined
+    return {
+      percent: Math.round(exposedArea / projectedArea * 100),
+      area: exposedArea.toFixed(1),
+    }
+  }, [frame, result])
   const scenarioOptions: Array<{ value: DisasterScenario; icon: typeof Wind }> = [
     { value: 'wind', icon: Wind },
     { value: 'rain', icon: CloudRain },
@@ -343,6 +358,12 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
               <div className="simulation-status">
                 {windExposureSummary && (
                   <span>{t('stabilityLab.windExposure', windExposureSummary)}</span>
+                )}
+                {rainExposureSummary && (
+                  <span>{t('stabilityLab.rainExposure', rainExposureSummary)}</span>
+                )}
+                {result.options.scenario === 'rain' && (
+                  <span>{t('stabilityLab.waterAccumulation', { percent: Math.round(frame.waterAccumulation * 100) })}</span>
                 )}
                 <span>{t('stabilityLab.load', { load: Math.round(frame.loadFactor * result.options.intensity) })}</span>
                 <span className={currentFailedCount > 0 ? 'failed' : ''}>{t('stabilityLab.failedNow', { count: currentFailedCount })}</span>

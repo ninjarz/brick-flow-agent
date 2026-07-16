@@ -24,11 +24,15 @@ export type WindExposure = {
   exposedRatio: number
 }
 
+export type RainExposure = WindExposure
+
 export type WindOcclusionField = {
   rayHitBrickIds: string[][]
   projectedSampleCountByBrickId: Map<string, number>
   projectedAreaByBrickId: Map<string, number>
 }
+
+export type RainOcclusionField = WindOcclusionField
 
 export type DisasterSimulationResult = {
   options: Required<DisasterSimulationOptions>
@@ -37,6 +41,8 @@ export type DisasterSimulationResult = {
   peakStressByBrickId: Map<string, number>
   windExposureByBrickId: Map<string, WindExposure>
   windOcclusionField?: WindOcclusionField
+  rainExposureByBrickId: Map<string, RainExposure>
+  rainOcclusionField?: RainOcclusionField
   maxFallByBrickId: Map<string, number>
   timeline: Array<{
     timeSeconds: number
@@ -66,12 +72,14 @@ export type DisasterFrame = {
   loadFactor: number
   failedIds: Set<string>
   windExposureByBrickId: Map<string, WindExposure>
+  rainExposureByBrickId: Map<string, RainExposure>
+  waterAccumulation: number
   offsetsByBrickId: Map<string, { x: number; y: number; z: number }>
 }
 
 const simulationFrameCount = 90
 const contactTolerance = 0.14
-const windOcclusionSampleSize = 0.5
+const disasterOcclusionSampleSize = 0.5
 const epsilon = 0.000001
 const clamp = (value: number, min = 0, max = 1) => Math.min(max, Math.max(min, value))
 
@@ -195,8 +203,8 @@ const createWindOcclusionField = (
   const maximumY = Math.max(...projections.map(({ bounds }) => bounds.maxY))
   const crosswindSpan = Math.max(epsilon, maximumCrosswind - minimumCrosswind)
   const height = Math.max(epsilon, maximumY - minimumY)
-  const crosswindSamples = Math.max(1, Math.ceil(crosswindSpan / windOcclusionSampleSize))
-  const verticalSamples = Math.max(1, Math.ceil(height / windOcclusionSampleSize))
+  const crosswindSamples = Math.max(1, Math.ceil(crosswindSpan / disasterOcclusionSampleSize))
+  const verticalSamples = Math.max(1, Math.ceil(height / disasterOcclusionSampleSize))
   const rayHitBrickIds: string[][] = []
   const projectedSampleCountByBrickId = new Map(projections.map(({ brickId }) => [brickId, 0]))
   const projectedAreaByBrickId = new Map(projections.map(({ brickId, projectedArea }) => [brickId, projectedArea]))
@@ -242,7 +250,7 @@ const createWindOcclusionField = (
   return { rayHitBrickIds, projectedSampleCountByBrickId, projectedAreaByBrickId }
 }
 
-const getWindExposureFromField = (
+const getExposureFromField = (
   field: WindOcclusionField,
   failedIds: Set<string>,
 ) => {
@@ -268,6 +276,76 @@ const getWindExposureFromField = (
   }))
 }
 
+const createRainOcclusionField = (
+  boundsById: Map<string, WindBounds>,
+) => {
+  const projections = [...boundsById].map(([brickId, bounds]) => ({
+    brickId,
+    bounds,
+    projectedArea: Math.max(epsilon, bounds.maxX - bounds.minX) *
+      Math.max(epsilon, bounds.maxZ - bounds.minZ),
+  }))
+  if (projections.length === 0) {
+    return {
+      rayHitBrickIds: [],
+      projectedSampleCountByBrickId: new Map<string, number>(),
+      projectedAreaByBrickId: new Map<string, number>(),
+    } satisfies RainOcclusionField
+  }
+
+  const minimumX = Math.min(...projections.map(({ bounds }) => bounds.minX))
+  const maximumX = Math.max(...projections.map(({ bounds }) => bounds.maxX))
+  const minimumZ = Math.min(...projections.map(({ bounds }) => bounds.minZ))
+  const maximumZ = Math.max(...projections.map(({ bounds }) => bounds.maxZ))
+  const width = Math.max(epsilon, maximumX - minimumX)
+  const depth = Math.max(epsilon, maximumZ - minimumZ)
+  const xSamples = Math.max(1, Math.ceil(width / disasterOcclusionSampleSize))
+  const zSamples = Math.max(1, Math.ceil(depth / disasterOcclusionSampleSize))
+  const rayHitBrickIds: string[][] = []
+  const projectedSampleCountByBrickId = new Map(projections.map(({ brickId }) => [brickId, 0]))
+  const projectedAreaByBrickId = new Map(projections.map(({ brickId, projectedArea }) => [brickId, projectedArea]))
+
+  const addRay = (x: number, z: number) => {
+    const hits = projections
+      .filter(({ bounds }) => (
+        x > bounds.minX + epsilon && x < bounds.maxX - epsilon &&
+        z > bounds.minZ + epsilon && z < bounds.maxZ - epsilon
+      ))
+      .sort((source, target) => target.bounds.maxY - source.bounds.maxY)
+    if (hits.length === 0) return
+
+    const hitBrickIds = hits.map(({ brickId }) => brickId)
+    hitBrickIds.forEach((brickId) => {
+      projectedSampleCountByBrickId.set(brickId, (projectedSampleCountByBrickId.get(brickId) ?? 0) + 1)
+    })
+    rayHitBrickIds.push(hitBrickIds)
+  }
+
+  for (let xIndex = 0; xIndex < xSamples; xIndex += 1) {
+    const x = minimumX + width * (xIndex + 0.5) / xSamples
+    for (let zIndex = 0; zIndex < zSamples; zIndex += 1) {
+      const z = minimumZ + depth * (zIndex + 0.5) / zSamples
+      addRay(x, z)
+    }
+  }
+
+  for (const projection of projections) {
+    if ((projectedSampleCountByBrickId.get(projection.brickId) ?? 0) > 0) continue
+    addRay(
+      (projection.bounds.minX + projection.bounds.maxX) / 2,
+      (projection.bounds.minZ + projection.bounds.maxZ) / 2,
+    )
+  }
+
+  return { rayHitBrickIds, projectedSampleCountByBrickId, projectedAreaByBrickId }
+}
+
+const getWaterAccumulation = (
+  timeSeconds: number,
+  durationSeconds: number,
+  intensity: number,
+) => clamp(timeSeconds / durationSeconds) * (0.3 + intensity * 0.7)
+
 export const runDisasterSimulation = (
   bricks: PlacedBrick[],
   options: DisasterSimulationOptions,
@@ -287,8 +365,14 @@ export const runDisasterSimulation = (
     ? createWindOcclusionField(graph.boundsById, windDirection)
     : undefined
   const windExposureByBrickId = windOcclusionField
-    ? getWindExposureFromField(windOcclusionField, new Set())
+    ? getExposureFromField(windOcclusionField, new Set())
     : new Map<string, WindExposure>()
+  const rainOcclusionField = resolvedOptions.scenario === 'rain'
+    ? createRainOcclusionField(graph.boundsById)
+    : undefined
+  const rainExposureByBrickId = rainOcclusionField
+    ? getExposureFromField(rainOcclusionField, new Set())
+    : new Map<string, RainExposure>()
   const rootIds = new Set([...graph.boundsById]
     .filter(([, bounds]) => Math.abs(bounds.minY) <= contactTolerance)
     .map(([brickId]) => brickId))
@@ -332,8 +416,16 @@ export const runDisasterSimulation = (
     const timeSeconds = resolvedOptions.durationSeconds * frameIndex / simulationFrameCount
     const loadFactor = getDynamicLoadFactor(resolvedOptions.scenario, timeSeconds, resolvedOptions.durationSeconds)
     const frameWindExposure = windOcclusionField
-      ? getWindExposureFromField(windOcclusionField, new Set(failureTimeByBrickId.keys()))
+      ? getExposureFromField(windOcclusionField, new Set(failureTimeByBrickId.keys()))
       : windExposureByBrickId
+    const frameRainExposure = rainOcclusionField
+      ? getExposureFromField(rainOcclusionField, new Set(failureTimeByBrickId.keys()))
+      : rainExposureByBrickId
+    const waterAccumulation = getWaterAccumulation(
+      timeSeconds,
+      resolvedOptions.durationSeconds,
+      intensity,
+    )
 
     for (const item of prepared) {
       if (failureTimeByBrickId.has(item.brick.id)) continue
@@ -344,8 +436,13 @@ export const runDisasterSimulation = (
         const exposedArea = frameWindExposure.get(item.brick.id)?.exposedArea ?? 0
         demand = exposedArea * (0.2 + 2.15 * intensity ** 2) * (0.28 + item.stability.heightRatio * 0.92)
       } else if (resolvedOptions.scenario === 'rain') {
-        demand = item.topArea * (0.12 + 1.7 * intensity) * (0.34 + item.stability.heightRatio * 0.35)
-        grip = 1 - intensity * 0.38
+        const exposure = frameRainExposure.get(item.brick.id)
+        const exposedArea = exposure?.exposedArea ?? item.topArea
+        const exposedRatio = exposure?.exposedRatio ?? 1
+        demand = exposedArea * (0.12 + 1.7 * intensity) *
+          (0.34 + item.stability.heightRatio * 0.35) *
+          (1 + waterAccumulation * 1.15)
+        grip = 1 - intensity * 0.38 * (0.3 + exposedRatio * 0.7) * (0.4 + waterAccumulation * 0.6)
       } else {
         demand = item.stability.mass * (0.12 + 1.35 * intensity) * (0.18 + item.stability.heightRatio)
       }
@@ -381,6 +478,8 @@ export const runDisasterSimulation = (
     peakStressByBrickId,
     windExposureByBrickId,
     windOcclusionField,
+    rainExposureByBrickId,
+    rainOcclusionField,
     maxFallByBrickId,
     timeline,
     survivedBrickCount: Math.max(0, prepared.length - failureTimeByBrickId.size),
@@ -408,8 +507,14 @@ export const getDisasterFrame = (
     if (failureTime !== undefined && failureTime <= resolvedTime) failedIds.add(brickId)
   }
   const windExposureByBrickId = result.windOcclusionField
-    ? getWindExposureFromField(result.windOcclusionField, failedIds)
+    ? getExposureFromField(result.windOcclusionField, failedIds)
     : result.windExposureByBrickId
+  const rainExposureByBrickId = result.rainOcclusionField
+    ? getExposureFromField(result.rainOcclusionField, failedIds)
+    : result.rainExposureByBrickId
+  const waterAccumulation = result.options.scenario === 'rain'
+    ? getWaterAccumulation(resolvedTime, result.options.durationSeconds, intensity)
+    : 0
 
   for (const [brickId, stability] of result.analysis.riskByBrickId) {
     const failureTime = result.failureTimeByBrickId.get(brickId)
@@ -438,5 +543,13 @@ export const getDisasterFrame = (
     }
   }
 
-  return { timeSeconds: resolvedTime, loadFactor, failedIds, windExposureByBrickId, offsetsByBrickId }
+  return {
+    timeSeconds: resolvedTime,
+    loadFactor,
+    failedIds,
+    windExposureByBrickId,
+    rainExposureByBrickId,
+    waterAccumulation,
+    offsetsByBrickId,
+  }
 }

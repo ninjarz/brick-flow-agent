@@ -94,4 +94,25 @@ describe('disaster simulation', () => {
     expect(rearExposure?.exposedRatio).toBeCloseTo(0.5, 1)
     expect(rearExposure?.exposedArea).toBeCloseTo((rearExposure?.projectedArea ?? 0) * 0.5, 1)
   })
+
+  it('only applies direct rain load to the top brick in a covered stack', () => {
+    const base = makeBrick('brick-1x2', 'gray', 0, 0, 0)
+    const roof = makeBrick('brick-1x2', 'gray', 0, 1.2, 0)
+    const result = runDisasterSimulation([base, roof], { scenario: 'rain', intensity: 10 })
+
+    expect(result.rainExposureByBrickId.get(roof.id)?.exposedRatio).toBe(1)
+    expect(result.rainExposureByBrickId.get(base.id)?.exposedRatio).toBe(0)
+  })
+
+  it('tracks partial roof coverage and exposes lower bricks after the roof fails', () => {
+    const base = makeBrick('brick-2x2', 'gray', 0, 0, 0)
+    const roof = makeBrick('brick-1x1', 'gray', 0, 1.2, 0)
+    const result = runDisasterSimulation([base, roof], { scenario: 'rain', intensity: 10 })
+
+    expect(result.rainExposureByBrickId.get(base.id)?.exposedRatio).toBeCloseTo(0.75, 2)
+    result.failureTimeByBrickId.set(roof.id, 1)
+    const unshieldedFrame = getDisasterFrame(result, 2)
+    expect(unshieldedFrame.rainExposureByBrickId.get(base.id)?.exposedRatio).toBe(1)
+    expect(unshieldedFrame.waterAccumulation).toBeGreaterThan(0)
+  })
 })
