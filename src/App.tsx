@@ -1454,104 +1454,115 @@ function App() {
             <p className="eyebrow">brick-flow-agent</p>
             <h1>{t('app.title')}</h1>
           </div>
-          <div className="engine-actions">
-            <button
-              className="icon-button"
-              type="button"
-              aria-label={t('top.undo')}
-              title={t('top.undo')}
-              disabled={!canUndo}
-              onClick={undoPlan}
-            >
-              <Undo2 size={18} />
-            </button>
-            <button
-              className="icon-button"
-              type="button"
-              aria-label={t('top.redo')}
-              title={t('top.redo')}
-              disabled={!canRedo}
-              onClick={redoPlan}
-            >
-              <Redo2 size={18} />
-            </button>
-            <button
-              type="button"
-              className={`icon-button ${sceneViewMode === 'border' ? '' : 'active'}`}
-              aria-label={t('top.switchViewMode', {
-                current: t(`top.viewMode.${sceneViewMode}`),
-                next: t(`top.viewMode.${getNextSceneViewMode(sceneViewMode)}`),
-              })}
-              title={t('top.switchViewMode', {
-                current: t(`top.viewMode.${sceneViewMode}`),
-                next: t(`top.viewMode.${getNextSceneViewMode(sceneViewMode)}`),
-              })}
-              onClick={() => setSceneViewMode((mode) => getNextSceneViewMode(mode))}
-            >
-              {sceneViewMode === 'border'
-                ? <Box size={18} />
-                : sceneViewMode === 'borderless'
-                  ? <Eye size={18} />
-                  : sceneViewMode === 'xray'
-                    ? <ScanLine size={18} />
-                    : <Boxes size={18} />}
-            </button>
-            <button
-              className={`icon-button ${isAutoSnapEnabled ? 'active' : ''}`}
-              type="button"
-              aria-label={isAutoSnapEnabled ? t('top.disableAutoSnap') : t('top.enableAutoSnap')}
-              title={isAutoSnapEnabled ? t('top.autoSnapOn') : t('top.autoSnapOff')}
-              onClick={() => setIsAutoSnapEnabled((enabled) => !enabled)}
-            >
-              {isAutoSnapEnabled ? <Link size={18} /> : <Unlink2 size={18} />}
-            </button>
-            <button
-              className="icon-button"
-              type="button"
-              aria-label={t('top.stabilityLab')}
-              title={t('top.stabilityLab')}
-              onClick={() => setIsStabilityLabOpen(true)}
-            >
-              <Gauge size={18} />
-            </button>
-            <button
-              className="icon-button"
-              type="button"
-              aria-label={t('top.config')}
-              title={t('top.config')}
-              onClick={() => setIsConfigOpen(true)}
-            >
-              <Settings2 size={18} />
-            </button>
-            <button
-              className="icon-button"
-              type="button"
-              aria-label={t('top.importObj')}
-              title={t('top.importObj')}
-              onClick={() => setIsObjImportOpen(true)}
-            >
-              <FileUp size={18} />
-            </button>
-            <button
-              className="icon-button"
-              type="button"
-              aria-label={t('top.assetLibrary')}
-              title={t('top.assetLibrary')}
-              onClick={() => setIsAssetLibraryOpen(true)}
-            >
-              <BookOpen size={18} />
-            </button>
-            <a
-              className="icon-button github-link"
-              href="https://github.com/ninjarz/brick-flow-agent"
-              target="_blank"
-              rel="noreferrer"
-              aria-label={t('top.github')}
-              title={t('top.github')}
-            >
-              <Github size={18} />
-            </a>
-          </div>
+          <nav className="topbar-toolbars" aria-label={t('top.toolbar')}>
+            <section className="toolbar-group" aria-label={t('top.editingTools')}>
+              <span className="toolbar-group-label">{t('top.editingTools')}</span>
+              <div className="engine-actions">
+                <button
+                  className="icon-button"
+                  type="button"
+                  aria-label={t('top.undo')}
+                  title={t('top.undo')}
+                  disabled={!canUndo}
+                  onClick={undoPlan}
+                >
+                  <Undo2 size={18} />
+                </button>
+                <button
+                  className="icon-button"
+                  type="button"
+                  aria-label={t('top.redo')}
+                  title={t('top.redo')}
+                  disabled={!canRedo}
+                  onClick={redoPlan}
+                >
+                  <Redo2 size={18} />
+                </button>
+                <button
+                  type="button"
+                  className={`icon-button ${sceneViewMode === 'border' ? '' : 'active'}`}
+                  aria-label={t('top.switchViewMode', {
+                    current: t(`top.viewMode.${sceneViewMode}`),
+                    next: t(`top.viewMode.${getNextSceneViewMode(sceneViewMode)}`),
+                  })}
+                  title={t('top.switchViewMode', {
+                    current: t(`top.viewMode.${sceneViewMode}`),
+                    next: t(`top.viewMode.${getNextSceneViewMode(sceneViewMode)}`),
+                  })}
+                  onClick={() => setSceneViewMode((mode) => getNextSceneViewMode(mode))}
+                >
+                  {sceneViewMode === 'border'
+                    ? <Box size={18} />
+                    : sceneViewMode === 'borderless'
+                      ? <Eye size={18} />
+                      : sceneViewMode === 'xray'
+                        ? <ScanLine size={18} />
+                        : <Boxes size={18} />}
+                </button>
+                <button
+                  className={`icon-button ${isAutoSnapEnabled ? 'active' : ''}`}
+                  type="button"
+                  aria-label={isAutoSnapEnabled ? t('top.disableAutoSnap') : t('top.enableAutoSnap')}
+                  title={isAutoSnapEnabled ? t('top.autoSnapOn') : t('top.autoSnapOff')}
+                  onClick={() => setIsAutoSnapEnabled((enabled) => !enabled)}
+                >
+                  {isAutoSnapEnabled ? <Link size={18} /> : <Unlink2 size={18} />}
+                </button>
+              </div>
+            </section>
+
+            <section className="toolbar-group" aria-label={t('top.projectTools')}>
+              <span className="toolbar-group-label">{t('top.projectTools')}</span>
+              <div className="engine-actions">
+                <button
+                  className="icon-button"
+                  type="button"
+                  aria-label={t('top.assetLibrary')}
+                  title={t('top.assetLibrary')}
+                  onClick={() => setIsAssetLibraryOpen(true)}
+                >
+                  <BookOpen size={18} />
+                </button>
+                <button
+                  className="icon-button"
+                  type="button"
+                  aria-label={t('top.importObj')}
+                  title={t('top.importObj')}
+                  onClick={() => setIsObjImportOpen(true)}
+                >
+                  <FileUp size={18} />
+                </button>
+                <button
+                  className="icon-button"
+                  type="button"
+                  aria-label={t('top.stabilityLab')}
+                  title={t('top.stabilityLab')}
+                  onClick={() => setIsStabilityLabOpen(true)}
+                >
+                  <Gauge size={18} />
+                </button>
+                <button
+                  className="icon-button"
+                  type="button"
+                  aria-label={t('top.config')}
+                  title={t('top.config')}
+                  onClick={() => setIsConfigOpen(true)}
+                >
+                  <Settings2 size={18} />
+                </button>
+                <a
+                  className="icon-button github-link"
+                  href="https://github.com/ninjarz/brick-flow-agent"
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={t('top.github')}
+                  title={t('top.github')}
+                >
+                  <Github size={18} />
+                </a>
+              </div>
+            </section>
+          </nav>
         </header>
 
         <div className="viewer">

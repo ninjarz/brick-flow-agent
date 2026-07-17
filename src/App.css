@@ -24,10 +24,63 @@
   gap: 18px;
 }
 
+.topbar-toolbars {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  align-items: stretch;
+  gap: 9px;
+}
+
+.toolbar-group {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 5px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(248, 250, 252, 0.9);
+}
+
+.toolbar-group-label {
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 7px 0 5px;
+  border-right: 1px solid #e2e8f0;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
 .engine-actions {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 2px;
+}
+
+.toolbar-group .icon-button {
+  width: 34px;
+  height: 34px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.toolbar-group .icon-button:hover {
+  border-color: #cbd5e1;
+  background: #fff;
+}
+
+.toolbar-group .icon-button.active {
+  border-color: rgba(37, 99, 235, 0.28);
+  background: #eaf2ff;
+}
+
+.toolbar-group .icon-button.github-link {
+  border-color: transparent;
+  background: transparent;
 }
 
 .eyebrow {
@@ -2702,10 +2755,29 @@ button:disabled {
   }
 }
 
-@media (max-width: 560px) {
+@media (max-width: 1180px) {
   .topbar {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .topbar-toolbars {
+    width: 100%;
+    grid-template-columns: max-content max-content;
+  }
+}
+
+@media (max-width: 560px) {
+  .topbar-toolbars {
+    grid-template-columns: 1fr;
+  }
+
+  .toolbar-group {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .toolbar-group .engine-actions {
+    justify-content: flex-end;
   }
 
   .workspace {
