@@ -51,6 +51,9 @@ export type WorldEntity = {
   combat: {
     cooldownRemainingSeconds: number
   }
+  autonomy: {
+    nextDecisionAtSeconds: number
+  }
 }
 
 export type WorldEvent = {

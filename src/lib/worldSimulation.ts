@@ -223,6 +223,20 @@ const findNearestEnemy = (entity: WorldEntity, entities: WorldEntity[]) => {
     .sort((a, b) => distance2d(entity.transform, a.transform) - distance2d(entity.transform, b.transform))[0]
 }
 
+const findNearestSocialTarget = (entity: WorldEntity, entities: WorldEntity[]) => entities
+  .filter((candidate) => (
+    candidate.id !== entity.id &&
+    candidate.health > 0 &&
+    (entity.factionId === 'neutral' || candidate.factionId === 'neutral' || candidate.factionId === entity.factionId)
+  ))
+  .sort((a, b) => distance2d(entity.transform, a.transform) - distance2d(entity.transform, b.transform))[0]
+
+const nextSocialDecisionDelay = (entityId: string, elapsedSeconds: number) => {
+  const key = `${entityId}:${Math.floor(elapsedSeconds)}`
+  const hash = [...key].reduce((value, character) => Math.imul(value ^ character.charCodeAt(0), 16777619) >>> 0, 2166136261)
+  return 7 + (hash % 6)
+}
+
 const moveEntityToward = (
   entity: WorldEntity,
   target: WorldTargetRef,
@@ -374,7 +388,16 @@ export const stepWorldSimulation = (
     }
     if (!activeCommand && entity.controller === 'rule') {
       const enemy = findNearestEnemy(entity, entities)
-      if (enemy) activeCommand = { type: 'attack', target: { kind: 'entity', id: enemy.id } }
+      if (enemy) {
+        activeCommand = { type: 'attack', target: { kind: 'entity', id: enemy.id } }
+      } else if (timeSeconds >= entity.autonomy.nextDecisionAtSeconds) {
+        const socialTarget = findNearestSocialTarget(entity, entities)
+        entity = {
+          ...entity,
+          autonomy: { nextDecisionAtSeconds: timeSeconds + nextSocialDecisionDelay(entity.id, timeSeconds) },
+        }
+        if (socialTarget) activeCommand = { type: 'interact', target: { kind: 'entity', id: socialTarget.id } }
+      }
     }
     entity = { ...entity, activeCommand, commandQueue }
     if (!activeCommand || activeCommand.type === 'stop') {

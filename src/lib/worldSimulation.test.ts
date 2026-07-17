@@ -130,4 +130,21 @@ describe('WorldEntity simulation', () => {
     expect(impacted.entities[1].health).toBeLessThan(knight.health)
     expect(impacted.pendingImpacts).toHaveLength(0)
   })
+
+  it('lets idle rule-controlled allies socialize at a throttled deterministic cadence', () => {
+    const knight = worldEntityDefinitionById.get('knight')!
+    const first = createWorldEntity(knight, { id: 'first', factionId: 'neutral', transform: { x: 0, z: 0 } })
+    const second = createWorldEntity(knight, { id: 'second', factionId: 'neutral', transform: { x: 0.1, z: 0 } })
+    first.autonomy.nextDecisionAtSeconds = 0
+    second.autonomy.nextDecisionAtSeconds = 100
+    const world = { ...createEmptyWorldState('plan-1'), entities: [first, second] }
+
+    const interacted = stepWorldSimulation(world, [], 0.1)
+    expect(interacted.events.some((event) => event.type === 'interaction' && event.actorId === first.id)).toBe(true)
+    expect(interacted.narrative.relationshipsByEntityId[first.id][second.id].affinity).toBe(5)
+    expect(interacted.entities[0].autonomy.nextDecisionAtSeconds).toBeGreaterThan(interacted.elapsedSeconds + 6)
+
+    const next = stepWorldSimulation(interacted, [], 0.1)
+    expect(next.events.filter((event) => event.type === 'interaction')).toHaveLength(1)
+  })
 })

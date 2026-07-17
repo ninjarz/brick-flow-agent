@@ -45,6 +45,10 @@ export const generateWorldEntityName = (
 
 const createWorldEntityId = () => `entity-${Math.random().toString(36).slice(2, 9)}`
 
+const stableEntityNumber = (value: string) => [...value].reduce((hash, character) => (
+  Math.imul(hash ^ character.charCodeAt(0), 16777619) >>> 0
+), 2166136261)
+
 export const createWorldEntity = (
   definition: WorldEntityDefinition,
   options: {
@@ -62,8 +66,9 @@ export const createWorldEntity = (
     ? makeUniqueName(options.name, options.existingNames ?? [])
     : generateWorldEntityName(definition, options.existingNames, options.random)
 
+  const id = options.id ?? createWorldEntityId()
   return {
-    id: options.id ?? createWorldEntityId(),
+    id,
     definitionId: definition.id,
     kind: definition.kind,
     name: generatedName,
@@ -86,6 +91,7 @@ export const createWorldEntity = (
     },
     behaviorState: 'idle',
     combat: { cooldownRemainingSeconds: 0 },
+    autonomy: { nextDecisionAtSeconds: 2 + (stableEntityNumber(id) % 5) },
   }
 }
 
@@ -138,6 +144,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
     ...entity,
     behaviorState: entity.behaviorState ?? 'idle',
     combat: entity.combat ?? { cooldownRemainingSeconds: 0 },
+    autonomy: entity.autonomy ?? { nextDecisionAtSeconds: 2 + (stableEntityNumber(entity.id) % 5) },
   }))
 
   return {
