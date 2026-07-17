@@ -30,6 +30,7 @@ export const WorldEntityEditorPanel = ({ entity, commandTargets, onUpdate, onIss
   }, [entity?.id])
   if (!entity) return null
   const definition = worldEntityDefinitionById.get(entity.definitionId)
+  const visibleCommand = entity.activeCommand ?? entity.commandQueue[0]
   const commitName = () => {
     const nextName = draftName.trim() || entity.name
     setDraftName(nextName)
@@ -101,6 +102,8 @@ export const WorldEntityEditorPanel = ({ entity, commandTargets, onUpdate, onIss
       <div className="world-entity-stats">
         <span>{t('worldEntity.health', { current: entity.health, max: entity.maxHealth })}</span>
         <span>{t(`worldEntity.controller.${entity.controller}`)}</span>
+        <span>{t(`worldEntity.behavior.${entity.behaviorState}`)}</span>
+        {visibleCommand && <span>{t('worldEntity.currentOrder', { order: t(`worldEntity.order.${visibleCommand.type}`) })}</span>}
       </div>
       <section className="world-command-panel" aria-label={t('worldEntity.orders')}>
         <div className="section-title">

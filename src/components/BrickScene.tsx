@@ -1,4 +1,4 @@
-import { Edges, Line, OrbitControls, Text } from '@react-three/drei'
+import { Billboard, Edges, Line, OrbitControls, Text } from '@react-three/drei'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
 import { memo, type ReactNode, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -1805,11 +1805,21 @@ const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementAct
   onSelect?: (id: string) => void
 }) => {
   const definition = worldEntityDefinitionById.get(entity.definitionId)
+  const groupRef = useRef<Group>(null)
+  useFrame((state) => {
+    if (!groupRef.current || ghost || entity.health <= 0) return
+    const movingBob = entity.behaviorState === 'moving' ? Math.abs(Math.sin(state.clock.elapsedTime * 9)) * 0.09 : 0
+    const attackBob = entity.behaviorState === 'attacking' ? Math.sin(state.clock.elapsedTime * 16) * 0.06 : 0
+    groupRef.current.position.y = entity.transform.y + movingBob + attackBob
+  })
   if (!definition) return null
+  const healthRatio = Math.max(0, Math.min(1, entity.health / Math.max(1, entity.maxHealth)))
+  const healthColor = healthRatio > 0.6 ? '#16a34a' : healthRatio > 0.3 ? '#f59e0b' : '#dc2626'
   return (
     <group
+      ref={groupRef}
       position={[entity.transform.x, entity.transform.y, entity.transform.z]}
-      rotation={[0, entity.transform.rotationRadians, 0]}
+      rotation={[entity.health <= 0 ? 0 : 0, entity.transform.rotationRadians, entity.health <= 0 ? Math.PI / 2 : 0]}
       userData={ghost ? { placementGhost: true } : undefined}
       onClick={ghost || !onSelect ? undefined : (event) => {
         if (placementActive) return
@@ -1821,9 +1831,19 @@ const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementAct
         ? <CatapultWorldEntityMesh entity={entity} ghost={ghost} />
         : <HumanWorldEntityMesh entity={entity} ghost={ghost} />}
       {!ghost && (
-        <Text position={[0, definition.visual.heightStuds + 0.45, 0]} fontSize={0.3} color="#0f172a">
-          {entity.name}
-        </Text>
+        <Billboard position={[0, definition.visual.heightStuds + 0.65, 0]} follow>
+          <Text position={[0, 0.25, 0]} fontSize={0.3} color="#0f172a" anchorY="bottom">
+            {entity.name}
+          </Text>
+          <mesh position={[0, 0, 0]}>
+            <planeGeometry args={[1.65, 0.16]} />
+            <meshBasicMaterial color="#0f172a" transparent opacity={0.72} depthWrite={false} />
+          </mesh>
+          <mesh position={[-0.8 + healthRatio * 0.8, 0, 0.006]}>
+            <planeGeometry args={[1.55 * healthRatio, 0.1]} />
+            <meshBasicMaterial color={healthColor} depthWrite={false} />
+          </mesh>
+        </Billboard>
       )}
       {selected && (
         <mesh position={[0, 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]}>
