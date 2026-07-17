@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { BookOpen, Box, Boxes, Download, Eye, FileUp, Gauge, Github, Globe2, KeyRound, Link, MessageCircle, Pause, Play, Plus, Redo2, RotateCcw, ScanLine, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
 import { LazyBrickGlyph } from './components/LazyBrickGlyph'
 import { BrickEditorPanel } from './components/BrickEditorPanel'
-import { WorldEntityEditorPanel } from './components/WorldEntityEditorPanel'
+import { WorldEntityEditorPanel, type WorldCommandTargetOption } from './components/WorldEntityEditorPanel'
 import { WorldTavern } from './components/WorldTavern'
 import type { BrickSceneViewMode } from './components/BrickScene'
 import { ControlPanel } from './components/ControlPanel'
@@ -24,7 +24,7 @@ import { prepareReferenceImage } from './lib/referenceImage'
 import { simplifiedBrickThreshold } from './lib/scenePerformance'
 import { toggleBrickSelection } from './lib/brickSelection'
 import { dissolveBrickStructure, getBrickStructure, getExactSelectionStructure, pruneBrickStructures, solidifyBrickSelection, updateBrickStructure } from './lib/brickStructures'
-import { createEmptyWorldState, createWorldEntity } from './lib/worldEntity'
+import { createEmptyWorldState, createWorldEntity, issueWorldEntityCommand } from './lib/worldEntity'
 import { stepWorldSimulation, worldSimulationStepSeconds } from './lib/worldSimulation'
 import { addWorldStory, createLocalTavernStory } from './lib/worldNarrative'
 import { applyWorldAiTurn, formatWorldAiTurnSummary, requestWorldAiTurn } from './lib/worldAi'
@@ -33,7 +33,7 @@ import { formatLDrawPlan, parseLDrawPlan } from './lib/ldrawPlan'
 import { getEffectiveInventory, loadInventoryOverrides, saveInventoryOverrides } from './lib/userInventory'
 import { clearWorkspaceDraft, hasIndexedDbWorkspaceDraft, loadWorkspaceDraft, loadWorkspaceDraftFromIndexedDb, saveWorkspaceDraft } from './lib/workspaceDraft'
 import type { BrickStructure, BuildPlan, FinishedAsset, LlmConfig, PlacedBrick } from './types/bricks'
-import type { WorldEntity } from './types/world'
+import type { WorldEntity, WorldEntityCommand } from './types/world'
 import './App.css'
 
 const BrickScene = lazy(() => import('./components/BrickScene').then((module) => ({ default: module.BrickScene })))
@@ -349,6 +349,18 @@ function App() {
     () => world.entities.find((entity) => entity.id === selectedWorldEntityId),
     [selectedWorldEntityId, world.entities],
   )
+  const worldCommandTargets = useMemo<WorldCommandTargetOption[]>(() => [
+    ...world.entities.filter((entity) => entity.health > 0).map((entity) => ({
+      kind: 'entity' as const,
+      id: entity.id,
+      label: `${entity.name} · ${t(`worldEntity.faction.${entity.factionId}`)}`,
+    })),
+    ...(plan.structures ?? []).map((structure) => ({
+      kind: 'structure' as const,
+      id: structure.id,
+      label: `${structure.name} · ${t('structure.solidified')}`,
+    })),
+  ], [plan.structures, t, world.entities])
   const activeSelectedIds = useMemo(() => {
     if (!selectedId) return []
     const liveBrickIds = new Set(plan.bricks.map((brick) => brick.id))
@@ -1317,6 +1329,29 @@ function App() {
     setSelectedWorldEntityId((current) => current === entityId ? '' : current)
   }, [])
 
+  const issuePlayerWorldCommand = useCallback((entityId: string, command: WorldEntityCommand) => {
+    const currentWorld = worldRef.current
+    const actor = currentWorld.entities.find((entity) => entity.id === entityId)
+    if (!actor || actor.controller !== 'player') return false
+    const currentPlan = planRef.current
+    const result = issueWorldEntityCommand(
+      currentWorld,
+      entityId,
+      command,
+      (target) => target.kind === 'entity'
+        ? currentWorld.entities.some((entity) => entity.id === target.id && entity.health > 0)
+        : target.kind === 'structure'
+          ? (currentPlan.structures ?? []).some((structure) => structure.id === target.id)
+          : target.kind === 'brick'
+            ? currentPlan.bricks.some((brick) => brick.id === target.id)
+            : false,
+      'replace',
+    )
+    if (!result.ok) return false
+    setWorld(result.world)
+    return true
+  }, [])
+
   const generateTavernStory = useCallback(() => {
     setWorld((current) => addWorldStory(current, createLocalTavernStory(current, locale)))
   }, [locale])
@@ -1991,7 +2026,9 @@ function App() {
           />
           <WorldEntityEditorPanel
             entity={selectedWorldEntity}
+            commandTargets={worldCommandTargets}
             onUpdate={updateWorldEntity}
+            onIssueCommand={issuePlayerWorldCommand}
             onDelete={deleteWorldEntity}
             onClose={() => setSelectedWorldEntityId('')}
           />
