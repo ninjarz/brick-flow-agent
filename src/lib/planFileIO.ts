@@ -1,5 +1,7 @@
 import { isValidImportedPose, normalizeImportedPose, tryNormalizeImportedPlan } from './planImport'
 import type { BuildPlan, PlacedBrick } from '../types/bricks'
+import type { WorldState } from '../types/world'
+import { parseStoredWorldState } from './worldEntity'
 
 export type ImportText = {
   importedPlanTitle: string
@@ -86,4 +88,21 @@ export const parseImportedPlan = (
     if (nestedPlan) return nestedPlan
   }
   return buildPlanFromManualJson(value, text)
+}
+
+export type ImportedProject = {
+  plan: BuildPlan
+  world?: WorldState
+}
+
+export const parseImportedProject = (
+  value: unknown,
+  text: ImportText = defaultImportText,
+): ImportedProject | undefined => {
+  const plan = parseImportedPlan(value, text)
+  if (!plan) return undefined
+  const world = isRecord(value) && value.world !== undefined
+    ? parseStoredWorldState(value.world, plan.id)
+    : undefined
+  return { plan, world }
 }

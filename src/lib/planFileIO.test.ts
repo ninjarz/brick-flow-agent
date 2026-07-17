@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { serializeBuildManual } from './manualSerializer'
-import { parseImportedPlan } from './planFileIO'
+import { parseImportedPlan, parseImportedProject } from './planFileIO'
 import { makeBrick } from './planUtils'
 import type { BuildPlan } from '../types/bricks'
+import { createEmptyWorldState, createWorldEntity } from './worldEntity'
+import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 
 const plan: BuildPlan = {
   id: 'file-io-test',
@@ -27,5 +29,21 @@ describe('plan file import', () => {
 
   it('rejects unrelated data', () => {
     expect(parseImportedPlan({ schemaVersion: 5, steps: [] })).toBeUndefined()
+  })
+
+  it('round-trips an optional world while remaining compatible with plan-only JSON', () => {
+    const world = {
+      ...createEmptyWorldState(plan.id),
+      entities: [createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'knight-1', name: '守门人' })],
+    }
+    const project = parseImportedProject({ schemaVersion: 6, plan, world })
+    expect(project?.plan.id).toBe(plan.id)
+    expect(project?.world?.entities[0]).toMatchObject({ id: 'knight-1', name: '守门人' })
+    expect(parseImportedProject(plan)).toEqual({ plan: parseImportedPlan(plan), world: undefined })
+  })
+
+  it('drops a world whose plan id does not match the imported plan', () => {
+    const mismatchedWorld = createEmptyWorldState('other-plan')
+    expect(parseImportedProject({ plan, world: mismatchedWorld })?.world).toBeUndefined()
   })
 })

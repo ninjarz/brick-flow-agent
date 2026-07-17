@@ -19,7 +19,7 @@ import { countBricks, createBrickCollisionIndex, createPlanSpatialState, duplica
 import { footprintToWorld, getBrickWorldFrame, normalizeHorizontalStud, normalizeQuarterTurns, normalizeVerticalQuarterTurns, normalizeYStud } from './lib/brickUnits'
 import { useI18n } from './lib/i18n'
 import type { ObjImportResult } from './lib/objImport'
-import { parseImportedPlan, type ImportText } from './lib/planFileIO'
+import { parseImportedProject, type ImportText } from './lib/planFileIO'
 import { prepareReferenceImage } from './lib/referenceImage'
 import { simplifiedBrickThreshold } from './lib/scenePerformance'
 import { toggleBrickSelection } from './lib/brickSelection'
@@ -742,9 +742,10 @@ function App() {
         const ldrawResult = isLDrawFile
           ? parseLDrawPlan(text, file.name.replace(/\.(?:ldr|mpd)$/i, ''))
           : undefined
-        const importedPlan = isLDrawFile
-          ? ldrawResult?.plan
-          : parseImportedPlan(JSON.parse(text) as unknown, importText)
+        const importedProject = isLDrawFile
+          ? ldrawResult?.plan ? { plan: ldrawResult.plan } : undefined
+          : parseImportedProject(JSON.parse(text) as unknown, importText)
+        const importedPlan = importedProject?.plan
         if (!importedPlan) {
           setGenerationFailure(t(isLDrawFile ? 'error.importLDrawInvalid' : 'error.importInvalid'))
           return
@@ -758,6 +759,7 @@ function App() {
         }
 
         setPlan(importedPlan)
+        setWorld(importedProject.world ?? createEmptyWorldState(importedPlan.id))
         setPrompt(importedPlan.prompt)
         selectBrick('')
         clearGenerationFeedback()
@@ -1620,9 +1622,11 @@ function App() {
   const exportPlan = () => {
     const manual = serializeBuildManual(plan, locale)
     downloadJson(`${plan.title || 'brick-plan'}.json`, {
-      schemaVersion: 5,
+      schemaVersion: 6,
+      worldSchemaVersion: 1,
       exportedAt: new Date().toISOString(),
       plan,
+      world,
       manual,
     })
   }
