@@ -11,6 +11,7 @@ import { getBlockingBuildPlanIssues, validateBuildPlan } from './planUtils'
 import type { BuildPlan } from '../types/bricks'
 import { createEmptyWorldState, parseStoredWorldState } from './worldEntity'
 import type { WorldState } from '../types/world'
+import { createCoalescedAsyncWriter } from './coalescedWriter'
 
 const storageKey = 'brick-flow-agent:workspace-draft:v1'
 const indexedDbKey = 'workspace-draft:v1'
@@ -63,8 +64,6 @@ export const loadWorkspaceDraftFromIndexedDb = async () => {
   }
 }
 
-let saveQueue = Promise.resolve(true)
-
 const persistWorkspaceDraft = async (plan: BuildPlan, prompt: string, world: WorldState) => {
   if (typeof window === 'undefined') return true
   const value = { schemaVersion: 2, prompt, plan, world }
@@ -90,11 +89,12 @@ const persistWorkspaceDraft = async (plan: BuildPlan, prompt: string, world: Wor
   }
 }
 
-export const saveWorkspaceDraft = (plan: BuildPlan, prompt: string, world: WorldState) => {
-  const nextSave = saveQueue.then(() => persistWorkspaceDraft(plan, prompt, world))
-  saveQueue = nextSave.catch(() => false)
-  return nextSave
-}
+const workspaceDraftWriter = createCoalescedAsyncWriter<WorkspaceDraft>(({ plan, prompt, world }) =>
+  persistWorkspaceDraft(plan, prompt, world)
+)
+
+export const saveWorkspaceDraft = (plan: BuildPlan, prompt: string, world: WorldState) =>
+  workspaceDraftWriter.write({ plan, prompt, world })
 
 export const clearWorkspaceDraft = async () => {
   if (typeof window !== 'undefined') window.localStorage.removeItem(storageKey)
