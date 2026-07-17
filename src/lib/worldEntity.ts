@@ -7,6 +7,7 @@ import type {
   WorldState,
   WorldTargetRef,
 } from '../types/world'
+import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 
 const normalizeName = (value: string) => value.trim().replace(/\s+/g, ' ')
 const comparableName = (value: string) => normalizeName(value).toLocaleLowerCase()
@@ -127,47 +128,153 @@ export const changeWorldEntityController = (
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
 
+const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
+const isController = (value: unknown): value is WorldEntityControllerKind =>
+  value === 'rule' || value === 'player' || value === 'ai'
+
+const parseTargetRef = (value: unknown): WorldTargetRef | undefined => {
+  if (!isRecord(value) || typeof value.id !== 'string' || !value.id.trim()) return undefined
+  if (!['entity', 'brick', 'structure', 'waypoint'].includes(String(value.kind))) return undefined
+  return { kind: value.kind as WorldTargetRef['kind'], id: value.id.trim() } as WorldTargetRef
+}
+
+const parseStoredCommand = (value: unknown): WorldEntityCommand | undefined => {
+  if (!isRecord(value) || typeof value.type !== 'string') return undefined
+  if (value.type === 'stop') return { type: 'stop' }
+  if (value.type === 'patrol' && Array.isArray(value.waypointIds)) {
+    const waypointIds = value.waypointIds.filter((id): id is string => typeof id === 'string' && Boolean(id.trim())).map((id) => id.trim()).slice(0, 32)
+    return waypointIds.length > 0 ? { type: 'patrol', waypointIds } : undefined
+  }
+  const target = parseTargetRef(value.target)
+  if (!target || !['move', 'attack', 'guard', 'follow', 'interact'].includes(value.type)) return undefined
+  if (value.type === 'attack' && !['entity', 'brick', 'structure'].includes(target.kind)) return undefined
+  if (value.type === 'follow' && target.kind !== 'entity') return undefined
+  return { type: value.type, target } as WorldEntityCommand
+}
+
+const parseStoredEntity = (value: unknown): WorldEntity | undefined => {
+  if (!isRecord(value) || typeof value.id !== 'string' || !value.id.trim()) return undefined
+  if (typeof value.definitionId !== 'string' || typeof value.name !== 'string' || !value.name.trim()) return undefined
+  const definition = worldEntityDefinitionById.get(value.definitionId)
+  if (!definition || !isRecord(value.transform)) return undefined
+  if (!isFiniteNumber(value.transform.x) || !isFiniteNumber(value.transform.y) || !isFiniteNumber(value.transform.z)) return undefined
+  if (!isFiniteNumber(value.transform.rotationRadians)) return undefined
+  const entity = createWorldEntity(definition, {
+    id: value.id.trim(),
+    name: value.name,
+    description: typeof value.description === 'string' ? value.description : definition.description,
+    factionId: typeof value.factionId === 'string' ? value.factionId.slice(0, 80) : 'neutral',
+    controller: isController(value.controller) ? value.controller : 'rule',
+    transform: value.transform,
+  })
+  const health = isFiniteNumber(value.health) ? Math.max(0, Math.min(definition.combat.maxHealth, value.health)) : definition.combat.maxHealth
+  const behaviorStates: WorldEntity['behaviorState'][] = ['idle', 'moving', 'attacking', 'blocked', 'dead']
+  const behaviorState = health <= 0
+    ? 'dead'
+    : behaviorStates.includes(value.behaviorState as WorldEntity['behaviorState']) ? value.behaviorState as WorldEntity['behaviorState'] : 'idle'
+  const commandQueue = Array.isArray(value.commandQueue)
+    ? value.commandQueue.map(parseStoredCommand).filter((command): command is WorldEntityCommand => Boolean(command)).slice(0, 20)
+    : []
+  const activeCommand = parseStoredCommand(value.activeCommand)
+  return {
+    ...entity,
+    health,
+    commandQueue,
+    ...(activeCommand ? { activeCommand } : {}),
+    navigation: { status: 'idle', path: [], pathIndex: 0 },
+    behaviorState,
+    combat: {
+      cooldownRemainingSeconds: isRecord(value.combat) && isFiniteNumber(value.combat.cooldownRemainingSeconds)
+        ? Math.max(0, value.combat.cooldownRemainingSeconds)
+        : 0,
+    },
+    autonomy: {
+      nextDecisionAtSeconds: isRecord(value.autonomy) && isFiniteNumber(value.autonomy.nextDecisionAtSeconds)
+        ? Math.max(0, value.autonomy.nextDecisionAtSeconds)
+        : 2 + (stableEntityNumber(entity.id) % 5),
+    },
+  }
+}
+
+const eventTypes = new Set<WorldState['events'][number]['type']>([
+  'attack', 'damage', 'defeated', 'brick-hit', 'structure-hit', 'interaction', 'command-issued', 'command-complete',
+])
+
+const parseStoredEvents = (value: unknown): WorldState['events'] => Array.isArray(value)
+  ? value.filter((event): event is WorldState['events'][number] => (
+      isRecord(event) && typeof event.id === 'string' && isFiniteNumber(event.timeSeconds) &&
+      eventTypes.has(event.type as WorldState['events'][number]['type']) && typeof event.actorId === 'string'
+    )).slice(-500)
+  : []
+
+const normalizeArrayRecord = <T>(value: unknown, predicate: (item: unknown) => item is T) => {
+  if (!isRecord(value)) return {} as Record<string, T[]>
+  return Object.fromEntries(Object.entries(value).map(([key, items]) => [
+    key,
+    Array.isArray(items) ? items.filter(predicate).slice(-80) : [],
+  ]))
+}
+
+const isStoredMemory = (value: unknown): value is WorldState['narrative']['memoriesByEntityId'][string][number] =>
+  isRecord(value) && typeof value.id === 'string' && typeof value.eventId === 'string' &&
+  typeof value.entityId === 'string' && isFiniteNumber(value.timeSeconds) && eventTypes.has(value.type as never) &&
+  [1, 2, 3].includes(Number(value.importance))
+
+const isStoredStory = (value: unknown): value is WorldState['narrative']['stories'][number] =>
+  isRecord(value) && typeof value.id === 'string' && typeof value.title === 'string' && typeof value.body === 'string' &&
+  isFiniteNumber(value.createdAtSeconds) && Array.isArray(value.eventIds) && (value.source === 'local' || value.source === 'ai')
+
+const normalizeRelationships = (value: unknown): WorldState['narrative']['relationshipsByEntityId'] => {
+  if (!isRecord(value)) return {}
+  return Object.fromEntries(Object.entries(value).map(([observerId, targets]) => {
+    if (!isRecord(targets)) return [observerId, {}]
+    const normalizedTargets = Object.fromEntries(Object.entries(targets).flatMap(([targetId, relationship]) => {
+      if (!isRecord(relationship) || !isFiniteNumber(relationship.affinity) || !isFiniteNumber(relationship.encounters)) return []
+      if (!eventTypes.has(relationship.lastEventType as WorldState['events'][number]['type'])) return []
+      return [[targetId, {
+        targetEntityId: typeof relationship.targetEntityId === 'string' ? relationship.targetEntityId : targetId,
+        affinity: Math.max(-100, Math.min(100, relationship.affinity)),
+        encounters: Math.max(0, Math.floor(relationship.encounters)),
+        lastEventType: relationship.lastEventType as WorldState['events'][number]['type'],
+        updatedAtSeconds: isFiniteNumber(relationship.updatedAtSeconds) ? Math.max(0, relationship.updatedAtSeconds) : 0,
+      }]]
+    }))
+    return [observerId, normalizedTargets]
+  }))
+}
+
 export const parseStoredWorldState = (value: unknown, planId: string) => {
   if (!isRecord(value) || value.planId !== planId || !Array.isArray(value.entities)) return undefined
-  const storedEntities = value.entities.filter((entity): entity is WorldEntity => (
-    isRecord(entity) &&
-    typeof entity.id === 'string' &&
-    typeof entity.definitionId === 'string' &&
-    typeof entity.name === 'string' &&
-    entity.name.trim().length > 0 &&
-    typeof entity.transform === 'object' &&
-    entity.transform !== null &&
-    Array.isArray(entity.commandQueue)
-  ))
-  if (storedEntities.length !== value.entities.length) return undefined
-  const entities = storedEntities.map((entity) => ({
-    ...entity,
-    behaviorState: entity.behaviorState ?? 'idle',
-    combat: entity.combat ?? { cooldownRemainingSeconds: 0 },
-    autonomy: entity.autonomy ?? { nextDecisionAtSeconds: 2 + (stableEntityNumber(entity.id) % 5) },
-  }))
+  const entities = value.entities.map(parseStoredEntity)
+  if (entities.some((entity) => !entity)) return undefined
+  const safeEntities = entities as WorldEntity[]
+  const entityIds = new Set(safeEntities.map((entity) => entity.id))
+  const events = parseStoredEvents(value.events)
+  const pendingImpacts = Array.isArray(value.pendingImpacts) ? value.pendingImpacts.filter((impact): impact is WorldState['pendingImpacts'][number] => (
+    isRecord(impact) && typeof impact.id === 'string' && typeof impact.actorId === 'string' && entityIds.has(impact.actorId) &&
+    Boolean(parseTargetRef(impact.target)) && isRecord(impact.target) && ['entity', 'brick', 'structure'].includes(String(impact.target.kind)) &&
+    isFiniteNumber(impact.damage) && impact.damage > 0 &&
+    (impact.projectileKind === 'arrow' || impact.projectileKind === 'stone') && isFiniteNumber(impact.impactAtSeconds)
+  )).slice(-100) : []
+  const narrative = isRecord(value.narrative) ? value.narrative : {}
 
   return {
-    id: typeof value.id === 'string' ? value.id : `world-${planId}`,
+    id: typeof value.id === 'string' && value.id.trim() ? value.id.trim() : `world-${planId}`,
     planId,
-    randomSeed: typeof value.randomSeed === 'number' ? value.randomSeed : 1,
-    elapsedSeconds: typeof value.elapsedSeconds === 'number' ? value.elapsedSeconds : 0,
+    randomSeed: isFiniteNumber(value.randomSeed) ? Math.floor(value.randomSeed) : 1,
+    elapsedSeconds: isFiniteNumber(value.elapsedSeconds) ? Math.max(0, value.elapsedSeconds) : 0,
     paused: typeof value.paused === 'boolean' ? value.paused : false,
-    entities,
-    events: Array.isArray(value.events) ? value.events as WorldState['events'] : [],
-    pendingImpacts: Array.isArray(value.pendingImpacts) ? value.pendingImpacts as WorldState['pendingImpacts'] : [],
-    narrative: isRecord(value.narrative)
-      ? {
-          processedEventIds: Array.isArray(value.narrative.processedEventIds) ? value.narrative.processedEventIds as string[] : [],
-          memoriesByEntityId: isRecord(value.narrative.memoriesByEntityId)
-            ? value.narrative.memoriesByEntityId as WorldState['narrative']['memoriesByEntityId']
-            : {},
-          relationshipsByEntityId: isRecord(value.narrative.relationshipsByEntityId)
-            ? value.narrative.relationshipsByEntityId as WorldState['narrative']['relationshipsByEntityId']
-            : {},
-          stories: Array.isArray(value.narrative.stories) ? value.narrative.stories as WorldState['narrative']['stories'] : [],
-        }
-      : { processedEventIds: [], memoriesByEntityId: {}, relationshipsByEntityId: {}, stories: [] },
+    entities: safeEntities,
+    events,
+    pendingImpacts,
+    narrative: {
+      processedEventIds: Array.isArray(narrative.processedEventIds)
+        ? narrative.processedEventIds.filter((id): id is string => typeof id === 'string').slice(-1_000)
+        : [],
+      memoriesByEntityId: normalizeArrayRecord(narrative.memoriesByEntityId, isStoredMemory),
+      relationshipsByEntityId: normalizeRelationships(narrative.relationshipsByEntityId),
+      stories: Array.isArray(narrative.stories) ? narrative.stories.filter(isStoredStory).slice(-80) : [],
+    },
   } satisfies WorldState
 }
 

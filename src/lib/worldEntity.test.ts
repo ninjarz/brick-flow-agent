@@ -136,4 +136,50 @@ describe('WorldEntity foundation', () => {
     expect(parseStoredWorldState(world, 'plan-1')).toEqual(world)
     expect(parseStoredWorldState(world, 'plan-2')).toBeUndefined()
   })
+
+  it('rejects non-finite entity transforms and sanitizes unsafe runtime state', () => {
+    const knight = worldEntityDefinitionById.get('knight')!
+    const entity = createWorldEntity(knight, { id: 'safe-knight', name: '守门人' })
+    const world = createEmptyWorldState('plan-1')
+    expect(parseStoredWorldState({
+      ...world,
+      entities: [{ ...entity, transform: { ...entity.transform, x: Number.NaN } }],
+    }, world.planId)).toBeUndefined()
+
+    const restored = parseStoredWorldState({
+      ...world,
+      randomSeed: Number.POSITIVE_INFINITY,
+      entities: [{
+        ...entity,
+        navigation: null,
+        autonomy: undefined,
+        commandQueue: [
+          { type: 'move', target: { kind: 'entity', id: 'target' } },
+          { type: 'teleport', x: 999 },
+        ],
+      }],
+      pendingImpacts: [{
+        id: 'bad-impact', actorId: entity.id, target: { kind: 'waypoint', id: 'x' },
+        damage: 10, projectileKind: 'arrow', impactAtSeconds: 2,
+      }],
+      narrative: {
+        processedEventIds: ['event-1', 3],
+        memoriesByEntityId: { [entity.id]: 'broken' },
+        relationshipsByEntityId: { [entity.id]: { broken: { affinity: 'high' } } },
+        stories: [{ id: 'broken' }],
+      },
+    }, world.planId)
+    expect(restored).toBeDefined()
+    expect(restored?.randomSeed).toBe(1)
+    expect(restored?.entities[0].navigation).toEqual({ status: 'idle', path: [], pathIndex: 0 })
+    expect(restored?.entities[0].commandQueue).toEqual([{ type: 'move', target: { kind: 'entity', id: 'target' } }])
+    expect(restored?.entities[0].autonomy.nextDecisionAtSeconds).toBeGreaterThanOrEqual(2)
+    expect(restored?.pendingImpacts).toEqual([])
+    expect(restored?.narrative).toMatchObject({
+      processedEventIds: ['event-1'],
+      memoriesByEntityId: { [entity.id]: [] },
+      relationshipsByEntityId: { [entity.id]: {} },
+      stories: [],
+    })
+  })
 })
