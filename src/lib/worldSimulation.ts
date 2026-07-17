@@ -13,6 +13,16 @@ const arrivalDistanceStuds = 0.35
 
 type Point = { x: number; y: number; z: number }
 type GridNode = { x: number; z: number }
+type BrickBounds = NonNullable<ReturnType<typeof getBrickBounds>>
+const brickBoundsCache = new WeakMap<PlacedBrick[], BrickBounds[]>()
+
+const getCachedBrickBounds = (bricks: PlacedBrick[]) => {
+  const cached = brickBoundsCache.get(bricks)
+  if (cached) return cached
+  const bounds = bricks.map(getBrickBounds).filter((item): item is BrickBounds => Boolean(item))
+  brickBoundsCache.set(bricks, bounds)
+  return bounds
+}
 
 const distance2d = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.z - b.z)
 const gridKey = (node: GridNode) => `${node.x}:${node.z}`
@@ -29,7 +39,7 @@ const createObstacleTest = (bricks: PlacedBrick[], entity: WorldEntity) => {
   const definition = worldEntityDefinitionById.get(entity.definitionId)
   const bodyHeight = definition?.body.heightStuds ?? 5
   const radius = getBodyRadius(entity)
-  const bounds = bricks.map(getBrickBounds).filter((item) => Boolean(item))
+  const bounds = getCachedBrickBounds(bricks)
   return (x: number, z: number) => bounds.some((item) => (
     item!.minY < bodyHeight - 0.01 &&
     item!.maxY > 0.05 &&
@@ -39,6 +49,48 @@ const createObstacleTest = (bricks: PlacedBrick[], entity: WorldEntity) => {
     z < item!.maxZ + radius
   ))
 }
+
+const segmentIntersectsBounds = (start: Point, end: Point, bounds: BrickBounds) => {
+  const direction = { x: end.x - start.x, y: end.y - start.y, z: end.z - start.z }
+  let near = 0
+  let far = 1
+  for (const axis of ['x', 'y', 'z'] as const) {
+    const min = bounds[`min${axis.toUpperCase()}` as 'minX' | 'minY' | 'minZ']
+    const max = bounds[`max${axis.toUpperCase()}` as 'maxX' | 'maxY' | 'maxZ']
+    if (Math.abs(direction[axis]) < 1e-8) {
+      if (start[axis] < min || start[axis] > max) return false
+      continue
+    }
+    const first = (min - start[axis]) / direction[axis]
+    const second = (max - start[axis]) / direction[axis]
+    near = Math.max(near, Math.min(first, second))
+    far = Math.min(far, Math.max(first, second))
+    if (near > far) return false
+  }
+  return far > 0.015 && near < 0.985
+}
+
+const createWorldLineOfSightTest = (bricks: PlacedBrick[]) => {
+  const bounds = getCachedBrickBounds(bricks)
+  return (actor: WorldEntity, target: WorldEntity) => {
+    const actorBody = worldEntityDefinitionById.get(actor.definitionId)?.body
+    const targetBody = worldEntityDefinitionById.get(target.definitionId)?.body
+    const start = {
+      x: actor.transform.x,
+      y: actor.transform.y + (actorBody?.attackOriginHeightStuds ?? 2),
+      z: actor.transform.z,
+    }
+    const end = {
+      x: target.transform.x,
+      y: target.transform.y + (targetBody?.heightStuds ?? 4) * 0.55,
+      z: target.transform.z,
+    }
+    return !bounds.some((item) => segmentIntersectsBounds(start, end, item))
+  }
+}
+
+export const hasWorldLineOfSight = (actor: WorldEntity, target: WorldEntity, bricks: PlacedBrick[]) =>
+  createWorldLineOfSightTest(bricks)(actor, target)
 
 const reconstructPath = (cameFrom: Map<string, string>, nodes: Map<string, GridNode>, endKey: string) => {
   const path: Point[] = []
@@ -260,6 +312,7 @@ export const stepWorldSimulation = (
       cooldownRemainingSeconds: Math.max(0, entity.combat.cooldownRemainingSeconds - deltaSeconds),
     },
   }))
+  const hasLineOfSight = createWorldLineOfSightTest(bricks)
   const events: WorldEvent[] = []
 
   for (let index = 0; index < entities.length; index += 1) {
@@ -297,7 +350,9 @@ export const stepWorldSimulation = (
     const definition = worldEntityDefinitionById.get(entity.definitionId)
     const targetDistance = distance2d(entity.transform, targetPoint)
     const isAttack = activeCommand.type === 'attack'
-    if (isAttack && definition && targetDistance <= definition.combat.attackRangeStuds) {
+    const targetEntity = target.kind === 'entity' ? entities.find((candidate) => candidate.id === target.id) : undefined
+    const hasAttackLineOfSight = definition?.combat.projectileKind !== 'arrow' || !targetEntity || hasLineOfSight(entity, targetEntity)
+    if (isAttack && definition && targetDistance <= definition.combat.attackRangeStuds && hasAttackLineOfSight) {
       entity = { ...entity, behaviorState: 'attacking' }
       if (entity.combat.cooldownRemainingSeconds <= 0) {
         entity = {

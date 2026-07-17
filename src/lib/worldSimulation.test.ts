@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { createEmptyWorldState, createWorldEntity, issueWorldEntityCommand } from './worldEntity'
-import { findWorldPath, stepWorldSimulation } from './worldSimulation'
+import { findWorldPath, hasWorldLineOfSight, stepWorldSimulation } from './worldSimulation'
 import { makeBrick } from './planUtils'
 
 describe('WorldEntity simulation', () => {
@@ -105,5 +105,24 @@ describe('WorldEntity simulation', () => {
     expect(next.events.at(-1)).toMatchObject({ type: 'interaction', actorId: actor.id, targetId: target.id })
     expect(next.narrative.relationshipsByEntityId[actor.id][target.id].affinity).toBe(5)
     expect(next.narrative.relationshipsByEntityId[target.id][actor.id].affinity).toBe(5)
+  })
+
+  it('blocks arrows with tall brick cover while leaving an open shot valid', () => {
+    const archerDefinition = worldEntityDefinitionById.get('archer')!
+    const knightDefinition = worldEntityDefinitionById.get('knight')!
+    const archer = createWorldEntity(archerDefinition, { id: 'archer', factionId: 'red', transform: { x: 0, z: 0 } })
+    const knight = createWorldEntity(knightDefinition, { id: 'knight', factionId: 'blue', transform: { x: 7, z: 0 } })
+    archer.activeCommand = { type: 'attack', target: { kind: 'entity', id: knight.id } }
+    const wall = [0, 1.2, 2.4, 3.6].map((y) => makeBrick('brick-2x2', 'gray', 3, y, -1))
+    expect(hasWorldLineOfSight(archer, knight, [])).toBe(true)
+    expect(hasWorldLineOfSight(archer, knight, wall)).toBe(false)
+
+    const blockedWorld = { ...createEmptyWorldState('plan-1'), entities: [archer, knight] }
+    const blocked = stepWorldSimulation(blockedWorld, wall, 0.1)
+    expect(blocked.entities[1].health).toBe(knight.health)
+    expect(blocked.events.some((event) => event.type === 'attack')).toBe(false)
+
+    const open = stepWorldSimulation(blockedWorld, [], 0.1)
+    expect(open.entities[1].health).toBeLessThan(knight.health)
   })
 })
