@@ -490,6 +490,9 @@ const makeWheelDefinition = (
   name,
   kind: 'wheel',
   footprint: legoPlateFootprint(widthStuds, depthStuds, 3),
+  // Wheels and tires intentionally stay connectorless until the editor models
+  // axle holes and tire/rim fits as distinct mechanical joints. Fake studs here
+  // would make validation accept physically impossible assemblies.
   connectors: [],
   colors,
   inventory,

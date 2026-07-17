@@ -26,10 +26,12 @@ await writeFile(entry, `
       partNumber: definition.partNumber,
       normalizedPartNumber,
       name: definition.name,
+      kind: definition.kind,
       hasGeneratedVisual: Boolean(generatedTriangles),
       generatedTriangles: generatedTriangles?.length ?? 0,
       hasGeneratedConnectors: Boolean(generatedConnectors?.length),
       generatedConnectors: generatedConnectors?.length ?? 0,
+      effectiveConnectors: definition.connectors.length,
     };
   });
 `)
@@ -47,6 +49,7 @@ const { auditInput } = await import(`file://${outfile}`)
 const withFile = []
 const withGeneratedVisual = []
 const withGeneratedConnectors = []
+const withEffectiveConnectors = []
 const missingFile = []
 
 for (const item of auditInput) {
@@ -56,6 +59,9 @@ for (const item of auditInput) {
 
   if (item.hasGeneratedConnectors) {
     withGeneratedConnectors.push(item)
+  }
+  if (item.effectiveConnectors > 0) {
+    withEffectiveConnectors.push(item)
   }
 
   try {
@@ -70,9 +76,13 @@ const summary = {
   totalDefinitions: auditInput.length,
   withGeneratedVisual: withGeneratedVisual.length,
   withGeneratedConnectors: withGeneratedConnectors.length,
+  withEffectiveConnectors: withEffectiveConnectors.length,
   withLocalDatFile: withFile.length,
   missingLocalDatFile: missingFile.length,
 }
+
+const missingEffectiveConnectors = auditInput.filter((item) => item.effectiveConnectors === 0)
+const unexpectedMissingEffectiveConnectors = missingEffectiveConnectors.filter((item) => item.kind !== 'wheel')
 
 const details = {
   generatedVisualParts: withGeneratedVisual,
@@ -93,4 +103,10 @@ console.log(JSON.stringify(showDetails ? { ...summary, ...details } : {
   missingDatParts: missingFile.map(compactPart),
   missingGeneratedVisualParts: auditInput.filter((item) => !item.hasGeneratedVisual).map(compactPart),
   missingGeneratedConnectorParts: auditInput.filter((item) => !item.hasGeneratedConnectors).map(compactPart),
+  missingEffectiveConnectorParts: missingEffectiveConnectors.map(compactPart),
+  unexpectedMissingEffectiveConnectorParts: unexpectedMissingEffectiveConnectors.map(compactPart),
 }, null, 2))
+
+if (missingFile.length > 0 || auditInput.some((item) => !item.hasGeneratedVisual) || unexpectedMissingEffectiveConnectors.length > 0) {
+  process.exitCode = 1
+}
