@@ -5,7 +5,7 @@ import { BrickEditorPanel } from './components/BrickEditorPanel'
 import type { BrickSceneViewMode } from './components/BrickScene'
 import { ControlPanel } from './components/ControlPanel'
 import { brickById, brickDefinitions, getDefaultBrickColor } from './data/basicBricks'
-import { findNearestOpenBrickGroupAround, rotationRepositionSearchRadiusStuds, type StationaryPlanSpatialData } from './lib/brickGroupPlacement'
+import { dropBrickGroupAtPoint, findNearestOpenBrickGroupAround, rotationRepositionSearchRadiusStuds, type StationaryPlanSpatialData } from './lib/brickGroupPlacement'
 import { generateBuildPlan } from './lib/localGenerator'
 import { buildLlmUserPrompt, generateLlmBuildPlan, isLlmConfigComplete, llmSystemPrompt, testLlmConnection } from './lib/llmGenerator'
 import { loadLlmConfig, saveLlmConfig } from './lib/llmConfig'
@@ -19,6 +19,7 @@ import type { ObjImportResult } from './lib/objImport'
 import { parseImportedPlan, type ImportText } from './lib/planFileIO'
 import { prepareReferenceImage } from './lib/referenceImage'
 import { simplifiedBrickThreshold } from './lib/scenePerformance'
+import { toggleBrickSelection } from './lib/brickSelection'
 import { analyzeBuildStability } from './lib/stabilityAnalysis'
 import { formatLDrawPlan, parseLDrawPlan } from './lib/ldrawPlan'
 import { getEffectiveInventory, loadInventoryOverrides, saveInventoryOverrides } from './lib/userInventory'
@@ -44,6 +45,12 @@ type LocalizedFinishedAsset = {
   displayDescription: string
   displayPrompt: string
   displayPlan: BuildPlan
+}
+type PlacementSession = {
+  kind: 'new' | 'move'
+  anchorBrickId: string
+  sourceBricks: PlacedBrick[]
+  previewBricks: PlacedBrick[]
 }
 const workspaceDraftSaveDebounceMs = 120
 const sceneViewModeOrder: BrickSceneViewMode[] = ['border', 'borderless', 'xray', 'voxel']
@@ -140,8 +147,10 @@ function App() {
     future: BuildPlan[]
   }>({ past: [], future: [] })
   const stationarySpatialStateCacheRef = useRef<StationaryPlanSpatialData>()
+  const placementPointerKeyRef = useRef('')
   const [selectedId, setSelectedId] = useState('')
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([])
+  const [placementSession, setPlacementSession] = useState<PlacementSession>()
   const [llmConfig, setLlmConfig] = useState<LlmConfig>(() => loadLlmConfig())
   const [inventoryOverrides, setInventoryOverrides] = useState(() => loadInventoryOverrides())
   const [isTestingLlmConfig, setIsTestingLlmConfig] = useState(false)
@@ -247,6 +256,8 @@ function App() {
     planHistoryRef.current.past = planHistoryRef.current.past.slice(0, -1)
     planHistoryRef.current.future = [current, ...planHistoryRef.current.future.slice(0, 49)]
     planRef.current = previous
+    placementPointerKeyRef.current = ''
+    setPlacementSession(undefined)
     setSelectedId('')
     setSelectedGroupIds([])
     setPlanState(previous)
@@ -261,6 +272,8 @@ function App() {
     planHistoryRef.current.future = planHistoryRef.current.future.slice(1)
     planHistoryRef.current.past = [...planHistoryRef.current.past.slice(-49), current]
     planRef.current = next
+    placementPointerKeyRef.current = ''
+    setPlacementSession(undefined)
     setSelectedId('')
     setSelectedGroupIds([])
     setPlanState(next)
@@ -270,10 +283,17 @@ function App() {
   const canUndo = historyVersion >= 0 && planHistoryRef.current.past.length > 0
   const canRedo = historyVersion >= 0 && planHistoryRef.current.future.length > 0
 
-  const selectBrick = useCallback((id: string) => {
-    setSelectedId(id)
-    setSelectedGroupIds([])
-  }, [])
+  const selectBrick = useCallback((id: string, options?: { toggle?: boolean }) => {
+    if (!options?.toggle || !id) {
+      setSelectedId(id)
+      setSelectedGroupIds([])
+      return
+    }
+
+    const nextSelection = toggleBrickSelection(selectedId, selectedGroupIds, id)
+    setSelectedId(nextSelection.selectedId)
+    setSelectedGroupIds(nextSelection.selectedGroupIds)
+  }, [selectedGroupIds, selectedId])
 
   const selectConnectedGroup = useCallback((id: string) => {
     if (!id) {
@@ -1042,7 +1062,7 @@ function App() {
     })
   }
 
-  const addBrick = (brickId: string) => {
+  const beginNewBrickPlacement = (brickId: string) => {
     const definition = brickById.get(brickId)
     if (!definition) return
     const inventory = getEffectiveInventory(brickId, definition.inventory, inventoryOverrides)
@@ -1051,24 +1071,103 @@ function App() {
       return
     }
     const nextBrick = makeBrick(brickId, getDefaultBrickColor(definition), 0, 0, 0)
-    let placedBrick = nextBrick
+    const stationaryData = getStationarySpatialState(planRef.current.bricks, new Set())
+    const previewBricks = dropBrickGroupAtPoint(
+      [nextBrick],
+      nextBrick.id,
+      { x: 0, z: 0 },
+      stationaryData,
+    ) ?? [nextBrick]
+    placementPointerKeyRef.current = ''
+    setPlacementSession({
+      kind: 'new',
+      anchorBrickId: nextBrick.id,
+      sourceBricks: [nextBrick],
+      previewBricks,
+    })
+  }
+
+  const beginSelectedPlacement = useCallback((brickId: string, point: { x: number; z: number }) => {
+    if (placementSession || !activeSelectedIds.includes(brickId)) return
+    const selectedIdSet = new Set(activeSelectedIds)
+    const sourceBricks = planRef.current.bricks.filter((brick) => selectedIdSet.has(brick.id))
+    if (sourceBricks.length === 0) return
+    const stationaryData = getStationarySpatialState(planRef.current.bricks, selectedIdSet)
+    const previewBricks = dropBrickGroupAtPoint(sourceBricks, brickId, point, stationaryData) ?? sourceBricks
+    placementPointerKeyRef.current = `${normalizeHorizontalStud(point.x)}:${normalizeHorizontalStud(point.z)}`
+    setPlacementSession({
+      kind: 'move',
+      anchorBrickId: brickId,
+      sourceBricks,
+      previewBricks,
+    })
+  }, [activeSelectedIds, getStationarySpatialState, placementSession])
+
+  const updatePlacementPoint = useCallback((point: { x: number; z: number }) => {
+    const pointerKey = `${normalizeHorizontalStud(point.x)}:${normalizeHorizontalStud(point.z)}`
+    if (placementPointerKeyRef.current === pointerKey) return
+    placementPointerKeyRef.current = pointerKey
+    setPlacementSession((current) => {
+      if (!current) return current
+      const excludedIds = current.kind === 'move'
+        ? new Set(current.sourceBricks.map((brick) => brick.id))
+        : new Set<string>()
+      const stationaryData = getStationarySpatialState(planRef.current.bricks, excludedIds)
+      const previewBricks = dropBrickGroupAtPoint(
+        current.sourceBricks,
+        current.anchorBrickId,
+        point,
+        stationaryData,
+      )
+      return previewBricks ? { ...current, previewBricks } : current
+    })
+  }, [getStationarySpatialState])
+
+  const cancelPlacement = useCallback(() => {
+    placementPointerKeyRef.current = ''
+    setPlacementSession(undefined)
+  }, [])
+
+  const confirmPlacement = useCallback(() => {
+    if (!placementSession) return
+    const placedIds = placementSession.previewBricks.map((brick) => brick.id)
+    const placedIdSet = new Set(placedIds)
+
     setPlan((current) => {
-      const nextPlan = {
-        ...current,
-        bricks: [
-          ...current.bricks,
-          (placedBrick = findSupportedOpenPose(
-            isAutoSnapEnabled ? snapBrickToPlan(nextBrick, current.bricks) : nextBrick,
-            current.bricks,
-            { allowGroundFallback: true, preferGroundFallback: true },
-          )),
-        ],
+      if (placementSession.kind === 'move') {
+        const previewById = new Map(placementSession.previewBricks.map((brick) => [brick.id, brick]))
+        return {
+          ...current,
+          bricks: current.bricks.map((brick) => previewById.get(brick.id) ?? brick),
+        }
       }
 
-      return addBrickToManualStep(nextPlan, placedBrick.id, manualStepTitle, manualStepDescription)
+      return placementSession.previewBricks.reduce(
+        (nextPlan, brick) => addBrickToManualStep(
+          { ...nextPlan, bricks: [...nextPlan.bricks, brick] },
+          brick.id,
+          manualStepTitle,
+          manualStepDescription,
+        ),
+        current,
+      )
     })
-    selectBrick(placedBrick.id)
-  }
+    setSelectedId(placedIds.at(-1) ?? '')
+    setSelectedGroupIds(placedIdSet.size > 1 ? placedIds : [])
+    placementPointerKeyRef.current = ''
+    setPlacementSession(undefined)
+  }, [manualStepDescription, manualStepTitle, placementSession, setPlan])
+
+  useEffect(() => {
+    if (!placementSession) return
+    const handlePlacementKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      cancelPlacement()
+    }
+    window.addEventListener('keydown', handlePlacementKeyDown)
+    return () => window.removeEventListener('keydown', handlePlacementKeyDown)
+  }, [cancelPlacement, placementSession])
 
   const duplicateSelected = () => {
     if (!selectedBrick) return
@@ -1587,6 +1686,12 @@ function App() {
               <span className="xray-com"><i />{t('xray.centerOfMass')}</span>
             </div>
           )}
+          {placementSession && (
+            <div className="placement-hint" role="status">
+              <strong>{placementSession.kind === 'new' ? t('placement.adding') : t('placement.moving')}</strong>
+              <span>{t('placement.instructions')}</span>
+            </div>
+          )}
           <Suspense fallback={<div className="scene-loading">{t('scene.loading')}</div>}>
             <BrickScene
               bricks={plan.bricks}
@@ -1595,8 +1700,14 @@ function App() {
               viewMode={sceneViewMode}
               stabilityAnalysis={sceneStabilityAnalysis}
               highlightedIds={activeSelectedIds.filter((id) => id !== selectedId)}
+              placementPreviewBricks={placementSession?.previewBricks}
+              placementActive={Boolean(placementSession)}
               onSelect={selectBrick}
               onSelectConnected={selectConnectedGroup}
+              onPlacementPointChange={updatePlacementPoint}
+              onConfirmPlacement={confirmPlacement}
+              onCancelPlacement={cancelPlacement}
+              onBeginDragSelected={beginSelectedPlacement}
               onNudgeSelected={nudgeSelected}
               onRotateSelected={rotateSelected}
               onDeleteSelected={deleteSelected}
@@ -1657,7 +1768,7 @@ function App() {
         }}
         plan={plan}
         onRenamePlan={renamePlan}
-        onAddBrick={addBrick}
+        onAddBrick={beginNewBrickPlacement}
         inventoryOverrides={inventoryOverrides}
         onInventoryChange={(brickId, inventory) => {
           setInventoryOverrides((current) => {

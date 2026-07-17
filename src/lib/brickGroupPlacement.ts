@@ -2,11 +2,13 @@ import {
   createBrickCollisionIndex,
   createPlanSpatialState,
   getBrickBounds,
+  getBrickRawOverlapScore,
   getNearestHorizontalSearchOffsets,
   hasBrickCollision,
   isBrickAboveGround,
 } from './planUtils'
-import { WORLD_SNAP_STEP_STUDS, normalizeHorizontalStud, normalizeYStud } from './brickUnits'
+import { brickById } from '../data/basicBricks'
+import { WORLD_SNAP_STEP_STUDS, getBrickWorldFrame, normalizeHorizontalStud, normalizeYStud } from './brickUnits'
 import type { PlacedBrick } from '../types/bricks'
 
 export type StationaryPlanSpatialData = {
@@ -61,4 +63,92 @@ export const findNearestOpenBrickGroupAround = (
   }
 
   return undefined
+}
+
+type HorizontalDropPoint = {
+  x: number
+  z: number
+}
+
+const translateBrickGroup = (
+  bricks: PlacedBrick[],
+  delta: { xStud?: number; yStud?: number; zStud?: number },
+) => bricks.map((brick) => ({
+  ...brick,
+  pose: {
+    ...brick.pose,
+    xStud: normalizeHorizontalStud(brick.pose.xStud + (delta.xStud ?? 0)),
+    yStud: normalizeYStud(brick.pose.yStud + (delta.yStud ?? 0)),
+    zStud: normalizeHorizontalStud(brick.pose.zStud + (delta.zStud ?? 0)),
+  },
+}))
+
+const canPlaceDroppedGroup = (
+  bricks: PlacedBrick[],
+  stationaryBricks: PlacedBrick[],
+  stationaryCollisionIndex: ReturnType<typeof createBrickCollisionIndex>,
+) => bricks.every((brick) => (
+  isBrickAboveGround(brick) &&
+  getBrickRawOverlapScore(brick, stationaryBricks, stationaryCollisionIndex) <= boundsTolerance
+))
+
+/**
+ * Aligns the anchor brick's horizontal centre to the pointer, then lowers the
+ * whole rigid selection from above until the next grid step would collide.
+ * The source array is never mutated, so callers can use the result as a ghost
+ * preview and commit it only after explicit confirmation.
+ */
+export const dropBrickGroupAtPoint = (
+  bricks: PlacedBrick[],
+  anchorBrickId: string,
+  point: HorizontalDropPoint,
+  stationaryData: Pick<StationaryPlanSpatialData, 'stationaryBricks' | 'spatialState'>,
+) => {
+  const anchor = bricks.find((brick) => brick.id === anchorBrickId) ?? bricks[0]
+  const anchorDefinition = anchor ? brickById.get(anchor.brickId) : undefined
+  if (!anchor || !anchorDefinition || bricks.length === 0) return undefined
+
+  const anchorFrame = getBrickWorldFrame(anchorDefinition, anchor.pose)
+  const horizontallyAligned = translateBrickGroup(bricks, {
+    xStud: normalizeHorizontalStud(point.x - anchorFrame.x),
+    zStud: normalizeHorizontalStud(point.z - anchorFrame.z),
+  })
+  const groupBounds = horizontallyAligned.map(getBrickBounds).filter((bounds) => Boolean(bounds))
+  if (groupBounds.length !== horizontallyAligned.length) return undefined
+
+  const groupMinY = Math.min(...groupBounds.map((bounds) => bounds!.minY))
+  const groupMinX = Math.min(...groupBounds.map((bounds) => bounds!.minX))
+  const groupMaxX = Math.max(...groupBounds.map((bounds) => bounds!.maxX))
+  const groupMinZ = Math.min(...groupBounds.map((bounds) => bounds!.minZ))
+  const groupMaxZ = Math.max(...groupBounds.map((bounds) => bounds!.maxZ))
+  const stationaryMaxY = Math.max(
+    0,
+    ...stationaryData.stationaryBricks
+      .map(getBrickBounds)
+      .filter((bounds) => Boolean(bounds))
+      .filter((bounds) => (
+        bounds!.minX < groupMaxX - boundsTolerance &&
+        bounds!.maxX > groupMinX + boundsTolerance &&
+        bounds!.minZ < groupMaxZ - boundsTolerance &&
+        bounds!.maxZ > groupMinZ + boundsTolerance
+      ))
+      .map((bounds) => bounds!.maxY),
+  )
+  const startShift = stationaryMaxY + WORLD_SNAP_STEP_STUDS - groupMinY
+  let candidate = translateBrickGroup(horizontallyAligned, { yStud: startShift })
+  const collisionIndex = stationaryData.spatialState.collisionIndex
+
+  if (!canPlaceDroppedGroup(candidate, stationaryData.stationaryBricks, collisionIndex)) return undefined
+
+  // Descending from above deliberately stops at the first obstacle. This
+  // prevents a preview from tunnelling through a roof into an enclosed gap.
+  const maxDropSteps = Math.ceil((stationaryMaxY + 1) / WORLD_SNAP_STEP_STUDS) + 2
+  for (let step = 0; step < maxDropSteps; step += 1) {
+    const lowered = translateBrickGroup(candidate, { yStud: -WORLD_SNAP_STEP_STUDS })
+    if (lowered.every((brick, index) => brick.pose.yStud === candidate[index].pose.yStud)) break
+    if (!canPlaceDroppedGroup(lowered, stationaryData.stationaryBricks, collisionIndex)) break
+    candidate = lowered
+  }
+
+  return candidate
 }

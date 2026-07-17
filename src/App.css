@@ -210,6 +210,38 @@ button.status-pill:hover {
   font-size: 13px;
 }
 
+.placement-hint {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: calc(100% - 28px);
+  padding: 8px 11px;
+  border: 1px solid rgba(8, 145, 178, 0.35);
+  border-radius: 999px;
+  background: rgba(236, 254, 255, 0.94);
+  color: #155e75;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.14);
+  font-size: 11px;
+  pointer-events: none;
+  transform: translateX(-50%);
+  backdrop-filter: blur(8px);
+}
+
+.placement-hint strong {
+  color: #0e7490;
+  white-space: nowrap;
+}
+
+.placement-hint span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .voxel-legend {
   position: absolute;
   z-index: 2;

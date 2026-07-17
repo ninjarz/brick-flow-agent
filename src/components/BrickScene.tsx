@@ -34,6 +34,10 @@ export type BrickSceneTransform = {
   }
 }
 
+export type BrickSelectionOptions = {
+  toggle?: boolean
+}
+
 type BrickSceneProps = {
   bricks: PlacedBrick[]
   selectedId?: string
@@ -44,9 +48,15 @@ type BrickSceneProps = {
   stabilityAnalysis?: StabilityAnalysis
   displayColorByBrickId?: Map<string, string>
   transformsByBrickId?: Map<string, BrickSceneTransform>
+  placementPreviewBricks?: PlacedBrick[]
+  placementActive?: boolean
   onCameraAzimuthChange?: (degrees: number) => void
-  onSelect: (id: string) => void
+  onSelect: (id: string, options?: BrickSelectionOptions) => void
   onSelectConnected?: (id: string) => void
+  onPlacementPointChange?: (point: { x: number; z: number }) => void
+  onConfirmPlacement?: () => void
+  onCancelPlacement?: () => void
+  onBeginDragSelected?: (id: string, point: { x: number; z: number }) => void
   onNudgeSelected: (delta: { xStud?: number; yStud?: number; zStud?: number }) => void
   onRotateSelected: (axis: 'horizontal' | 'vertical', deltaQuarterTurns: -1 | 1) => void
   onDeleteSelected: () => void
@@ -69,6 +79,129 @@ const defaultGridExtent = 15
 const gridPadding = 4
 const nudgeRepeatDelayMs = 280
 const nudgeRepeatIntervalMs = 90
+const dragLongPressDelayMs = 420
+
+const isPlacementGhostObject = (object: Object3D) => {
+  let current: Object3D | null = object
+  while (current) {
+    if (current.userData.placementGhost === true) return true
+    current = current.parent
+  }
+  return false
+}
+
+const getFirstPlacementSurfacePoint = (event: ThreeEvent<PointerEvent>) => {
+  const surfaceHit = event.intersections.find((intersection) => !isPlacementGhostObject(intersection.object))
+  return surfaceHit?.point ?? event.point
+}
+
+const useBrickInteractionHandlers = ({
+  resolveBrickId,
+  canBeginDrag,
+  placementActive,
+  onSelect,
+  onSelectConnected,
+  onBeginDragSelected,
+  onConfirmPlacement,
+  onCancelPlacement,
+}: {
+  resolveBrickId: (event: ThreeEvent<MouseEvent>) => string | undefined
+  canBeginDrag: (id: string) => boolean
+  placementActive: boolean
+  onSelect: (id: string, options?: BrickSelectionOptions) => void
+  onSelectConnected?: (id: string) => void
+  onBeginDragSelected?: (id: string, point: { x: number; z: number }) => void
+  onConfirmPlacement?: () => void
+  onCancelPlacement?: () => void
+}) => {
+  const longPressTimerRef = useRef<number>()
+  const pointerDownRef = useRef<{ x: number; y: number }>()
+  const isPointerDownRef = useRef(false)
+  const releaseListenerCleanupRef = useRef<() => void>()
+  const suppressNextClickRef = useRef(false)
+
+  const clearLongPress = () => {
+    if (longPressTimerRef.current !== undefined) window.clearTimeout(longPressTimerRef.current)
+    longPressTimerRef.current = undefined
+    pointerDownRef.current = undefined
+    isPointerDownRef.current = false
+    releaseListenerCleanupRef.current?.()
+    releaseListenerCleanupRef.current = undefined
+  }
+
+  useEffect(() => () => clearLongPress(), [])
+
+  useEffect(() => {
+    if (!placementActive) suppressNextClickRef.current = false
+  }, [placementActive])
+
+  const onPointerDown = (event: ThreeEvent<PointerEvent>) => {
+    if (placementActive || event.button !== 0) return
+    const brickId = resolveBrickId(event as unknown as ThreeEvent<MouseEvent>)
+    if (!brickId || !canBeginDrag(brickId) || !onBeginDragSelected) return
+    clearLongPress()
+    const point = { x: event.point.x, z: event.point.z }
+    pointerDownRef.current = { x: event.clientX, y: event.clientY }
+    isPointerDownRef.current = true
+    const handleGlobalRelease = () => clearLongPress()
+    window.addEventListener('pointerup', handleGlobalRelease, true)
+    window.addEventListener('pointercancel', handleGlobalRelease, true)
+    window.addEventListener('blur', handleGlobalRelease)
+    releaseListenerCleanupRef.current = () => {
+      window.removeEventListener('pointerup', handleGlobalRelease, true)
+      window.removeEventListener('pointercancel', handleGlobalRelease, true)
+      window.removeEventListener('blur', handleGlobalRelease)
+    }
+    longPressTimerRef.current = window.setTimeout(() => {
+      if (!isPointerDownRef.current) {
+        clearLongPress()
+        return
+      }
+      suppressNextClickRef.current = true
+      longPressTimerRef.current = undefined
+      onBeginDragSelected(brickId, point)
+    }, dragLongPressDelayMs)
+  }
+
+  const onPointerMove = (event: ThreeEvent<PointerEvent>) => {
+    const start = pointerDownRef.current
+    if (!start || longPressTimerRef.current === undefined) return
+    if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 6) clearLongPress()
+  }
+
+  const onPointerUp = () => clearLongPress()
+  const onPointerOut = () => clearLongPress()
+  const onClick = (event: ThreeEvent<MouseEvent>) => {
+    event.stopPropagation()
+    clearLongPress()
+    if (suppressNextClickRef.current) {
+      suppressNextClickRef.current = false
+      return
+    }
+    if (placementActive) {
+      onConfirmPlacement?.()
+      return
+    }
+    const brickId = resolveBrickId(event)
+    const toggleSelection = event.metaKey || event.ctrlKey || event.nativeEvent.metaKey || event.nativeEvent.ctrlKey
+    if (brickId) onSelect(brickId, { toggle: toggleSelection })
+  }
+  const onDoubleClick = (event: ThreeEvent<MouseEvent>) => {
+    if (placementActive) return
+    const brickId = resolveBrickId(event)
+    if (!brickId) return
+    event.stopPropagation()
+    onSelectConnected?.(brickId)
+  }
+  const onContextMenu = (event: ThreeEvent<MouseEvent>) => {
+    if (!placementActive) return
+    event.stopPropagation()
+    event.nativeEvent.preventDefault()
+    onCancelPlacement?.()
+  }
+
+  return { onPointerDown, onPointerMove, onPointerUp, onPointerOut, onClick, onDoubleClick, onContextMenu }
+}
 
 const BoundsOutline = ({ position, size, color }: {
   position: [number, number, number]
@@ -631,7 +764,7 @@ const SceneLighting = ({
   )
 }
 
-const BrickMesh = memo(function BrickMesh({ brick, selected, highlighted, floating, preferDetailedGeometry, showEdges, displayColor, onSelect, onSelectConnected }: {
+const BrickMesh = memo(function BrickMesh({ brick, selected, highlighted, floating, preferDetailedGeometry, showEdges, displayColor, ghost = false, placementActive, onSelect, onSelectConnected, onBeginDragSelected, onConfirmPlacement, onCancelPlacement }: {
   brick: PlacedBrick
   selected: boolean
   highlighted: boolean
@@ -639,8 +772,13 @@ const BrickMesh = memo(function BrickMesh({ brick, selected, highlighted, floati
   preferDetailedGeometry: boolean
   showEdges: boolean
   displayColor?: string
-  onSelect: (id: string) => void
+  ghost?: boolean
+  placementActive: boolean
+  onSelect: (id: string, options?: BrickSelectionOptions) => void
   onSelectConnected?: (id: string) => void
+  onBeginDragSelected?: (id: string, point: { x: number; z: number }) => void
+  onConfirmPlacement?: () => void
+  onCancelPlacement?: () => void
 }) {
   const definition = brickById.get(brick.brickId)
   if (!definition) return null
@@ -655,13 +793,18 @@ const BrickMesh = memo(function BrickMesh({ brick, selected, highlighted, floati
       preferDetailedGeometry={preferDetailedGeometry}
       showEdges={showEdges}
       displayColor={displayColor}
+      ghost={ghost}
+      placementActive={placementActive}
       onSelect={onSelect}
       onSelectConnected={onSelectConnected}
+      onBeginDragSelected={onBeginDragSelected}
+      onConfirmPlacement={onConfirmPlacement}
+      onCancelPlacement={onCancelPlacement}
     />
   )
 })
 
-const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, preferDetailedGeometry, showEdges, displayColor, onSelect, onSelectConnected }: {
+const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, preferDetailedGeometry, showEdges, displayColor, ghost, placementActive, onSelect, onSelectConnected, onBeginDragSelected, onConfirmPlacement, onCancelPlacement }: {
   brick: PlacedBrick
   definition: BrickDefinition
   selected: boolean
@@ -670,8 +813,13 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
   preferDetailedGeometry: boolean
   showEdges: boolean
   displayColor?: string
-  onSelect: (id: string) => void
+  ghost: boolean
+  placementActive: boolean
+  onSelect: (id: string, options?: BrickSelectionOptions) => void
   onSelectConnected?: (id: string) => void
+  onBeginDragSelected?: (id: string, point: { x: number; z: number }) => void
+  onConfirmPlacement?: () => void
+  onCancelPlacement?: () => void
 }) => {
   const frame = getBrickWorldFrame(definition, brick.pose)
   const origin = poseToWorld(brick.pose)
@@ -707,7 +855,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
   const visibleStuds = connectors.filter((connector) => connector.kind === 'stud' && !rendersOwnStuds)
   const visiblePins = connectors.filter((connector) => connector.kind === 'pin' && connector.gender === 'male')
   const bodyColor = displayColor ?? colorHex[brick.color]
-  const bodyOpacity = displayColor ? 0.92 : colorOpacity[brick.color]
+  const bodyOpacity = ghost ? 0.32 : displayColor ? 0.92 : colorOpacity[brick.color]
   const isEyeTile = brick.brickId === 'tile-eye-1x1' || brick.brickId === 'tile-eye-closed-1x1' || brick.brickId === 'tile-eye-offset-1x1' || brick.brickId === 'tile-eye-centered-1x1'
   const baseWidth = definition.footprint.widthStuds
   const baseDepth = definition.footprint.depthStuds
@@ -716,15 +864,16 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
     ? createLoadedLDrawPartGeometry(definition.partNumber, definition.footprint)
     : undefined
 
-  const handleClick = (event: ThreeEvent<MouseEvent>) => {
-    event.stopPropagation()
-    onSelect(brick.id)
-  }
-
-  const handleDoubleClick = (event: ThreeEvent<MouseEvent>) => {
-    event.stopPropagation()
-    onSelectConnected?.(brick.id)
-  }
+  const interactionHandlers = useBrickInteractionHandlers({
+    resolveBrickId: () => brick.id,
+    canBeginDrag: () => selected || highlighted,
+    placementActive,
+    onSelect,
+    onSelectConnected,
+    onBeginDragSelected,
+    onConfirmPlacement,
+    onCancelPlacement,
+  })
 
   const renderSelectedConnectorMarkers = () => selected && connectors.map((connector) => (
     <mesh
@@ -755,7 +904,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
 
   if (preferDetailedGeometry && ldrawGeometry) {
     return (
-      <group position={[frame.x, bodyY, frame.z]} onClick={handleClick} onDoubleClick={handleDoubleClick}>
+      <group position={[frame.x, bodyY, frame.z]} {...interactionHandlers}>
         {rotateWithPose(
           <>
             <mesh castShadow receiveShadow>
@@ -781,7 +930,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
 
   if (definition.kind === 'wheel') {
     return (
-      <group position={[frame.x, origin.y + 0.14, frame.z]} rotation={[0, rotation, Math.PI / 2]} onClick={handleClick} onDoubleClick={handleDoubleClick}>
+      <group position={[frame.x, origin.y + 0.14, frame.z]} rotation={[0, rotation, Math.PI / 2]} {...interactionHandlers}>
         <mesh castShadow receiveShadow>
           <cylinderGeometry args={[0.42, 0.42, 0.32, 32]} />
           <meshStandardMaterial color={bodyColor} roughness={0.72} metalness={0.05} />
@@ -810,7 +959,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
 
   if (definition.kind === 'axle') {
     return (
-      <group position={[frame.x, origin.y + frame.height / 2, frame.z]} rotation={[0, rotation, Math.PI / 2]} onClick={handleClick} onDoubleClick={handleDoubleClick}>
+      <group position={[frame.x, origin.y + frame.height / 2, frame.z]} rotation={[0, rotation, Math.PI / 2]} {...interactionHandlers}>
         <mesh castShadow receiveShadow>
           <cylinderGeometry args={[0.09, 0.09, frame.width + 2, 16]} />
           <meshStandardMaterial color={bodyColor} roughness={0.54} metalness={0.05} />
@@ -839,7 +988,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
     const bladeOffset = baseWidth * 0.25
 
     return (
-      <group position={[frame.x, bodyY, frame.z]} onClick={handleClick} onDoubleClick={handleDoubleClick}>
+      <group position={[frame.x, bodyY, frame.z]} {...interactionHandlers}>
         {rotateWithPose(
           <>
             {Array.from({ length: 4 }).map((_, index) => {
@@ -936,7 +1085,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
     }
 
     return (
-      <group position={[frame.x, bodyY, frame.z]} onClick={handleClick} onDoubleClick={handleDoubleClick}>
+      <group position={[frame.x, bodyY, frame.z]} {...interactionHandlers}>
         {rotateWithPose(renderSpecialBody())}
         {visibleStuds.map((connector) => {
           const direction = connectorDirection(connector)
@@ -974,7 +1123,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
   }
 
   return (
-    <group position={[frame.x, bodyY, frame.z]} onClick={handleClick} onDoubleClick={handleDoubleClick}>
+    <group position={[frame.x, bodyY, frame.z]} {...interactionHandlers}>
       {isEyeTile ? (
         rotateWithPose(
           <RoundEyeTileBody variant={brick.brickId} height={baseHeight} />
@@ -1176,11 +1325,16 @@ const getBoundsSize = (bounds: StructuralVoxelBounds): [number, number, number] 
   bounds.maxZ - bounds.minZ,
 ]
 
-const StructuralVoxelInstances = ({ kind, instances, onSelect, onSelectConnected }: {
+const StructuralVoxelInstances = ({ kind, instances, draggableIds, placementActive, onSelect, onSelectConnected, onBeginDragSelected, onConfirmPlacement, onCancelPlacement }: {
   kind: StructuralCellKind
   instances: StructuralVoxelInstance[]
-  onSelect: (id: string) => void
+  draggableIds: Set<string>
+  placementActive: boolean
+  onSelect: (id: string, options?: BrickSelectionOptions) => void
   onSelectConnected?: (id: string) => void
+  onBeginDragSelected?: (id: string, point: { x: number; z: number }) => void
+  onConfirmPlacement?: () => void
+  onCancelPlacement?: () => void
 }) => {
   const fillRef = useRef<InstancedMesh>(null)
   const wireRef = useRef<InstancedMesh>(null)
@@ -1214,21 +1368,22 @@ const StructuralVoxelInstances = ({ kind, instances, onSelect, onSelectConnected
     writeInstanceMatrices(wireRef.current)
   }, [instances, matrixObject])
 
+  const getInstanceBrickId = (event: ThreeEvent<MouseEvent>) => {
+    const instance = event.instanceId === undefined ? undefined : instances[event.instanceId]
+    return instance?.brickId
+  }
+  const interactionHandlers = useBrickInteractionHandlers({
+    resolveBrickId: getInstanceBrickId,
+    canBeginDrag: (id) => draggableIds.has(id),
+    placementActive,
+    onSelect,
+    onSelectConnected,
+    onBeginDragSelected,
+    onConfirmPlacement,
+    onCancelPlacement,
+  })
+
   if (instances.length === 0) return null
-
-  const handleClick = (event: ThreeEvent<MouseEvent>) => {
-    const instance = event.instanceId === undefined ? undefined : instances[event.instanceId]
-    if (!instance) return
-    event.stopPropagation()
-    onSelect(instance.brickId)
-  }
-
-  const handleDoubleClick = (event: ThreeEvent<MouseEvent>) => {
-    const instance = event.instanceId === undefined ? undefined : instances[event.instanceId]
-    if (!instance) return
-    event.stopPropagation()
-    onSelectConnected?.(instance.brickId)
-  }
 
   return (
     <>
@@ -1238,8 +1393,7 @@ const StructuralVoxelInstances = ({ kind, instances, onSelect, onSelectConnected
         args={[undefined, undefined, instances.length]}
         frustumCulled={false}
         renderOrder={kind === 'enterable' ? 1 : 2}
-        onClick={handleClick}
-        onDoubleClick={handleDoubleClick}
+        {...interactionHandlers}
       >
         <boxGeometry args={[1, 1, 1]} />
         <meshStandardMaterial
@@ -1256,8 +1410,7 @@ const StructuralVoxelInstances = ({ kind, instances, onSelect, onSelectConnected
           args={[undefined, undefined, instances.length]}
           frustumCulled={false}
           renderOrder={3}
-          onClick={handleClick}
-          onDoubleClick={handleDoubleClick}
+          {...interactionHandlers}
         >
           <boxGeometry args={[1, 1, 1]} />
           <meshBasicMaterial color="#111827" wireframe transparent opacity={0.18} depthWrite={false} />
@@ -1278,13 +1431,17 @@ const StructuralVoxelSelectionBox = ({ bounds, selected }: {
   />
 )
 
-const StructuralVoxelScene = ({ bricks, selectedId, highlightedIdSet, boundsVersion, onSelect, onSelectConnected }: {
+const StructuralVoxelScene = ({ bricks, selectedId, highlightedIdSet, boundsVersion, placementActive, onSelect, onSelectConnected, onBeginDragSelected, onConfirmPlacement, onCancelPlacement }: {
   bricks: PlacedBrick[]
   selectedId?: string
   highlightedIdSet: Set<string>
   boundsVersion: number
-  onSelect: (id: string) => void
+  placementActive: boolean
+  onSelect: (id: string, options?: BrickSelectionOptions) => void
   onSelectConnected?: (id: string) => void
+  onBeginDragSelected?: (id: string, point: { x: number; z: number }) => void
+  onConfirmPlacement?: () => void
+  onCancelPlacement?: () => void
 }) => {
   const { instancesByKind, boundsByBrickId } = useMemo(() => {
     void boundsVersion
@@ -1322,8 +1479,13 @@ const StructuralVoxelScene = ({ bricks, selectedId, highlightedIdSet, boundsVers
         key={kind}
         kind={kind}
         instances={instancesByKind[kind]}
+        draggableIds={new Set(selectedId ? [selectedId, ...highlightedIdSet] : highlightedIdSet)}
+        placementActive={placementActive}
         onSelect={onSelect}
         onSelectConnected={onSelectConnected}
+        onBeginDragSelected={onBeginDragSelected}
+        onConfirmPlacement={onConfirmPlacement}
+        onCancelPlacement={onCancelPlacement}
       />
       ))}
       {[...boundsByBrickId.entries()].map(([brickId, bounds]) => {
@@ -1335,12 +1497,17 @@ const StructuralVoxelScene = ({ bricks, selectedId, highlightedIdSet, boundsVers
   )
 }
 
-const SimplifiedBrickInstances = memo(function SimplifiedBrickInstances({ group, showEdges, transformsByBrickId, onSelect, onSelectConnected }: {
+const SimplifiedBrickInstances = memo(function SimplifiedBrickInstances({ group, showEdges, transformsByBrickId, draggableIds, placementActive, onSelect, onSelectConnected, onBeginDragSelected, onConfirmPlacement, onCancelPlacement }: {
   group: SimplifiedBrickInstanceGroup
   showEdges: boolean
   transformsByBrickId?: Map<string, BrickSceneTransform>
-  onSelect: (id: string) => void
+  draggableIds: Set<string>
+  placementActive: boolean
+  onSelect: (id: string, options?: BrickSelectionOptions) => void
   onSelectConnected?: (id: string) => void
+  onBeginDragSelected?: (id: string, point: { x: number; z: number }) => void
+  onConfirmPlacement?: () => void
+  onCancelPlacement?: () => void
 }) {
   const fillRef = useRef<InstancedMesh>(null)
   const wireRef = useRef<InstancedMesh>(null)
@@ -1404,17 +1571,16 @@ const SimplifiedBrickInstances = memo(function SimplifiedBrickInstances({ group,
     return typeof instanceId === 'number' ? group.instances[instanceId]?.brick.id : undefined
   }
 
-  const handleClick = (event: ThreeEvent<MouseEvent>) => {
-    event.stopPropagation()
-    const brickId = getInstanceBrickId(event)
-    if (brickId) onSelect(brickId)
-  }
-
-  const handleDoubleClick = (event: ThreeEvent<MouseEvent>) => {
-    event.stopPropagation()
-    const brickId = getInstanceBrickId(event)
-    if (brickId) onSelectConnected?.(brickId)
-  }
+  const interactionHandlers = useBrickInteractionHandlers({
+    resolveBrickId: getInstanceBrickId,
+    canBeginDrag: (id) => draggableIds.has(id),
+    placementActive,
+    onSelect,
+    onSelectConnected,
+    onBeginDragSelected,
+    onConfirmPlacement,
+    onCancelPlacement,
+  })
 
   if (group.instances.length === 0) return null
 
@@ -1424,8 +1590,7 @@ const SimplifiedBrickInstances = memo(function SimplifiedBrickInstances({ group,
         ref={fillRef}
         args={[undefined, undefined, group.instances.length]}
         frustumCulled={false}
-        onClick={handleClick}
-        onDoubleClick={handleDoubleClick}
+        {...interactionHandlers}
       >
         <boxGeometry args={[1, 1, 1]} />
         <meshStandardMaterial
@@ -1442,8 +1607,7 @@ const SimplifiedBrickInstances = memo(function SimplifiedBrickInstances({ group,
           args={[undefined, undefined, group.instances.length]}
           frustumCulled={false}
           renderOrder={2}
-          onClick={handleClick}
-          onDoubleClick={handleDoubleClick}
+          {...interactionHandlers}
         >
           <boxGeometry args={[1, 1, 1]} />
           <meshBasicMaterial color={edgeColor} wireframe transparent opacity={0.22} depthWrite={false} />
@@ -1467,15 +1631,19 @@ const SimplifiedSelectionBox = ({ bounds, selected }: {
   )
 }
 
-const SimplifiedBrickScene = ({ bricks, selectedId, highlightedIdSet, showEdges, displayColorByBrickId, transformsByBrickId, onSelect, onSelectConnected }: {
+const SimplifiedBrickScene = ({ bricks, selectedId, highlightedIdSet, showEdges, displayColorByBrickId, transformsByBrickId, placementActive, onSelect, onSelectConnected, onBeginDragSelected, onConfirmPlacement, onCancelPlacement }: {
   bricks: PlacedBrick[]
   selectedId?: string
   highlightedIdSet: Set<string>
   showEdges: boolean
   displayColorByBrickId?: Map<string, string>
   transformsByBrickId?: Map<string, BrickSceneTransform>
-  onSelect: (id: string) => void
+  placementActive: boolean
+  onSelect: (id: string, options?: BrickSelectionOptions) => void
   onSelectConnected?: (id: string) => void
+  onBeginDragSelected?: (id: string, point: { x: number; z: number }) => void
+  onConfirmPlacement?: () => void
+  onCancelPlacement?: () => void
 }) => {
   const { groups, boundsByBrickId } = useMemo(() => {
     const nextGroups = new Map<string, SimplifiedBrickInstanceGroup>()
@@ -1511,8 +1679,13 @@ const SimplifiedBrickScene = ({ bricks, selectedId, highlightedIdSet, showEdges,
           group={group}
           showEdges={showEdges}
           transformsByBrickId={transformsByBrickId}
+          draggableIds={new Set(selectedId ? [selectedId, ...highlightedIdSet] : highlightedIdSet)}
+          placementActive={placementActive}
           onSelect={onSelect}
           onSelectConnected={onSelectConnected}
+          onBeginDragSelected={onBeginDragSelected}
+          onConfirmPlacement={onConfirmPlacement}
+          onCancelPlacement={onCancelPlacement}
         />
       ))}
       {selectedId && boundsByBrickId.has(selectedId) && (
@@ -1524,6 +1697,62 @@ const SimplifiedBrickScene = ({ bricks, selectedId, highlightedIdSet, showEdges,
         return bounds ? <SimplifiedSelectionBox key={brickId} bounds={bounds} selected={false} /> : null
       })}
     </>
+  )
+}
+
+const PlacementGhosts = ({ bricks, onConfirmPlacement, onCancelPlacement }: {
+  bricks: PlacedBrick[]
+  onConfirmPlacement?: () => void
+  onCancelPlacement?: () => void
+}) => {
+  if (bricks.length > 48) {
+    return (
+      <group renderOrder={30} userData={{ placementGhost: true }}>
+        {bricks.map((brick) => {
+          const bounds = getBrickBounds(brick)
+          if (!bounds) return null
+          const width = bounds.maxX - bounds.minX
+          const height = bounds.maxY - bounds.minY
+          const depth = bounds.maxZ - bounds.minZ
+          return (
+            <mesh
+              key={brick.id}
+              position={[
+                bounds.minX + width / 2,
+                bounds.minY + height / 2,
+                bounds.minZ + depth / 2,
+              ]}
+            >
+              <boxGeometry args={[width, height, depth]} />
+              <meshStandardMaterial color="#22d3ee" transparent opacity={0.24} depthWrite={false} />
+              <Edges color="#0891b2" threshold={12} />
+            </mesh>
+          )
+        })}
+      </group>
+    )
+  }
+
+  return (
+    <group renderOrder={30} userData={{ placementGhost: true }}>
+      {bricks.map((brick) => (
+        <BrickMesh
+          key={brick.id}
+          brick={brick}
+          selected={false}
+          highlighted={false}
+          floating={false}
+          preferDetailedGeometry
+          showEdges
+          displayColor="#22d3ee"
+          ghost
+          placementActive
+          onSelect={() => {}}
+          onConfirmPlacement={onConfirmPlacement}
+          onCancelPlacement={onCancelPlacement}
+        />
+      ))}
+    </group>
   )
 }
 
@@ -1574,9 +1803,15 @@ export const BrickScene = ({
   stabilityAnalysis,
   displayColorByBrickId,
   transformsByBrickId,
+  placementPreviewBricks = [],
+  placementActive = false,
   onCameraAzimuthChange,
   onSelect,
   onSelectConnected,
+  onPlacementPointChange,
+  onConfirmPlacement,
+  onCancelPlacement,
+  onBeginDragSelected,
   onNudgeSelected,
   onRotateSelected,
   onDeleteSelected,
@@ -1683,7 +1918,9 @@ export const BrickScene = ({
       frameloop="demand"
       dpr={[1, performanceSettings.maxDevicePixelRatio]}
       camera={{ position: [8, 7, 9], fov: 42 }}
-      onPointerMissed={() => onSelect('')}
+      onPointerMissed={() => {
+        if (!placementActive) onSelect('')
+      }}
     >
       <color attach="background" args={['#eef2f5']} />
       <SceneLighting
@@ -1693,7 +1930,24 @@ export const BrickScene = ({
         size={gridFrame.size}
         enableShadows={enableRealtimeShadows}
       />
-      <group>
+      <group
+        onPointerMove={(event) => {
+          if (!placementActive) return
+          const surfacePoint = getFirstPlacementSurfacePoint(event)
+          onPlacementPointChange?.({ x: surfacePoint.x, z: surfacePoint.z })
+        }}
+        onClick={(event) => {
+          if (!placementActive) return
+          event.stopPropagation()
+          onConfirmPlacement?.()
+        }}
+        onContextMenu={(event) => {
+          if (!placementActive) return
+          event.stopPropagation()
+          event.nativeEvent.preventDefault()
+          onCancelPlacement?.()
+        }}
+      >
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[gridFrame.centerX, -0.02, gridFrame.centerZ]} receiveShadow={enableRealtimeShadows}>
           <planeGeometry args={[gridFrame.size, gridFrame.size]} />
           <meshStandardMaterial color="#d7dee6" side={DoubleSide} />
@@ -1705,8 +1959,12 @@ export const BrickScene = ({
             selectedId={selectedId}
             highlightedIdSet={highlightedIdSet}
             boundsVersion={ldrawBoundsVersion}
+            placementActive={placementActive}
             onSelect={onSelect}
             onSelectConnected={onSelectConnected}
+            onBeginDragSelected={onBeginDragSelected}
+            onConfirmPlacement={onConfirmPlacement}
+            onCancelPlacement={onCancelPlacement}
           />
         ) : useSimplifiedInteractionView ? (
           <SimplifiedBrickScene
@@ -1716,8 +1974,12 @@ export const BrickScene = ({
             showEdges={showBrickEdges}
             displayColorByBrickId={resolvedDisplayColorByBrickId}
             transformsByBrickId={transformsByBrickId}
+            placementActive={placementActive}
             onSelect={onSelect}
             onSelectConnected={onSelectConnected}
+            onBeginDragSelected={onBeginDragSelected}
+            onConfirmPlacement={onConfirmPlacement}
+            onCancelPlacement={onCancelPlacement}
           />
         ) : bricks.map((brick) => (
           <TransformedBrick key={brick.id} transform={transformsByBrickId?.get(brick.id)}>
@@ -1729,11 +1991,22 @@ export const BrickScene = ({
               preferDetailedGeometry={preferDetailedGeometry}
               showEdges={showBrickEdges}
               displayColor={resolvedDisplayColorByBrickId?.get(brick.id)}
+              placementActive={placementActive}
               onSelect={onSelect}
               onSelectConnected={onSelectConnected}
+              onBeginDragSelected={onBeginDragSelected}
+              onConfirmPlacement={onConfirmPlacement}
+              onCancelPlacement={onCancelPlacement}
             />
           </TransformedBrick>
         ))}
+        {placementActive && (
+          <PlacementGhosts
+            bricks={placementPreviewBricks}
+            onConfirmPlacement={onConfirmPlacement}
+            onCancelPlacement={onCancelPlacement}
+          />
+        )}
         {xrayDebug && resolvedStabilityAnalysis && <StabilityOverlay analysis={resolvedStabilityAnalysis} />}
         {bricks.length === 0 && (
           <Text position={[0, 1.2, 0]} fontSize={0.35} color="#475569">
@@ -1741,12 +2014,14 @@ export const BrickScene = ({
           </Text>
         )}
       </group>
-      <KeyboardShortcuts
-        selectedId={selectedId}
-        onNudgeSelected={onNudgeSelected}
-        onRotateSelected={onRotateSelected}
-        onDeleteSelected={onDeleteSelected}
-      />
+      {!placementActive && (
+        <KeyboardShortcuts
+          selectedId={selectedId}
+          onNudgeSelected={onNudgeSelected}
+          onRotateSelected={onRotateSelected}
+          onDeleteSelected={onDeleteSelected}
+        />
+      )}
       <CameraFrame
         centerX={gridFrame.modelCenterX}
         centerY={gridFrame.centerY}
@@ -1756,7 +2031,7 @@ export const BrickScene = ({
         azimuthDegrees={initialCameraAzimuthDegrees}
       />
       <CameraAzimuthObserver onChange={onCameraAzimuthChange} />
-      <OrbitControls target={orbitTargetRef.current} makeDefault />
+      <OrbitControls target={orbitTargetRef.current} makeDefault enabled={!placementActive} />
     </Canvas>
   )
 }
