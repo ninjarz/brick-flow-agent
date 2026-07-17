@@ -4,6 +4,7 @@ import type { WorldEntity, WorldEntityCommand, WorldEvent, WorldPendingImpact, W
 import { getBrickBounds } from './planUtils'
 import { ingestWorldEvents } from './worldNarrative'
 import { getWorldProjectileFlightSeconds } from './worldProjectiles'
+import { createWorldObstacleIndex, queryWorldObstacleBounds, type WorldObstacleBounds, type WorldObstacleIndex } from './worldObstacleIndex'
 
 export const worldSimulationStepSeconds = 0.1
 const navigationGridStuds = 0.5
@@ -14,15 +15,15 @@ const arrivalDistanceStuds = 0.35
 
 type Point = { x: number; y: number; z: number }
 type GridNode = { x: number; z: number }
-type BrickBounds = NonNullable<ReturnType<typeof getBrickBounds>>
-const brickBoundsCache = new WeakMap<PlacedBrick[], BrickBounds[]>()
+type BrickBounds = WorldObstacleBounds
+const obstacleIndexCache = new WeakMap<PlacedBrick[], WorldObstacleIndex>()
 
-const getCachedBrickBounds = (bricks: PlacedBrick[]) => {
-  const cached = brickBoundsCache.get(bricks)
+const getCachedObstacleIndex = (bricks: PlacedBrick[]) => {
+  const cached = obstacleIndexCache.get(bricks)
   if (cached) return cached
-  const bounds = bricks.map(getBrickBounds).filter((item): item is BrickBounds => Boolean(item))
-  brickBoundsCache.set(bricks, bounds)
-  return bounds
+  const index = createWorldObstacleIndex(bricks)
+  obstacleIndexCache.set(bricks, index)
+  return index
 }
 
 const distance2d = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.z - b.z)
@@ -40,15 +41,28 @@ const createObstacleTest = (bricks: PlacedBrick[], entity: WorldEntity) => {
   const definition = worldEntityDefinitionById.get(entity.definitionId)
   const bodyHeight = definition?.body.heightStuds ?? 5
   const radius = getBodyRadius(entity)
-  const bounds = getCachedBrickBounds(bricks)
-  return (x: number, z: number) => bounds.some((item) => (
+  const obstacleIndex = getCachedObstacleIndex(bricks)
+  const resultCache = new Map<string, boolean>()
+  return (x: number, z: number) => {
+    const key = `${x}:${z}`
+    const cached = resultCache.get(key)
+    if (cached !== undefined) return cached
+    const blocked = queryWorldObstacleBounds(obstacleIndex, {
+      minX: x - radius,
+      maxX: x + radius,
+      minZ: z - radius,
+      maxZ: z + radius,
+    }).some((item) => (
     item!.minY < bodyHeight - 0.01 &&
     item!.maxY > 0.05 &&
     x > item!.minX - radius &&
     x < item!.maxX + radius &&
     z > item!.minZ - radius &&
     z < item!.maxZ + radius
-  ))
+    ))
+    resultCache.set(key, blocked)
+    return blocked
+  }
 }
 
 const segmentIntersectsBounds = (start: Point, end: Point, bounds: BrickBounds) => {
@@ -72,7 +86,7 @@ const segmentIntersectsBounds = (start: Point, end: Point, bounds: BrickBounds) 
 }
 
 const createWorldLineOfSightTest = (bricks: PlacedBrick[]) => {
-  const bounds = getCachedBrickBounds(bricks)
+  const obstacleIndex = getCachedObstacleIndex(bricks)
   return (actor: WorldEntity, target: WorldEntity) => {
     const actorBody = worldEntityDefinitionById.get(actor.definitionId)?.body
     const targetBody = worldEntityDefinitionById.get(target.definitionId)?.body
@@ -86,7 +100,13 @@ const createWorldLineOfSightTest = (bricks: PlacedBrick[]) => {
       y: target.transform.y + (targetBody?.heightStuds ?? 4) * 0.55,
       z: target.transform.z,
     }
-    return !bounds.some((item) => segmentIntersectsBounds(start, end, item))
+    const candidates = queryWorldObstacleBounds(obstacleIndex, {
+      minX: Math.min(start.x, end.x),
+      maxX: Math.max(start.x, end.x),
+      minZ: Math.min(start.z, end.z),
+      maxZ: Math.max(start.z, end.z),
+    })
+    return !candidates.some((item) => segmentIntersectsBounds(start, end, item))
   }
 }
 
