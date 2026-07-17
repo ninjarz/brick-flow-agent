@@ -96,6 +96,11 @@ export const createEmptyWorldState = (planId: string): WorldState => ({
   paused: false,
   entities: [],
   events: [],
+  narrative: {
+    processedEventIds: [],
+    memoriesByEntityId: {},
+    stories: [],
+  },
 })
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -128,6 +133,9 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
     paused: typeof value.paused === 'boolean' ? value.paused : false,
     entities,
     events: Array.isArray(value.events) ? value.events as WorldState['events'] : [],
+    narrative: isRecord(value.narrative)
+      ? value.narrative as WorldState['narrative']
+      : { processedEventIds: [], memoriesByEntityId: {}, stories: [] },
   } satisfies WorldState
 }
 

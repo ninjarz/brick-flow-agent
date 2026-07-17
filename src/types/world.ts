@@ -58,8 +58,36 @@ export type WorldEvent = {
   timeSeconds: number
   type: 'attack' | 'damage' | 'defeated' | 'brick-hit' | 'structure-hit' | 'command-complete'
   actorId: string
+  actorName?: string
   targetId?: string
+  targetName?: string
   amount?: number
+}
+
+export type WorldMemory = {
+  id: string
+  eventId: string
+  entityId: string
+  timeSeconds: number
+  type: WorldEvent['type']
+  otherId?: string
+  otherName?: string
+  importance: 1 | 2 | 3
+}
+
+export type WorldStory = {
+  id: string
+  title: string
+  body: string
+  createdAtSeconds: number
+  eventIds: string[]
+  source: 'local' | 'ai'
+}
+
+export type WorldNarrativeState = {
+  processedEventIds: string[]
+  memoriesByEntityId: Record<string, WorldMemory[]>
+  stories: WorldStory[]
 }
 
 export type WorldEntityBody =
@@ -115,4 +143,5 @@ export type WorldState = {
   paused: boolean
   entities: WorldEntity[]
   events: WorldEvent[]
+  narrative: WorldNarrativeState
 }

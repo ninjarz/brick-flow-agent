@@ -1,0 +1,50 @@
+import { describe, expect, it } from 'vitest'
+import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
+import type { WorldEvent } from '../types/world'
+import { createEmptyWorldState, createWorldEntity } from './worldEntity'
+import { addWorldStory, createLocalTavernStory, ingestWorldEvents } from './worldNarrative'
+
+describe('world narrative', () => {
+  it('records each event once in both participants memories', () => {
+    const world = createEmptyWorldState('plan-1')
+    const event: WorldEvent = {
+      id: 'event-1',
+      timeSeconds: 1,
+      type: 'damage',
+      actorId: 'knight-1',
+      actorName: '亚瑟',
+      targetId: 'archer-1',
+      targetName: '罗宾',
+      amount: 12,
+    }
+    const once = ingestWorldEvents(world.narrative, [event], new Set(['knight-1', 'archer-1']))
+    const twice = ingestWorldEvents(once, [event], new Set(['knight-1', 'archer-1']))
+
+    expect(once.memoriesByEntityId['knight-1']).toHaveLength(1)
+    expect(once.memoriesByEntityId['archer-1']).toHaveLength(1)
+    expect(twice).toEqual(once)
+  })
+
+  it('generates and stores a local story grounded in world events', () => {
+    const knight = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'knight-1', name: '亚瑟' })
+    const world = {
+      ...createEmptyWorldState('plan-1'),
+      entities: [knight],
+      events: [{
+        id: 'event-1',
+        timeSeconds: 1,
+        type: 'structure-hit' as const,
+        actorId: knight.id,
+        actorName: knight.name,
+        targetId: 'gate-1',
+        targetName: '北门',
+      }],
+    }
+    const story = createLocalTavernStory(world, 'zh-CN')
+    const next = addWorldStory(world, story)
+
+    expect(story.body).toContain('亚瑟')
+    expect(story.body).toContain('北门')
+    expect(next.narrative.stories).toContainEqual(story)
+  })
+})

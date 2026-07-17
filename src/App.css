@@ -2697,6 +2697,214 @@ button:disabled {
   resize: vertical;
 }
 
+.tavern-modal {
+  width: min(1120px, calc(100vw - 28px));
+  max-height: min(860px, calc(100vh - 28px));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid #d6c4a2;
+  border-radius: 14px;
+  background: #fffdf8;
+  box-shadow: 0 24px 70px rgba(41, 27, 13, 0.28);
+}
+
+.tavern-modal > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  border-bottom: 1px solid #eadfc9;
+  background: linear-gradient(135deg, #fff7e6, #f7ead2);
+}
+
+.tavern-modal > header h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.tavern-modal > header p {
+  margin: 5px 0 0;
+  color: #785f42;
+  font-size: 12px;
+}
+
+.tavern-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.tavern-header-actions > button:first-child {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.tavern-layout {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+}
+
+.tavern-characters {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  overflow-y: auto;
+  padding: 14px;
+  border-right: 1px solid #eadfc9;
+  background: #fbf7ef;
+}
+
+.tavern-characters > button {
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 7px;
+  text-align: left;
+}
+
+.tavern-characters > button > span {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #fde68a;
+  color: #78350f;
+  font-weight: 900;
+}
+
+.tavern-characters > button div {
+  min-width: 0;
+  display: grid;
+}
+
+.tavern-characters > button small {
+  overflow: hidden;
+  color: #7c6a55;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tavern-characters > button.active {
+  border-color: #d97706;
+  background: #fff7ed;
+}
+
+.tavern-content {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  grid-template-rows: minmax(180px, 0.8fr) minmax(220px, 1.2fr);
+  gap: 12px;
+  overflow-y: auto;
+  padding: 14px;
+}
+
+.tavern-content > section {
+  min-width: 0;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid #eadfc9;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.tavern-content h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 9px;
+  font-size: 14px;
+}
+
+.tavern-content ol {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding-left: 20px;
+  color: #574938;
+  font-size: 12px;
+}
+
+.tavern-memory-panel li.importance-3 {
+  color: #991b1b;
+  font-weight: 800;
+}
+
+.tavern-memory-panel li.importance-2 {
+  color: #9a3412;
+}
+
+.tavern-stories {
+  grid-column: 1 / -1;
+}
+
+.tavern-stories > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.tavern-stories > header small {
+  color: #7c6a55;
+  font-size: 10px;
+}
+
+.tavern-stories > header button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.tavern-stories article {
+  margin-top: 9px;
+  padding: 10px;
+  border-left: 3px solid #d97706;
+  border-radius: 7px;
+  background: #fffbeb;
+}
+
+.tavern-stories article p {
+  margin: 6px 0;
+  color: #574938;
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre-line;
+}
+
+.tavern-stories article small {
+  color: #9a7b55;
+  font-size: 9px;
+}
+
+@media (max-width: 760px) {
+  .tavern-layout { grid-template-columns: 1fr; }
+  .tavern-characters {
+    max-height: 150px;
+    border-right: 0;
+    border-bottom: 1px solid #eadfc9;
+  }
+  .tavern-content { grid-template-columns: 1fr; }
+  .tavern-stories { grid-column: auto; }
+}
+
 .inventory-tools {
   display: flex;
   align-items: center;

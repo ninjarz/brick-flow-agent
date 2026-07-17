@@ -1,8 +1,9 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, Box, Boxes, Download, Eye, FileUp, Gauge, Github, Globe2, KeyRound, Link, Pause, Play, Plus, Redo2, RotateCcw, ScanLine, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
+import { BookOpen, Box, Boxes, Download, Eye, FileUp, Gauge, Github, Globe2, KeyRound, Link, MessageCircle, Pause, Play, Plus, Redo2, RotateCcw, ScanLine, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
 import { LazyBrickGlyph } from './components/LazyBrickGlyph'
 import { BrickEditorPanel } from './components/BrickEditorPanel'
 import { WorldEntityEditorPanel } from './components/WorldEntityEditorPanel'
+import { WorldTavern } from './components/WorldTavern'
 import type { BrickSceneViewMode } from './components/BrickScene'
 import { ControlPanel } from './components/ControlPanel'
 import { brickById, brickDefinitions, getDefaultBrickColor } from './data/basicBricks'
@@ -25,6 +26,7 @@ import { toggleBrickSelection } from './lib/brickSelection'
 import { dissolveBrickStructure, getBrickStructure, getExactSelectionStructure, pruneBrickStructures, solidifyBrickSelection, updateBrickStructure } from './lib/brickStructures'
 import { createEmptyWorldState, createWorldEntity } from './lib/worldEntity'
 import { stepWorldSimulation, worldSimulationStepSeconds } from './lib/worldSimulation'
+import { addWorldStory, createLocalTavernStory } from './lib/worldNarrative'
 import { analyzeBuildStability } from './lib/stabilityAnalysis'
 import { formatLDrawPlan, parseLDrawPlan } from './lib/ldrawPlan'
 import { getEffectiveInventory, loadInventoryOverrides, saveInventoryOverrides } from './lib/userInventory'
@@ -185,6 +187,7 @@ function App() {
   const [isAssetLibraryOpen, setIsAssetLibraryOpen] = useState(false)
   const [isObjImportOpen, setIsObjImportOpen] = useState(false)
   const [isStabilityLabOpen, setIsStabilityLabOpen] = useState(false)
+  const [isTavernOpen, setIsTavernOpen] = useState(false)
   const [isManualOpen, setIsManualOpen] = useState(false)
   const [manualPlan, setManualPlan] = useState<BuildPlan>()
   const [manualStepIndex, setManualStepIndex] = useState(0)
@@ -636,13 +639,15 @@ function App() {
   }, [buildManual, isManualOpen, isManualPlaying, manualPlaybackIntervalMs, manualStepIndex])
 
   useEffect(() => {
-    if (!isConfigOpen && !isPromptPreviewOpen && !isAssetLibraryOpen && !isObjImportOpen && !isManualOpen && !isStabilityLabOpen) return
+    if (!isConfigOpen && !isPromptPreviewOpen && !isAssetLibraryOpen && !isObjImportOpen && !isManualOpen && !isStabilityLabOpen && !isTavernOpen) return
 
     const handleModalEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       event.preventDefault()
 
-      if (isManualOpen) {
+      if (isTavernOpen) {
+        setIsTavernOpen(false)
+      } else if (isManualOpen) {
         closeManual()
       } else if (isStabilityLabOpen) {
         setIsStabilityLabOpen(false)
@@ -660,11 +665,11 @@ function App() {
 
     window.addEventListener('keydown', handleModalEscape)
     return () => window.removeEventListener('keydown', handleModalEscape)
-  }, [closeManual, isAssetLibraryOpen, isConfigOpen, isManualOpen, isObjImportOpen, isPromptPreviewOpen, isStabilityLabOpen])
+  }, [closeManual, isAssetLibraryOpen, isConfigOpen, isManualOpen, isObjImportOpen, isPromptPreviewOpen, isStabilityLabOpen, isTavernOpen])
 
   useEffect(() => {
     const handleHistoryKeyDown = (event: KeyboardEvent) => {
-      if (isConfigOpen || isPromptPreviewOpen || isAssetLibraryOpen || isObjImportOpen || isManualOpen || isStabilityLabOpen) return
+      if (isConfigOpen || isPromptPreviewOpen || isAssetLibraryOpen || isObjImportOpen || isManualOpen || isStabilityLabOpen || isTavernOpen) return
       if (isTypingElement(event.target)) return
       if (!event.metaKey && !event.ctrlKey) return
 
@@ -683,7 +688,7 @@ function App() {
 
     window.addEventListener('keydown', handleHistoryKeyDown)
     return () => window.removeEventListener('keydown', handleHistoryKeyDown)
-  }, [isAssetLibraryOpen, isConfigOpen, isManualOpen, isObjImportOpen, isPromptPreviewOpen, isStabilityLabOpen, redoPlan, undoPlan])
+  }, [isAssetLibraryOpen, isConfigOpen, isManualOpen, isObjImportOpen, isPromptPreviewOpen, isStabilityLabOpen, isTavernOpen, redoPlan, undoPlan])
 
 
 
@@ -1308,6 +1313,18 @@ function App() {
     setSelectedWorldEntityId((current) => current === entityId ? '' : current)
   }, [])
 
+  const generateTavernStory = useCallback(() => {
+    setWorld((current) => addWorldStory(current, createLocalTavernStory(current, locale)))
+  }, [locale])
+
+  const clearTavernHistory = useCallback(() => {
+    setWorld((current) => ({
+      ...current,
+      events: [],
+      narrative: { processedEventIds: [], memoriesByEntityId: {}, stories: [] },
+    }))
+  }, [])
+
   useEffect(() => {
     if (!placementSession && !worldEntityPlacement) return
     const handlePlacementKeyDown = (event: KeyboardEvent) => {
@@ -1815,6 +1832,15 @@ function App() {
                 <button
                   className="icon-button"
                   type="button"
+                  aria-label={t('top.tavern')}
+                  title={t('top.tavern')}
+                  onClick={() => setIsTavernOpen(true)}
+                >
+                  <MessageCircle size={18} />
+                </button>
+                <button
+                  className="icon-button"
+                  type="button"
                   aria-label={t('top.config')}
                   title={t('top.config')}
                   onClick={() => setIsConfigOpen(true)}
@@ -2021,6 +2047,15 @@ function App() {
         <Suspense fallback={null}>
           <StabilityLab plan={plan} onClose={() => setIsStabilityLabOpen(false)} />
         </Suspense>
+      )}
+
+      {isTavernOpen && (
+        <WorldTavern
+          world={world}
+          onGenerateStory={generateTavernStory}
+          onClearHistory={clearTavernHistory}
+          onClose={() => setIsTavernOpen(false)}
+        />
       )}
 
       {isConfigOpen && (

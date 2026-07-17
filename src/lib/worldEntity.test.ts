@@ -35,13 +35,10 @@ describe('WorldEntity foundation', () => {
     })
     const target = createWorldEntity(archer, { id: 'archer-1' })
     const world: WorldState = {
+      ...createEmptyWorldState('plan-1'),
       id: 'world-1',
-      planId: 'plan-1',
       randomSeed: 42,
-      elapsedSeconds: 0,
-      paused: false,
       entities: [source, target],
-      events: [],
     }
 
     const result = issueWorldEntityCommand(world, source.id, {
@@ -61,13 +58,10 @@ describe('WorldEntity foundation', () => {
     const knight = worldEntityDefinitionById.get('knight')!
     const source = createWorldEntity(knight, { id: 'knight-1' })
     const world: WorldState = {
+      ...createEmptyWorldState('plan-1'),
       id: 'world-1',
-      planId: 'plan-1',
       randomSeed: 42,
-      elapsedSeconds: 0,
-      paused: false,
       entities: [source],
-      events: [],
     }
 
     const result = issueWorldEntityCommand(

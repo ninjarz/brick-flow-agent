@@ -2,6 +2,7 @@ import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import type { BrickStructure, PlacedBrick } from '../types/bricks'
 import type { WorldEntity, WorldEntityCommand, WorldEvent, WorldState, WorldTargetRef } from '../types/world'
 import { getBrickBounds } from './planUtils'
+import { ingestWorldEvents } from './worldNarrative'
 
 export const worldSimulationStepSeconds = 0.1
 const navigationGridStuds = 0.5
@@ -335,10 +336,20 @@ export const stepWorldSimulation = (
     entities[index] = entity
   }
 
+  const entityNameById = new Map(entities.map((entity) => [entity.id, entity.name]))
+  const structureNameById = new Map(structures.map((structure) => [structure.id, structure.name]))
+  const enrichedEvents = events.map((event) => ({
+    ...event,
+    actorName: entityNameById.get(event.actorId) ?? event.actorName,
+    targetName: event.targetId
+      ? entityNameById.get(event.targetId) ?? structureNameById.get(event.targetId) ?? event.targetName
+      : event.targetName,
+  }))
   return {
     ...world,
     elapsedSeconds: timeSeconds,
     entities,
-    events: [...world.events, ...events].slice(-maxEventHistory),
+    events: [...world.events, ...enrichedEvents].slice(-maxEventHistory),
+    narrative: ingestWorldEvents(world.narrative, enrichedEvents, new Set(entities.map((entity) => entity.id))),
   }
 }
