@@ -97,6 +97,7 @@ export const createEmptyWorldState = (planId: string): WorldState => ({
   paused: false,
   entities: [],
   events: [],
+  pendingImpacts: [],
   narrative: {
     processedEventIds: [],
     memoriesByEntityId: {},
@@ -147,6 +148,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
     paused: typeof value.paused === 'boolean' ? value.paused : false,
     entities,
     events: Array.isArray(value.events) ? value.events as WorldState['events'] : [],
+    pendingImpacts: Array.isArray(value.pendingImpacts) ? value.pendingImpacts as WorldState['pendingImpacts'] : [],
     narrative: isRecord(value.narrative)
       ? {
           processedEventIds: Array.isArray(value.narrative.processedEventIds) ? value.narrative.processedEventIds as string[] : [],

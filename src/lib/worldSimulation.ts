@@ -1,8 +1,9 @@
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import type { BrickStructure, PlacedBrick } from '../types/bricks'
-import type { WorldEntity, WorldEntityCommand, WorldEvent, WorldState, WorldTargetRef } from '../types/world'
+import type { WorldEntity, WorldEntityCommand, WorldEvent, WorldPendingImpact, WorldState, WorldTargetRef } from '../types/world'
 import { getBrickBounds } from './planUtils'
 import { ingestWorldEvents } from './worldNarrative'
+import { getWorldProjectileFlightSeconds } from './worldProjectiles'
 
 export const worldSimulationStepSeconds = 0.1
 const navigationGridStuds = 0.5
@@ -298,6 +299,25 @@ const makeEvent = (
 
 const commandTarget = (command: WorldEntityCommand) => 'target' in command ? command.target : undefined
 
+const createPendingImpact = (
+  timeSeconds: number,
+  actor: WorldEntity,
+  target: Extract<WorldTargetRef, { kind: 'entity' | 'brick' | 'structure' }>,
+  damage: number,
+  projectileKind: 'arrow' | 'stone',
+  targetPoint: Point,
+): WorldPendingImpact => ({
+  id: `impact-${Math.random().toString(36).slice(2, 9)}`,
+  actorId: actor.id,
+  target,
+  damage,
+  projectileKind,
+  impactAtSeconds: timeSeconds + getWorldProjectileFlightSeconds(
+    projectileKind,
+    distance2d(actor.transform, targetPoint),
+  ),
+})
+
 export const stepWorldSimulation = (
   world: WorldState,
   bricks: PlacedBrick[],
@@ -314,6 +334,31 @@ export const stepWorldSimulation = (
   }))
   const hasLineOfSight = createWorldLineOfSightTest(bricks)
   const events: WorldEvent[] = []
+  const pendingImpacts = world.pendingImpacts.filter((impact) => impact.impactAtSeconds > timeSeconds)
+  const dueImpacts = world.pendingImpacts.filter((impact) => impact.impactAtSeconds <= timeSeconds)
+
+  for (const impact of dueImpacts) {
+    const actorIndex = entities.findIndex((entity) => entity.id === impact.actorId)
+    if (actorIndex < 0) continue
+    if (impact.target.kind === 'entity') {
+      const targetIndex = entities.findIndex((entity) => entity.id === impact.target.id && entity.health > 0)
+      if (targetIndex < 0) continue
+      const victim = entities[targetIndex]
+      const nextHealth = Math.max(0, victim.health - impact.damage)
+      entities[targetIndex] = { ...victim, health: nextHealth, behaviorState: nextHealth <= 0 ? 'dead' : victim.behaviorState }
+      events.push(makeEvent(timeSeconds, 'damage', impact.actorId, victim.id, impact.damage))
+      if (nextHealth <= 0) {
+        events.push(makeEvent(timeSeconds, 'defeated', impact.actorId, victim.id))
+        entities[actorIndex] = { ...entities[actorIndex], activeCommand: undefined }
+      }
+    } else if (impact.target.kind === 'brick') {
+      if (bricks.some((brick) => brick.id === impact.target.id)) {
+        events.push(makeEvent(timeSeconds, 'brick-hit', impact.actorId, impact.target.id))
+      }
+    } else if (structures.some((structure) => structure.id === impact.target.id)) {
+      events.push(makeEvent(timeSeconds, 'structure-hit', impact.actorId, impact.target.id))
+    }
+  }
 
   for (let index = 0; index < entities.length; index += 1) {
     let entity = entities[index]
@@ -360,7 +405,16 @@ export const stepWorldSimulation = (
           combat: { cooldownRemainingSeconds: definition.combat.cooldownSeconds },
         }
         events.push(makeEvent(timeSeconds, 'attack', entity.id, target.id, definition.combat.damage))
-        if (target.kind === 'entity') {
+        if (definition.combat.projectileKind) {
+          pendingImpacts.push(createPendingImpact(
+            timeSeconds,
+            entity,
+            target as Extract<WorldTargetRef, { kind: 'entity' | 'brick' | 'structure' }>,
+            definition.combat.damage,
+            definition.combat.projectileKind,
+            targetPoint,
+          ))
+        } else if (target.kind === 'entity') {
           const targetIndex = entities.findIndex((candidate) => candidate.id === target.id)
           if (targetIndex >= 0) {
             const victim = entities[targetIndex]
@@ -412,6 +466,7 @@ export const stepWorldSimulation = (
     elapsedSeconds: timeSeconds,
     entities,
     events: [...world.events, ...enrichedEvents].slice(-maxEventHistory),
+    pendingImpacts,
     narrative: ingestWorldEvents(world.narrative, [...pendingExistingEvents, ...enrichedEvents], new Set(entities.map((entity) => entity.id))),
   }
 }

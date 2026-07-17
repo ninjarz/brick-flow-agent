@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { createWorldEntity } from './worldEntity'
-import { getWorldProjectileVisuals, sampleWorldProjectilePosition } from './worldProjectiles'
+import { getWorldProjectileFlightSeconds, getWorldProjectileVisuals, sampleWorldProjectilePosition } from './worldProjectiles'
 
 describe('world projectile visuals', () => {
   it('creates visible ranged projectiles but not melee projectiles', () => {
@@ -22,5 +22,6 @@ describe('world projectile visuals', () => {
     expect(middle.y).toBeGreaterThan(projectile.start.y)
     expect(middle.progress).toBeCloseTo(0.5)
     expect(getWorldProjectileVisuals([event], [catapult, knight], 7)).toHaveLength(0)
+    expect(projectile.lifetimeSeconds).toBe(getWorldProjectileFlightSeconds('stone', 10))
   })
 })

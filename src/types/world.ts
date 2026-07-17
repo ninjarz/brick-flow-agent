@@ -66,6 +66,15 @@ export type WorldEvent = {
   commandSource?: WorldEntityControllerKind
 }
 
+export type WorldPendingImpact = {
+  id: string
+  actorId: string
+  target: Extract<WorldTargetRef, { kind: 'entity' | 'brick' | 'structure' }>
+  damage: number
+  projectileKind: 'arrow' | 'stone'
+  impactAtSeconds: number
+}
+
 export type WorldMemory = {
   id: string
   eventId: string
@@ -154,5 +163,6 @@ export type WorldState = {
   paused: boolean
   entities: WorldEntity[]
   events: WorldEvent[]
+  pendingImpacts: WorldPendingImpact[]
   narrative: WorldNarrativeState
 }

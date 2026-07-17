@@ -11,6 +11,10 @@ export type WorldProjectileVisual = {
   arcHeightStuds: number
 }
 
+export const getWorldProjectileFlightSeconds = (kind: 'arrow' | 'stone', distanceStuds: number) => kind === 'arrow'
+  ? Math.max(0.22, Math.min(0.75, distanceStuds / 18))
+  : Math.max(0.55, Math.min(1.35, distanceStuds / 10))
+
 export const getWorldProjectileVisuals = (
   events: WorldEvent[],
   entities: WorldEntity[],
@@ -26,9 +30,7 @@ export const getWorldProjectileVisuals = (
     const kind = actorDefinition?.combat.projectileKind
     if (!actor || !target || !kind) return []
     const distance = Math.hypot(target.transform.x - actor.transform.x, target.transform.z - actor.transform.z)
-    const lifetimeSeconds = kind === 'arrow'
-      ? Math.max(0.22, Math.min(0.75, distance / 18))
-      : Math.max(0.55, Math.min(1.35, distance / 10))
+    const lifetimeSeconds = getWorldProjectileFlightSeconds(kind, distance)
     if (elapsedSeconds - event.timeSeconds > lifetimeSeconds + 0.15) return []
     return [{
       id: event.id,
