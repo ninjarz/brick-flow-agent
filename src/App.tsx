@@ -189,6 +189,7 @@ function App() {
   const [isObjImportOpen, setIsObjImportOpen] = useState(false)
   const [isStabilityLabOpen, setIsStabilityLabOpen] = useState(false)
   const [isTavernOpen, setIsTavernOpen] = useState(false)
+  const [isWorldRosterOpen, setIsWorldRosterOpen] = useState(false)
   const [isWorldAiThinking, setIsWorldAiThinking] = useState(false)
   const [worldAiFeedback, setWorldAiFeedback] = useState<{ tone: 'success' | 'error'; text: string }>()
   const worldAiAbortRef = useRef<AbortController>()
@@ -1944,18 +1945,58 @@ function App() {
 
         <div className="viewer">
           {world.entities.length > 0 && (
-            <div className="world-simulation-toolbar" role="status">
-              <span>{t('worldEntity.worldCount', { count: world.entities.length })}</span>
-              <button
-                type="button"
-                aria-label={world.paused ? t('worldEntity.resume') : t('worldEntity.pause')}
-                title={world.paused ? t('worldEntity.resume') : t('worldEntity.pause')}
-                onClick={() => setWorld((current) => ({ ...current, paused: !current.paused }))}
-              >
-                {world.paused ? <Play size={14} /> : <Pause size={14} />}
-                {world.paused ? t('worldEntity.resume') : t('worldEntity.pause')}
-              </button>
-            </div>
+            <>
+              <div className="world-simulation-toolbar" role="status">
+                <span>{t('worldEntity.worldCount', { count: world.entities.length })}</span>
+                <button
+                  type="button"
+                  aria-expanded={isWorldRosterOpen}
+                  aria-controls="world-entity-roster"
+                  onClick={() => setIsWorldRosterOpen((open) => !open)}
+                >
+                  <Globe2 size={14} />
+                  {t('worldEntity.roster')}
+                </button>
+                <button
+                  type="button"
+                  aria-label={world.paused ? t('worldEntity.resume') : t('worldEntity.pause')}
+                  title={world.paused ? t('worldEntity.resume') : t('worldEntity.pause')}
+                  onClick={() => setWorld((current) => ({ ...current, paused: !current.paused }))}
+                >
+                  {world.paused ? <Play size={14} /> : <Pause size={14} />}
+                  {world.paused ? t('worldEntity.resume') : t('worldEntity.pause')}
+                </button>
+              </div>
+              {isWorldRosterOpen && (
+                <section id="world-entity-roster" className="world-entity-roster" aria-label={t('worldEntity.roster')}>
+                  <header>
+                    <strong>{t('worldEntity.roster')}</strong>
+                    <button className="icon-button" type="button" aria-label={t('common.close')} onClick={() => setIsWorldRosterOpen(false)}>
+                      <X size={14} />
+                    </button>
+                  </header>
+                  <div>
+                    {world.entities.map((entity) => (
+                      <button
+                        key={entity.id}
+                        type="button"
+                        className={entity.id === selectedWorldEntityId ? 'active' : ''}
+                        onClick={() => {
+                          selectWorldEntity(entity.id)
+                          setIsWorldRosterOpen(false)
+                        }}
+                      >
+                        <i className={`faction-${entity.factionId}`} />
+                        <span>
+                          <strong>{entity.name}</strong>
+                          <small>{t(`worldEntity.controller.${entity.controller}`)} · {entity.health}/{entity.maxHealth}</small>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+            </>
           )}
           {plan.bricks.length >= simplifiedBrickThreshold && sceneViewMode !== 'voxel' && (
             <div className={`performance-badge ${world.entities.length > 0 ? 'with-world-toolbar' : ''}`}>{t('scene.performanceMode')}</div>

@@ -272,6 +272,84 @@ button.status-pill:hover {
   font-size: 11px;
 }
 
+.world-entity-roster {
+  position: absolute;
+  z-index: 6;
+  top: 54px;
+  right: 12px;
+  width: min(290px, calc(100% - 24px));
+  max-height: min(420px, calc(100% - 70px));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid rgba(14, 116, 144, 0.28);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.2);
+  backdrop-filter: blur(12px);
+}
+
+.world-entity-roster > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 10px 7px 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.world-entity-roster > div {
+  display: grid;
+  gap: 5px;
+  overflow-y: auto;
+  padding: 7px;
+}
+
+.world-entity-roster > div > button {
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  text-align: left;
+  background: #f8fafc;
+}
+
+.world-entity-roster > div > button.active {
+  border-color: #0ea5e9;
+  background: #ecfeff;
+}
+
+.world-entity-roster i {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #64748b;
+}
+
+.world-entity-roster i.faction-red { background: #dc2626; }
+.world-entity-roster i.faction-blue { background: #2563eb; }
+
+.world-entity-roster span,
+.world-entity-roster span strong,
+.world-entity-roster span small {
+  min-width: 0;
+  display: block;
+}
+
+.world-entity-roster span strong,
+.world-entity-roster span small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.world-entity-roster span small {
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 10px;
+}
+
 .voxel-legend {
   position: absolute;
   z-index: 2;
