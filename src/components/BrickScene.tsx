@@ -2,7 +2,7 @@ import { Edges, Line, OrbitControls, Text } from '@react-three/drei'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
 import { memo, type ReactNode, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { BufferGeometry, DoubleSide, Float32BufferAttribute, Object3D, Vector3, type DirectionalLight, type InstancedMesh } from 'three'
+import { BufferGeometry, DoubleSide, Float32BufferAttribute, Object3D, Vector3, type DirectionalLight, type Group, type InstancedMesh } from 'three'
 import { brickById, colorHex, colorOpacity } from '../data/basicBricks'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { createRound2x2AxleBodyGeometry, createRound2x2AxleGrilleBodyGeometry } from '../lib/csgBrickGeometry'
@@ -11,6 +11,7 @@ import { loadLDrawGeneratedVisual } from '../lib/ldrawGeneratedVisualLoader'
 import { createLoadedLDrawPartGeometry } from '../lib/ldrawVisualGeometry'
 import { createBuildGraph, getBrickBounds } from '../lib/planUtils'
 import { getScenePerformanceSettings } from '../lib/scenePerformance'
+import { getWorldProjectileVisuals, sampleWorldProjectilePosition, type WorldProjectileVisual } from '../lib/worldProjectiles'
 import { analyzeBuildStability, getStabilityRiskColor, type StabilityAnalysis } from '../lib/stabilityAnalysis'
 import { getBrickWorldRenderStructuralCellBoxes, type StructuralCellKind, type WorldStructuralCellBox } from '../lib/structuralGrid'
 import { WORLD_EDIT_STEP_STUDS, getBrickConnectors, getBrickWorldFrame, poseToWorld } from '../lib/brickUnits'
@@ -23,7 +24,7 @@ import {
   createSlope45Geometry,
 } from '../lib/slopeGeometries'
 import type { BrickDefinition, PlacedBrick } from '../types/bricks'
-import type { WorldEntity } from '../types/world'
+import type { WorldEntity, WorldEvent } from '../types/world'
 
 export type BrickSceneViewMode = 'border' | 'borderless' | 'xray' | 'voxel'
 
@@ -51,6 +52,9 @@ type BrickSceneProps = {
   displayColorByBrickId?: Map<string, string>
   transformsByBrickId?: Map<string, BrickSceneTransform>
   worldEntities?: WorldEntity[]
+  worldEvents?: WorldEvent[]
+  worldElapsedSeconds?: number
+  worldPaused?: boolean
   worldEntityPlacementPreview?: WorldEntity
   selectedWorldEntityId?: string
   placementPreviewBricks?: PlacedBrick[]
@@ -1831,14 +1835,63 @@ const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementAct
   )
 }
 
-const WorldEntityScene = ({ entities, preview, selectedId, placementActive, onSelect }: {
+const WorldProjectileMesh = ({ projectile, elapsedSeconds, paused }: {
+  projectile: WorldProjectileVisual
+  elapsedSeconds: number
+  paused: boolean
+}) => {
+  const groupRef = useRef<Group>(null)
+  const visualTimeRef = useRef(Math.max(projectile.createdAtSeconds, elapsedSeconds))
+  useEffect(() => {
+    visualTimeRef.current = Math.max(visualTimeRef.current, elapsedSeconds)
+  }, [elapsedSeconds])
+  useFrame((_state, delta) => {
+    if (!groupRef.current) return
+    if (!paused) visualTimeRef.current += Math.min(delta, 0.05)
+    const position = sampleWorldProjectilePosition(projectile, visualTimeRef.current)
+    groupRef.current.position.set(position.x, position.y, position.z)
+    groupRef.current.lookAt(projectile.end.x, projectile.end.y, projectile.end.z)
+    groupRef.current.visible = position.progress < 1
+  })
+  return (
+    <group ref={groupRef}>
+      {projectile.kind === 'arrow' ? (
+        <group rotation={[Math.PI / 2, 0, 0]}>
+          <mesh>
+            <cylinderGeometry args={[0.035, 0.035, 0.65, 8]} />
+            <meshStandardMaterial color="#713f12" roughness={0.8} />
+          </mesh>
+          <mesh position={[0, 0.37, 0]}>
+            <coneGeometry args={[0.09, 0.18, 8]} />
+            <meshStandardMaterial color="#94a3b8" metalness={0.35} roughness={0.45} />
+          </mesh>
+        </group>
+      ) : (
+        <mesh castShadow>
+          <sphereGeometry args={[0.28, 14, 10]} />
+          <meshStandardMaterial color="#57534e" roughness={0.95} />
+        </mesh>
+      )}
+    </group>
+  )
+}
+
+const WorldEntityScene = ({ entities, events, elapsedSeconds, paused, preview, selectedId, placementActive, onSelect }: {
   entities: WorldEntity[]
+  events: WorldEvent[]
+  elapsedSeconds: number
+  paused: boolean
   preview?: WorldEntity
   selectedId?: string
   placementActive: boolean
   onSelect?: (id: string) => void
-}) => (
-  <group>
+}) => {
+  const projectiles = useMemo(
+    () => getWorldProjectileVisuals(events, entities, elapsedSeconds),
+    [elapsedSeconds, entities, events],
+  )
+  return (
+    <group>
     {entities.map((entity) => (
       <WorldEntityMesh
         key={entity.id}
@@ -1849,8 +1902,17 @@ const WorldEntityScene = ({ entities, preview, selectedId, placementActive, onSe
       />
     ))}
     {preview && <WorldEntityMesh entity={preview} ghost />}
-  </group>
-)
+    {projectiles.map((projectile) => (
+      <WorldProjectileMesh
+        key={projectile.id}
+        projectile={projectile}
+        elapsedSeconds={elapsedSeconds}
+        paused={paused}
+      />
+    ))}
+    </group>
+  )
+}
 
 const PlacementGhosts = ({ bricks, onConfirmPlacement, onCancelPlacement }: {
   bricks: PlacedBrick[]
@@ -1956,6 +2018,9 @@ export const BrickScene = ({
   displayColorByBrickId,
   transformsByBrickId,
   worldEntities = [],
+  worldEvents = [],
+  worldElapsedSeconds = 0,
+  worldPaused = false,
   worldEntityPlacementPreview,
   selectedWorldEntityId,
   placementPreviewBricks = [],
@@ -2165,6 +2230,9 @@ export const BrickScene = ({
         )}
         <WorldEntityScene
           entities={worldEntities}
+          events={worldEvents}
+          elapsedSeconds={worldElapsedSeconds}
+          paused={worldPaused}
           preview={worldEntityPlacementPreview}
           selectedId={selectedWorldEntityId}
           placementActive={placementActive}

@@ -1995,6 +1995,9 @@ function App() {
               stabilityAnalysis={sceneStabilityAnalysis}
               highlightedIds={activeSelectedIds.filter((id) => id !== selectedId)}
               worldEntities={world.entities}
+              worldEvents={world.events}
+              worldElapsedSeconds={world.elapsedSeconds}
+              worldPaused={world.paused}
               worldEntityPlacementPreview={worldEntityPlacement?.entity}
               selectedWorldEntityId={selectedWorldEntityId}
               placementPreviewBricks={placementSession?.previewBricks}
