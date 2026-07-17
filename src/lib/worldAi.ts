@@ -1,4 +1,4 @@
-import type { BrickStructure, PlacedBrick } from '../types/bricks'
+import type { BrickStructure, LlmConfig, PlacedBrick } from '../types/bricks'
 import type {
   WorldEntityCommand,
   WorldState,
@@ -7,12 +7,15 @@ import type {
   WorldTargetRef,
 } from '../types/world'
 import { issueWorldEntityCommand } from './worldEntity'
+import { requestLlmJsonContent } from './llmGenerator'
 
 type WorldAiLocale = 'zh-CN' | 'en-US'
 
 export type WorldAiSnapshot = {
   worldId: string
   elapsedSeconds: number
+  brickCount: number
+  brickSnapshotTruncated: boolean
   entities: Array<{
     id: string
     name: string
@@ -26,7 +29,13 @@ export type WorldAiSnapshot = {
     recentMemories: Array<{ type: string; otherId?: string; otherName?: string; importance: number }>
   }>
   bricks: Array<{ id: string; brickId: string; position: { x: number; y: number; z: number } }>
-  structures: Array<{ id: string; name: string; description: string; brickIds: string[] }>
+  structures: Array<{
+    id: string
+    name: string
+    description: string
+    brickCount: number
+    position?: { x: number; y: number; z: number }
+  }>
   recentEvents: Array<{
     type: string
     actorId: string
@@ -63,13 +72,40 @@ const exactKeys = (value: Record<string, unknown>, allowedKeys: string[]) =>
 const asCleanString = (value: unknown, maxLength = 120) =>
   typeof value === 'string' ? value.trim().slice(0, maxLength) : ''
 
+const maxSnapshotBricks = 240
+
+const selectRelevantBricks = (world: WorldState, bricks: PlacedBrick[]) => {
+  if (bricks.length <= maxSnapshotBricks) return bricks
+  const observers = world.entities.filter((entity) => entity.controller === 'ai' && entity.health > 0)
+  const anchors = observers.length > 0 ? observers : world.entities.filter((entity) => entity.health > 0)
+  if (anchors.length === 0) return bricks.slice(0, maxSnapshotBricks)
+  return [...bricks]
+    .sort((a, b) => {
+      const distanceA = Math.min(...anchors.map((entity) => Math.hypot(
+        a.pose.xStud - entity.transform.x,
+        a.pose.zStud - entity.transform.z,
+      )))
+      const distanceB = Math.min(...anchors.map((entity) => Math.hypot(
+        b.pose.xStud - entity.transform.x,
+        b.pose.zStud - entity.transform.z,
+      )))
+      return distanceA - distanceB || a.id.localeCompare(b.id)
+    })
+    .slice(0, maxSnapshotBricks)
+}
+
 export const createWorldAiSnapshot = (
   world: WorldState,
   bricks: PlacedBrick[],
   structures: BrickStructure[] = [],
-): WorldAiSnapshot => ({
+): WorldAiSnapshot => {
+  const selectedBricks = selectRelevantBricks(world, bricks)
+  const bricksById = new Map(bricks.map((brick) => [brick.id, brick]))
+  return {
   worldId: world.id,
   elapsedSeconds: Number(world.elapsedSeconds.toFixed(2)),
+  brickCount: bricks.length,
+  brickSnapshotTruncated: selectedBricks.length < bricks.length,
   entities: world.entities.map((entity) => ({
     id: entity.id,
     name: entity.name,
@@ -91,17 +127,25 @@ export const createWorldAiSnapshot = (
       importance: memory.importance,
     })),
   })),
-  bricks: bricks.map((brick) => ({
+  bricks: selectedBricks.map((brick) => ({
     id: brick.id,
     brickId: brick.brickId,
     position: { x: brick.pose.xStud, y: brick.pose.yStud, z: brick.pose.zStud },
   })),
-  structures: structures.map((structure) => ({
-    id: structure.id,
-    name: structure.name,
-    description: structure.description,
-    brickIds: [...structure.brickIds],
-  })),
+  structures: structures.map((structure) => {
+    const members = structure.brickIds.map((id) => bricksById.get(id)).filter((brick): brick is PlacedBrick => Boolean(brick))
+    return {
+      id: structure.id,
+      name: structure.name,
+      description: structure.description,
+      brickCount: structure.brickIds.length,
+      position: members.length > 0 ? {
+        x: Number((members.reduce((sum, brick) => sum + brick.pose.xStud, 0) / members.length).toFixed(2)),
+        y: Number((members.reduce((sum, brick) => sum + brick.pose.yStud, 0) / members.length).toFixed(2)),
+        z: Number((members.reduce((sum, brick) => sum + brick.pose.zStud, 0) / members.length).toFixed(2)),
+      } : undefined,
+    }
+  }),
   recentEvents: world.events.slice(-16).map((event) => ({
     type: event.type,
     actorId: event.actorId,
@@ -110,7 +154,7 @@ export const createWorldAiSnapshot = (
     targetName: event.targetName,
     amount: event.amount,
   })),
-})
+}}
 
 export const worldAiSystemPrompt = `You direct AI-controlled characters in a brick world. Return one compact JSON object only.
 You may only issue high-level commands using IDs from the supplied snapshot. Never invent IDs.
@@ -124,14 +168,14 @@ Return this exact shape:
 {
   "commands": [
     { "entityId": "existing AI-controlled entity id", "type": "stop" },
-    { "entityId": "existing AI-controlled entity id", "type": "move|attack|guard|follow|interact", "target": { "kind": "entity|brick|structure|waypoint", "id": "existing target id" } },
-    { "entityId": "existing AI-controlled entity id", "type": "patrol", "waypointIds": ["existing waypoint ids"] }
+    { "entityId": "existing AI-controlled entity id", "type": "move|attack|guard|follow|interact", "target": { "kind": "entity|brick|structure", "id": "existing target id" } }
   ],
   "story": { "title": "optional short title", "body": "optional grounded account of the decision" }
 }
 
 Rules:
 - Return at most one command per AI-controlled entity and at most 12 commands total.
+- The bricks array may contain only the nearest relevant subset; brickCount is the total scene count.
 - Attack may target only an entity, brick, or structure. Follow may target only an entity.
 - A unit may not target itself.
 - Coordinates in the snapshot are read-only context. Never return coordinates or direct state fields.
@@ -260,6 +304,27 @@ export const parseWorldAiJson = (content: string) => {
   const jsonText = fencedMatch?.[1] ?? trimmed
   const objectMatch = jsonText.match(/\{[\s\S]*\}/)
   return JSON.parse(objectMatch?.[0] ?? jsonText) as unknown
+}
+
+export const requestWorldAiTurn = async (input: {
+  world: WorldState
+  bricks: PlacedBrick[]
+  structures?: BrickStructure[]
+  config: LlmConfig
+  locale?: WorldAiLocale
+  signal?: AbortSignal
+}) => {
+  const snapshot = createWorldAiSnapshot(input.world, input.bricks, input.structures)
+  const content = await requestLlmJsonContent({
+    config: input.config,
+    systemPrompt: worldAiSystemPrompt,
+    userPrompt: buildWorldAiTurnPrompt(snapshot),
+    locale: input.locale,
+    signal: input.signal,
+    temperature: 0.35,
+    maxTokens: 3_000,
+  })
+  return parseWorldAiJson(content)
 }
 
 export const formatWorldAiTurnSummary = (

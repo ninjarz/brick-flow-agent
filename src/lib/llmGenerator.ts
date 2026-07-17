@@ -39,6 +39,16 @@ type LlmGenerateInput = GeneratorInput & {
 type LlmRequestPayload = Record<string, unknown>
 type LlmLocale = 'zh-CN' | 'en-US'
 
+export type LlmJsonRequestInput = {
+  config: LlmConfig
+  systemPrompt: string
+  userPrompt: string
+  signal?: AbortSignal
+  locale?: LlmLocale
+  temperature?: number
+  maxTokens?: number
+}
+
 const clientRequestTimeoutMs = 240_000
 const configTestTimeoutMs = 15_000
 const configTestMaxTokens = 128
@@ -557,6 +567,55 @@ export const testLlmConnection = async (config: LlmConfig, locale: LlmLocale = '
   const payload = JSON.parse(responseText) as unknown
   const content = extractMessageContent(payload)
   if (!content) throw new Error(formatEmptyContentError(payload, llmText[locale].configTestContext, locale))
+}
+
+export const requestLlmJsonContent = async ({
+  config,
+  systemPrompt,
+  userPrompt,
+  signal,
+  locale = 'zh-CN',
+  temperature = 0.2,
+  maxTokens = 4_096,
+}: LlmJsonRequestInput) => {
+  if (!isLlmConfigComplete(config)) throw new Error(llmText[locale].incompleteConfig)
+
+  const controller = new AbortController()
+  const abortFromCaller = () => controller.abort()
+  signal?.addEventListener('abort', abortFromCaller)
+  const timeout = window.setTimeout(() => controller.abort(), clientRequestTimeoutMs)
+  let response: Response
+
+  try {
+    response = await requestLlmChat(config, applyThinkingMode({
+      model: config.modelName.trim(),
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature,
+      max_tokens: maxTokens,
+      stream: false,
+      response_format: { type: 'json_object' },
+    }, config.enableThinking), controller.signal)
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      if (signal?.aborted) throw new Error(llmText[locale].generationCanceled)
+      throw new Error(llmText[locale].generationTimeout)
+    }
+    throw formatFetchError(error, config.requestMode, locale)
+  } finally {
+    signal?.removeEventListener('abort', abortFromCaller)
+    window.clearTimeout(timeout)
+  }
+
+  if (!response.ok) throw new Error(await formatRequestError(response, config.requestMode, locale))
+  const responseText = await response.text()
+  if (!responseText.trim()) throw new Error(llmText[locale].emptyGenerationResponse)
+  const payload = JSON.parse(responseText) as unknown
+  const content = extractMessageContent(payload)
+  if (!content) throw new Error(formatEmptyContentError(payload, llmText[locale].responseContext, locale))
+  return content
 }
 
 export const generateLlmBuildPlan = async ({ prompt, imageName, imageDataUrl, inventoryOverrides, config, signal, locale = 'zh-CN', repairFeedback, previousPlan }: LlmGenerateInput): Promise<BuildPlan> => {

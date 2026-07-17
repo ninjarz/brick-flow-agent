@@ -27,6 +27,7 @@ import { dissolveBrickStructure, getBrickStructure, getExactSelectionStructure, 
 import { createEmptyWorldState, createWorldEntity } from './lib/worldEntity'
 import { stepWorldSimulation, worldSimulationStepSeconds } from './lib/worldSimulation'
 import { addWorldStory, createLocalTavernStory } from './lib/worldNarrative'
+import { applyWorldAiTurn, formatWorldAiTurnSummary, requestWorldAiTurn } from './lib/worldAi'
 import { analyzeBuildStability } from './lib/stabilityAnalysis'
 import { formatLDrawPlan, parseLDrawPlan } from './lib/ldrawPlan'
 import { getEffectiveInventory, loadInventoryOverrides, saveInventoryOverrides } from './lib/userInventory'
@@ -188,6 +189,9 @@ function App() {
   const [isObjImportOpen, setIsObjImportOpen] = useState(false)
   const [isStabilityLabOpen, setIsStabilityLabOpen] = useState(false)
   const [isTavernOpen, setIsTavernOpen] = useState(false)
+  const [isWorldAiThinking, setIsWorldAiThinking] = useState(false)
+  const [worldAiFeedback, setWorldAiFeedback] = useState<{ tone: 'success' | 'error'; text: string }>()
+  const worldAiAbortRef = useRef<AbortController>()
   const [isManualOpen, setIsManualOpen] = useState(false)
   const [manualPlan, setManualPlan] = useState<BuildPlan>()
   const [manualStepIndex, setManualStepIndex] = useState(0)
@@ -1317,6 +1321,47 @@ function App() {
     setWorld((current) => addWorldStory(current, createLocalTavernStory(current, locale)))
   }, [locale])
 
+  const runWorldAiTurn = useCallback(async () => {
+    if (!llmConfigComplete || isWorldAiThinking) return
+    worldAiAbortRef.current?.abort()
+    const controller = new AbortController()
+    worldAiAbortRef.current = controller
+    setIsWorldAiThinking(true)
+    setWorldAiFeedback(undefined)
+    const requestWorld = worldRef.current
+    const requestPlan = planRef.current
+    try {
+      const response = await requestWorldAiTurn({
+        world: requestWorld,
+        bricks: requestPlan.bricks,
+        structures: requestPlan.structures,
+        config: llmConfig,
+        locale,
+        signal: controller.signal,
+      })
+      const currentWorld = worldRef.current
+      const currentPlan = planRef.current
+      const result = applyWorldAiTurn(currentWorld, response, {
+        bricks: currentPlan.bricks,
+        structures: currentPlan.structures,
+      })
+      const nextWorld = result.story ? addWorldStory(result.world, result.story) : result.world
+      setWorld(nextWorld)
+      setWorldAiFeedback({ tone: 'success', text: formatWorldAiTurnSummary(result, locale) })
+    } catch (error) {
+      if (controller.signal.aborted) return
+      setWorldAiFeedback({
+        tone: 'error',
+        text: error instanceof Error ? error.message : t('tavern.aiFailed'),
+      })
+    } finally {
+      if (worldAiAbortRef.current === controller) {
+        worldAiAbortRef.current = undefined
+        setIsWorldAiThinking(false)
+      }
+    }
+  }, [isWorldAiThinking, llmConfig, llmConfigComplete, locale, t])
+
   const clearTavernHistory = useCallback(() => {
     setWorld((current) => ({
       ...current,
@@ -2053,7 +2098,11 @@ function App() {
         <WorldTavern
           world={world}
           onGenerateStory={generateTavernStory}
+          onRunAiTurn={runWorldAiTurn}
           onClearHistory={clearTavernHistory}
+          llmConfigured={llmConfigComplete}
+          isAiThinking={isWorldAiThinking}
+          aiFeedback={worldAiFeedback}
           onClose={() => setIsTavernOpen(false)}
         />
       )}

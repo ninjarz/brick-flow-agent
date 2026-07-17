@@ -1,4 +1,4 @@
-import { Beer, BookOpen, Sparkles, Trash2, X } from 'lucide-react'
+import { Beer, BookOpen, Bot, Sparkles, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useI18n } from '../lib/i18n'
 import { formatWorldEvent } from '../lib/worldNarrative'
@@ -7,11 +7,24 @@ import type { WorldState } from '../types/world'
 type WorldTavernProps = {
   world: WorldState
   onGenerateStory: () => void
+  onRunAiTurn: () => void
   onClearHistory: () => void
+  llmConfigured: boolean
+  isAiThinking: boolean
+  aiFeedback?: { tone: 'success' | 'error'; text: string }
   onClose: () => void
 }
 
-export const WorldTavern = ({ world, onGenerateStory, onClearHistory, onClose }: WorldTavernProps) => {
+export const WorldTavern = ({
+  world,
+  onGenerateStory,
+  onRunAiTurn,
+  onClearHistory,
+  llmConfigured,
+  isAiThinking,
+  aiFeedback,
+  onClose,
+}: WorldTavernProps) => {
   const { locale, t } = useI18n()
   const [selectedEntityId, setSelectedEntityId] = useState(world.entities[0]?.id ?? '')
   const [confirmClear, setConfirmClear] = useState(false)
@@ -21,6 +34,7 @@ export const WorldTavern = ({ world, onGenerateStory, onClearHistory, onClose }:
   }, [selectedEntityId, world.entities])
   const selectedEntity = world.entities.find((entity) => entity.id === selectedEntityId)
   const selectedMemories = world.narrative.memoriesByEntityId[selectedEntityId] ?? []
+  const aiEntityCount = world.entities.filter((entity) => entity.controller === 'ai' && entity.health > 0).length
   const eventsById = useMemo(() => new Map(world.events.map((event) => [event.id, event])), [world.events])
 
   return (
@@ -111,11 +125,23 @@ export const WorldTavern = ({ world, onGenerateStory, onClearHistory, onClose }:
                   <h3>{t('tavern.stories')}</h3>
                   <small>{t('tavern.localStoryHint')}</small>
                 </div>
-                <button type="button" onClick={onGenerateStory} disabled={world.entities.length === 0 && world.events.length === 0}>
-                  <Sparkles size={15} />
-                  {t('tavern.generateRumor')}
-                </button>
+                <div className="tavern-story-actions">
+                  <button
+                    type="button"
+                    onClick={onRunAiTurn}
+                    disabled={!llmConfigured || aiEntityCount === 0 || isAiThinking}
+                    title={!llmConfigured ? t('tavern.aiNeedsConfig') : aiEntityCount === 0 ? t('tavern.aiNeedsEntity') : undefined}
+                  >
+                    <Bot size={15} />
+                    {isAiThinking ? t('tavern.aiThinking') : t('tavern.runAiTurn', { count: aiEntityCount })}
+                  </button>
+                  <button type="button" onClick={onGenerateStory} disabled={world.entities.length === 0 && world.events.length === 0}>
+                    <Sparkles size={15} />
+                    {t('tavern.generateRumor')}
+                  </button>
+                </div>
               </header>
+              {aiFeedback && <p className={`tavern-ai-feedback ${aiFeedback.tone}`}>{aiFeedback.text}</p>}
               {[...world.narrative.stories].reverse().map((story) => (
                 <article key={story.id}>
                   <strong>{story.title}</strong>

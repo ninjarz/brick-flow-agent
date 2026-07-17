@@ -23,8 +23,24 @@ describe('world AI adapter', () => {
       pose: { xStud: 4, yStud: 0, zStud: 2, rotationQuarterTurns: 0 },
     }], [{ id: 'tower-1', name: 'Tower', description: 'A tower', brickIds: ['brick-1'] }])
     expect(snapshot.entities[0]).toMatchObject({ id: 'ai-knight', position: { x: 2, y: 0, z: 0 } })
-    expect(snapshot.structures[0].id).toBe('tower-1')
+    expect(snapshot.structures[0]).toMatchObject({ id: 'tower-1', brickCount: 1, position: { x: 4, y: 0, z: 2 } })
     expect(buildWorldAiTurnPrompt(snapshot)).toContain('Never return coordinates')
+  })
+
+  it('caps large brick snapshots to the nearest relevant targets', () => {
+    const world = makeWorld()
+    const bricks = Array.from({ length: 300 }, (_, index) => ({
+      id: `brick-${index}`,
+      brickId: 'lego-brick-1x1',
+      color: 'gray' as const,
+      pose: { xStud: index, yStud: 0, zStud: 0, rotationQuarterTurns: 0 as const },
+    }))
+    const snapshot = createWorldAiSnapshot(world, bricks)
+    expect(snapshot.brickCount).toBe(300)
+    expect(snapshot.brickSnapshotTruncated).toBe(true)
+    expect(snapshot.bricks).toHaveLength(240)
+    expect(snapshot.bricks.some((brick) => brick.id === 'brick-2')).toBe(true)
+    expect(snapshot.bricks.some((brick) => brick.id === 'brick-299')).toBe(false)
   })
 
   it('accepts an ID-based command without directly changing the transform', () => {

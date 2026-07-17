@@ -2873,6 +2873,29 @@ button:disabled {
   white-space: nowrap;
 }
 
+.tavern-story-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tavern-ai-feedback {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #eaf8ef;
+  color: #13713a;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.tavern-ai-feedback.error {
+  background: #fff0f0;
+  color: #b42318;
+}
+
 .tavern-stories article {
   margin-top: 9px;
   padding: 10px;
