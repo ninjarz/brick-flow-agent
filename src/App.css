@@ -433,6 +433,49 @@ button.status-pill:hover {
   box-shadow: inset 0 0 0 1px #2563eb;
 }
 
+.rain-physics-control {
+  display: grid;
+  gap: 6px;
+  padding: 9px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.rain-physics-control > span {
+  color: #475569;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.rain-physics-control > small {
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.rain-physics-profiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.rain-physics-profiles button {
+  min-height: 32px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.rain-physics-profiles button.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+  box-shadow: inset 0 0 0 1px #2563eb;
+}
+
 .stability-run {
   width: 100%;
   margin-top: 0;
@@ -614,6 +657,142 @@ button.status-pill:hover {
   border-color: rgba(220, 38, 38, 0.26);
   color: #b91c1c;
 }
+
+.simulation-load-inspector {
+  position: absolute;
+  z-index: 5;
+  bottom: 10px;
+  left: 10px;
+  width: min(310px, calc(100% - 20px));
+  display: grid;
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid rgba(37, 99, 235, 0.22);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.91);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1);
+  backdrop-filter: blur(6px);
+}
+
+.simulation-load-inspector-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.simulation-load-inspector-header > strong {
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.simulation-load-inspector-header button {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  border-color: #cbd5e1;
+  background: #fff;
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 850;
+}
+
+.simulation-load-inspector-header button.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.simulation-load-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 9px;
+  color: #64748b;
+  font-size: 8px;
+  font-weight: 750;
+}
+
+.simulation-load-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.simulation-load-legend i {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: #38bdf8;
+}
+
+.simulation-load-legend i.safe { background: #22c55e; }
+.simulation-load-legend i.warning { background: #f59e0b; }
+.simulation-load-legend i.failed { background: #dc2626; }
+
+.simulation-load-inspector ol {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.simulation-load-inspector li {
+  min-width: 0;
+  padding-top: 4px;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.simulation-load-inspector li > button {
+  width: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 3px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  text-align: left;
+}
+
+.simulation-load-inspector li.active > button {
+  background: #eff6ff;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.3);
+}
+
+.simulation-load-inspector li > button > span {
+  min-width: 0;
+  display: grid;
+}
+
+.simulation-load-inspector li strong,
+.simulation-load-inspector li small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.simulation-load-inspector li strong {
+  color: #334155;
+  font-size: 9px;
+}
+
+.simulation-load-inspector li small,
+.simulation-load-empty {
+  color: #64748b;
+  font-size: 8px;
+}
+
+.simulation-load-inspector li button b {
+  color: #d97706;
+  font-size: 11px;
+}
+
+.simulation-load-inspector li.failed button b { color: #dc2626; }
 
 .simulation-wind-direction {
   position: absolute;

@@ -83,14 +83,23 @@ await writeFile(entry, `
   measure('analyze stability for largest finished asset', () =>
     stabilityAnalysis.analyzeBuildStability(largestAsset.plan.bricks)
   );
-  measure('simulate wind for largest finished asset', () =>
-    disasterSimulation.runDisasterSimulation(largestAsset.plan.bricks, { scenario: 'wind', intensity: 70 })
+  measure('simulate challenge wind for largest finished asset', () =>
+    disasterSimulation.runDisasterSimulation(largestAsset.plan.bricks, { scenario: 'wind', intensity: 70, physicsProfile: 'challenge' })
   );
-  measure('simulate rain for largest finished asset', () =>
-    disasterSimulation.runDisasterSimulation(largestAsset.plan.bricks, { scenario: 'rain', intensity: 70 })
+  measure('simulate realistic wind for largest finished asset', () =>
+    disasterSimulation.runDisasterSimulation(largestAsset.plan.bricks, { scenario: 'wind', intensity: 70, physicsProfile: 'realistic' })
   );
-  measure('simulate earthquake for largest finished asset', () =>
-    disasterSimulation.runDisasterSimulation(largestAsset.plan.bricks, { scenario: 'earthquake', intensity: 70 })
+  measure('simulate challenge rain for largest finished asset', () =>
+    disasterSimulation.runDisasterSimulation(largestAsset.plan.bricks, { scenario: 'rain', intensity: 70, physicsProfile: 'challenge' })
+  );
+  measure('simulate realistic rain for largest finished asset', () =>
+    disasterSimulation.runDisasterSimulation(largestAsset.plan.bricks, { scenario: 'rain', intensity: 70, physicsProfile: 'realistic' })
+  );
+  measure('simulate challenge earthquake for largest finished asset', () =>
+    disasterSimulation.runDisasterSimulation(largestAsset.plan.bricks, { scenario: 'earthquake', intensity: 70, physicsProfile: 'challenge' })
+  );
+  measure('simulate realistic earthquake for largest finished asset', () =>
+    disasterSimulation.runDisasterSimulation(largestAsset.plan.bricks, { scenario: 'earthquake', intensity: 70, physicsProfile: 'realistic' })
   );
 
   const curvedDefinition = brickById.get('curved-slope-1x2')!;

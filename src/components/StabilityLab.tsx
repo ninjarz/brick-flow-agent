@@ -1,9 +1,11 @@
-import { Activity, ArrowRight, CloudRain, LoaderCircle, Pause, Play, RotateCcw, Wind, X, Zap } from 'lucide-react'
+import { Activity, ArrowRight, CloudRain, Gauge, LoaderCircle, Pause, Play, RotateCcw, Wind, X, Zap } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { BrickScene } from './BrickScene'
+import { BrickScene, type BrickSceneTransform } from './BrickScene'
+import { brickById } from '../data/basicBricks'
 import {
   getDisasterFrame,
   type DisasterFailureMode,
+  type DisasterPhysicsProfile,
   type DisasterScenario,
   type DisasterSimulationOptions,
   type DisasterSimulationResult,
@@ -19,6 +21,14 @@ type StabilityLabProps = {
 }
 
 const weatherParticleCount = 18
+const failedConnectionColor = '#dc2626'
+const connectionHeatColor = (utilization: number) => {
+  if (utilization <= 0.001) return '#64748b'
+  if (utilization < 0.35) return '#38bdf8'
+  if (utilization < 0.7) return '#22c55e'
+  if (utilization < 1) return '#f59e0b'
+  return failedConnectionColor
+}
 const windDirectionPresets = [
   { degrees: 0, axis: 'X+' },
   { degrees: 90, axis: 'Z+' },
@@ -77,12 +87,15 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
   const [scenario, setScenario] = useState<DisasterScenario>('wind')
   const [intensity, setIntensity] = useState(70)
   const [directionDegrees, setDirectionDegrees] = useState(25)
+  const [physicsProfile, setPhysicsProfile] = useState<DisasterPhysicsProfile>('challenge')
   const [result, setResult] = useState<DisasterSimulationResult>()
   const [isSimulating, setIsSimulating] = useState(true)
   const [simulationError, setSimulationError] = useState('')
   const [timeSeconds, setTimeSeconds] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [cameraAzimuthDegrees, setCameraAzimuthDegrees] = useState(18)
+  const [showConnectionHeatmap, setShowConnectionHeatmap] = useState(true)
+  const [inspectedBrickId, setInspectedBrickId] = useState('')
   const workerRef = useRef<Worker>()
   const simulationRunRef = useRef(0)
 
@@ -134,7 +147,7 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
   }, [plan.bricks, stopWorker])
 
   useEffect(() => {
-    runSimulation({ scenario: 'wind', intensity: 70, directionDegrees: 25 })
+    runSimulation({ scenario: 'wind', intensity: 70, directionDegrees: 25, physicsProfile: 'challenge' })
     return () => {
       simulationRunRef.current += 1
       stopWorker()
@@ -142,8 +155,8 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
   }, [runSimulation, stopWorker])
 
   const restartSimulation = useCallback(() => {
-    runSimulation({ scenario, intensity, directionDegrees })
-  }, [directionDegrees, intensity, runSimulation, scenario])
+    runSimulation({ scenario, intensity, directionDegrees, physicsProfile })
+  }, [directionDegrees, intensity, physicsProfile, runSimulation, scenario])
 
   useEffect(() => {
     if (!isPlaying || !result) return
@@ -167,19 +180,29 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
   }, [isPlaying, result])
 
   const frame = useMemo(() => result ? getDisasterFrame(result, timeSeconds) : undefined, [result, timeSeconds])
-  const displayBricks = useMemo(() => plan.bricks.map((brick) => {
-    const offset = frame?.offsetsByBrickId.get(brick.id)
-    return {
-      ...brick,
-      color: frame?.failedIds.has(brick.id) ? 'red' as const : brick.color,
-      pose: offset ? {
-        ...brick.pose,
-        xStud: brick.pose.xStud + offset.x,
-        yStud: brick.pose.yStud + offset.y,
-        zStud: brick.pose.zStud + offset.z,
-      } : brick.pose,
+  const sceneDisplayColorByBrickId = useMemo(() => {
+    if (!frame) return undefined
+    const colors = new Map<string, string>()
+    for (const brick of plan.bricks) {
+      if (frame.failedIds.has(brick.id)) {
+        colors.set(brick.id, failedConnectionColor)
+      } else if (showConnectionHeatmap) {
+        colors.set(brick.id, connectionHeatColor(frame.connectionUtilizationByBrickId.get(brick.id) ?? 0))
+      }
     }
-  }), [frame, plan.bricks])
+    return colors
+  }, [frame, plan.bricks, showConnectionHeatmap])
+  const sceneTransformsByBrickId = useMemo(() => {
+    if (!frame) return undefined
+    const brickIds = new Set([
+      ...frame.offsetsByBrickId.keys(),
+      ...frame.rotationsByBrickId.keys(),
+    ])
+    return new Map([...brickIds].map((brickId) => [brickId, {
+      translation: frame.offsetsByBrickId.get(brickId),
+      rotation: frame.rotationsByBrickId.get(brickId),
+    } satisfies BrickSceneTransform]))
+  }, [frame])
   const currentFailedCount = frame?.failedIds.size ?? 0
   const windExposureSummary = useMemo(() => {
     if (!result || !frame || result.options.scenario !== 'wind') return undefined
@@ -223,6 +246,35 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
       .sort((left, right) => right[1] - left[1])[0]
     return primary ? { mode: primary[0], count: primary[1] } : undefined
   }, [frame, result])
+  const peakConnectionUtilization = useMemo(() => {
+    if (!result) return undefined
+    const peak = Math.max(0, ...result.peakConnectionUtilizationByBrickId.values())
+    return Math.round(peak * 100)
+  }, [result])
+  const criticalConnections = useMemo(() => {
+    if (!result || !frame) return []
+    const placedById = new Map(plan.bricks.map((brick) => [brick.id, brick]))
+    return [...frame.connectionUtilizationByBrickId]
+      .filter(([, utilization]) => utilization > 0.001)
+      .sort((left, right) => right[1] - left[1])
+      .slice(0, 3)
+      .map(([brickId, utilization]) => {
+        const placed = placedById.get(brickId)
+        const definition = placed ? brickById.get(placed.brickId) : undefined
+        const failed = frame.failedIds.has(brickId)
+        const mode = failed
+          ? result.failureModeByBrickId.get(brickId)
+          : result.governingFailureModeByBrickId.get(brickId)
+        return {
+          brickId,
+          label: definition?.name ?? placed?.brickId ?? brickId,
+          partNumber: definition?.partNumber,
+          utilization: Math.round(utilization * 100),
+          failed,
+          mode,
+        }
+      })
+  }, [frame, plan.bricks, result])
   const scenarioOptions: Array<{ value: DisasterScenario; icon: typeof Wind }> = [
     { value: 'wind', icon: Wind },
     { value: 'rain', icon: CloudRain },
@@ -256,7 +308,16 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
                   key={value}
                   type="button"
                   className={scenario === value ? 'active' : ''}
-                  onClick={() => setScenario(value)}
+                  aria-pressed={scenario === value}
+                  onClick={() => {
+                    setScenario(value)
+                    runSimulation({
+                      scenario: value,
+                      intensity,
+                      directionDegrees,
+                      physicsProfile,
+                    })
+                  }}
                 >
                   <Icon size={17} />
                   {t(`stabilityLab.scenario.${value}`)}
@@ -267,6 +328,26 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
               <span>{t('stabilityLab.intensity')} <strong>{intensity}%</strong></span>
               <input type="range" min={10} max={100} step={5} value={intensity} onChange={(event) => setIntensity(Number(event.target.value))} />
             </label>
+            <div className="rain-physics-control">
+              <span>{t('stabilityLab.physicsProfile')}</span>
+              <div className="rain-physics-profiles">
+                {(['challenge', 'realistic'] as const).map((profile) => (
+                  <button
+                    key={profile}
+                    type="button"
+                    className={physicsProfile === profile ? 'active' : ''}
+                    aria-pressed={physicsProfile === profile}
+                    onClick={() => {
+                      setPhysicsProfile(profile)
+                      runSimulation({ scenario, intensity, directionDegrees, physicsProfile: profile })
+                    }}
+                  >
+                    {t(`stabilityLab.physicsProfile.${profile}`)}
+                  </button>
+                ))}
+              </div>
+              <small>{t(`stabilityLab.physicsProfile.${physicsProfile}.hint`)}</small>
+            </div>
             {scenario !== 'rain' && (
               <div className="wind-direction-control">
                 <WindDirectionIndicator
@@ -356,12 +437,14 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
                 {Array.from({ length: weatherParticleCount }, (_, index) => <i key={index} style={{ '--particle-index': index } as CSSProperties} />)}
               </div>
               <BrickScene
-                bricks={displayBricks}
-                selectedId=""
+                bricks={plan.bricks}
+                selectedId={inspectedBrickId}
                 cameraFrameKey={`${plan.id}:stability-lab`}
                 stabilityAnalysis={result.analysis}
+                displayColorByBrickId={sceneDisplayColorByBrickId}
+                transformsByBrickId={sceneTransformsByBrickId}
                 onCameraAzimuthChange={setCameraAzimuthDegrees}
-                onSelect={() => {}}
+                onSelect={(brickId) => setInspectedBrickId((current) => current === brickId ? '' : brickId)}
                 onNudgeSelected={() => {}}
                 onRotateSelected={() => {}}
                 onDeleteSelected={() => {}}
@@ -378,6 +461,58 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
                   />
                 </div>
               )}
+              <div className="simulation-load-inspector">
+                <div className="simulation-load-inspector-header">
+                  <strong>{t('stabilityLab.loadInspector')}</strong>
+                  <button
+                    type="button"
+                    className={showConnectionHeatmap ? 'active' : ''}
+                    aria-pressed={showConnectionHeatmap}
+                    onClick={() => setShowConnectionHeatmap((visible) => !visible)}
+                  >
+                    <Gauge size={13} />
+                    {t('stabilityLab.heatmap')}
+                  </button>
+                </div>
+                {showConnectionHeatmap && (
+                  <div className="simulation-load-legend" aria-label={t('stabilityLab.heatmapLegend')}>
+                    <span><i className="cool" />{t('stabilityLab.heatmap.low')}</span>
+                    <span><i className="safe" />{t('stabilityLab.heatmap.medium')}</span>
+                    <span><i className="warning" />{t('stabilityLab.heatmap.high')}</span>
+                    <span><i className="failed" />{t('stabilityLab.heatmap.failed')}</span>
+                  </div>
+                )}
+                {criticalConnections.length > 0 ? (
+                  <ol>
+                    {criticalConnections.map((connection) => (
+                      <li
+                        key={connection.brickId}
+                        className={`${connection.failed ? 'failed' : ''} ${inspectedBrickId === connection.brickId ? 'active' : ''}`}
+                      >
+                        <button
+                          type="button"
+                          aria-pressed={inspectedBrickId === connection.brickId}
+                          aria-label={t('stabilityLab.inspectConnection', { label: connection.label })}
+                          onClick={() => setInspectedBrickId((current) => (
+                            current === connection.brickId ? '' : connection.brickId
+                          ))}
+                        >
+                          <span>
+                            <strong title={connection.label}>{connection.label}</strong>
+                            <small>
+                              {connection.partNumber ? `#${connection.partNumber} · ` : ''}
+                              {connection.mode ? t(`stabilityLab.failureMode.${connection.mode}`) : t('stabilityLab.connectionLoad')}
+                            </small>
+                          </span>
+                          <b>{connection.utilization}%</b>
+                        </button>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <small className="simulation-load-empty">{t('stabilityLab.noConnectionLoad')}</small>
+                )}
+              </div>
               <div className="simulation-status">
                 {windExposureSummary && (
                   <span>{t('stabilityLab.windExposure', windExposureSummary)}</span>
@@ -388,6 +523,21 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
                 {result.options.scenario === 'rain' && (
                   <span>{t('stabilityLab.waterAccumulation', { percent: Math.round(frame.waterAccumulation * 100) })}</span>
                 )}
+                <span>{t('stabilityLab.physicsProfileActive', {
+                  profile: t(`stabilityLab.physicsProfile.${result.options.physicsProfile}`),
+                })}</span>
+                <span>{t('stabilityLab.loadCalibration', {
+                  value: result.loadCalibration.baseValue.toFixed(1),
+                  unit: result.loadCalibration.unit,
+                  multiplier: result.loadCalibration.loadMultiplier.toFixed(1),
+                })}</span>
+                <span>{t('stabilityLab.simulationSteps', { count: result.simulationStepCount })}</span>
+                {peakConnectionUtilization !== undefined && (
+                  <span className={peakConnectionUtilization >= 100 ? 'failed' : ''}>
+                    {t('stabilityLab.connectionUtilization', { percent: peakConnectionUtilization })}
+                  </span>
+                )}
+                <span>{t('stabilityLab.gravityActive')}</span>
                 <span>{t('stabilityLab.load', { load: Math.round(frame.loadFactor * result.options.intensity) })}</span>
                 <span className={currentFailedCount > 0 ? 'failed' : ''}>{t('stabilityLab.failedNow', { count: currentFailedCount })}</span>
                 {primaryFailureMode && (

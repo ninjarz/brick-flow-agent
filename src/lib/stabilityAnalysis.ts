@@ -100,7 +100,7 @@ const pointIsInsidePolygon = (point: StabilityPoint2, polygon: StabilityPoint2[]
   return inside
 }
 
-const signedDistanceToHull = (point: StabilityPoint2, hull: StabilityPoint2[]) => {
+export const getSignedDistanceToSupportHull = (point: StabilityPoint2, hull: StabilityPoint2[]) => {
   if (hull.length === 0) return -1
   if (hull.length === 1) return -Math.hypot(point.x - hull[0].x, point.z - hull[0].z)
   const distance = Math.min(...hull.map((source, index) => (
@@ -214,7 +214,7 @@ export const analyzeBuildStability = (
   const supportHull = createConvexHull(groundCorners)
   const supportArea = polygonArea(supportHull)
   const hullScale = Math.max(1, Math.sqrt(Math.max(epsilon, supportArea)), modelSpan * 0.25)
-  const tippingMargin = signedDistanceToHull(centerOfMass, supportHull) / hullScale
+  const tippingMargin = getSignedDistanceToSupportHull(centerOfMass, supportHull) / hullScale
   const groundedMass = measured.reduce((sum, item) => (
     sum + (graph.groundedIds.has(item.brick.id) ? item.mass : 0)
   ), 0)

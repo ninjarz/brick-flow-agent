@@ -25,6 +25,15 @@ import type { BrickDefinition, PlacedBrick } from '../types/bricks'
 
 export type BrickSceneViewMode = 'border' | 'borderless' | 'xray' | 'voxel'
 
+export type BrickSceneTransform = {
+  translation?: { x: number; y: number; z: number }
+  rotation?: {
+    pivot: { x: number; y: number; z: number }
+    axis: { x: number; z: number }
+    angle: number
+  }
+}
+
 type BrickSceneProps = {
   bricks: PlacedBrick[]
   selectedId?: string
@@ -33,6 +42,8 @@ type BrickSceneProps = {
   initialCameraAzimuthDegrees?: number
   viewMode?: BrickSceneViewMode
   stabilityAnalysis?: StabilityAnalysis
+  displayColorByBrickId?: Map<string, string>
+  transformsByBrickId?: Map<string, BrickSceneTransform>
   onCameraAzimuthChange?: (degrees: number) => void
   onSelect: (id: string) => void
   onSelectConnected?: (id: string) => void
@@ -70,6 +81,32 @@ const BoundsOutline = ({ position, size, color }: {
     <Edges color={color} threshold={15} />
   </mesh>
 )
+
+const TransformedBrick = ({ transform, children }: {
+  transform?: BrickSceneTransform
+  children: ReactNode
+}) => {
+  if (!transform) return children
+  const translation = transform.translation ?? { x: 0, y: 0, z: 0 }
+  const rotation = transform.rotation
+  const rotated = rotation ? (
+    <group
+      position={[rotation.pivot.x, rotation.pivot.y, rotation.pivot.z]}
+      quaternion={[
+        rotation.axis.x * Math.sin(rotation.angle / 2),
+        0,
+        rotation.axis.z * Math.sin(rotation.angle / 2),
+        Math.cos(rotation.angle / 2),
+      ]}
+    >
+      <group position={[-rotation.pivot.x, -rotation.pivot.y, -rotation.pivot.z]}>
+        {children}
+      </group>
+    </group>
+  ) : children
+
+  return <group position={[translation.x, translation.y, translation.z]}>{rotated}</group>
+}
 
 const connectorDirection = (connector: ReturnType<typeof getBrickConnectors>[number]) => (
   connector.direction ?? (
@@ -1298,20 +1335,27 @@ const StructuralVoxelScene = ({ bricks, selectedId, highlightedIdSet, boundsVers
   )
 }
 
-const SimplifiedBrickInstances = memo(function SimplifiedBrickInstances({ group, showEdges, onSelect, onSelectConnected }: {
+const SimplifiedBrickInstances = memo(function SimplifiedBrickInstances({ group, showEdges, transformsByBrickId, onSelect, onSelectConnected }: {
   group: SimplifiedBrickInstanceGroup
   showEdges: boolean
+  transformsByBrickId?: Map<string, BrickSceneTransform>
   onSelect: (id: string) => void
   onSelectConnected?: (id: string) => void
 }) {
   const fillRef = useRef<InstancedMesh>(null)
   const wireRef = useRef<InstancedMesh>(null)
   const previousInstancesRef = useRef<SimplifiedBrickInstance[]>()
+  const previousTransformsRef = useRef<Map<string, BrickSceneTransform>>()
   const matrixObject = useMemo(() => new Object3D(), [])
+  const transformAxis = useMemo(() => new Vector3(), [])
+  const transformPivot = useMemo(() => new Vector3(), [])
+  const transformTranslation = useMemo(() => new Vector3(), [])
 
   useLayoutEffect(() => {
     const previousInstances = previousInstancesRef.current
-    const shouldRewriteAll = !previousInstances || previousInstances.length !== group.instances.length
+    const shouldRewriteAll = !previousInstances ||
+      previousInstances.length !== group.instances.length ||
+      previousTransformsRef.current !== transformsByBrickId
 
     const writeInstanceMatrices = (mesh: InstancedMesh | null, force: boolean) => {
       if (!mesh) return
@@ -1322,8 +1366,24 @@ const SimplifiedBrickInstances = memo(function SimplifiedBrickInstances({ group,
 
         const [x, y, z] = getBoundsCenter(instance.bounds)
         const [width, height, depth] = getBoundsSize(instance.bounds)
+        const transform = transformsByBrickId?.get(instance.brick.id)
+        const rotation = transform?.rotation
+        const translation = transform?.translation
         matrixObject.position.set(x, y, z)
-        matrixObject.rotation.set(0, 0, 0)
+        matrixObject.quaternion.identity()
+        if (rotation) {
+          transformAxis.set(rotation.axis.x, 0, rotation.axis.z).normalize()
+          transformPivot.set(rotation.pivot.x, rotation.pivot.y, rotation.pivot.z)
+          matrixObject.position
+            .sub(transformPivot)
+            .applyAxisAngle(transformAxis, rotation.angle)
+            .add(transformPivot)
+          matrixObject.quaternion.setFromAxisAngle(transformAxis, rotation.angle)
+        }
+        if (translation) {
+          transformTranslation.set(translation.x, translation.y, translation.z)
+          matrixObject.position.add(transformTranslation)
+        }
         matrixObject.scale.set(width, height, depth)
         matrixObject.updateMatrix()
         mesh.setMatrixAt(index, matrixObject.matrix)
@@ -1336,7 +1396,8 @@ const SimplifiedBrickInstances = memo(function SimplifiedBrickInstances({ group,
     writeInstanceMatrices(fillRef.current, shouldRewriteAll)
     writeInstanceMatrices(wireRef.current, shouldRewriteAll)
     previousInstancesRef.current = group.instances
-  }, [group.instances, matrixObject])
+    previousTransformsRef.current = transformsByBrickId
+  }, [group.instances, matrixObject, transformAxis, transformPivot, transformTranslation, transformsByBrickId])
 
   const getInstanceBrickId = (event: ThreeEvent<MouseEvent>) => {
     const instanceId = event.instanceId
@@ -1406,12 +1467,13 @@ const SimplifiedSelectionBox = ({ bounds, selected }: {
   )
 }
 
-const SimplifiedBrickScene = ({ bricks, selectedId, highlightedIdSet, showEdges, displayColorByBrickId, onSelect, onSelectConnected }: {
+const SimplifiedBrickScene = ({ bricks, selectedId, highlightedIdSet, showEdges, displayColorByBrickId, transformsByBrickId, onSelect, onSelectConnected }: {
   bricks: PlacedBrick[]
   selectedId?: string
   highlightedIdSet: Set<string>
   showEdges: boolean
   displayColorByBrickId?: Map<string, string>
+  transformsByBrickId?: Map<string, BrickSceneTransform>
   onSelect: (id: string) => void
   onSelectConnected?: (id: string) => void
 }) => {
@@ -1448,6 +1510,7 @@ const SimplifiedBrickScene = ({ bricks, selectedId, highlightedIdSet, showEdges,
           key={`${group.color}-${group.opacity}`}
           group={group}
           showEdges={showEdges}
+          transformsByBrickId={transformsByBrickId}
           onSelect={onSelect}
           onSelectConnected={onSelectConnected}
         />
@@ -1509,6 +1572,8 @@ export const BrickScene = ({
   initialCameraAzimuthDegrees,
   viewMode = 'border',
   stabilityAnalysis,
+  displayColorByBrickId,
+  transformsByBrickId,
   onCameraAzimuthChange,
   onSelect,
   onSelectConnected,
@@ -1592,6 +1657,7 @@ export const BrickScene = ({
       getStabilityRiskColor(item.risk, item.grounded),
     ]))
   }, [resolvedStabilityAnalysis, xrayDebug])
+  const resolvedDisplayColorByBrickId = xrayColorByBrickId ?? displayColorByBrickId
   const supportedByBrickId = useMemo(() => {
     void ldrawBoundsVersion
 
@@ -1648,23 +1714,25 @@ export const BrickScene = ({
             selectedId={selectedId}
             highlightedIdSet={highlightedIdSet}
             showEdges={showBrickEdges}
-            displayColorByBrickId={xrayColorByBrickId}
+            displayColorByBrickId={resolvedDisplayColorByBrickId}
+            transformsByBrickId={transformsByBrickId}
             onSelect={onSelect}
             onSelectConnected={onSelectConnected}
           />
         ) : bricks.map((brick) => (
+          <TransformedBrick key={brick.id} transform={transformsByBrickId?.get(brick.id)}>
             <BrickMesh
-              key={brick.id}
               brick={brick}
               selected={brick.id === selectedId}
               highlighted={highlightedIdSet.has(brick.id)}
               floating={supportedByBrickId.get(brick.id) === false}
               preferDetailedGeometry={preferDetailedGeometry}
               showEdges={showBrickEdges}
-              displayColor={xrayColorByBrickId?.get(brick.id)}
+              displayColor={resolvedDisplayColorByBrickId?.get(brick.id)}
               onSelect={onSelect}
               onSelectConnected={onSelectConnected}
             />
+          </TransformedBrick>
         ))}
         {xrayDebug && resolvedStabilityAnalysis && <StabilityOverlay analysis={resolvedStabilityAnalysis} />}
         {bricks.length === 0 && (
