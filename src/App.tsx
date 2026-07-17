@@ -2,8 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { BookOpen, Box, Boxes, Download, Eye, FileUp, Gauge, Github, Globe2, KeyRound, Link, MessageCircle, Pause, Play, Plus, Redo2, RotateCcw, ScanLine, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
 import { LazyBrickGlyph } from './components/LazyBrickGlyph'
 import { BrickEditorPanel } from './components/BrickEditorPanel'
-import { WorldEntityEditorPanel, type WorldCommandTargetOption } from './components/WorldEntityEditorPanel'
-import { WorldTavern } from './components/WorldTavern'
+import type { WorldCommandTargetOption } from './components/WorldEntityEditorPanel'
 import type { BrickSceneViewMode } from './components/BrickScene'
 import { ControlPanel } from './components/ControlPanel'
 import { brickById, brickDefinitions, getDefaultBrickColor } from './data/basicBricks'
@@ -40,6 +39,8 @@ import './App.css'
 const BrickScene = lazy(() => import('./components/BrickScene').then((module) => ({ default: module.BrickScene })))
 const ObjImportModal = lazy(() => import('./components/ObjImportModal').then((module) => ({ default: module.ObjImportModal })))
 const StabilityLab = lazy(() => import('./components/StabilityLab').then((module) => ({ default: module.StabilityLab })))
+const WorldEntityEditorPanel = lazy(() => import('./components/WorldEntityEditorPanel').then((module) => ({ default: module.WorldEntityEditorPanel })))
+const WorldTavern = lazy(() => import('./components/WorldTavern').then((module) => ({ default: module.WorldTavern })))
 
 const defaultFinishedAssetI18nKeys = new Map(
   defaultFinishedAssets
@@ -2084,14 +2085,18 @@ function App() {
             onDissolveStructure={dissolveSelectedStructure}
             onClose={() => selectBrick('')}
           />
-          <WorldEntityEditorPanel
-            entity={selectedWorldEntity}
-            commandTargets={worldCommandTargets}
-            onUpdate={updateWorldEntity}
-            onIssueCommand={issuePlayerWorldCommand}
-            onDelete={deleteWorldEntity}
-            onClose={() => setSelectedWorldEntityId('')}
-          />
+          {selectedWorldEntity && (
+            <Suspense fallback={null}>
+              <WorldEntityEditorPanel
+                entity={selectedWorldEntity}
+                commandTargets={worldCommandTargets}
+                onUpdate={updateWorldEntity}
+                onIssueCommand={issuePlayerWorldCommand}
+                onDelete={deleteWorldEntity}
+                onClose={() => setSelectedWorldEntityId('')}
+              />
+            </Suspense>
+          )}
         </div>
 
         <section className="brick-counts" aria-label={t('counts.aria')}>
@@ -2192,17 +2197,19 @@ function App() {
       )}
 
       {isTavernOpen && (
-        <WorldTavern
-          world={world}
-          onGenerateStory={generateTavernStory}
-          onRunAiTurn={runWorldAiTurn}
-          onGetAiContext={getWorldAiContextPreview}
-          onClearHistory={clearTavernHistory}
-          llmConfigured={llmConfigComplete}
-          isAiThinking={isWorldAiThinking}
-          aiFeedback={worldAiFeedback}
-          onClose={() => setIsTavernOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <WorldTavern
+            world={world}
+            onGenerateStory={generateTavernStory}
+            onRunAiTurn={runWorldAiTurn}
+            onGetAiContext={getWorldAiContextPreview}
+            onClearHistory={clearTavernHistory}
+            llmConfigured={llmConfigComplete}
+            isAiThinking={isWorldAiThinking}
+            aiFeedback={worldAiFeedback}
+            onClose={() => setIsTavernOpen(false)}
+          />
+        </Suspense>
       )}
 
       {isConfigOpen && (
