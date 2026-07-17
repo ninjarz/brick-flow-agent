@@ -16,6 +16,12 @@ const arrivalDistanceStuds = 0.35
 type Point = { x: number; y: number; z: number }
 type GridNode = { x: number; z: number }
 type BrickBounds = WorldObstacleBounds
+type WorldTargetLookup = {
+  entityIndexById: Map<string, number>
+  brickById: Map<string, PlacedBrick>
+  structureById: Map<string, BrickStructure>
+  structurePointById: Map<string, Point | undefined>
+}
 const obstacleIndexCache = new WeakMap<PlacedBrick[], WorldObstacleIndex>()
 
 const getCachedObstacleIndex = (bricks: PlacedBrick[]) => {
@@ -199,15 +205,15 @@ export const findWorldPath = (
 const getTargetPoint = (
   target: WorldTargetRef,
   entities: WorldEntity[],
-  bricks: PlacedBrick[],
-  structures: BrickStructure[],
+  lookup: WorldTargetLookup,
 ): Point | undefined => {
   if (target.kind === 'entity') {
-    const entity = entities.find((candidate) => candidate.id === target.id && candidate.health > 0)
-    return entity ? entity.transform : undefined
+    const index = lookup.entityIndexById.get(target.id)
+    const entity = index === undefined ? undefined : entities[index]
+    return entity && entity.health > 0 ? entity.transform : undefined
   }
   if (target.kind === 'brick') {
-    const brick = bricks.find((candidate) => candidate.id === target.id)
+    const brick = lookup.brickById.get(target.id)
     const bounds = brick ? getBrickBounds(brick) : undefined
     return bounds ? {
       x: (bounds.minX + bounds.maxX) / 2,
@@ -216,40 +222,60 @@ const getTargetPoint = (
     } : undefined
   }
   if (target.kind === 'structure') {
-    const structure = structures.find((candidate) => candidate.id === target.id)
-    const structureBrickIds = new Set(structure?.brickIds ?? [])
-    const bounds = bricks
-      .filter((brick) => structureBrickIds.has(brick.id))
+    if (lookup.structurePointById.has(target.id)) return lookup.structurePointById.get(target.id)
+    const structure = lookup.structureById.get(target.id)
+    const bounds = (structure?.brickIds ?? [])
+      .map((brickId) => lookup.brickById.get(brickId))
+      .filter((brick): brick is PlacedBrick => Boolean(brick))
       .map(getBrickBounds)
       .filter((item) => Boolean(item))
-    return bounds.length > 0 ? {
+    const point = bounds.length > 0 ? {
       x: (Math.min(...bounds.map((item) => item!.minX)) + Math.max(...bounds.map((item) => item!.maxX))) / 2,
       y: Math.min(...bounds.map((item) => item!.minY)),
       z: (Math.min(...bounds.map((item) => item!.minZ)) + Math.max(...bounds.map((item) => item!.maxZ))) / 2,
     } : undefined
+    lookup.structurePointById.set(target.id, point)
+    return point
   }
   return undefined
 }
 
+const findNearestEntity = (
+  entity: WorldEntity,
+  entities: WorldEntity[],
+  predicate: (candidate: WorldEntity) => boolean,
+) => {
+  let nearest: WorldEntity | undefined
+  let nearestDistance = Infinity
+  for (const candidate of entities) {
+    if (!predicate(candidate)) continue
+    const distance = distance2d(entity.transform, candidate.transform)
+    if (distance >= nearestDistance) continue
+    nearest = candidate
+    nearestDistance = distance
+  }
+  return nearest
+}
+
 const findNearestEnemy = (entity: WorldEntity, entities: WorldEntity[]) => {
   if (entity.factionId === 'neutral') return undefined
-  return entities
-    .filter((candidate) => (
+  return findNearestEntity(entity, entities, (candidate) => (
       candidate.id !== entity.id &&
       candidate.health > 0 &&
       candidate.factionId !== 'neutral' &&
       candidate.factionId !== entity.factionId
-    ))
-    .sort((a, b) => distance2d(entity.transform, a.transform) - distance2d(entity.transform, b.transform))[0]
+  ))
 }
 
-const findNearestSocialTarget = (entity: WorldEntity, entities: WorldEntity[]) => entities
-  .filter((candidate) => (
+const findNearestSocialTarget = (entity: WorldEntity, entities: WorldEntity[]) => findNearestEntity(
+  entity,
+  entities,
+  (candidate) => (
     candidate.id !== entity.id &&
     candidate.health > 0 &&
     (entity.factionId === 'neutral' || candidate.factionId === 'neutral' || candidate.factionId === entity.factionId)
-  ))
-  .sort((a, b) => distance2d(entity.transform, a.transform) - distance2d(entity.transform, b.transform))[0]
+  ),
+)
 
 const nextSocialDecisionDelay = (entityId: string, elapsedSeconds: number) => {
   const key = `${entityId}:${Math.floor(elapsedSeconds)}`
@@ -366,17 +392,23 @@ export const stepWorldSimulation = (
       cooldownRemainingSeconds: Math.max(0, entity.combat.cooldownRemainingSeconds - deltaSeconds),
     },
   }))
+  const targetLookup: WorldTargetLookup = {
+    entityIndexById: new Map(entities.map((entity, index) => [entity.id, index])),
+    brickById: new Map(bricks.map((brick) => [brick.id, brick])),
+    structureById: new Map(structures.map((structure) => [structure.id, structure])),
+    structurePointById: new Map(),
+  }
   const hasLineOfSight = createWorldLineOfSightTest(bricks)
   const events: WorldEvent[] = []
   const pendingImpacts = world.pendingImpacts.filter((impact) => impact.impactAtSeconds > timeSeconds)
   const dueImpacts = world.pendingImpacts.filter((impact) => impact.impactAtSeconds <= timeSeconds)
 
   for (const impact of dueImpacts) {
-    const actorIndex = entities.findIndex((entity) => entity.id === impact.actorId)
-    if (actorIndex < 0) continue
+    const actorIndex = targetLookup.entityIndexById.get(impact.actorId)
+    if (actorIndex === undefined) continue
     if (impact.target.kind === 'entity') {
-      const targetIndex = entities.findIndex((entity) => entity.id === impact.target.id && entity.health > 0)
-      if (targetIndex < 0) continue
+      const targetIndex = targetLookup.entityIndexById.get(impact.target.id)
+      if (targetIndex === undefined || entities[targetIndex].health <= 0) continue
       const victim = entities[targetIndex]
       const nextHealth = Math.max(0, victim.health - impact.damage)
       entities[targetIndex] = { ...victim, health: nextHealth, behaviorState: nextHealth <= 0 ? 'dead' : victim.behaviorState }
@@ -386,10 +418,10 @@ export const stepWorldSimulation = (
         entities[actorIndex] = { ...entities[actorIndex], activeCommand: undefined }
       }
     } else if (impact.target.kind === 'brick') {
-      if (bricks.some((brick) => brick.id === impact.target.id)) {
+      if (targetLookup.brickById.has(impact.target.id)) {
         events.push(makeEvent(timeSeconds, 'brick-hit', impact.actorId, impact.target.id))
       }
-    } else if (structures.some((structure) => structure.id === impact.target.id)) {
+    } else if (targetLookup.structureById.has(impact.target.id)) {
       events.push(makeEvent(timeSeconds, 'structure-hit', impact.actorId, impact.target.id))
     }
   }
@@ -430,7 +462,7 @@ export const stepWorldSimulation = (
       entities[index] = entity
       continue
     }
-    const targetPoint = getTargetPoint(target, entities, bricks, structures)
+    const targetPoint = getTargetPoint(target, entities, targetLookup)
     if (!targetPoint) {
       entities[index] = { ...entity, activeCommand: undefined, behaviorState: 'idle' }
       continue
@@ -438,7 +470,8 @@ export const stepWorldSimulation = (
     const definition = worldEntityDefinitionById.get(entity.definitionId)
     const targetDistance = distance2d(entity.transform, targetPoint)
     const isAttack = activeCommand.type === 'attack'
-    const targetEntity = target.kind === 'entity' ? entities.find((candidate) => candidate.id === target.id) : undefined
+    const targetEntityIndex = target.kind === 'entity' ? targetLookup.entityIndexById.get(target.id) : undefined
+    const targetEntity = targetEntityIndex === undefined ? undefined : entities[targetEntityIndex]
     const hasAttackLineOfSight = definition?.combat.projectileKind !== 'arrow' || !targetEntity || hasLineOfSight(entity, targetEntity)
     if (isAttack && definition && targetDistance <= definition.combat.attackRangeStuds && hasAttackLineOfSight) {
       entity = { ...entity, behaviorState: 'attacking' }
@@ -458,8 +491,8 @@ export const stepWorldSimulation = (
             targetPoint,
           ))
         } else if (target.kind === 'entity') {
-          const targetIndex = entities.findIndex((candidate) => candidate.id === target.id)
-          if (targetIndex >= 0) {
+          const targetIndex = targetLookup.entityIndexById.get(target.id)
+          if (targetIndex !== undefined) {
             const victim = entities[targetIndex]
             const nextHealth = Math.max(0, victim.health - definition.combat.damage)
             entities[targetIndex] = { ...victim, health: nextHealth, behaviorState: nextHealth <= 0 ? 'dead' : victim.behaviorState }
