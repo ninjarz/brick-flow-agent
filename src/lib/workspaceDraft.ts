@@ -12,9 +12,11 @@ import type { BuildPlan } from '../types/bricks'
 import { createEmptyWorldState, parseStoredWorldState } from './worldEntity'
 import type { WorldState } from '../types/world'
 import { createCoalescedAsyncWriter } from './coalescedWriter'
+import { createWorkspaceSerializer } from './workspaceSerialization'
 
 const storageKey = 'brick-flow-agent:workspace-draft:v1'
 const indexedDbKey = 'workspace-draft:v1'
+const serializeWorkspace = createWorkspaceSerializer()
 
 export type WorkspaceDraft = {
   plan: BuildPlan
@@ -66,10 +68,9 @@ export const loadWorkspaceDraftFromIndexedDb = async () => {
 
 const persistWorkspaceDraft = async (plan: BuildPlan, prompt: string, world: WorldState) => {
   if (typeof window === 'undefined') return true
-  const value = { schemaVersion: 2, prompt, plan, world }
-  const serialized = JSON.stringify(value)
+  const { value, serialized } = serializeWorkspace(plan, prompt, world, localStorageComfortLimit)
 
-  if (serialized.length <= localStorageComfortLimit) {
+  if (serialized) {
     try {
       window.localStorage.setItem(storageKey, serialized)
       await removeLargeStoredValue(indexedDbKey).catch(() => undefined)
