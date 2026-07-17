@@ -27,7 +27,7 @@ import { dissolveBrickStructure, getBrickStructure, getExactSelectionStructure, 
 import { createEmptyWorldState, createWorldEntity, issueWorldEntityCommand } from './lib/worldEntity'
 import { stepWorldSimulation, worldSimulationStepSeconds } from './lib/worldSimulation'
 import { addWorldStory, createLocalTavernStory } from './lib/worldNarrative'
-import { applyWorldAiTurn, formatWorldAiTurnSummary, requestWorldAiTurn } from './lib/worldAi'
+import { applyWorldAiTurn, buildWorldAiTurnPrompt, createWorldAiSnapshot, formatWorldAiTurnSummary, requestWorldAiTurn, worldAiSystemPrompt } from './lib/worldAi'
 import { analyzeBuildStability } from './lib/stabilityAnalysis'
 import { formatLDrawPlan, parseLDrawPlan } from './lib/ldrawPlan'
 import { getEffectiveInventory, loadInventoryOverrides, saveInventoryOverrides } from './lib/userInventory'
@@ -1400,6 +1400,13 @@ function App() {
     }
   }, [isWorldAiThinking, llmConfig, llmConfigComplete, locale, t])
 
+  const getWorldAiContextPreview = useCallback(() => {
+    const currentWorld = worldRef.current
+    const currentPlan = planRef.current
+    const snapshot = createWorldAiSnapshot(currentWorld, currentPlan.bricks, currentPlan.structures)
+    return ['# system', worldAiSystemPrompt, '', '# world', buildWorldAiTurnPrompt(snapshot)].join('\n')
+  }, [])
+
   const clearTavernHistory = useCallback(() => {
     setWorld((current) => ({
       ...current,
@@ -2184,6 +2191,7 @@ function App() {
           world={world}
           onGenerateStory={generateTavernStory}
           onRunAiTurn={runWorldAiTurn}
+          onGetAiContext={getWorldAiContextPreview}
           onClearHistory={clearTavernHistory}
           llmConfigured={llmConfigComplete}
           isAiThinking={isWorldAiThinking}

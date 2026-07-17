@@ -3042,6 +3042,47 @@ button:disabled {
   color: #b42318;
 }
 
+.tavern-ai-context {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #eff6ff;
+}
+
+.tavern-ai-context > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tavern-ai-context > header div,
+.tavern-ai-context > header strong,
+.tavern-ai-context > header small {
+  display: block;
+}
+
+.tavern-ai-context > header small {
+  margin-top: 2px;
+  color: #64748b;
+}
+
+.tavern-ai-context pre {
+  max-height: 260px;
+  margin: 0;
+  padding: 9px;
+  overflow: auto;
+  border-radius: 8px;
+  background: #0f172a;
+  color: #dbeafe;
+  font-size: 10px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .tavern-stories article {
   margin-top: 9px;
   padding: 10px;

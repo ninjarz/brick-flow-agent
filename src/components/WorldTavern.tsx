@@ -1,4 +1,4 @@
-import { Beer, BookOpen, Bot, Sparkles, Trash2, X } from 'lucide-react'
+import { Beer, BookOpen, Bot, Clipboard, Eye, Sparkles, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useI18n } from '../lib/i18n'
 import { formatWorldEvent } from '../lib/worldNarrative'
@@ -8,6 +8,7 @@ type WorldTavernProps = {
   world: WorldState
   onGenerateStory: () => void
   onRunAiTurn: () => void
+  onGetAiContext: () => string
   onClearHistory: () => void
   llmConfigured: boolean
   isAiThinking: boolean
@@ -19,6 +20,7 @@ export const WorldTavern = ({
   world,
   onGenerateStory,
   onRunAiTurn,
+  onGetAiContext,
   onClearHistory,
   llmConfigured,
   isAiThinking,
@@ -28,6 +30,8 @@ export const WorldTavern = ({
   const { locale, t } = useI18n()
   const [selectedEntityId, setSelectedEntityId] = useState(world.entities[0]?.id ?? '')
   const [confirmClear, setConfirmClear] = useState(false)
+  const [aiContext, setAiContext] = useState('')
+  const [contextCopyStatus, setContextCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
   useEffect(() => {
     if (world.entities.some((entity) => entity.id === selectedEntityId)) return
     setSelectedEntityId(world.entities[0]?.id ?? '')
@@ -144,6 +148,16 @@ export const WorldTavern = ({
                 <div className="tavern-story-actions">
                   <button
                     type="button"
+                    onClick={() => {
+                      setAiContext((current) => current ? '' : onGetAiContext())
+                      setContextCopyStatus('idle')
+                    }}
+                  >
+                    <Eye size={15} />
+                    {aiContext ? t('tavern.hideAiContext') : t('tavern.previewAiContext')}
+                  </button>
+                  <button
+                    type="button"
                     onClick={onRunAiTurn}
                     disabled={!llmConfigured || aiEntityCount === 0 || isAiThinking}
                     title={!llmConfigured ? t('tavern.aiNeedsConfig') : aiEntityCount === 0 ? t('tavern.aiNeedsEntity') : undefined}
@@ -157,6 +171,31 @@ export const WorldTavern = ({
                   </button>
                 </div>
               </header>
+              {aiContext && (
+                <section className="tavern-ai-context">
+                  <header>
+                    <div>
+                      <strong>{t('tavern.aiContextTitle')}</strong>
+                      <small>{t('tavern.aiContextHint')}</small>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(aiContext)
+                          setContextCopyStatus('copied')
+                        } catch {
+                          setContextCopyStatus('failed')
+                        }
+                      }}
+                    >
+                      <Clipboard size={14} />
+                      {t(`tavern.contextCopy.${contextCopyStatus}`)}
+                    </button>
+                  </header>
+                  <pre>{aiContext}</pre>
+                </section>
+              )}
               {aiFeedback && <p className={`tavern-ai-feedback ${aiFeedback.tone}`}>{aiFeedback.text}</p>}
               {[...world.narrative.stories].reverse().map((story) => (
                 <article key={story.id}>
