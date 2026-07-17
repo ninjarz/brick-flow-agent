@@ -62,10 +62,21 @@ export const WorldEntityEditorPanel = ({ entity, onUpdate, onDelete, onClose }: 
             <option value="red">{t('worldEntity.faction.red')}</option>
           </select>
         </label>
+        <label>
+          {t('worldEntity.controller')}
+          <select
+            value={entity.controller}
+            onChange={(event) => onUpdate({ ...entity, controller: event.target.value as WorldEntity['controller'] })}
+          >
+            <option value="rule">{t('worldEntity.controller.rule')}</option>
+            <option value="player">{t('worldEntity.controller.player')}</option>
+            <option value="ai">{t('worldEntity.controller.ai')}</option>
+          </select>
+        </label>
       </div>
       <div className="world-entity-stats">
         <span>{t('worldEntity.health', { current: entity.health, max: entity.maxHealth })}</span>
-        <span>{t('worldEntity.controller.rule')}</span>
+        <span>{t(`worldEntity.controller.${entity.controller}`)}</span>
       </div>
       <button className="danger" type="button" onClick={() => onDelete(entity.id)}>
         <Trash2 size={16} />
