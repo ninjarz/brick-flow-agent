@@ -345,11 +345,13 @@ export const stepWorldSimulation = (
       ? entityNameById.get(event.targetId) ?? structureNameById.get(event.targetId) ?? event.targetName
       : event.targetName,
   }))
+  const processedEventIds = new Set(world.narrative.processedEventIds)
+  const pendingExistingEvents = world.events.filter((event) => !processedEventIds.has(event.id))
   return {
     ...world,
     elapsedSeconds: timeSeconds,
     entities,
     events: [...world.events, ...enrichedEvents].slice(-maxEventHistory),
-    narrative: ingestWorldEvents(world.narrative, enrichedEvents, new Set(entities.map((entity) => entity.id))),
+    narrative: ingestWorldEvents(world.narrative, [...pendingExistingEvents, ...enrichedEvents], new Set(entities.map((entity) => entity.id))),
   }
 }

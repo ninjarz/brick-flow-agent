@@ -54,6 +54,7 @@ describe('world AI adapter', () => {
     expect(result.world.entities[0].transform).toEqual(world.entities[0].transform)
     expect(result.world.entities[0].commandQueue).toEqual([{ type: 'attack', target: { kind: 'entity', id: 'rule-knight' } }])
     expect(result.story).toMatchObject({ source: 'ai', title: 'A Challenge' })
+    expect(result.story?.eventIds).toContain(result.world.events.at(-1)?.id)
   })
 
   it('rejects direct state mutation, unknown IDs, self targets, and non-AI actors', () => {

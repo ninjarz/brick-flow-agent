@@ -66,16 +66,37 @@ export const ingestWorldEvents = (
 const displayName = (name: string | undefined, id: string | undefined, fallback: string) =>
   name?.trim() || id?.trim() || fallback
 
+const commandName = (type: WorldEvent['commandType'], locale: 'zh-CN' | 'en-US') => {
+  if (locale === 'en-US') return type ?? 'act'
+  return ({
+    stop: '停止',
+    move: '移动',
+    attack: '攻击',
+    guard: '守卫',
+    follow: '跟随',
+    interact: '交互',
+    patrol: '巡逻',
+  } as const)[type ?? 'move'] ?? '行动'
+}
+
 export const formatWorldEvent = (event: WorldEvent, locale: 'zh-CN' | 'en-US') => {
   const actor = displayName(event.actorName, event.actorId, locale === 'zh-CN' ? '某个单位' : 'A unit')
   const target = displayName(event.targetName, event.targetId, locale === 'zh-CN' ? '目标' : 'the target')
   if (locale === 'en-US') {
+    if (event.type === 'command-issued') {
+      const source = event.commandSource === 'ai' ? 'AI' : event.commandSource === 'player' ? 'the player' : 'the rule controller'
+      return `${source} ordered ${actor} to ${commandName(event.commandType, locale)}${event.targetId ? ` toward ${target}` : ''}.`
+    }
     if (event.type === 'attack') return `${actor} attacked ${target}.`
     if (event.type === 'damage') return `${target} took ${event.amount ?? 0} damage from ${actor}.`
     if (event.type === 'defeated') return `${actor} defeated ${target}.`
     if (event.type === 'brick-hit') return `${actor} struck brick ${target}, but the structure was not damaged.`
     if (event.type === 'structure-hit') return `${actor} struck structure ${target}, but it remained intact.`
     return `${actor} completed an order involving ${target}.`
+  }
+  if (event.type === 'command-issued') {
+    const source = event.commandSource === 'ai' ? 'AI' : event.commandSource === 'player' ? '玩家' : '规则控制器'
+    return `${source}命令${actor}执行“${commandName(event.commandType, locale)}”${event.targetId ? `，目标是${target}` : ''}。`
   }
   if (event.type === 'attack') return `${actor}向${target}发起了攻击。`
   if (event.type === 'damage') return `${target}受到${actor}造成的 ${event.amount ?? 0} 点伤害。`
@@ -125,4 +146,3 @@ export const addWorldStory = (world: WorldState, story: WorldStory): WorldState 
     stories: [...world.narrative.stories, story].slice(-maxStories),
   },
 })
-

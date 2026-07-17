@@ -52,6 +52,15 @@ describe('WorldEntity foundation', () => {
     expect(result.world.entities[0].commandQueue).toEqual([
       { type: 'move', target: { kind: 'entity', id: target.id } },
     ])
+    expect(result.world.events.at(-1)).toMatchObject({
+      type: 'command-issued',
+      actorId: source.id,
+      actorName: source.name,
+      targetId: target.id,
+      targetName: target.name,
+      commandType: 'move',
+      commandSource: 'rule',
+    })
   })
 
   it('reserves structure targets and validates them through a resolver', () => {

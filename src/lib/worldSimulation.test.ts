@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
-import { createEmptyWorldState, createWorldEntity } from './worldEntity'
+import { createEmptyWorldState, createWorldEntity, issueWorldEntityCommand } from './worldEntity'
 import { findWorldPath, stepWorldSimulation } from './worldSimulation'
 import { makeBrick } from './planUtils'
 
@@ -80,5 +80,17 @@ describe('WorldEntity simulation', () => {
     }])
 
     expect(next.events.some((event) => event.type === 'structure-hit' && event.targetId === 'gate-1')).toBe(true)
+  })
+
+  it('ingests externally issued orders into character memory on the next fixed step', () => {
+    const knight = worldEntityDefinitionById.get('knight')!
+    const actor = createWorldEntity(knight, { id: 'actor', controller: 'player' })
+    const world = { ...createEmptyWorldState('plan-1'), entities: [actor] }
+    const issued = issueWorldEntityCommand(world, actor.id, { type: 'stop' }, undefined, 'replace')
+    expect(issued.ok).toBe(true)
+    if (!issued.ok) return
+
+    const next = stepWorldSimulation(issued.world, [], 0.1)
+    expect(next.narrative.memoriesByEntityId[actor.id]?.at(-1)).toMatchObject({ type: 'command-issued' })
   })
 })

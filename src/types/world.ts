@@ -56,12 +56,14 @@ export type WorldEntity = {
 export type WorldEvent = {
   id: string
   timeSeconds: number
-  type: 'attack' | 'damage' | 'defeated' | 'brick-hit' | 'structure-hit' | 'command-complete'
+  type: 'attack' | 'damage' | 'defeated' | 'brick-hit' | 'structure-hit' | 'command-issued' | 'command-complete'
   actorId: string
   actorName?: string
   targetId?: string
   targetName?: string
   amount?: number
+  commandType?: WorldEntityCommand['type']
+  commandSource?: WorldEntityControllerKind
 }
 
 export type WorldMemory = {

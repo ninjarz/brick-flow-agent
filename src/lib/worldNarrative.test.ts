@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import type { WorldEvent } from '../types/world'
 import { createEmptyWorldState, createWorldEntity } from './worldEntity'
-import { addWorldStory, createLocalTavernStory, ingestWorldEvents } from './worldNarrative'
+import { addWorldStory, createLocalTavernStory, formatWorldEvent, ingestWorldEvents } from './worldNarrative'
 
 describe('world narrative', () => {
   it('records each event once in both participants memories', () => {
@@ -46,5 +46,21 @@ describe('world narrative', () => {
     expect(story.body).toContain('亚瑟')
     expect(story.body).toContain('北门')
     expect(next.narrative.stories).toContainEqual(story)
+  })
+
+  it('explains who issued a high-level order without exposing coordinates', () => {
+    const event: WorldEvent = {
+      id: 'event-order',
+      timeSeconds: 2,
+      type: 'command-issued',
+      actorId: 'knight-1',
+      actorName: '亚瑟',
+      targetId: 'gate-1',
+      targetName: '北门',
+      commandType: 'guard',
+      commandSource: 'player',
+    }
+    expect(formatWorldEvent(event, 'zh-CN')).toBe('玩家命令亚瑟执行“守卫”，目标是北门。')
+    expect(formatWorldEvent(event, 'en-US')).toBe('the player ordered 亚瑟 to guard toward 北门.')
   })
 })

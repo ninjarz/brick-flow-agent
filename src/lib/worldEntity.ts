@@ -192,6 +192,22 @@ export const issueWorldEntityCommand = (
     if (!targetExists(target)) return { ok: false, world, issue: 'TARGET_NOT_FOUND' }
   }
 
+  const target = getCommandTargets(command)[0]
+  const targetEntity = target?.kind === 'entity'
+    ? world.entities.find((candidate) => candidate.id === target.id)
+    : undefined
+  const commandEvent = {
+    id: `event-command-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    timeSeconds: world.elapsedSeconds,
+    type: 'command-issued' as const,
+    actorId: entity.id,
+    actorName: entity.name,
+    targetId: target?.id,
+    targetName: targetEntity?.name ?? target?.id,
+    commandType: command.type,
+    commandSource: entity.controller,
+  }
+
   return {
     ok: true,
     world: {
@@ -207,6 +223,7 @@ export const issueWorldEntityCommand = (
             }
           : { ...candidate, commandQueue: [...candidate.commandQueue, command] }
         : candidate),
+      events: [...world.events, commandEvent].slice(-500),
     },
   }
 }

@@ -294,7 +294,7 @@ export const applyWorldAiTurn = (
     world: nextWorld,
     accepted,
     rejected,
-    story: parseAiStory(response.story, world),
+    story: parseAiStory(response.story, nextWorld),
   }
 }
 
