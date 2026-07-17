@@ -1,11 +1,11 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BookOpen, Box, Boxes, Download, Eye, FileUp, Gauge, Github, Globe2, KeyRound, Link, MessageCircle, Pause, Play, Plus, Redo2, RotateCcw, ScanLine, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
-import { LazyBrickGlyph } from './components/LazyBrickGlyph'
 import { BrickEditorPanel } from './components/BrickEditorPanel'
+import { BrickCountsPanel } from './components/BrickCountsPanel'
 import type { WorldCommandTargetOption } from './components/WorldEntityEditorPanel'
 import type { BrickSceneViewMode } from './components/BrickScene'
 import { ControlPanel } from './components/ControlPanel'
-import { brickById, brickDefinitions, getDefaultBrickColor } from './data/basicBricks'
+import { brickById, getDefaultBrickColor } from './data/basicBricks'
 import { worldEntityDefinitionById } from './data/worldEntityDefinitions'
 import { dropBrickGroupAtPoint, findNearestOpenBrickGroupAround, rotationRepositionSearchRadiusStuds, type StationaryPlanSpatialData } from './lib/brickGroupPlacement'
 import { generateBuildPlan } from './lib/localGenerator'
@@ -389,10 +389,6 @@ function App() {
     counts[entity.definitionId] = (counts[entity.definitionId] ?? 0) + 1
     return counts
   }, {}), [world.entities])
-  const usedBricks = useMemo(
-    () => brickDefinitions.filter((brick) => brickCounts[brick.id]),
-    [brickCounts],
-  )
   const manualSourcePlan = isManualOpen ? manualPlan ?? plan : undefined
   const buildManual = useMemo(() => manualSourcePlan ? serializeBuildManual(manualSourcePlan, locale) : undefined, [locale, manualSourcePlan])
   const manualMarkdown = useMemo(() => buildManual ? formatBuildManualMarkdown(buildManual, locale) : '', [buildManual, locale])
@@ -2099,30 +2095,7 @@ function App() {
           )}
         </div>
 
-        <section className="brick-counts" aria-label={t('counts.aria')}>
-          <header>
-            <h2>{t('counts.title')}</h2>
-            <p>{t('common.parts', { count: plan.bricks.length })}</p>
-          </header>
-          <div className="brick-count-list">
-            {usedBricks.map((brick) => (
-              <article key={brick.id}>
-                <LazyBrickGlyph
-                  brickId={brick.id}
-                  kind={brick.kind}
-                  footprint={brick.footprint}
-                  color={plan.bricks.find((placedBrick) => placedBrick.brickId === brick.id)?.color ?? getDefaultBrickColor(brick)}
-                  className="count-glyph"
-                />
-                <div>
-                  <h3>{brick.name}</h3>
-                  <p>{t('counts.quantity', { count: brickCounts[brick.id] })}</p>
-                </div>
-              </article>
-            ))}
-          </div>
-          {usedBricks.length === 0 && <p className="muted">{t('counts.empty')}</p>}
-        </section>
+        <BrickCountsPanel plan={plan} brickCounts={brickCounts} />
       </section>
 
       <ControlPanel
@@ -2142,6 +2115,7 @@ function App() {
           setIsPromptPreviewOpen(true)
         }}
         plan={plan}
+        brickCounts={brickCounts}
         onRenamePlan={renamePlan}
         onAddBrick={beginNewBrickPlacement}
         onAddWorldEntity={beginWorldEntityPlacement}

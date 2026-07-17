@@ -3,7 +3,7 @@ import { BookOpen, Box, Download, ImageUp, Plus, RotateCcw, Sparkles, Trash2, Up
 import { brickDefinitions, getDefaultBrickColor } from '../data/basicBricks'
 import { worldEntityDefinitions } from '../data/worldEntityDefinitions'
 import { PLATE_HEIGHT_WORLD } from '../lib/brickUnits'
-import { countBricks, getBlockingBuildPlanIssues, summarizeBuildPlanIssues, validateBuildPlan, validateBuildPlanBasics } from '../lib/planUtils'
+import { getBlockingBuildPlanIssues, summarizeBuildPlanIssues, validateBuildPlan, validateBuildPlanBasics } from '../lib/planUtils'
 import { useI18n } from '../lib/i18n'
 import { LazyBrickGlyph } from './LazyBrickGlyph'
 import type { BrickPack, BuildPlan } from '../types/bricks'
@@ -22,6 +22,7 @@ type ControlPanelProps = {
   onCancelGenerate: () => void
   onOpenPromptPreview: () => void
   plan: BuildPlan
+  brickCounts: Record<string, number>
   onRenamePlan: (title: string) => void
   onAddBrick: (brickId: string) => void
   onAddWorldEntity: (definitionId: string) => void
@@ -64,6 +65,7 @@ export const ControlPanel = ({
   onCancelGenerate,
   onOpenPromptPreview,
   plan,
+  brickCounts,
   onRenamePlan,
   onAddBrick,
   onAddWorldEntity,
@@ -126,7 +128,6 @@ export const ControlPanel = ({
     : planIssues.length > 0
       ? planIssueSummary
       : t('common.structureOk')
-  const brickCounts = useMemo(() => countBricks(derivedPlan), [derivedPlan])
   const packBrickDefinitions = useMemo(
     () => partPackFilter === 'npc' ? [] : brickDefinitions.filter((brick) => brick.pack === partPackFilter),
     [partPackFilter],
