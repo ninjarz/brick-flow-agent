@@ -26,6 +26,7 @@ import { toggleBrickSelection } from './lib/brickSelection'
 import { dissolveBrickStructure, getBrickStructure, getExactSelectionStructure, pruneBrickStructures, solidifyBrickSelection, updateBrickStructure } from './lib/brickStructures'
 import { createEmptyWorldState, createWorldEntity, issueWorldEntityCommand } from './lib/worldEntity'
 import { stepWorldSimulation, worldSimulationStepSeconds } from './lib/worldSimulation'
+import { advanceWorldFixedStepClock, createWorldFixedStepClock } from './lib/worldClock'
 import { addWorldStory, createLocalTavernStory } from './lib/worldNarrative'
 import { applyWorldAiTurn, buildWorldAiTurnPrompt, createWorldAiSnapshot, formatWorldAiTurnSummary, requestWorldAiTurn, worldAiSystemPrompt } from './lib/worldAi'
 import { analyzeBuildStability } from './lib/stabilityAnalysis'
@@ -573,17 +574,17 @@ function App() {
   useEffect(() => {
     if (world.entities.length === 0 || world.paused || placementSession || worldEntityPlacement) return
     let animationFrame = 0
-    let previousTime = performance.now()
-    let accumulator = 0
+    let clock = createWorldFixedStepClock(performance.now())
+    const resetClock = () => {
+      clock = createWorldFixedStepClock(performance.now())
+    }
     const animateWorld = (now: number) => {
-      accumulator += Math.min(0.25, (now - previousTime) / 1000)
-      previousTime = now
-      if (accumulator >= worldSimulationStepSeconds) {
-        const stepCount = Math.min(3, Math.floor(accumulator / worldSimulationStepSeconds))
-        accumulator -= stepCount * worldSimulationStepSeconds
+      const advanced = advanceWorldFixedStepClock(clock, now, worldSimulationStepSeconds)
+      clock = advanced.clock
+      if (advanced.stepCount > 0) {
         setWorld((current) => {
           let next = current
-          for (let step = 0; step < stepCount; step += 1) {
+          for (let step = 0; step < advanced.stepCount; step += 1) {
             next = stepWorldSimulation(
               next,
               planRef.current.bricks,
@@ -596,8 +597,12 @@ function App() {
       }
       animationFrame = requestAnimationFrame(animateWorld)
     }
+    document.addEventListener('visibilitychange', resetClock)
     animationFrame = requestAnimationFrame(animateWorld)
-    return () => cancelAnimationFrame(animationFrame)
+    return () => {
+      document.removeEventListener('visibilitychange', resetClock)
+      cancelAnimationFrame(animationFrame)
+    }
   }, [placementSession, world.entities.length, world.paused, worldEntityPlacement])
 
   useEffect(() => {
