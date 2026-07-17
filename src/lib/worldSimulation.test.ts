@@ -93,4 +93,17 @@ describe('WorldEntity simulation', () => {
     const next = stepWorldSimulation(issued.world, [], 0.1)
     expect(next.narrative.memoriesByEntityId[actor.id]?.at(-1)).toMatchObject({ type: 'command-issued' })
   })
+
+  it('turns a completed interaction order into social memory and affinity', () => {
+    const knight = worldEntityDefinitionById.get('knight')!
+    const actor = createWorldEntity(knight, { id: 'actor', controller: 'player', transform: { x: 0, z: 0 } })
+    const target = createWorldEntity(knight, { id: 'target', controller: 'player', transform: { x: 0.1, z: 0 } })
+    actor.activeCommand = { type: 'interact', target: { kind: 'entity', id: target.id } }
+    const world = { ...createEmptyWorldState('plan-1'), entities: [actor, target] }
+
+    const next = stepWorldSimulation(world, [], 0.1)
+    expect(next.events.at(-1)).toMatchObject({ type: 'interaction', actorId: actor.id, targetId: target.id })
+    expect(next.narrative.relationshipsByEntityId[actor.id][target.id].affinity).toBe(5)
+    expect(next.narrative.relationshipsByEntityId[target.id][actor.id].affinity).toBe(5)
+  })
 })

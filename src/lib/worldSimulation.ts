@@ -330,7 +330,12 @@ export const stepWorldSimulation = (
     const movement = moveEntityToward(entity, target, targetPoint, bricks, deltaSeconds)
     entity = movement.entity
     if (movement.arrived && !isAttack && activeCommand.type !== 'follow') {
-      events.push(makeEvent(timeSeconds, 'command-complete', entity.id, target.id))
+      events.push(makeEvent(
+        timeSeconds,
+        activeCommand.type === 'interact' && target.kind === 'entity' ? 'interaction' : 'command-complete',
+        entity.id,
+        target.id,
+      ))
       entity = { ...entity, activeCommand: undefined }
     }
     entities[index] = entity

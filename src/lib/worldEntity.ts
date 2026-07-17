@@ -100,6 +100,7 @@ export const createEmptyWorldState = (planId: string): WorldState => ({
   narrative: {
     processedEventIds: [],
     memoriesByEntityId: {},
+    relationshipsByEntityId: {},
     stories: [],
   },
 })
@@ -147,8 +148,17 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
     entities,
     events: Array.isArray(value.events) ? value.events as WorldState['events'] : [],
     narrative: isRecord(value.narrative)
-      ? value.narrative as WorldState['narrative']
-      : { processedEventIds: [], memoriesByEntityId: {}, stories: [] },
+      ? {
+          processedEventIds: Array.isArray(value.narrative.processedEventIds) ? value.narrative.processedEventIds as string[] : [],
+          memoriesByEntityId: isRecord(value.narrative.memoriesByEntityId)
+            ? value.narrative.memoriesByEntityId as WorldState['narrative']['memoriesByEntityId']
+            : {},
+          relationshipsByEntityId: isRecord(value.narrative.relationshipsByEntityId)
+            ? value.narrative.relationshipsByEntityId as WorldState['narrative']['relationshipsByEntityId']
+            : {},
+          stories: Array.isArray(value.narrative.stories) ? value.narrative.stories as WorldState['narrative']['stories'] : [],
+        }
+      : { processedEventIds: [], memoriesByEntityId: {}, relationshipsByEntityId: {}, stories: [] },
   } satisfies WorldState
 }
 

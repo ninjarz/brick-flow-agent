@@ -63,4 +63,21 @@ describe('world narrative', () => {
     expect(formatWorldEvent(event, 'zh-CN')).toBe('玩家命令亚瑟执行“守卫”，目标是北门。')
     expect(formatWorldEvent(event, 'en-US')).toBe('the player ordered 亚瑟 to guard toward 北门.')
   })
+
+  it('builds persistent two-way relationships from interaction and conflict', () => {
+    const world = createEmptyWorldState('plan-1')
+    const interaction: WorldEvent = {
+      id: 'event-interaction', timeSeconds: 1, type: 'interaction', actorId: 'a', targetId: 'b',
+    }
+    const damage: WorldEvent = {
+      id: 'event-damage', timeSeconds: 2, type: 'damage', actorId: 'a', targetId: 'b', amount: 10,
+    }
+    const afterInteraction = ingestWorldEvents(world.narrative, [interaction], new Set(['a', 'b']))
+    expect(afterInteraction.relationshipsByEntityId.a.b).toMatchObject({ affinity: 5, encounters: 1 })
+    expect(afterInteraction.relationshipsByEntityId.b.a).toMatchObject({ affinity: 5, encounters: 1 })
+
+    const afterDamage = ingestWorldEvents(afterInteraction, [damage], new Set(['a', 'b']))
+    expect(afterDamage.relationshipsByEntityId.a.b).toMatchObject({ affinity: 2, encounters: 2 })
+    expect(afterDamage.relationshipsByEntityId.b.a).toMatchObject({ affinity: -5, encounters: 2 })
+  })
 })

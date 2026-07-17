@@ -1401,7 +1401,7 @@ function App() {
     setWorld((current) => ({
       ...current,
       events: [],
-      narrative: { processedEventIds: [], memoriesByEntityId: {}, stories: [] },
+      narrative: { processedEventIds: [], memoriesByEntityId: {}, relationshipsByEntityId: {}, stories: [] },
     }))
   }, [])
 

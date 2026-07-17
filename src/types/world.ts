@@ -56,7 +56,7 @@ export type WorldEntity = {
 export type WorldEvent = {
   id: string
   timeSeconds: number
-  type: 'attack' | 'damage' | 'defeated' | 'brick-hit' | 'structure-hit' | 'command-issued' | 'command-complete'
+  type: 'attack' | 'damage' | 'defeated' | 'brick-hit' | 'structure-hit' | 'interaction' | 'command-issued' | 'command-complete'
   actorId: string
   actorName?: string
   targetId?: string
@@ -86,9 +86,18 @@ export type WorldStory = {
   source: 'local' | 'ai'
 }
 
+export type WorldRelationship = {
+  targetEntityId: string
+  affinity: number
+  encounters: number
+  lastEventType: WorldEvent['type']
+  updatedAtSeconds: number
+}
+
 export type WorldNarrativeState = {
   processedEventIds: string[]
   memoriesByEntityId: Record<string, WorldMemory[]>
+  relationshipsByEntityId: Record<string, Record<string, WorldRelationship>>
   stories: WorldStory[]
 }
 

@@ -1,4 +1,4 @@
-import type { WorldEvent, WorldMemory, WorldNarrativeState, WorldState, WorldStory } from '../types/world'
+import type { WorldEvent, WorldMemory, WorldNarrativeState, WorldRelationship, WorldState, WorldStory } from '../types/world'
 
 const maxMemoriesPerEntity = 40
 const maxProcessedEvents = 1_000
@@ -19,6 +19,36 @@ const appendMemory = (
   [entityId]: [...(memories[entityId] ?? []), memory].slice(-maxMemoriesPerEntity),
 })
 
+const clampAffinity = (value: number) => Math.max(-100, Math.min(100, value))
+
+const relationshipDelta = (event: WorldEvent, observerId: string) => {
+  if (event.type === 'interaction') return 5
+  if (event.type === 'defeated') return observerId === event.targetId ? -24 : -5
+  if (event.type === 'damage') return observerId === event.targetId ? -10 : -3
+  if (event.type === 'attack') return observerId === event.targetId ? -4 : -1
+  return 0
+}
+
+const updateRelationship = (
+  relationships: WorldNarrativeState['relationshipsByEntityId'],
+  observerId: string,
+  targetEntityId: string,
+  event: WorldEvent,
+) => {
+  const current = relationships[observerId]?.[targetEntityId]
+  const next: WorldRelationship = {
+    targetEntityId,
+    affinity: clampAffinity((current?.affinity ?? 0) + relationshipDelta(event, observerId)),
+    encounters: (current?.encounters ?? 0) + 1,
+    lastEventType: event.type,
+    updatedAtSeconds: event.timeSeconds,
+  }
+  return {
+    ...relationships,
+    [observerId]: { ...(relationships[observerId] ?? {}), [targetEntityId]: next },
+  }
+}
+
 export const ingestWorldEvents = (
   narrative: WorldNarrativeState,
   events: WorldEvent[],
@@ -26,6 +56,7 @@ export const ingestWorldEvents = (
 ): WorldNarrativeState => {
   const processedIds = new Set(narrative.processedEventIds)
   let memories = narrative.memoriesByEntityId
+  let relationships = narrative.relationshipsByEntityId ?? {}
   const nextProcessedIds = [...narrative.processedEventIds]
 
   for (const event of events) {
@@ -53,6 +84,8 @@ export const ingestWorldEvents = (
         otherName: event.actorName,
         importance: eventImportance(event.type),
       })
+      relationships = updateRelationship(relationships, event.actorId, event.targetId, event)
+      relationships = updateRelationship(relationships, event.targetId, event.actorId, event)
     }
   }
 
@@ -60,6 +93,7 @@ export const ingestWorldEvents = (
     ...narrative,
     processedEventIds: nextProcessedIds.slice(-maxProcessedEvents),
     memoriesByEntityId: memories,
+    relationshipsByEntityId: relationships,
   }
 }
 
@@ -92,6 +126,7 @@ export const formatWorldEvent = (event: WorldEvent, locale: 'zh-CN' | 'en-US') =
     if (event.type === 'defeated') return `${actor} defeated ${target}.`
     if (event.type === 'brick-hit') return `${actor} struck brick ${target}, but the structure was not damaged.`
     if (event.type === 'structure-hit') return `${actor} struck structure ${target}, but it remained intact.`
+    if (event.type === 'interaction') return `${actor} interacted with ${target}.`
     return `${actor} completed an order involving ${target}.`
   }
   if (event.type === 'command-issued') {
@@ -103,6 +138,7 @@ export const formatWorldEvent = (event: WorldEvent, locale: 'zh-CN' | 'en-US') =
   if (event.type === 'defeated') return `${actor}击败了${target}。`
   if (event.type === 'brick-hit') return `${actor}击中了砖块${target}，但建筑没有受损。`
   if (event.type === 'structure-hit') return `${actor}攻击了结构${target}，结构依然完好。`
+  if (event.type === 'interaction') return `${actor}与${target}进行了互动。`
   return `${actor}完成了与${target}有关的命令。`
 }
 

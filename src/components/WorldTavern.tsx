@@ -34,6 +34,8 @@ export const WorldTavern = ({
   }, [selectedEntityId, world.entities])
   const selectedEntity = world.entities.find((entity) => entity.id === selectedEntityId)
   const selectedMemories = world.narrative.memoriesByEntityId[selectedEntityId] ?? []
+  const selectedRelationships = Object.values(world.narrative.relationshipsByEntityId[selectedEntityId] ?? {})
+    .sort((a, b) => Math.abs(b.affinity) - Math.abs(a.affinity) || b.encounters - a.encounters)
   const aiEntityCount = world.entities.filter((entity) => entity.controller === 'ai' && entity.health > 0).length
   const eventsById = useMemo(() => new Map(world.events.map((event) => [event.id, event])), [world.events])
 
@@ -107,6 +109,20 @@ export const WorldTavern = ({
                 })}
               </ol>
               {selectedMemories.length === 0 && <p className="muted">{t('tavern.noMemories')}</p>}
+              <div className="tavern-relationships">
+                <h4>{t('tavern.relationships')}</h4>
+                {selectedRelationships.map((relationship) => {
+                  const target = world.entities.find((entity) => entity.id === relationship.targetEntityId)
+                  const tone = relationship.affinity >= 20 ? 'friendly' : relationship.affinity <= -20 ? 'hostile' : 'neutral'
+                  return (
+                    <div key={relationship.targetEntityId} className={tone}>
+                      <span>{target?.name ?? relationship.targetEntityId}</span>
+                      <small>{t(`tavern.relationship.${tone}`)} · {relationship.affinity > 0 ? '+' : ''}{relationship.affinity} · {t('tavern.encounters', { count: relationship.encounters })}</small>
+                    </div>
+                  )
+                })}
+                {selectedRelationships.length === 0 && <p className="muted">{t('tavern.noRelationships')}</p>}
+              </div>
             </section>
 
             <section className="tavern-chronicle">

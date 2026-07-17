@@ -2891,6 +2891,31 @@ button:disabled {
   color: #9a3412;
 }
 
+.tavern-relationships {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.tavern-relationships h4,
+.tavern-relationships p { margin: 0; }
+
+.tavern-relationships > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #f1f5f9;
+}
+
+.tavern-relationships > div.friendly { background: #ecfdf3; color: #166534; }
+.tavern-relationships > div.hostile { background: #fff1f2; color: #b42318; }
+.tavern-relationships small { text-align: right; }
+
 .tavern-stories {
   grid-column: 1 / -1;
 }
