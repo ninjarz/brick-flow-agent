@@ -272,7 +272,7 @@ export const applyWorldAiTurn = (
       return
     }
     commandedEntityIds.add(parsed.entityId)
-    const result = issueWorldEntityCommand(nextWorld, parsed.entityId, parsed.command, targetExists)
+    const result = issueWorldEntityCommand(nextWorld, parsed.entityId, parsed.command, targetExists, 'replace')
     if (result.ok === false) {
       const issue: WorldAiCommandRejection = result.issue === 'SELF_TARGET'
         ? 'SELF_TARGET'

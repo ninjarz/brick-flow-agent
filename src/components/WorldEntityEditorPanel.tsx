@@ -2,6 +2,7 @@ import { Bot, Trash2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { useI18n } from '../lib/i18n'
+import { changeWorldEntityController } from '../lib/worldEntity'
 import type { WorldEntity } from '../types/world'
 
 type WorldEntityEditorPanelProps = {
@@ -66,7 +67,7 @@ export const WorldEntityEditorPanel = ({ entity, onUpdate, onDelete, onClose }: 
           {t('worldEntity.controller')}
           <select
             value={entity.controller}
-            onChange={(event) => onUpdate({ ...entity, controller: event.target.value as WorldEntity['controller'] })}
+            onChange={(event) => onUpdate(changeWorldEntityController(entity, event.target.value as WorldEntity['controller']))}
           >
             <option value="rule">{t('worldEntity.controller.rule')}</option>
             <option value="player">{t('worldEntity.controller.player')}</option>

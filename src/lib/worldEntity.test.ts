@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { worldEntityDefinitionById, worldEntityDefinitions } from '../data/worldEntityDefinitions'
 import type { WorldState } from '../types/world'
-import { createEmptyWorldState, createWorldEntity, generateWorldEntityName, issueWorldEntityCommand, parseStoredWorldState } from './worldEntity'
+import { changeWorldEntityController, createEmptyWorldState, createWorldEntity, generateWorldEntityName, issueWorldEntityCommand, parseStoredWorldState } from './worldEntity'
 
 describe('WorldEntity foundation', () => {
   it('gives every catalog unit a usable name source and physical scale', () => {
@@ -72,6 +72,49 @@ describe('WorldEntity foundation', () => {
     )
 
     expect(result.ok).toBe(true)
+  })
+
+  it('clears stale autonomous work when control ownership changes', () => {
+    const knight = worldEntityDefinitionById.get('knight')!
+    const entity = {
+      ...createWorldEntity(knight, { id: 'knight-control' }),
+      activeCommand: { type: 'attack', target: { kind: 'entity', id: 'enemy' } } as const,
+      commandQueue: [{ type: 'stop' } as const],
+      behaviorState: 'attacking' as const,
+      navigation: {
+        status: 'moving' as const,
+        target: { kind: 'entity', id: 'enemy' } as const,
+        path: [{ x: 1, y: 0, z: 1 }],
+        pathIndex: 0,
+      },
+    }
+    const changed = changeWorldEntityController(entity, 'ai')
+    expect(changed).toMatchObject({ controller: 'ai', behaviorState: 'idle', commandQueue: [], navigation: { status: 'idle', path: [] } })
+    expect(changed.activeCommand).toBeUndefined()
+    expect(changeWorldEntityController(changed, 'ai')).toBe(changed)
+  })
+
+  it('can replace the active order without directly changing the transform', () => {
+    const knight = worldEntityDefinitionById.get('knight')!
+    const actor = {
+      ...createWorldEntity(knight, { id: 'actor', controller: 'ai' }),
+      activeCommand: { type: 'move', target: { kind: 'entity', id: 'old-target' } } as const,
+      commandQueue: [{ type: 'stop' } as const],
+    }
+    const target = createWorldEntity(knight, { id: 'target' })
+    const world = { ...createEmptyWorldState('plan'), entities: [actor, target] }
+    const result = issueWorldEntityCommand(
+      world,
+      actor.id,
+      { type: 'attack', target: { kind: 'entity', id: target.id } },
+      undefined,
+      'replace',
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.world.entities[0].activeCommand).toBeUndefined()
+    expect(result.world.entities[0].commandQueue).toEqual([{ type: 'attack', target: { kind: 'entity', id: 'target' } }])
+    expect(result.world.entities[0].transform).toEqual(actor.transform)
   })
 
   it('restores a stored world only for its matching build plan', () => {

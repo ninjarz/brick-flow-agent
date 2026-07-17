@@ -1,6 +1,7 @@
 import type {
   WorldEntity,
   WorldEntityCommand,
+  WorldEntityControllerKind,
   WorldEntityDefinition,
   WorldEntityTransform,
   WorldState,
@@ -103,6 +104,18 @@ export const createEmptyWorldState = (planId: string): WorldState => ({
   },
 })
 
+export const changeWorldEntityController = (
+  entity: WorldEntity,
+  controller: WorldEntityControllerKind,
+): WorldEntity => entity.controller === controller ? entity : {
+  ...entity,
+  controller,
+  commandQueue: [],
+  activeCommand: undefined,
+  behaviorState: entity.health > 0 ? 'idle' : 'dead',
+  navigation: { status: 'idle', path: [], pathIndex: 0 },
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
 
@@ -163,6 +176,7 @@ export const issueWorldEntityCommand = (
   targetExists: (target: WorldTargetRef) => boolean = (target) => (
     target.kind === 'entity' && world.entities.some((entity) => entity.id === target.id)
   ),
+  queueMode: 'append' | 'replace' = 'append',
 ): WorldCommandResult => {
   const entity = world.entities.find((candidate) => candidate.id === entityId)
   if (!entity) return { ok: false, world, issue: 'ENTITY_NOT_FOUND' }
@@ -183,7 +197,15 @@ export const issueWorldEntityCommand = (
     world: {
       ...world,
       entities: world.entities.map((candidate) => candidate.id === entityId
-        ? { ...candidate, commandQueue: [...candidate.commandQueue, command] }
+        ? queueMode === 'replace'
+          ? {
+              ...candidate,
+              activeCommand: undefined,
+              commandQueue: [command],
+              behaviorState: candidate.health > 0 ? 'idle' : 'dead',
+              navigation: { status: 'idle', path: [], pathIndex: 0 },
+            }
+          : { ...candidate, commandQueue: [...candidate.commandQueue, command] }
         : candidate),
     },
   }
