@@ -9,6 +9,8 @@ import {
 import { parseImportedPlan } from './planFileIO'
 import { getBlockingBuildPlanIssues, validateBuildPlan } from './planUtils'
 import type { BuildPlan } from '../types/bricks'
+import { createEmptyWorldState, parseStoredWorldState } from './worldEntity'
+import type { WorldState } from '../types/world'
 
 const storageKey = 'brick-flow-agent:workspace-draft:v1'
 const indexedDbKey = 'workspace-draft:v1'
@@ -16,6 +18,7 @@ const indexedDbKey = 'workspace-draft:v1'
 export type WorkspaceDraft = {
   plan: BuildPlan
   prompt: string
+  world: WorldState
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -28,6 +31,7 @@ const normalizeWorkspaceDraft = (value: unknown): WorkspaceDraft | undefined => 
   return {
     plan,
     prompt: typeof value.prompt === 'string' ? value.prompt : plan.prompt,
+    world: parseStoredWorldState(value.world, plan.id) ?? createEmptyWorldState(plan.id),
   }
 }
 
@@ -61,9 +65,9 @@ export const loadWorkspaceDraftFromIndexedDb = async () => {
 
 let saveQueue = Promise.resolve(true)
 
-const persistWorkspaceDraft = async (plan: BuildPlan, prompt: string) => {
+const persistWorkspaceDraft = async (plan: BuildPlan, prompt: string, world: WorldState) => {
   if (typeof window === 'undefined') return true
-  const value = { schemaVersion: 1, prompt, plan }
+  const value = { schemaVersion: 2, prompt, plan, world }
   const serialized = JSON.stringify(value)
 
   if (serialized.length <= localStorageComfortLimit) {
@@ -86,8 +90,8 @@ const persistWorkspaceDraft = async (plan: BuildPlan, prompt: string) => {
   }
 }
 
-export const saveWorkspaceDraft = (plan: BuildPlan, prompt: string) => {
-  const nextSave = saveQueue.then(() => persistWorkspaceDraft(plan, prompt))
+export const saveWorkspaceDraft = (plan: BuildPlan, prompt: string, world: WorldState) => {
+  const nextSave = saveQueue.then(() => persistWorkspaceDraft(plan, prompt, world))
   saveQueue = nextSave.catch(() => false)
   return nextSave
 }

@@ -4,6 +4,7 @@ import type { ThreeEvent } from '@react-three/fiber'
 import { memo, type ReactNode, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { BufferGeometry, DoubleSide, Float32BufferAttribute, Object3D, Vector3, type DirectionalLight, type InstancedMesh } from 'three'
 import { brickById, colorHex, colorOpacity } from '../data/basicBricks'
+import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { createRound2x2AxleBodyGeometry, createRound2x2AxleGrilleBodyGeometry } from '../lib/csgBrickGeometry'
 import { getBrickWorldBoundsFrame } from '../lib/ldrawBounds'
 import { loadLDrawGeneratedVisual } from '../lib/ldrawGeneratedVisualLoader'
@@ -22,6 +23,7 @@ import {
   createSlope45Geometry,
 } from '../lib/slopeGeometries'
 import type { BrickDefinition, PlacedBrick } from '../types/bricks'
+import type { WorldEntity } from '../types/world'
 
 export type BrickSceneViewMode = 'border' | 'borderless' | 'xray' | 'voxel'
 
@@ -48,12 +50,16 @@ type BrickSceneProps = {
   stabilityAnalysis?: StabilityAnalysis
   displayColorByBrickId?: Map<string, string>
   transformsByBrickId?: Map<string, BrickSceneTransform>
+  worldEntities?: WorldEntity[]
+  worldEntityPlacementPreview?: WorldEntity
+  selectedWorldEntityId?: string
   placementPreviewBricks?: PlacedBrick[]
   placementActive?: boolean
   onCameraAzimuthChange?: (degrees: number) => void
   onSelect: (id: string, options?: BrickSelectionOptions) => void
   onSelectConnected?: (id: string) => void
-  onPlacementPointChange?: (point: { x: number; z: number }) => void
+  onSelectWorldEntity?: (id: string) => void
+  onPlacementPointChange?: (point: { x: number; y: number; z: number }) => void
   onConfirmPlacement?: () => void
   onCancelPlacement?: () => void
   onBeginDragSelected?: (id: string, point: { x: number; z: number }) => void
@@ -1700,6 +1706,152 @@ const SimplifiedBrickScene = ({ bricks, selectedId, highlightedIdSet, showEdges,
   )
 }
 
+const WorldEntityMaterial = ({ color, ghost }: { color: string; ghost: boolean }) => (
+  <meshStandardMaterial
+    color={ghost ? '#22d3ee' : color}
+    roughness={0.48}
+    metalness={0.03}
+    transparent={ghost}
+    opacity={ghost ? 0.38 : 1}
+    depthWrite={!ghost}
+  />
+)
+
+const HumanWorldEntityMesh = ({ entity, ghost }: { entity: WorldEntity; ghost: boolean }) => {
+  const isArcher = entity.definitionId === 'archer'
+  const factionColor = entity.factionId === 'red'
+    ? '#dc2626'
+    : entity.factionId === 'blue' ? '#2563eb' : '#64748b'
+  const tunicColor = entity.factionId === 'neutral' && isArcher ? '#15803d' : factionColor
+  return (
+    <group>
+      {[-0.32, 0.32].map((x) => (
+        <mesh key={x} position={[x, 0.7, 0]} castShadow={!ghost}>
+          <boxGeometry args={[0.48, 1.4, 0.68]} />
+          <WorldEntityMaterial color="#334155" ghost={ghost} />
+        </mesh>
+      ))}
+      <mesh position={[0, 2.1, 0]} castShadow={!ghost}>
+        <boxGeometry args={[1.55, 1.45, 0.82]} />
+        <WorldEntityMaterial color={tunicColor} ghost={ghost} />
+      </mesh>
+      <mesh position={[0, 3.35, 0]} castShadow={!ghost}>
+        <cylinderGeometry args={[0.53, 0.53, 0.9, 16]} />
+        <WorldEntityMaterial color="#f1c27d" ghost={ghost} />
+      </mesh>
+      <mesh position={[0, 3.92, 0]} castShadow={!ghost}>
+        <cylinderGeometry args={[0.62, 0.52, 0.34, 16]} />
+        <WorldEntityMaterial color={isArcher ? '#166534' : '#94a3b8'} ghost={ghost} />
+      </mesh>
+      {isArcher ? (
+        <group position={[0.95, 2.35, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <mesh>
+            <torusGeometry args={[0.72, 0.055, 8, 20, Math.PI * 1.5]} />
+            <WorldEntityMaterial color="#92400e" ghost={ghost} />
+          </mesh>
+          <mesh position={[-0.18, 0, 0]} rotation={[0, 0, -0.55]}>
+            <cylinderGeometry args={[0.025, 0.025, 1.25, 6]} />
+            <WorldEntityMaterial color="#e2e8f0" ghost={ghost} />
+          </mesh>
+        </group>
+      ) : (
+        <>
+          <mesh position={[1.02, 2.15, 0]} rotation={[0, 0, -0.18]}>
+            <boxGeometry args={[0.12, 1.75, 0.18]} />
+            <WorldEntityMaterial color="#cbd5e1" ghost={ghost} />
+          </mesh>
+          <mesh position={[-0.98, 2.05, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.58, 0.58, 0.14, 20]} />
+            <WorldEntityMaterial color="#64748b" ghost={ghost} />
+          </mesh>
+        </>
+      )}
+    </group>
+  )
+}
+
+const CatapultWorldEntityMesh = ({ entity, ghost }: { entity: WorldEntity; ghost: boolean }) => (
+  <group>
+    {[-1.45, 1.45].flatMap((x) => [-1.7, 1.7].map((z) => (
+      <mesh key={`${x}:${z}`} position={[x, 0.82, z]} rotation={[0, 0, Math.PI / 2]} castShadow={!ghost}>
+        <cylinderGeometry args={[0.72, 0.72, 0.42, 16]} />
+        <WorldEntityMaterial color="#334155" ghost={ghost} />
+      </mesh>
+    )))}
+    <mesh position={[0, 1.15, 0]} castShadow={!ghost}>
+      <boxGeometry args={[3.2, 0.72, 4.7]} />
+      <WorldEntityMaterial color={entity.factionId === 'red' ? '#b91c1c' : entity.factionId === 'blue' ? '#1d4ed8' : '#92400e'} ghost={ghost} />
+    </mesh>
+    <mesh position={[0, 2.25, -0.2]} rotation={[-0.7, 0, 0]} castShadow={!ghost}>
+      <boxGeometry args={[0.42, 0.42, 4.3]} />
+      <WorldEntityMaterial color="#78350f" ghost={ghost} />
+    </mesh>
+    <mesh position={[0, 3.5, 1.25]} castShadow={!ghost}>
+      <sphereGeometry args={[0.58, 14, 14]} />
+      <WorldEntityMaterial color="#64748b" ghost={ghost} />
+    </mesh>
+  </group>
+)
+
+const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementActive = false, onSelect }: {
+  entity: WorldEntity
+  ghost?: boolean
+  selected?: boolean
+  placementActive?: boolean
+  onSelect?: (id: string) => void
+}) => {
+  const definition = worldEntityDefinitionById.get(entity.definitionId)
+  if (!definition) return null
+  return (
+    <group
+      position={[entity.transform.x, entity.transform.y, entity.transform.z]}
+      rotation={[0, entity.transform.rotationRadians, 0]}
+      userData={ghost ? { placementGhost: true } : undefined}
+      onClick={ghost || !onSelect ? undefined : (event) => {
+        if (placementActive) return
+        event.stopPropagation()
+        onSelect(entity.id)
+      }}
+    >
+      {entity.definitionId === 'catapult'
+        ? <CatapultWorldEntityMesh entity={entity} ghost={ghost} />
+        : <HumanWorldEntityMesh entity={entity} ghost={ghost} />}
+      {!ghost && (
+        <Text position={[0, definition.visual.heightStuds + 0.45, 0]} fontSize={0.3} color="#0f172a">
+          {entity.name}
+        </Text>
+      )}
+      {selected && (
+        <mesh position={[0, 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.9, 1.08, 28]} />
+          <meshBasicMaterial color="#0ea5e9" transparent opacity={0.9} depthWrite={false} />
+        </mesh>
+      )}
+    </group>
+  )
+}
+
+const WorldEntityScene = ({ entities, preview, selectedId, placementActive, onSelect }: {
+  entities: WorldEntity[]
+  preview?: WorldEntity
+  selectedId?: string
+  placementActive: boolean
+  onSelect?: (id: string) => void
+}) => (
+  <group>
+    {entities.map((entity) => (
+      <WorldEntityMesh
+        key={entity.id}
+        entity={entity}
+        selected={entity.id === selectedId}
+        placementActive={placementActive}
+        onSelect={onSelect}
+      />
+    ))}
+    {preview && <WorldEntityMesh entity={preview} ghost />}
+  </group>
+)
+
 const PlacementGhosts = ({ bricks, onConfirmPlacement, onCancelPlacement }: {
   bricks: PlacedBrick[]
   onConfirmPlacement?: () => void
@@ -1803,11 +1955,15 @@ export const BrickScene = ({
   stabilityAnalysis,
   displayColorByBrickId,
   transformsByBrickId,
+  worldEntities = [],
+  worldEntityPlacementPreview,
+  selectedWorldEntityId,
   placementPreviewBricks = [],
   placementActive = false,
   onCameraAzimuthChange,
   onSelect,
   onSelectConnected,
+  onSelectWorldEntity,
   onPlacementPointChange,
   onConfirmPlacement,
   onCancelPlacement,
@@ -1934,7 +2090,7 @@ export const BrickScene = ({
         onPointerMove={(event) => {
           if (!placementActive) return
           const surfacePoint = getFirstPlacementSurfacePoint(event)
-          onPlacementPointChange?.({ x: surfacePoint.x, z: surfacePoint.z })
+          onPlacementPointChange?.({ x: surfacePoint.x, y: surfacePoint.y, z: surfacePoint.z })
         }}
         onClick={(event) => {
           if (!placementActive) return
@@ -2007,6 +2163,13 @@ export const BrickScene = ({
             onCancelPlacement={onCancelPlacement}
           />
         )}
+        <WorldEntityScene
+          entities={worldEntities}
+          preview={worldEntityPlacementPreview}
+          selectedId={selectedWorldEntityId}
+          placementActive={placementActive}
+          onSelect={onSelectWorldEntity}
+        />
         {xrayDebug && resolvedStabilityAnalysis && <StabilityOverlay analysis={resolvedStabilityAnalysis} />}
         {bricks.length === 0 && (
           <Text position={[0, 1.2, 0]} fontSize={0.35} color="#475569">

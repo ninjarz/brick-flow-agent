@@ -1,17 +1,64 @@
-import { Copy, RotateCw, Trash2, X } from 'lucide-react'
+import { Boxes, Copy, RotateCw, Trash2, Unlink2, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { brickById } from '../data/basicBricks'
 import { WORLD_EDIT_STEP_STUDS, normalizeEditableStud, normalizeYStud } from '../lib/brickUnits'
 import { useI18n } from '../lib/i18n'
-import type { BrickColor, BuildPlan, PlacedBrick } from '../types/bricks'
+import type { BrickColor, BrickStructure, BuildPlan, PlacedBrick } from '../types/bricks'
 
 type BrickEditorPanelProps = {
   plan: BuildPlan
   selectedBrick?: PlacedBrick
   selectedCount?: number
+  selectedStructure?: BrickStructure
   onUpdateBrick: (brick: PlacedBrick) => void
   onDuplicate: () => void
   onDelete: () => void
+  onSolidify: () => void
+  onUpdateStructure: (structure: BrickStructure) => void
+  onDissolveStructure: () => void
   onClose: () => void
+}
+
+const StructureEditor = ({ structure, onUpdate, onDissolve }: {
+  structure: BrickStructure
+  onUpdate: (structure: BrickStructure) => void
+  onDissolve: () => void
+}) => {
+  const { t } = useI18n()
+  const [name, setName] = useState(structure.name)
+  const [description, setDescription] = useState(structure.description)
+  useEffect(() => {
+    setName(structure.name)
+    setDescription(structure.description)
+  }, [structure.description, structure.id, structure.name])
+  const commit = () => onUpdate({
+    ...structure,
+    name: name.trim() || structure.name,
+    description: description.trim(),
+  })
+
+  return (
+    <section className="solidified-structure-card">
+      <header>
+        <div>
+          <strong>{t('structure.solidified')}</strong>
+          <small>{t('structure.id', { id: structure.id })}</small>
+        </div>
+        <button type="button" onClick={onDissolve}>
+          <Unlink2 size={14} />
+          {t('structure.dissolve')}
+        </button>
+      </header>
+      <label>
+        {t('structure.name')}
+        <input value={name} onChange={(event) => setName(event.target.value)} onBlur={commit} />
+      </label>
+      <label>
+        {t('structure.description')}
+        <textarea value={description} onChange={(event) => setDescription(event.target.value)} onBlur={commit} placeholder={t('structure.descriptionPlaceholder')} />
+      </label>
+    </section>
+  )
 }
 
 const colors: BrickColor[] = ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink', 'trans-pink']
@@ -20,9 +67,13 @@ export const BrickEditorPanel = ({
   plan,
   selectedBrick,
   selectedCount = 0,
+  selectedStructure,
   onUpdateBrick,
   onDuplicate,
   onDelete,
+  onSolidify,
+  onUpdateStructure,
+  onDissolveStructure,
   onClose,
 }: BrickEditorPanelProps) => {
   const { t } = useI18n()
@@ -68,6 +119,20 @@ export const BrickEditorPanel = ({
           {selectedStep ? ` · ${t('control.belongsTo', { step: selectedStep.title })}` : ` · ${t('control.manualAdded')}`}
         </p>
       </div>
+
+      {selectedCount > 1 && !selectedStructure && (
+        <button className="solidify-selection-button" type="button" onClick={onSolidify}>
+          <Boxes size={16} />
+          {t('structure.solidifySelection', { count: selectedCount })}
+        </button>
+      )}
+      {selectedStructure && (
+        <StructureEditor
+          structure={selectedStructure}
+          onUpdate={onUpdateStructure}
+          onDissolve={onDissolveStructure}
+        />
+      )}
 
       <div className="field-grid">
         <label>

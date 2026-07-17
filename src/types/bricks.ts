@@ -98,6 +98,13 @@ export type BuildStep = {
   brickIds: string[]
 }
 
+export type BrickStructure = {
+  id: string
+  name: string
+  description: string
+  brickIds: string[]
+}
+
 export type BuildPlan = {
   id: string
   title: string
@@ -106,6 +113,7 @@ export type BuildPlan = {
   imageName?: string
   bricks: PlacedBrick[]
   steps: BuildStep[]
+  structures?: BrickStructure[]
 }
 
 export type LlmConfig = {

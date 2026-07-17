@@ -6,6 +6,7 @@ import {
   normalizeYStud,
   plateHeightToWorldStud,
 } from './brickUnits'
+import { pruneBrickStructures } from './brickStructures'
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
@@ -32,8 +33,16 @@ export const normalizeImportedPose = (pose: Record<string, unknown>): PlacedBric
   verticalQuarterTurns: normalizeVerticalQuarterTurns(Number(pose.verticalQuarterTurns ?? 0)),
 })
 
-export const normalizeImportedPlan = (plan: BuildPlan): BuildPlan => ({
+export const normalizeImportedPlan = (plan: BuildPlan): BuildPlan => pruneBrickStructures({
   ...plan,
+  structures: Array.isArray(plan.structures)
+    ? plan.structures.filter((structure) => (
+        typeof structure?.id === 'string' &&
+        typeof structure?.name === 'string' &&
+        typeof structure?.description === 'string' &&
+        Array.isArray(structure?.brickIds)
+      ))
+    : [],
   bricks: plan.bricks.map((brick) => ({
     ...brick,
     pose: normalizeImportedPose(brick.pose as unknown as Record<string, unknown>),

@@ -2,9 +2,11 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { BookOpen, Box, Boxes, Download, Eye, FileUp, Gauge, Github, Globe2, KeyRound, Link, Pause, Play, Plus, Redo2, RotateCcw, ScanLine, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
 import { LazyBrickGlyph } from './components/LazyBrickGlyph'
 import { BrickEditorPanel } from './components/BrickEditorPanel'
+import { WorldEntityEditorPanel } from './components/WorldEntityEditorPanel'
 import type { BrickSceneViewMode } from './components/BrickScene'
 import { ControlPanel } from './components/ControlPanel'
 import { brickById, brickDefinitions, getDefaultBrickColor } from './data/basicBricks'
+import { worldEntityDefinitionById } from './data/worldEntityDefinitions'
 import { dropBrickGroupAtPoint, findNearestOpenBrickGroupAround, rotationRepositionSearchRadiusStuds, type StationaryPlanSpatialData } from './lib/brickGroupPlacement'
 import { generateBuildPlan } from './lib/localGenerator'
 import { buildLlmUserPrompt, generateLlmBuildPlan, isLlmConfigComplete, llmSystemPrompt, testLlmConnection } from './lib/llmGenerator'
@@ -20,11 +22,15 @@ import { parseImportedPlan, type ImportText } from './lib/planFileIO'
 import { prepareReferenceImage } from './lib/referenceImage'
 import { simplifiedBrickThreshold } from './lib/scenePerformance'
 import { toggleBrickSelection } from './lib/brickSelection'
+import { dissolveBrickStructure, getBrickStructure, getExactSelectionStructure, pruneBrickStructures, solidifyBrickSelection, updateBrickStructure } from './lib/brickStructures'
+import { createEmptyWorldState, createWorldEntity } from './lib/worldEntity'
+import { stepWorldSimulation, worldSimulationStepSeconds } from './lib/worldSimulation'
 import { analyzeBuildStability } from './lib/stabilityAnalysis'
 import { formatLDrawPlan, parseLDrawPlan } from './lib/ldrawPlan'
 import { getEffectiveInventory, loadInventoryOverrides, saveInventoryOverrides } from './lib/userInventory'
 import { clearWorkspaceDraft, hasIndexedDbWorkspaceDraft, loadWorkspaceDraft, loadWorkspaceDraftFromIndexedDb, saveWorkspaceDraft } from './lib/workspaceDraft'
-import type { BuildPlan, FinishedAsset, LlmConfig, PlacedBrick } from './types/bricks'
+import type { BrickStructure, BuildPlan, FinishedAsset, LlmConfig, PlacedBrick } from './types/bricks'
+import type { WorldEntity } from './types/world'
 import './App.css'
 
 const BrickScene = lazy(() => import('./components/BrickScene').then((module) => ({ default: module.BrickScene })))
@@ -51,6 +57,9 @@ type PlacementSession = {
   anchorBrickId: string
   sourceBricks: PlacedBrick[]
   previewBricks: PlacedBrick[]
+}
+type WorldEntityPlacementSession = {
+  entity: WorldEntity
 }
 const workspaceDraftSaveDebounceMs = 120
 const sceneViewModeOrder: BrickSceneViewMode[] = ['border', 'borderless', 'xray', 'voxel']
@@ -140,6 +149,13 @@ function App() {
   const [imagePreview, setImagePreview] = useState<string>()
   const [imageName, setImageName] = useState<string>()
   const [plan, setPlanState] = useState<BuildPlan>(initialPlan)
+  const [world, setWorld] = useState(() => (
+    workspaceDraft?.world?.planId === initialPlan.id
+      ? workspaceDraft.world
+      : createEmptyWorldState(initialPlan.id)
+  ))
+  const worldRef = useRef(world)
+  const promptRef = useRef(prompt)
   const [historyVersion, setHistoryVersion] = useState(0)
   const planRef = useRef<BuildPlan>(workspaceDraft?.plan ?? initialPlan)
   const planHistoryRef = useRef<{
@@ -150,7 +166,9 @@ function App() {
   const placementPointerKeyRef = useRef('')
   const [selectedId, setSelectedId] = useState('')
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([])
+  const [selectedWorldEntityId, setSelectedWorldEntityId] = useState('')
   const [placementSession, setPlacementSession] = useState<PlacementSession>()
+  const [worldEntityPlacement, setWorldEntityPlacement] = useState<WorldEntityPlacementSession>()
   const [llmConfig, setLlmConfig] = useState<LlmConfig>(() => loadLlmConfig())
   const [inventoryOverrides, setInventoryOverrides] = useState(() => loadInventoryOverrides())
   const [isTestingLlmConfig, setIsTestingLlmConfig] = useState(false)
@@ -284,9 +302,11 @@ function App() {
   const canRedo = historyVersion >= 0 && planHistoryRef.current.future.length > 0
 
   const selectBrick = useCallback((id: string, options?: { toggle?: boolean }) => {
+    setSelectedWorldEntityId('')
     if (!options?.toggle || !id) {
+      const structure = id ? getBrickStructure(planRef.current, id) : undefined
       setSelectedId(id)
-      setSelectedGroupIds([])
+      setSelectedGroupIds(structure && structure.brickIds.length > 1 ? structure.brickIds : [])
       return
     }
 
@@ -294,6 +314,12 @@ function App() {
     setSelectedId(nextSelection.selectedId)
     setSelectedGroupIds(nextSelection.selectedGroupIds)
   }, [selectedGroupIds, selectedId])
+
+  const selectWorldEntity = useCallback((id: string) => {
+    setSelectedId('')
+    setSelectedGroupIds([])
+    setSelectedWorldEntityId(id)
+  }, [])
 
   const selectConnectedGroup = useCallback((id: string) => {
     if (!id) {
@@ -312,6 +338,10 @@ function App() {
     () => plan.bricks.find((brick) => brick.id === selectedId),
     [plan.bricks, selectedId],
   )
+  const selectedWorldEntity = useMemo(
+    () => world.entities.find((entity) => entity.id === selectedWorldEntityId),
+    [selectedWorldEntityId, world.entities],
+  )
   const activeSelectedIds = useMemo(() => {
     if (!selectedId) return []
     const liveBrickIds = new Set(plan.bricks.map((brick) => brick.id))
@@ -320,6 +350,10 @@ function App() {
     return ids.filter((id) => liveBrickIds.has(id))
   }, [plan.bricks, selectedGroupIds, selectedId])
   const selectedBatchCount = activeSelectedIds.length
+  const selectedStructure = useMemo(
+    () => getExactSelectionStructure(plan, activeSelectedIds),
+    [activeSelectedIds, plan],
+  )
   const getSelectedIdsForPlan = (bricks: PlacedBrick[]) => {
     if (!selectedId) return []
     const liveBrickIds = new Set(bricks.map((brick) => brick.id))
@@ -329,6 +363,10 @@ function App() {
     return ids.filter((id) => liveBrickIds.has(id))
   }
   const brickCounts = useMemo(() => countBricks(plan), [plan])
+  const worldEntityCounts = useMemo(() => world.entities.reduce<Record<string, number>>((counts, entity) => {
+    counts[entity.definitionId] = (counts[entity.definitionId] ?? 0) + 1
+    return counts
+  }, {}), [world.entities])
   const usedBricks = useMemo(
     () => brickDefinitions.filter((brick) => brickCounts[brick.id]),
     [brickCounts],
@@ -434,6 +472,7 @@ function App() {
         planRef.current = storedDraft.plan
         setPlanState(storedDraft.plan)
         setPrompt(storedDraft.prompt)
+        setWorld(storedDraft.world)
       }
       setIsWorkspaceStorageHydrated(true)
     })
@@ -473,10 +512,25 @@ function App() {
   }, [plan])
 
   useEffect(() => {
+    worldRef.current = world
+  }, [world])
+
+  useEffect(() => {
+    promptRef.current = prompt
+  }, [prompt])
+
+  useEffect(() => {
+    if (world.planId === plan.id) return
+    setWorld(createEmptyWorldState(plan.id))
+    setWorldEntityPlacement(undefined)
+    setSelectedWorldEntityId('')
+  }, [plan.id, world.planId])
+
+  useEffect(() => {
     if (!isWorkspaceStorageHydrated) return
     const timeoutId = window.setTimeout(
       () => {
-        void saveWorkspaceDraft(plan, prompt).then((saved) => {
+        void saveWorkspaceDraft(plan, prompt, worldRef.current).then((saved) => {
           if (saved || storageWarningShownRef.current) return
           storageWarningShownRef.current = true
           setGenerationWarning(t('error.storageUnavailable'))
@@ -487,6 +541,44 @@ function App() {
 
     return () => window.clearTimeout(timeoutId)
   }, [isWorkspaceStorageHydrated, plan, prompt, t])
+
+  useEffect(() => {
+    if (!isWorkspaceStorageHydrated) return
+    const intervalId = window.setInterval(() => {
+      void saveWorkspaceDraft(planRef.current, promptRef.current, worldRef.current)
+    }, 2_000)
+    return () => window.clearInterval(intervalId)
+  }, [isWorkspaceStorageHydrated])
+
+  useEffect(() => {
+    if (world.entities.length === 0 || world.paused || placementSession || worldEntityPlacement) return
+    let animationFrame = 0
+    let previousTime = performance.now()
+    let accumulator = 0
+    const animateWorld = (now: number) => {
+      accumulator += Math.min(0.25, (now - previousTime) / 1000)
+      previousTime = now
+      if (accumulator >= worldSimulationStepSeconds) {
+        const stepCount = Math.min(3, Math.floor(accumulator / worldSimulationStepSeconds))
+        accumulator -= stepCount * worldSimulationStepSeconds
+        setWorld((current) => {
+          let next = current
+          for (let step = 0; step < stepCount; step += 1) {
+            next = stepWorldSimulation(
+              next,
+              planRef.current.bricks,
+              worldSimulationStepSeconds,
+              planRef.current.structures ?? [],
+            )
+          }
+          return next
+        })
+      }
+      animationFrame = requestAnimationFrame(animateWorld)
+    }
+    animationFrame = requestAnimationFrame(animateWorld)
+    return () => cancelAnimationFrame(animationFrame)
+  }, [placementSession, world.entities.length, world.paused, worldEntityPlacement])
 
   useEffect(() => {
     setFinishedAssets((current) => {
@@ -670,7 +762,10 @@ function App() {
     if (!window.confirm(t('error.resetConfirm'))) return
 
     void clearWorkspaceDraft()
-    setPlan(generateBuildPlan({ prompt: defaultPrompt }))
+    const nextPlan = generateBuildPlan({ prompt: defaultPrompt })
+    setPlan(nextPlan)
+    setWorld(createEmptyWorldState(nextPlan.id))
+    setWorldEntityPlacement(undefined)
     setPrompt(defaultPrompt)
     selectBrick('')
     setImageName(undefined)
@@ -1079,6 +1174,7 @@ function App() {
       stationaryData,
     ) ?? [nextBrick]
     placementPointerKeyRef.current = ''
+    setWorldEntityPlacement(undefined)
     setPlacementSession({
       kind: 'new',
       anchorBrickId: nextBrick.id,
@@ -1087,8 +1183,19 @@ function App() {
     })
   }
 
+  const beginWorldEntityPlacement = (definitionId: string) => {
+    const definition = worldEntityDefinitionById.get(definitionId)
+    if (!definition) return
+    const entity = createWorldEntity(definition, {
+      existingNames: world.entities.map((candidate) => candidate.name),
+    })
+    placementPointerKeyRef.current = ''
+    setPlacementSession(undefined)
+    setWorldEntityPlacement({ entity })
+  }
+
   const beginSelectedPlacement = useCallback((brickId: string, point: { x: number; z: number }) => {
-    if (placementSession || !activeSelectedIds.includes(brickId)) return
+    if (placementSession || worldEntityPlacement || !activeSelectedIds.includes(brickId)) return
     const selectedIdSet = new Set(activeSelectedIds)
     const sourceBricks = planRef.current.bricks.filter((brick) => selectedIdSet.has(brick.id))
     if (sourceBricks.length === 0) return
@@ -1101,9 +1208,9 @@ function App() {
       sourceBricks,
       previewBricks,
     })
-  }, [activeSelectedIds, getStationarySpatialState, placementSession])
+  }, [activeSelectedIds, getStationarySpatialState, placementSession, worldEntityPlacement])
 
-  const updatePlacementPoint = useCallback((point: { x: number; z: number }) => {
+  const updatePlacementPoint = useCallback((point: { x: number; y: number; z: number }) => {
     const pointerKey = `${normalizeHorizontalStud(point.x)}:${normalizeHorizontalStud(point.z)}`
     if (placementPointerKeyRef.current === pointerKey) return
     placementPointerKeyRef.current = pointerKey
@@ -1121,11 +1228,23 @@ function App() {
       )
       return previewBricks ? { ...current, previewBricks } : current
     })
+    setWorldEntityPlacement((current) => current ? {
+      entity: {
+        ...current.entity,
+        transform: {
+          ...current.entity.transform,
+          x: normalizeHorizontalStud(point.x),
+          y: 0,
+          z: normalizeHorizontalStud(point.z),
+        },
+      },
+    } : current)
   }, [getStationarySpatialState])
 
   const cancelPlacement = useCallback(() => {
     placementPointerKeyRef.current = ''
     setPlacementSession(undefined)
+    setWorldEntityPlacement(undefined)
   }, [])
 
   const confirmPlacement = useCallback(() => {
@@ -1158,8 +1277,39 @@ function App() {
     setPlacementSession(undefined)
   }, [manualStepDescription, manualStepTitle, placementSession, setPlan])
 
+  const confirmActivePlacement = useCallback(() => {
+    if (worldEntityPlacement) {
+      setWorld((current) => ({
+        ...current,
+        entities: [...current.entities, worldEntityPlacement.entity],
+      }))
+      placementPointerKeyRef.current = ''
+      setSelectedId('')
+      setSelectedGroupIds([])
+      setSelectedWorldEntityId(worldEntityPlacement.entity.id)
+      setWorldEntityPlacement(undefined)
+      return
+    }
+    confirmPlacement()
+  }, [confirmPlacement, worldEntityPlacement])
+
+  const updateWorldEntity = useCallback((updated: WorldEntity) => {
+    setWorld((current) => ({
+      ...current,
+      entities: current.entities.map((entity) => entity.id === updated.id ? updated : entity),
+    }))
+  }, [])
+
+  const deleteWorldEntity = useCallback((entityId: string) => {
+    setWorld((current) => ({
+      ...current,
+      entities: current.entities.filter((entity) => entity.id !== entityId),
+    }))
+    setSelectedWorldEntityId((current) => current === entityId ? '' : current)
+  }, [])
+
   useEffect(() => {
-    if (!placementSession) return
+    if (!placementSession && !worldEntityPlacement) return
     const handlePlacementKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       event.preventDefault()
@@ -1167,7 +1317,7 @@ function App() {
     }
     window.addEventListener('keydown', handlePlacementKeyDown)
     return () => window.removeEventListener('keydown', handlePlacementKeyDown)
-  }, [cancelPlacement, placementSession])
+  }, [cancelPlacement, placementSession, worldEntityPlacement])
 
   const duplicateSelected = () => {
     if (!selectedBrick) return
@@ -1314,7 +1464,7 @@ function App() {
     if (!selectedBrick) return
     const selectionIds = activeSelectedIds.length > 0 ? activeSelectedIds : [selectedBrick.id]
     const selectionIdSet = new Set(selectionIds)
-    setPlan((current) => ({
+    setPlan((current) => pruneBrickStructures({
       ...current,
       bricks: current.bricks.filter((brick) => !selectionIdSet.has(brick.id)),
       steps: current.steps
@@ -1326,6 +1476,28 @@ function App() {
     }))
     selectBrick('')
   }
+
+  const solidifySelected = useCallback(() => {
+    if (activeSelectedIds.length < 2) return
+    setPlan((current) => {
+      const result = solidifyBrickSelection(current, activeSelectedIds)
+      if (result.ok === false) {
+        setGenerationWarning(t(`structure.issue.${result.issue}`))
+        return current
+      }
+      return result.plan
+    })
+  }, [activeSelectedIds, setPlan, t])
+
+  const updateSelectedStructure = useCallback((updated: BrickStructure) => {
+    setPlan((current) => updateBrickStructure(current, updated))
+  }, [setPlan])
+
+  const dissolveSelectedStructure = useCallback(() => {
+    if (!selectedStructure) return
+    setPlan((current) => dissolveBrickStructure(current, selectedStructure.id))
+    setSelectedGroupIds([])
+  }, [selectedStructure, setPlan])
 
   const downloadJson = (filename: string, data: unknown) => {
     downloadFile(filename, JSON.stringify(data, null, 2), 'application/json')
@@ -1665,8 +1837,22 @@ function App() {
         </header>
 
         <div className="viewer">
+          {world.entities.length > 0 && (
+            <div className="world-simulation-toolbar" role="status">
+              <span>{t('worldEntity.worldCount', { count: world.entities.length })}</span>
+              <button
+                type="button"
+                aria-label={world.paused ? t('worldEntity.resume') : t('worldEntity.pause')}
+                title={world.paused ? t('worldEntity.resume') : t('worldEntity.pause')}
+                onClick={() => setWorld((current) => ({ ...current, paused: !current.paused }))}
+              >
+                {world.paused ? <Play size={14} /> : <Pause size={14} />}
+                {world.paused ? t('worldEntity.resume') : t('worldEntity.pause')}
+              </button>
+            </div>
+          )}
           {plan.bricks.length >= simplifiedBrickThreshold && sceneViewMode !== 'voxel' && (
-            <div className="performance-badge">{t('scene.performanceMode')}</div>
+            <div className={`performance-badge ${world.entities.length > 0 ? 'with-world-toolbar' : ''}`}>{t('scene.performanceMode')}</div>
           )}
           {sceneViewMode === 'voxel' && (
             <div className="voxel-legend" aria-label={t('voxel.legend')}>
@@ -1686,9 +1872,11 @@ function App() {
               <span className="xray-com"><i />{t('xray.centerOfMass')}</span>
             </div>
           )}
-          {placementSession && (
+          {(placementSession || worldEntityPlacement) && (
             <div className="placement-hint" role="status">
-              <strong>{placementSession.kind === 'new' ? t('placement.adding') : t('placement.moving')}</strong>
+              <strong>{worldEntityPlacement
+                ? t('placement.addingNpc', { name: worldEntityPlacement.entity.name })
+                : placementSession?.kind === 'new' ? t('placement.adding') : t('placement.moving')}</strong>
               <span>{t('placement.instructions')}</span>
             </div>
           )}
@@ -1700,12 +1888,16 @@ function App() {
               viewMode={sceneViewMode}
               stabilityAnalysis={sceneStabilityAnalysis}
               highlightedIds={activeSelectedIds.filter((id) => id !== selectedId)}
+              worldEntities={world.entities}
+              worldEntityPlacementPreview={worldEntityPlacement?.entity}
+              selectedWorldEntityId={selectedWorldEntityId}
               placementPreviewBricks={placementSession?.previewBricks}
-              placementActive={Boolean(placementSession)}
+              placementActive={Boolean(placementSession || worldEntityPlacement)}
               onSelect={selectBrick}
               onSelectConnected={selectConnectedGroup}
+              onSelectWorldEntity={selectWorldEntity}
               onPlacementPointChange={updatePlacementPoint}
-              onConfirmPlacement={confirmPlacement}
+              onConfirmPlacement={confirmActivePlacement}
               onCancelPlacement={cancelPlacement}
               onBeginDragSelected={beginSelectedPlacement}
               onNudgeSelected={nudgeSelected}
@@ -1717,10 +1909,20 @@ function App() {
             plan={plan}
             selectedBrick={selectedBrick}
             selectedCount={selectedBatchCount}
+            selectedStructure={selectedStructure}
             onUpdateBrick={updateBrick}
             onDuplicate={duplicateSelected}
             onDelete={deleteSelected}
+            onSolidify={solidifySelected}
+            onUpdateStructure={updateSelectedStructure}
+            onDissolveStructure={dissolveSelectedStructure}
             onClose={() => selectBrick('')}
+          />
+          <WorldEntityEditorPanel
+            entity={selectedWorldEntity}
+            onUpdate={updateWorldEntity}
+            onDelete={deleteWorldEntity}
+            onClose={() => setSelectedWorldEntityId('')}
           />
         </div>
 
@@ -1769,6 +1971,8 @@ function App() {
         plan={plan}
         onRenamePlan={renamePlan}
         onAddBrick={beginNewBrickPlacement}
+        onAddWorldEntity={beginWorldEntityPlacement}
+        worldEntityCounts={worldEntityCounts}
         inventoryOverrides={inventoryOverrides}
         onInventoryChange={(brickId, inventory) => {
           setInventoryOverrides((current) => {

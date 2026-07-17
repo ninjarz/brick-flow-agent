@@ -1,6 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { BookOpen, Box, Download, ImageUp, Plus, RotateCcw, Sparkles, Trash2, Upload, X } from 'lucide-react'
 import { brickDefinitions, getDefaultBrickColor } from '../data/basicBricks'
+import { worldEntityDefinitions } from '../data/worldEntityDefinitions'
 import { PLATE_HEIGHT_WORLD } from '../lib/brickUnits'
 import { countBricks, getBlockingBuildPlanIssues, summarizeBuildPlanIssues, validateBuildPlan, validateBuildPlanBasics } from '../lib/planUtils'
 import { useI18n } from '../lib/i18n'
@@ -23,6 +24,8 @@ type ControlPanelProps = {
   plan: BuildPlan
   onRenamePlan: (title: string) => void
   onAddBrick: (brickId: string) => void
+  onAddWorldEntity: (definitionId: string) => void
+  worldEntityCounts: Record<string, number>
   inventoryOverrides: Record<string, number>
   onInventoryChange: (brickId: string, inventory?: number) => void
   onResetInventory: () => void
@@ -42,7 +45,8 @@ const getHeightLabel = (brick: (typeof brickDefinitions)[number]) =>
 
 const isInventoryLimited = (inventory: number) => Number.isFinite(inventory)
 const formatInventory = (inventory: number) => isInventoryLimited(inventory) ? String(inventory) : '∞'
-const partPackOptions: BrickPack[] = ['lego', 'minecraft']
+type CatalogPack = BrickPack | 'npc'
+const partPackOptions: CatalogPack[] = ['lego', 'minecraft', 'npc']
 const validationDebounceMs = 120
 const initialVisiblePartCount = 12
 
@@ -62,6 +66,8 @@ export const ControlPanel = ({
   plan,
   onRenamePlan,
   onAddBrick,
+  onAddWorldEntity,
+  worldEntityCounts,
   inventoryOverrides,
   onInventoryChange,
   onResetInventory,
@@ -74,7 +80,7 @@ export const ControlPanel = ({
   const { locale, t } = useI18n()
   const [partQuery, setPartQuery] = useState('')
   const [partKindFilter, setPartKindFilter] = useState('all')
-  const [partPackFilter, setPartPackFilter] = useState<BrickPack>('lego')
+  const [partPackFilter, setPartPackFilter] = useState<CatalogPack>('lego')
   const [visiblePartLimit, setVisiblePartLimit] = useState(initialVisiblePartCount)
   const [backgroundValidation, setBackgroundValidation] = useState<{
     plan: BuildPlan
@@ -122,18 +128,37 @@ export const ControlPanel = ({
       : t('common.structureOk')
   const brickCounts = useMemo(() => countBricks(derivedPlan), [derivedPlan])
   const packBrickDefinitions = useMemo(
-    () => brickDefinitions.filter((brick) => brick.pack === partPackFilter),
+    () => partPackFilter === 'npc' ? [] : brickDefinitions.filter((brick) => brick.pack === partPackFilter),
     [partPackFilter],
   )
+  const visibleWorldEntityDefinitions = useMemo(() => {
+    if (partPackFilter !== 'npc') return []
+    const query = partQuery.trim().toLowerCase()
+    return worldEntityDefinitions.filter((definition) => {
+      const matchesKind = partKindFilter === 'all' || definition.role === partKindFilter
+      const matchesQuery = !query || [
+        definition.id,
+        definition.displayName,
+        definition.description,
+        definition.role,
+      ].some((value) => value.toLowerCase().includes(query))
+      return matchesKind && matchesQuery
+    })
+  }, [partKindFilter, partPackFilter, partQuery])
   const partKindOptions = useMemo(
     () => [
       { value: 'all', label: t('common.all') },
-      ...Array.from(new Set(packBrickDefinitions.map((brick) => brick.kind))).map((kind) => ({
-        value: kind,
-        label: t(`control.kind.${kind}`),
-      })),
+      ...(partPackFilter === 'npc'
+        ? Array.from(new Set(worldEntityDefinitions.map((definition) => definition.role))).map((role) => ({
+            value: role,
+            label: t(`control.npcRole.${role}`),
+          }))
+        : Array.from(new Set(packBrickDefinitions.map((brick) => brick.kind))).map((kind) => ({
+            value: kind,
+            label: t(`control.kind.${kind}`),
+          }))),
     ],
-    [packBrickDefinitions, t],
+    [packBrickDefinitions, partPackFilter, t],
   )
   const visibleBrickDefinitions = useMemo(() => {
     const query = partQuery.trim().toLowerCase()
@@ -227,7 +252,7 @@ export const ControlPanel = ({
             aria-label={t('control.partsPackSelect')}
             value={partPackFilter}
             onChange={(event) => {
-              setPartPackFilter(event.target.value as BrickPack)
+              setPartPackFilter(event.target.value as CatalogPack)
               setPartKindFilter('all')
             }}
           >
@@ -254,7 +279,7 @@ export const ControlPanel = ({
               </button>
             ))}
           </div>
-          <div className="inventory-tools">
+          {partPackFilter !== 'npc' && <div className="inventory-tools">
             <span>{t('control.inventoryHint')}</span>
             {Object.keys(inventoryOverrides).length > 0 && (
               <button type="button" onClick={onResetInventory}>
@@ -262,7 +287,7 @@ export const ControlPanel = ({
                 {t('control.inventoryReset')}
               </button>
             )}
-          </div>
+          </div>}
         </div>
         {visibleBrickDefinitions.length > 0 && (
           <div className="parts-list-summary">
@@ -273,6 +298,29 @@ export const ControlPanel = ({
           </div>
         )}
         <div className="parts-list">
+          {partPackFilter === 'npc' && visibleWorldEntityDefinitions.map((definition) => (
+            <article className="npc-catalog-item" key={definition.id}>
+              <button
+                className="npc-add-button"
+                type="button"
+                title={t('control.addNpc', { name: definition.displayName })}
+                onClick={() => onAddWorldEntity(definition.id)}
+              >
+                <span className={`npc-catalog-glyph ${definition.role}`} aria-hidden="true">
+                  {definition.id === 'knight' ? '♞' : definition.id === 'archer' ? '➶' : '⚙'}
+                </span>
+                <span className="part-copy">
+                  <strong>{definition.displayName}</strong>
+                  <small>{definition.description}</small>
+                  <small>{t('control.npcScale', {
+                    height: definition.visual.heightStuds,
+                    count: worldEntityCounts[definition.id] ?? 0,
+                  })}</small>
+                </span>
+                <Plus size={15} />
+              </button>
+            </article>
+          ))}
           {renderedBrickDefinitions.map((brick) => {
             const usedCount = brickCounts[brick.id] ?? 0
             const hasInventoryOverride = Object.prototype.hasOwnProperty.call(inventoryOverrides, brick.id)
@@ -317,7 +365,8 @@ export const ControlPanel = ({
               </article>
             )
           })}
-          {packBrickDefinitions.length === 0 && <p className="muted">{t('control.noPackParts')}</p>}
+          {partPackFilter === 'npc' && visibleWorldEntityDefinitions.length === 0 && <p className="muted">{t('control.noNpcs')}</p>}
+          {partPackFilter !== 'npc' && packBrickDefinitions.length === 0 && <p className="muted">{t('control.noPackParts')}</p>}
           {packBrickDefinitions.length > 0 && visibleBrickDefinitions.length === 0 && <p className="muted">{t('control.noParts')}</p>}
           {remainingPartCount > 0 && (
             <button
