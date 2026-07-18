@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
-import { BookOpen, Box, Download, ImageUp, Plus, RotateCcw, Sparkles, Trash2, Upload, X } from 'lucide-react'
+import { BookOpen, Box, Download, ImageUp, Plus, RotateCcw, Sparkles, Upload, X } from 'lucide-react'
 import { brickDefinitions, getDefaultBrickColor } from '../data/basicBricks'
 import { worldEntityDefinitions } from '../data/worldEntityDefinitions'
 import { PLATE_HEIGHT_WORLD } from '../lib/brickUnits'
@@ -33,7 +33,6 @@ type ControlPanelProps = {
   onExport: () => void
   onExportLDraw: () => void
   onImportPlan: (file?: File) => void
-  onResetWorkspace: () => void
   onOpenManual: () => void
 }
 
@@ -76,7 +75,6 @@ export const ControlPanel = ({
   onExport,
   onExportLDraw,
   onImportPlan,
-  onResetWorkspace,
   onOpenManual,
 }: ControlPanelProps) => {
   const { locale, t } = useI18n()
@@ -425,10 +423,6 @@ export const ControlPanel = ({
             }}
           />
         </label>
-        <button className="danger" type="button" onClick={onResetWorkspace}>
-          <Trash2 size={16} />
-          {t('control.resetCanvas')}
-        </button>
       </section>
     </aside>
   )

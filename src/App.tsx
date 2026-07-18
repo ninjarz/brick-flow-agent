@@ -32,6 +32,7 @@ import { applyWorldAiTurn, buildWorldAiTurnPrompt, createWorldAiSnapshot, format
 import { analyzeBuildStability } from './lib/stabilityAnalysis'
 import { formatLDrawPlan, parseLDrawPlan } from './lib/ldrawPlan'
 import { getEffectiveInventory, loadInventoryOverrides, saveInventoryOverrides } from './lib/userInventory'
+import { importAssetPlanIncrementally } from './lib/incrementalAssetImport'
 import { clearWorkspaceDraft, hasIndexedDbWorkspaceDraft, loadWorkspaceDraft, loadWorkspaceDraftFromIndexedDb, saveWorkspaceDraft } from './lib/workspaceDraft'
 import type { BrickStructure, BuildPlan, FinishedAsset, LlmConfig, PlacedBrick } from './types/bricks'
 import type { WorldEntity, WorldEntityCommand } from './types/world'
@@ -215,6 +216,7 @@ function App() {
   const [assetQuery, setAssetQuery] = useState('')
   const [assetCategoryFilter, setAssetCategoryFilter] = useState('all')
   const [sceneViewMode, setSceneViewMode] = useState<BrickSceneViewMode>('border')
+  const [assetImportFrameVersion, setAssetImportFrameVersion] = useState(0)
   const [isAutoSnapEnabled, setIsAutoSnapEnabled] = useState(false)
   const sceneStabilityAnalysis = useMemo(
     () => sceneViewMode === 'xray' ? analyzeBuildStability(plan.bricks) : undefined,
@@ -1749,9 +1751,18 @@ function App() {
       return
     }
 
-    setPlan(asset.displayPlan)
-    setPrompt(asset.displayPrompt)
-    selectBrick('')
+    const imported = importAssetPlanIncrementally(planRef.current, asset.displayPlan)
+    if (!imported) {
+      setGenerationFailure(t('error.assetNoSpace'))
+      setIsAssetLibraryOpen(false)
+      return
+    }
+
+    setPlan(imported.plan)
+    setSelectedId(imported.importedBrickIds.at(-1) ?? '')
+    setSelectedGroupIds(imported.importedBrickIds.length > 1 ? imported.importedBrickIds : [])
+    setSelectedWorldEntityId('')
+    setAssetImportFrameVersion((version) => version + 1)
     setIsAssetLibraryOpen(false)
     clearGenerationFeedback()
     if (issues.length > 0) {
@@ -1917,6 +1928,15 @@ function App() {
                 >
                   {isAutoSnapEnabled ? <Link size={18} /> : <Unlink2 size={18} />}
                 </button>
+                <button
+                  className="icon-button danger"
+                  type="button"
+                  aria-label={t('control.resetCanvas')}
+                  title={t('control.resetCanvas')}
+                  onClick={resetWorkspace}
+                >
+                  <Trash2 size={18} />
+                </button>
               </div>
             </section>
 
@@ -2071,7 +2091,7 @@ function App() {
             <BrickScene
               bricks={plan.bricks}
               selectedId={selectedId}
-              cameraFrameKey={plan.id}
+              cameraFrameKey={`${plan.id}:asset-import-${assetImportFrameVersion}`}
               viewMode={sceneViewMode}
               stabilityAnalysis={sceneStabilityAnalysis}
               highlightedIds={activeSelectedIds.filter((id) => id !== selectedId)}
@@ -2160,7 +2180,6 @@ function App() {
         onExport={exportPlan}
         onExportLDraw={exportLDraw}
         onImportPlan={handleImportPlan}
-        onResetWorkspace={resetWorkspace}
         onOpenManual={() => openManual()}
       />
 
