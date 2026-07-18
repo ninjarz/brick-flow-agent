@@ -375,6 +375,12 @@ function App() {
     const ids = groupIds.length > 1 ? groupIds : [selectedId]
     return ids.filter((id) => liveBrickIds.has(id))
   }, [plan.bricks, selectedGroupIds, selectedId])
+  const placementSourceBrickIds = useMemo(
+    () => placementSession?.kind === 'move'
+      ? placementSession.sourceBricks.map((brick) => brick.id)
+      : [],
+    [placementSession],
+  )
   const selectedBatchCount = activeSelectedIds.length
   const selectedStructure = useMemo(
     () => getExactSelectionStructure(plan, activeSelectedIds),
@@ -2113,6 +2119,7 @@ function App() {
               worldEntityPlacementPreview={worldEntityPlacement?.entity}
               selectedWorldEntityId={selectedWorldEntityId}
               placementPreviewBricks={placementSession?.previewBricks}
+              placementSourceBrickIds={placementSourceBrickIds}
               placementActive={Boolean(placementSession || worldEntityPlacement)}
               onSelect={selectBrick}
               onSelectConnected={selectConnectedGroup}

@@ -10,6 +10,7 @@ import { getBrickWorldBoundsFrame } from '../lib/ldrawBounds'
 import { loadLDrawGeneratedVisual } from '../lib/ldrawGeneratedVisualLoader'
 import { normalizeLDrawPartNumber } from '../lib/ldrawPartNumbers'
 import { createLoadedLDrawPartGeometry } from '../lib/ldrawVisualGeometry'
+import { getVisibleBricksDuringPlacement } from '../lib/brickPlacementPreview'
 import { createBuildGraph, getBrickBounds } from '../lib/planUtils'
 import { getScenePerformanceSettings } from '../lib/scenePerformance'
 import { getWorldProjectileVisuals, sampleWorldProjectilePosition, type WorldProjectileVisual } from '../lib/worldProjectiles'
@@ -59,6 +60,7 @@ type BrickSceneProps = {
   worldEntityPlacementPreview?: WorldEntity
   selectedWorldEntityId?: string
   placementPreviewBricks?: PlacedBrick[]
+  placementSourceBrickIds?: string[]
   placementActive?: boolean
   onCameraAzimuthChange?: (degrees: number) => void
   onSelect: (id: string, options?: BrickSelectionOptions) => void
@@ -2084,6 +2086,7 @@ export const BrickScene = ({
   worldEntityPlacementPreview,
   selectedWorldEntityId,
   placementPreviewBricks = [],
+  placementSourceBrickIds = [],
   placementActive = false,
   onCameraAzimuthChange,
   onSelect,
@@ -2102,6 +2105,10 @@ export const BrickScene = ({
   const xrayDebug = viewMode === 'xray'
   const showBrickEdges = viewMode === 'border' || xrayDebug
   const highlightedIdSet = useMemo(() => new Set(highlightedIds), [highlightedIds])
+  const visibleBricks = useMemo(
+    () => getVisibleBricksDuringPlacement(bricks, placementSourceBrickIds),
+    [bricks, placementSourceBrickIds],
+  )
   const [ldrawBoundsVersion, setLDrawBoundsVersion] = useState(0)
   const deferredFrameBricks = useDeferredValue(bricks)
   const deferredCameraFrameKey = useDeferredValue(cameraFrameKey)
@@ -2240,7 +2247,7 @@ export const BrickScene = ({
         <gridHelper args={[gridFrame.size, gridFrame.size, '#93a4b7', '#c4ced8']} position={[gridFrame.centerX, 0, gridFrame.centerZ]} />
         {structuralDebug ? (
           <StructuralVoxelScene
-            bricks={bricks}
+            bricks={visibleBricks}
             selectedId={selectedId}
             highlightedIdSet={highlightedIdSet}
             boundsVersion={ldrawBoundsVersion}
@@ -2253,7 +2260,7 @@ export const BrickScene = ({
           />
         ) : useSimplifiedInteractionView ? (
           <SimplifiedBrickScene
-            bricks={bricks}
+            bricks={visibleBricks}
             selectedId={selectedId}
             highlightedIdSet={highlightedIdSet}
             showEdges={showBrickEdges}
@@ -2266,7 +2273,7 @@ export const BrickScene = ({
             onConfirmPlacement={onConfirmPlacement}
             onCancelPlacement={onCancelPlacement}
           />
-        ) : bricks.map((brick) => (
+        ) : visibleBricks.map((brick) => (
           <TransformedBrick key={brick.id} transform={transformsByBrickId?.get(brick.id)}>
             <BrickMesh
               brick={brick}
