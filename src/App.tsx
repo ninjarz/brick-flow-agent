@@ -571,12 +571,16 @@ function App() {
 
   useEffect(() => {
     if (world.entities.length === 0 || world.paused || placementSession || worldEntityPlacement) return
-    let animationFrame = 0
+    let timeoutId = 0
     let clock = createWorldFixedStepClock(performance.now())
     const resetClock = () => {
       clock = createWorldFixedStepClock(performance.now())
     }
-    const animateWorld = (now: number) => {
+    const scheduleWorldStep = () => {
+      timeoutId = window.setTimeout(animateWorld, worldSimulationStepSeconds * 1_000)
+    }
+    const animateWorld = () => {
+      const now = performance.now()
       const advanced = advanceWorldFixedStepClock(clock, now, worldSimulationStepSeconds)
       clock = advanced.clock
       if (advanced.stepCount > 0) {
@@ -593,13 +597,13 @@ function App() {
           return next
         })
       }
-      animationFrame = requestAnimationFrame(animateWorld)
+      scheduleWorldStep()
     }
     document.addEventListener('visibilitychange', resetClock)
-    animationFrame = requestAnimationFrame(animateWorld)
+    scheduleWorldStep()
     return () => {
       document.removeEventListener('visibilitychange', resetClock)
-      cancelAnimationFrame(animationFrame)
+      window.clearTimeout(timeoutId)
     }
   }, [placementSession, world.entities.length, world.paused, worldEntityPlacement])
 
