@@ -106,6 +106,64 @@ describe('WorldEntity simulation', () => {
     expect(next.events.some((event) => event.type === 'attack')).toBe(false)
   })
 
+  it('turns slow vehicles toward their target without snapping their heading', () => {
+    const catapult = worldEntityDefinitionById.get('catapult')!
+    const knight = worldEntityDefinitionById.get('knight')!
+    const attacker = createWorldEntity(catapult, {
+      id: 'turning-catapult',
+      controller: 'player',
+      factionId: 'blue',
+      transform: { x: 0, z: 0, rotationRadians: 0 },
+    })
+    const target = createWorldEntity(knight, {
+      id: 'rear-target',
+      controller: 'player',
+      factionId: 'red',
+      transform: { x: 0, z: -10 },
+    })
+    attacker.activeCommand = { type: 'attack', target: { kind: 'entity', id: target.id } }
+    const world = { ...createEmptyWorldState('plan-1'), entities: [attacker, target] }
+
+    const next = stepWorldSimulation(world, [], 0.1)
+    const maximumTurn = catapult.movement.turningRadiansPerSecond * 0.1
+
+    expect(Math.abs(next.entities[0].transform.rotationRadians)).toBeGreaterThan(0)
+    expect(Math.abs(next.entities[0].transform.rotationRadians)).toBeLessThanOrEqual(maximumTurn + 0.000001)
+  })
+
+  it('clears behavior and queued orders when a unit is defeated', () => {
+    const knight = worldEntityDefinitionById.get('knight')!
+    const attacker = createWorldEntity(knight, {
+      id: 'finisher',
+      controller: 'player',
+      factionId: 'blue',
+      transform: { x: 0, z: 0 },
+    })
+    const victim = {
+      ...createWorldEntity(knight, {
+        id: 'ordered-victim',
+        controller: 'player',
+        factionId: 'red',
+        transform: { x: 1.5, z: 0 },
+      }),
+      health: 1,
+      activeCommand: { type: 'follow', target: { kind: 'entity', id: attacker.id } } as const,
+      commandQueue: [{ type: 'attack', target: { kind: 'entity', id: attacker.id } } as const],
+    }
+    attacker.activeCommand = { type: 'attack', target: { kind: 'entity', id: victim.id } }
+    const world = { ...createEmptyWorldState('plan-1'), entities: [attacker, victim] }
+
+    const next = stepWorldSimulation(world, [], 0.1)
+
+    expect(next.entities[1]).toMatchObject({
+      health: 0,
+      behaviorState: 'dead',
+      commandQueue: [],
+      navigation: { status: 'idle', path: [] },
+    })
+    expect(next.entities[1].activeCommand).toBeUndefined()
+  })
+
   it('emits brick hits without mutating the build bricks', () => {
     const knight = worldEntityDefinitionById.get('knight')!
     const brick = makeBrick('brick-1x1', 'gray', 0, 0, 0)

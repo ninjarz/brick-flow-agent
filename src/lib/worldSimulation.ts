@@ -360,6 +360,31 @@ const nextSocialDecisionDelay = (entityId: string, elapsedSeconds: number) => {
   return 7 + (hash % 6)
 }
 
+const normalizeAngleRadians = (value: number) => Math.atan2(Math.sin(value), Math.cos(value))
+
+const turnEntityToward = (
+  entity: WorldEntity,
+  targetPoint: Point,
+  turningRadiansPerSecond: number,
+  deltaSeconds: number,
+) => {
+  const desiredRotation = Math.atan2(
+    targetPoint.x - entity.transform.x,
+    targetPoint.z - entity.transform.z,
+  )
+  const rotationDelta = normalizeAngleRadians(desiredRotation - entity.transform.rotationRadians)
+  const maximumTurn = Math.max(0, turningRadiansPerSecond * deltaSeconds)
+  const appliedTurn = Math.max(-maximumTurn, Math.min(maximumTurn, rotationDelta))
+  return normalizeAngleRadians(entity.transform.rotationRadians + appliedTurn)
+}
+
+const stableDirectionRadians = (entityId: string) => {
+  const hash = [...entityId].reduce((value, character) => (
+    Math.imul(value ^ character.charCodeAt(0), 16777619) >>> 0
+  ), 2166136261)
+  return hash / 0xffffffff * Math.PI * 2
+}
+
 const getRetreatPoint = (entity: WorldEntity, targetPoint: Point, minimumRangeStuds: number): Point => {
   let dx = entity.transform.x - targetPoint.x
   let dz = entity.transform.z - targetPoint.z
@@ -376,13 +401,6 @@ const getRetreatPoint = (entity: WorldEntity, targetPoint: Point, minimumRangeSt
     y: entity.transform.y,
     z: entity.transform.z + dz / distance * retreatDistance,
   }
-}
-
-const stableDirectionRadians = (entityId: string) => {
-  const hash = [...entityId].reduce((value, character) => (
-    Math.imul(value ^ character.charCodeAt(0), 16777619) >>> 0
-  ), 2166136261)
-  return hash / 0xffffffff * Math.PI * 2
 }
 
 const moveEntityToward = (
@@ -456,7 +474,12 @@ const moveEntityToward = (
         ...entity.transform,
         x: nextPoint.x,
         z: nextPoint.z,
-        rotationRadians: Math.atan2(dx, dz),
+        rotationRadians: turnEntityToward(
+          entity,
+          destination,
+          definition.movement.turningRadiansPerSecond,
+          deltaSeconds,
+        ),
       },
       navigation: { status: 'moving' as const, target, path, pathIndex: nextPathIndex },
     },
@@ -534,7 +557,16 @@ export const stepWorldSimulation = (
       if (targetIndex === undefined || entities[targetIndex].health <= 0) continue
       const victim = entities[targetIndex]
       const nextHealth = Math.max(0, victim.health - impact.damage)
-      entities[targetIndex] = { ...victim, health: nextHealth, behaviorState: nextHealth <= 0 ? 'dead' : victim.behaviorState }
+      entities[targetIndex] = nextHealth <= 0
+        ? {
+            ...victim,
+            health: 0,
+            activeCommand: undefined,
+            commandQueue: [],
+            behaviorState: 'dead',
+            navigation: { status: 'idle', path: [], pathIndex: 0 },
+          }
+        : { ...victim, health: nextHealth }
       events.push(makeEvent(timeSeconds, 'damage', impact.actorId, victim.id, impact.damage))
       if (nextHealth <= 0) {
         events.push(makeEvent(timeSeconds, 'defeated', impact.actorId, victim.id))
@@ -554,7 +586,13 @@ export const stepWorldSimulation = (
   for (let index = 0; index < entities.length; index += 1) {
     let entity = entities[index]
     if (entity.health <= 0) {
-      entities[index] = { ...entity, behaviorState: 'dead' }
+      entities[index] = {
+        ...entity,
+        activeCommand: undefined,
+        commandQueue: [],
+        behaviorState: 'dead',
+        navigation: { status: 'idle', path: [], pathIndex: 0 },
+      }
       continue
     }
     let activeCommand = entity.activeCommand
@@ -635,7 +673,19 @@ export const stepWorldSimulation = (
     }
     const hasAttackLineOfSight = definition?.combat.projectileKind !== 'arrow' || !targetEntity || hasLineOfSight(entity, targetEntity)
     if (isAttack && definition && targetDistance <= definition.combat.attackRangeStuds && hasAttackLineOfSight) {
-      entity = { ...entity, behaviorState: 'attacking' }
+      entity = {
+        ...entity,
+        behaviorState: 'attacking',
+        transform: {
+          ...entity.transform,
+          rotationRadians: turnEntityToward(
+            entity,
+            targetPoint,
+            definition.movement.turningRadiansPerSecond,
+            deltaSeconds,
+          ),
+        },
+      }
       if (entity.combat.cooldownRemainingSeconds <= 0) {
         entity = {
           ...entity,
@@ -656,7 +706,16 @@ export const stepWorldSimulation = (
           if (targetIndex !== undefined) {
             const victim = entities[targetIndex]
             const nextHealth = Math.max(0, victim.health - definition.combat.damage)
-            entities[targetIndex] = { ...victim, health: nextHealth, behaviorState: nextHealth <= 0 ? 'dead' : victim.behaviorState }
+            entities[targetIndex] = nextHealth <= 0
+              ? {
+                  ...victim,
+                  health: 0,
+                  activeCommand: undefined,
+                  commandQueue: [],
+                  behaviorState: 'dead',
+                  navigation: { status: 'idle', path: [], pathIndex: 0 },
+                }
+              : { ...victim, health: nextHealth }
             events.push(makeEvent(timeSeconds, 'damage', entity.id, victim.id, definition.combat.damage))
             if (nextHealth <= 0) {
               events.push(makeEvent(timeSeconds, 'defeated', entity.id, victim.id))
