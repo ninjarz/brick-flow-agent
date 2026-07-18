@@ -323,11 +323,13 @@ const findNearestEntity = (
 
 const findNearestEnemy = (entity: WorldEntity, entities: WorldEntity[]) => {
   if (entity.factionId === 'neutral') return undefined
+  const detectionRange = worldEntityDefinitionById.get(entity.definitionId)?.perception.detectionRangeStuds ?? 0
   return findNearestEntity(entity, entities, (candidate) => (
       candidate.id !== entity.id &&
       candidate.health > 0 &&
       candidate.factionId !== 'neutral' &&
-      candidate.factionId !== entity.factionId
+      candidate.factionId !== entity.factionId &&
+      distance2d(entity.transform, candidate.transform) <= detectionRange
   ))
 }
 
@@ -356,6 +358,31 @@ const nextSocialDecisionDelay = (entityId: string, elapsedSeconds: number) => {
   const key = `${entityId}:${Math.floor(elapsedSeconds)}`
   const hash = [...key].reduce((value, character) => Math.imul(value ^ character.charCodeAt(0), 16777619) >>> 0, 2166136261)
   return 7 + (hash % 6)
+}
+
+const getRetreatPoint = (entity: WorldEntity, targetPoint: Point, minimumRangeStuds: number): Point => {
+  let dx = entity.transform.x - targetPoint.x
+  let dz = entity.transform.z - targetPoint.z
+  let distance = Math.hypot(dx, dz)
+  if (distance < 0.001) {
+    const direction = stableDirectionRadians(entity.id)
+    dx = Math.sin(direction)
+    dz = Math.cos(direction)
+    distance = 1
+  }
+  const retreatDistance = Math.max(navigationGridStuds, minimumRangeStuds - distance + navigationGridStuds)
+  return {
+    x: entity.transform.x + dx / distance * retreatDistance,
+    y: entity.transform.y,
+    z: entity.transform.z + dz / distance * retreatDistance,
+  }
+}
+
+const stableDirectionRadians = (entityId: string) => {
+  const hash = [...entityId].reduce((value, character) => (
+    Math.imul(value ^ character.charCodeAt(0), 16777619) >>> 0
+  ), 2166136261)
+  return hash / 0xffffffff * Math.PI * 2
 }
 
 const moveEntityToward = (
@@ -588,6 +615,23 @@ export const stepWorldSimulation = (
       events.push(makeEvent(timeSeconds, 'interaction', entity.id, target.id))
       entities[index] = { ...entity, activeCommand: undefined, behaviorState: 'idle' }
       continue
+    }
+    const minimumRangeStuds = definition?.combat.minimumRangeStuds ?? 0
+    if (isAttack && targetEntity && minimumRangeStuds > 0 && targetDistance < minimumRangeStuds) {
+      const retreatTarget: WorldTargetRef = { kind: 'waypoint', id: `retreat:${target.id}` }
+      const retreat = moveEntityToward(
+        entity,
+        retreatTarget,
+        getRetreatPoint(entity, targetPoint, minimumRangeStuds),
+        bricks,
+        entityOccupancy,
+        deltaSeconds,
+      )
+      if (retreat.entity.behaviorState !== 'blocked') {
+        entities[index] = retreat.entity
+        updateWorldEntityOccupancy(entityOccupancy, retreat.entity)
+        continue
+      }
     }
     const hasAttackLineOfSight = definition?.combat.projectileKind !== 'arrow' || !targetEntity || hasLineOfSight(entity, targetEntity)
     if (isAttack && definition && targetDistance <= definition.combat.attackRangeStuds && hasAttackLineOfSight) {

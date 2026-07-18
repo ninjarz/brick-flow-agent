@@ -28,6 +28,9 @@ export const worldEntityDefinitions: WorldEntityDefinition[] = [
       turningRadiansPerSecond: Math.PI * 1.8,
       turningRadiusStuds: 0.45,
     },
+    perception: {
+      detectionRangeStuds: 12,
+    },
     combat: {
       maxHealth: 120,
       attackRangeStuds: 1.5,
@@ -60,9 +63,13 @@ export const worldEntityDefinitions: WorldEntityDefinition[] = [
       turningRadiansPerSecond: Math.PI * 2,
       turningRadiusStuds: 0.4,
     },
+    perception: {
+      detectionRangeStuds: 16,
+    },
     combat: {
       maxHealth: 80,
       attackRangeStuds: 10,
+      minimumRangeStuds: 4,
       damage: 12,
       cooldownSeconds: 1.25,
       projectileKind: 'arrow',
@@ -94,9 +101,13 @@ export const worldEntityDefinitions: WorldEntityDefinition[] = [
       turningRadiansPerSecond: Math.PI * 0.55,
       turningRadiusStuds: 2.4,
     },
+    perception: {
+      detectionRangeStuds: 24,
+    },
     combat: {
       maxHealth: 260,
       attackRangeStuds: 18,
+      minimumRangeStuds: 8,
       damage: 42,
       cooldownSeconds: 4.5,
       projectileKind: 'stone',
@@ -107,4 +118,3 @@ export const worldEntityDefinitions: WorldEntityDefinition[] = [
 export const worldEntityDefinitionById = new Map(
   worldEntityDefinitions.map((definition) => [definition.id, definition]),
 )
-

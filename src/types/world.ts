@@ -149,9 +149,13 @@ export type WorldEntityDefinition = {
     turningRadiansPerSecond: number
     turningRadiusStuds: number
   }
+  perception: {
+    detectionRangeStuds: number
+  }
   combat: {
     maxHealth: number
     attackRangeStuds: number
+    minimumRangeStuds?: number
     damage: number
     cooldownSeconds: number
     projectileKind?: 'arrow' | 'stone'

@@ -60,6 +60,52 @@ describe('WorldEntity simulation', () => {
     expect(next.events.some((event) => event.type === 'damage')).toBe(true)
   })
 
+  it('does not acquire hostile units outside its perception radius', () => {
+    const knight = worldEntityDefinitionById.get('knight')!
+    const observer = createWorldEntity(knight, {
+      id: 'observer',
+      factionId: 'blue',
+      transform: { x: 0, z: 0 },
+    })
+    const distantEnemy = createWorldEntity(knight, {
+      id: 'distant-enemy',
+      controller: 'player',
+      factionId: 'red',
+      transform: { x: knight.perception.detectionRangeStuds + 2, z: 0 },
+    })
+    const world = { ...createEmptyWorldState('plan-1'), entities: [observer, distantEnemy] }
+
+    const next = stepWorldSimulation(world, [], 0.1)
+
+    expect(next.entities[0].activeCommand).toBeUndefined()
+    expect(next.entities[0].behaviorState).toBe('idle')
+  })
+
+  it('makes ranged units retreat before firing at a target that is too close', () => {
+    const archer = worldEntityDefinitionById.get('archer')!
+    const knight = worldEntityDefinitionById.get('knight')!
+    const ranged = createWorldEntity(archer, {
+      id: 'retreating-archer',
+      controller: 'player',
+      factionId: 'blue',
+      transform: { x: 0, z: 0 },
+    })
+    const enemy = createWorldEntity(knight, {
+      id: 'close-enemy',
+      controller: 'player',
+      factionId: 'red',
+      transform: { x: 2, z: 0 },
+    })
+    ranged.activeCommand = { type: 'attack', target: { kind: 'entity', id: enemy.id } }
+    const world = { ...createEmptyWorldState('plan-1'), entities: [ranged, enemy] }
+
+    const next = stepWorldSimulation(world, [], 0.1)
+
+    expect(next.entities[0].transform.x).toBeLessThan(ranged.transform.x)
+    expect(next.entities[0].behaviorState).toBe('moving')
+    expect(next.events.some((event) => event.type === 'attack')).toBe(false)
+  })
+
   it('emits brick hits without mutating the build bricks', () => {
     const knight = worldEntityDefinitionById.get('knight')!
     const brick = makeBrick('brick-1x1', 'gray', 0, 0, 0)
