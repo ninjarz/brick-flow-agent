@@ -9,13 +9,20 @@ type VisualChunkLoader = () => Promise<LDrawGeneratedVisualChunk>
 
 const loadedChunks = new Map<VisualChunkLoader, LDrawGeneratedVisualChunk>()
 const loadingChunks = new Map<VisualChunkLoader, Promise<LDrawGeneratedVisualChunk>>()
-const loadListeners = new Set<() => void>()
+const partNumbersByLoader = new Map<VisualChunkLoader, string[]>()
+for (const [partNumber, loader] of Object.entries(ldrawGeneratedVisualChunkLoaders)) {
+  const partNumbers = partNumbersByLoader.get(loader)
+  if (partNumbers) partNumbers.push(partNumber)
+  else partNumbersByLoader.set(loader, [partNumber])
+}
+const loadListeners = new Set<(partNumbers: readonly string[]) => void>()
 
-const notifyLoaded = () => {
-  for (const listener of loadListeners) listener()
+const notifyLoaded = (loader: VisualChunkLoader) => {
+  const partNumbers = partNumbersByLoader.get(loader) ?? []
+  for (const listener of loadListeners) listener(partNumbers)
 }
 
-export const onLDrawGeneratedVisualLoaded = (listener: () => void) => {
+export const onLDrawGeneratedVisualLoaded = (listener: (partNumbers: readonly string[]) => void) => {
   loadListeners.add(listener)
   return () => loadListeners.delete(listener)
 }
@@ -33,7 +40,7 @@ const loadVisualChunk = (loader: VisualChunkLoader) => {
   const loading = loader()
     .then((module) => {
       loadedChunks.set(loader, module)
-      notifyLoaded()
+      notifyLoaded(loader)
       return module
     })
     .finally(() => loadingChunks.delete(loader))

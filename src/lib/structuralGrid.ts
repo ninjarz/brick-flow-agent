@@ -28,22 +28,6 @@ const worldCollisionCellBoxCache = new Map<string, WorldStructuralCellBox[]>()
 const worldCollisionKeyCache = new Map<string, Set<string>>()
 let structuralCacheVersion = 0
 
-onLDrawGeneratedVisualLoaded(() => {
-  structuralCacheVersion += 1
-  structuralCellCache.clear()
-  renderStructuralCellCache.clear()
-  interactionStructuralCellCache.clear()
-  localSupportBoundsCache.clear()
-  localSupportFaceCache.clear()
-  worldStructuralCellBoxCache.clear()
-  worldRenderStructuralCellBoxCache.clear()
-  worldSupportCellBoxCache.clear()
-  worldSupportFaceCache.clear()
-  worldSupportBoundsCache.clear()
-  worldCollisionCellBoxCache.clear()
-  worldCollisionKeyCache.clear()
-})
-
 export const getStructuralCacheVersion = () => structuralCacheVersion
 
 export type StructuralCellKind = 'solid' | 'stud' | 'socket' | 'studsocket' | 'enterable'
@@ -359,6 +343,38 @@ const nominalBlockStructureIds = new Set([
 
 const usesNominalBlockStructure = (definition: BrickDefinition) =>
   definition.kind === 'block' || nominalBlockStructureIds.has(definition.id)
+
+const deleteDefinitionCacheEntries = <T>(cache: Map<string, T>, definitionIds: Set<string>) => {
+  for (const key of cache.keys()) {
+    const separatorIndex = key.indexOf(':')
+    if (separatorIndex >= 0 && definitionIds.has(key.slice(0, separatorIndex))) cache.delete(key)
+  }
+}
+
+onLDrawGeneratedVisualLoaded((partNumbers) => {
+  const loadedPartNumbers = new Set(partNumbers)
+  const affectedDefinitionIds = new Set(Array.from(brickById.values())
+    .filter((definition) => (
+      !usesNominalBlockStructure(definition)
+      && loadedPartNumbers.has(normalizeLDrawPartNumber(definition.partNumber))
+    ))
+    .map((definition) => definition.id))
+  if (affectedDefinitionIds.size === 0) return
+
+  structuralCacheVersion += 1
+  deleteDefinitionCacheEntries(structuralCellCache, affectedDefinitionIds)
+  deleteDefinitionCacheEntries(renderStructuralCellCache, affectedDefinitionIds)
+  deleteDefinitionCacheEntries(interactionStructuralCellCache, affectedDefinitionIds)
+  deleteDefinitionCacheEntries(localSupportBoundsCache, affectedDefinitionIds)
+  deleteDefinitionCacheEntries(localSupportFaceCache, affectedDefinitionIds)
+  deleteDefinitionCacheEntries(worldStructuralCellBoxCache, affectedDefinitionIds)
+  deleteDefinitionCacheEntries(worldRenderStructuralCellBoxCache, affectedDefinitionIds)
+  deleteDefinitionCacheEntries(worldSupportCellBoxCache, affectedDefinitionIds)
+  deleteDefinitionCacheEntries(worldSupportFaceCache, affectedDefinitionIds)
+  deleteDefinitionCacheEntries(worldSupportBoundsCache, affectedDefinitionIds)
+  deleteDefinitionCacheEntries(worldCollisionCellBoxCache, affectedDefinitionIds)
+  deleteDefinitionCacheEntries(worldCollisionKeyCache, affectedDefinitionIds)
+})
 
 const makeStructuralDefinitionCacheKey = (definition: BrickDefinition) =>
   `${definition.id}:${definition.partNumber}:${definition.footprint.widthStuds},${definition.footprint.depthStuds},${definition.footprint.heightStuds}`
