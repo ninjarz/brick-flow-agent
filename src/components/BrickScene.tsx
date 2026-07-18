@@ -8,6 +8,7 @@ import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { createRound2x2AxleBodyGeometry, createRound2x2AxleGrilleBodyGeometry } from '../lib/csgBrickGeometry'
 import { getBrickWorldBoundsFrame } from '../lib/ldrawBounds'
 import { loadLDrawGeneratedVisual } from '../lib/ldrawGeneratedVisualLoader'
+import { normalizeLDrawPartNumber } from '../lib/ldrawPartNumbers'
 import { createLoadedLDrawPartGeometry } from '../lib/ldrawVisualGeometry'
 import { createBuildGraph, getBrickBounds } from '../lib/planUtils'
 import { getScenePerformanceSettings } from '../lib/scenePerformance'
@@ -2066,6 +2067,10 @@ export const BrickScene = ({
   const deferredFrameBricks = useDeferredValue(bricks)
   const deferredCameraFrameKey = useDeferredValue(cameraFrameKey)
   const frameBricks = deferredFrameBricks
+  const frameLDrawPartNumbersKey = useMemo(() => Array.from(new Set(frameBricks.flatMap((brick) => {
+    const definition = brickById.get(brick.brickId)
+    return definition?.pack === 'lego' ? [normalizeLDrawPartNumber(definition.partNumber)] : []
+  }))).sort().join('|'), [frameBricks])
   const performanceSettings = getScenePerformanceSettings(bricks.length, viewMode)
   const enableRealtimeShadows = performanceSettings.enableRealtimeShadows
   const preferDetailedGeometry = ldrawBoundsVersion > 0
@@ -2080,14 +2085,14 @@ export const BrickScene = ({
 
   useEffect(() => {
     let cancelled = false
-    loadLDrawGeneratedVisual().then(() => {
+    loadLDrawGeneratedVisual(frameLDrawPartNumbersKey ? frameLDrawPartNumbersKey.split('|') : []).then(() => {
       if (!cancelled) setLDrawBoundsVersion((version) => version + 1)
     })
 
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [frameLDrawPartNumbersKey])
 
   const gridFrame = useMemo(() => {
     void ldrawBoundsVersion

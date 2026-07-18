@@ -1,11 +1,14 @@
-import type { MeshTriangle } from './structuralVoxelizer'
+import {
+  ldrawGeneratedVisualChunkLoaders,
+  ldrawGeneratedVisualPartNumbers,
+  type LDrawGeneratedVisualChunk,
+} from './ldrawGeneratedVisual'
+import { normalizeLDrawPartNumber } from './ldrawPartNumbers'
 
-type LDrawGeneratedVisualModule = {
-  getLDrawGeneratedVisualTriangles: (partNumber: string) => MeshTriangle[] | undefined
-}
+type VisualChunkLoader = () => Promise<LDrawGeneratedVisualChunk>
 
-let loadedModule: LDrawGeneratedVisualModule | undefined
-let loadingModule: Promise<LDrawGeneratedVisualModule> | undefined
+const loadedChunks = new Map<VisualChunkLoader, LDrawGeneratedVisualChunk>()
+const loadingChunks = new Map<VisualChunkLoader, Promise<LDrawGeneratedVisualChunk>>()
 const loadListeners = new Set<() => void>()
 
 const notifyLoaded = () => {
@@ -17,18 +20,48 @@ export const onLDrawGeneratedVisualLoaded = (listener: () => void) => {
   return () => loadListeners.delete(listener)
 }
 
-export const loadLDrawGeneratedVisual = async () => {
-  if (loadedModule) return loadedModule
-  loadingModule ??= import('./ldrawGeneratedVisual').then((module) => {
-    loadedModule = module
-    notifyLoaded()
-    return module
-  })
-  return loadingModule
+const getVisualChunkLoader = (partNumber: string) =>
+  ldrawGeneratedVisualChunkLoaders[normalizeLDrawPartNumber(partNumber)]
+
+const loadVisualChunk = (loader: VisualChunkLoader) => {
+  const loadedChunk = loadedChunks.get(loader)
+  if (loadedChunk) return Promise.resolve(loadedChunk)
+
+  const activeLoad = loadingChunks.get(loader)
+  if (activeLoad) return activeLoad
+
+  const loading = loader()
+    .then((module) => {
+      loadedChunks.set(loader, module)
+      notifyLoaded()
+      return module
+    })
+    .finally(() => loadingChunks.delete(loader))
+  loadingChunks.set(loader, loading)
+  return loading
 }
 
-export const getLoadedLDrawGeneratedVisualTriangles = (partNumber: string) =>
-  loadedModule?.getLDrawGeneratedVisualTriangles(partNumber)
+export const loadLDrawGeneratedVisual = async (partNumbers = ldrawGeneratedVisualPartNumbers) => {
+  const loaders = new Set(
+    partNumbers
+      .map(getVisualChunkLoader)
+      .filter((loader): loader is VisualChunkLoader => Boolean(loader)),
+  )
+  await Promise.all(Array.from(loaders, loadVisualChunk))
+}
 
-export const loadLDrawGeneratedVisualTriangles = async (partNumber: string) =>
-  (await loadLDrawGeneratedVisual()).getLDrawGeneratedVisualTriangles(partNumber)
+export const getLoadedLDrawGeneratedVisualTriangles = (partNumber: string) => {
+  const normalizedPartNumber = normalizeLDrawPartNumber(partNumber)
+  const loader = getVisualChunkLoader(normalizedPartNumber)
+  return loader
+    ? loadedChunks.get(loader)?.getLDrawGeneratedVisualTriangles(normalizedPartNumber)
+    : undefined
+}
+
+export const loadLDrawGeneratedVisualTriangles = async (partNumber: string) => {
+  const normalizedPartNumber = normalizeLDrawPartNumber(partNumber)
+  const loader = getVisualChunkLoader(normalizedPartNumber)
+  return loader
+    ? (await loadVisualChunk(loader)).getLDrawGeneratedVisualTriangles(normalizedPartNumber)
+    : undefined
+}

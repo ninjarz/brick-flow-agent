@@ -13,12 +13,12 @@ const showDetails = process.argv.includes('--details')
 await writeFile(entry, `
   import { brickDefinitions } from ${JSON.stringify(`${workspace}/src/data/basicBricks.ts`)};
   import { getLDrawGeneratedConnectors } from ${JSON.stringify(`${workspace}/src/lib/ldrawGeneratedConnectors.ts`)};
-  import { getLDrawGeneratedVisualTriangles } from ${JSON.stringify(`${workspace}/src/lib/ldrawGeneratedVisual.ts`)};
+  import { loadLDrawGeneratedVisualTriangles } from ${JSON.stringify(`${workspace}/src/lib/ldrawGeneratedVisualLoader.ts`)};
   import { normalizeLDrawPartNumber } from ${JSON.stringify(`${workspace}/src/lib/ldrawPartNumbers.ts`)};
 
-  export const auditInput = brickDefinitions.filter((definition) => definition.pack === 'lego').map((definition) => {
+  export const auditInput = await Promise.all(brickDefinitions.filter((definition) => definition.pack === 'lego').map(async (definition) => {
     const normalizedPartNumber = normalizeLDrawPartNumber(definition.partNumber);
-    const generatedTriangles = getLDrawGeneratedVisualTriangles(normalizedPartNumber);
+    const generatedTriangles = await loadLDrawGeneratedVisualTriangles(normalizedPartNumber);
     const generatedConnectors = getLDrawGeneratedConnectors(normalizedPartNumber, definition.id);
 
     return {
@@ -33,7 +33,7 @@ await writeFile(entry, `
       generatedConnectors: generatedConnectors?.length ?? 0,
       effectiveConnectors: definition.connectors.length,
     };
-  });
+  }));
 `)
 
 await esbuild.build({

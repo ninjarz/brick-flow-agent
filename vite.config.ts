@@ -104,6 +104,9 @@ const llmProxyPlugin = () => ({
 export default defineConfig({
   base: '/brick-flow-agent/',
   plugins: [react(), llmProxyPlugin()],
+  worker: {
+    format: 'es',
+  },
   build: {
     rollupOptions: {
       output: {

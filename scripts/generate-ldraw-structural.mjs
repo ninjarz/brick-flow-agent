@@ -1,6 +1,6 @@
 import * as esbuild from 'esbuild'
 import { existsSync } from 'node:fs'
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
@@ -10,6 +10,7 @@ const entry = join(tempDir, 'entry.ts')
 const outfile = join(tempDir, 'entry.mjs')
 const publicLDrawDir = join(workspace, 'public/ldraw')
 const visualOutputPath = join(workspace, 'src/lib/ldrawGeneratedVisual.ts')
+const visualChunkOutputDir = join(workspace, 'src/lib/ldrawGeneratedVisualChunks')
 const connectorOutputPath = join(workspace, 'src/lib/ldrawGeneratedConnectors.ts')
 
 await writeFile(entry, `
@@ -17,7 +18,7 @@ await writeFile(entry, `
   import { normalizeLDrawPartNumber } from ${JSON.stringify(`${workspace}/src/lib/ldrawPartNumbers.ts`)};
 
   export const partProfiles = Array.from(new Map(
-    brickDefinitions.map((definition) => [
+    brickDefinitions.filter((definition) => definition.pack === 'lego').map((definition) => [
       normalizeLDrawPartNumber(definition.partNumber),
       {
         partNumber: normalizeLDrawPartNumber(definition.partNumber),
@@ -559,7 +560,8 @@ const makeGeneratedTriangleModule = (
   valuesName,
   cacheName,
   profiles,
-) => `import type { MeshTriangle } from './structuralVoxelizer'
+  structuralVoxelizerImport = './structuralVoxelizer',
+) => `import type { MeshTriangle } from '${structuralVoxelizerImport}'
 
 const ${valuesName}: Record<string, number[]> = {
 ${serializeTriangleValueProfiles(profiles)}
@@ -587,6 +589,54 @@ export const ${exportName} = (partNumber: string) => {
   return triangles
 }
 `
+
+const visualChunkTargetSourceLength = 300_000
+const generatedVisualChunks = []
+let currentVisualChunk = []
+let currentVisualChunkSourceLength = 0
+
+for (const profile of generatedVisualProfiles) {
+  const profileSourceLength = serializeTriangleValueProfiles([profile]).length
+  if (
+    currentVisualChunk.length > 0
+    && currentVisualChunkSourceLength + profileSourceLength > visualChunkTargetSourceLength
+  ) {
+    generatedVisualChunks.push(currentVisualChunk)
+    currentVisualChunk = []
+    currentVisualChunkSourceLength = 0
+  }
+  currentVisualChunk.push(profile)
+  currentVisualChunkSourceLength += profileSourceLength
+}
+if (currentVisualChunk.length > 0) generatedVisualChunks.push(currentVisualChunk)
+
+const visualChunkNames = generatedVisualChunks.map((_, index) => `chunk-${String(index).padStart(2, '0')}`)
+const makeGeneratedVisualManifest = () => {
+  const loaderDeclarations = visualChunkNames.map((chunkName, index) =>
+    `const loadVisualChunk${index} = () => import('./ldrawGeneratedVisualChunks/${chunkName}')`,
+  ).join('\n')
+  const loaderEntries = generatedVisualChunks.flatMap((profiles, index) => profiles.map((profile) =>
+    `  ${JSON.stringify(profile.partNumber)}: loadVisualChunk${index},`,
+  )).join('\n')
+
+  return `import type { MeshTriangle } from './structuralVoxelizer'
+
+export type LDrawGeneratedVisualChunk = {
+  getLDrawGeneratedVisualTriangles: (partNumber: string) => MeshTriangle[] | undefined
+}
+
+${loaderDeclarations}
+
+export const ldrawGeneratedVisualChunkLoaders: Record<
+  string,
+  () => Promise<LDrawGeneratedVisualChunk>
+> = {
+${loaderEntries}
+}
+
+export const ldrawGeneratedVisualPartNumbers = Object.keys(ldrawGeneratedVisualChunkLoaders)
+`
+}
 
 const serializeConnectorProfiles = (profiles) => profiles.map((profile) => {
   const connectors = profile.connectors.map((connector) => {
@@ -620,16 +670,24 @@ export const getLDrawGeneratedConnectors = (partNumber: string, brickId: string)
 }
 `
 
-await writeFile(visualOutputPath, makeGeneratedTriangleModule(
-  'getLDrawGeneratedVisualTriangles',
-  'ldrawGeneratedVisualTriangleValues',
-  'visualTriangleCache',
-  generatedVisualProfiles,
-))
+await rm(visualChunkOutputDir, { recursive: true, force: true })
+await mkdir(visualChunkOutputDir, { recursive: true })
+await Promise.all(generatedVisualChunks.map((profiles, index) => writeFile(
+  join(visualChunkOutputDir, `${visualChunkNames[index]}.ts`),
+  makeGeneratedTriangleModule(
+    'getLDrawGeneratedVisualTriangles',
+    'ldrawGeneratedVisualTriangleValues',
+    'visualTriangleCache',
+    profiles,
+    '../structuralVoxelizer',
+  ),
+)))
+await writeFile(visualOutputPath, makeGeneratedVisualManifest())
 await writeFile(connectorOutputPath, makeGeneratedConnectorModule(generatedConnectorProfiles))
 
 console.log(JSON.stringify({
   generated: generatedVisualProfiles.length,
+  generatedVisualChunks: generatedVisualChunks.length,
   generatedConnectorProfiles: generatedConnectorProfiles.length,
   visualOutputPath,
   connectorOutputPath,

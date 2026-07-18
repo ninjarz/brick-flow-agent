@@ -1,8 +1,11 @@
 import { brickById } from '../data/basicBricks'
 import type { BrickConnector, BrickDefinition, PlacedBrick } from '../types/bricks'
-import { onLDrawGeneratedVisualLoaded } from './ldrawGeneratedVisualLoader'
+import {
+  getLoadedLDrawGeneratedVisualTriangles,
+  onLDrawGeneratedVisualLoaded,
+} from './ldrawGeneratedVisualLoader'
 import { getTriangleBounds, type BrickBounds } from './ldrawBounds'
-import { getLDrawStructuralTriangles } from './ldrawPartRegistry'
+import { normalizeLDrawPartNumber } from './ldrawPartNumbers'
 import { getConnectorLocalPoint, transformBrickLocalPoint } from './brickUnits'
 import { voxelizeMeshStructuralCells, type MeshTriangle } from './structuralVoxelizer'
 
@@ -367,7 +370,7 @@ export const getBrickStructuralCells = (definition: BrickDefinition): Structural
 
   const structuralTriangles = usesNominalBlockStructure(definition)
     ? undefined
-    : getLDrawStructuralTriangles(definition.partNumber)
+    : getLoadedLDrawGeneratedVisualTriangles(normalizeLDrawPartNumber(definition.partNumber))
   const cells = structuralTriangles
     ? makeMeshStructuralCells(definition, structuralTriangles)
     : makeDefaultStructuralCells(definition)
