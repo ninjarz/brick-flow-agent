@@ -445,7 +445,19 @@ const moveEntityToward = (
     }
   }
 
-  const step = Math.min(distance, definition.movement.speedStudsPerSecond * deltaSeconds)
+  const nextRotation = turnEntityToward(
+    entity,
+    destination,
+    definition.movement.turningRadiansPerSecond,
+    deltaSeconds,
+  )
+  const desiredRotation = Math.atan2(dx, dz)
+  const remainingTurn = Math.abs(normalizeAngleRadians(desiredRotation - nextRotation))
+  const movementAlignment = Math.max(0, Math.cos(remainingTurn))
+  const step = Math.min(
+    distance,
+    definition.movement.speedStudsPerSecond * deltaSeconds * movementAlignment,
+  )
   const nextPathIndex = distance <= step + 0.001 ? Math.min(path.length, pathIndex + 1) : pathIndex
   const nextPoint = {
     x: entity.transform.x + dx / Math.max(distance, 0.0001) * step,
@@ -474,12 +486,7 @@ const moveEntityToward = (
         ...entity.transform,
         x: nextPoint.x,
         z: nextPoint.z,
-        rotationRadians: turnEntityToward(
-          entity,
-          destination,
-          definition.movement.turningRadiansPerSecond,
-          deltaSeconds,
-        ),
+        rotationRadians: nextRotation,
       },
       navigation: { status: 'moving' as const, target, path, pathIndex: nextPathIndex },
     },

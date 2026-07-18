@@ -131,6 +131,32 @@ describe('WorldEntity simulation', () => {
     expect(Math.abs(next.entities[0].transform.rotationRadians)).toBeLessThanOrEqual(maximumTurn + 0.000001)
   })
 
+  it('turns a vehicle around before translating toward a path behind it', () => {
+    const catapult = worldEntityDefinitionById.get('catapult')!
+    const vehicle = createWorldEntity(catapult, {
+      id: 'turn-before-moving',
+      controller: 'player',
+      transform: { x: 0, z: 0, rotationRadians: 0 },
+    })
+    const target = createWorldEntity(catapult, {
+      id: 'rear-move-target',
+      controller: 'player',
+      transform: { x: 0, z: -12, rotationRadians: 0 },
+    })
+    vehicle.activeCommand = { type: 'move', target: { kind: 'entity', id: target.id } }
+    const world = { ...createEmptyWorldState('plan-1'), entities: [vehicle, target] }
+
+    const first = stepWorldSimulation(world, [], 0.1)
+
+    expect(first.entities[0].transform.x).toBeCloseTo(vehicle.transform.x)
+    expect(first.entities[0].transform.z).toBeCloseTo(vehicle.transform.z)
+    expect(Math.abs(first.entities[0].transform.rotationRadians)).toBeGreaterThan(0)
+
+    let turned = first
+    for (let step = 0; step < 12; step += 1) turned = stepWorldSimulation(turned, [], 0.1)
+    expect(turned.entities[0].transform.z).toBeLessThan(vehicle.transform.z)
+  })
+
   it('clears behavior and queued orders when a unit is defeated', () => {
     const knight = worldEntityDefinitionById.get('knight')!
     const attacker = createWorldEntity(knight, {
