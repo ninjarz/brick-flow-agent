@@ -5,6 +5,14 @@ import { getBrickBounds } from './planUtils'
 import { ingestWorldEvents } from './worldNarrative'
 import { getWorldProjectileFlightSeconds } from './worldProjectiles'
 import { createWorldObstacleIndex, queryWorldObstacleBounds, type WorldObstacleBounds, type WorldObstacleIndex } from './worldObstacleIndex'
+import {
+  createWorldEntityOccupancyIndex,
+  getWorldEntityCollisionRadius,
+  isWorldEntityPositionOccupied,
+  resolveOverlappingWorldEntities,
+  updateWorldEntityOccupancy,
+  type WorldEntityOccupancyIndex,
+} from './worldEntityCollision'
 
 export const worldSimulationStepSeconds = 0.1
 const navigationGridStuds = 0.5
@@ -36,24 +44,24 @@ const distance2d = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.z - b.z)
 const gridKey = (node: GridNode) => `${node.x}:${node.z}`
 const toGrid = (value: number) => Math.round(value / navigationGridStuds)
 const fromGrid = (value: number) => value * navigationGridStuds
-const getBodyRadius = (entity: WorldEntity) => {
-  const body = worldEntityDefinitionById.get(entity.definitionId)?.body
-  return body?.shape === 'capsule'
-    ? body.radiusStuds
-    : body ? Math.hypot(body.widthStuds, body.depthStuds) * 0.28 : 0.7
-}
-
-const createObstacleTest = (bricks: PlacedBrick[], entity: WorldEntity) => {
+const createObstacleTest = (
+  bricks: PlacedBrick[],
+  entity: WorldEntity,
+  entityOccupancy: WorldEntityOccupancyIndex,
+) => {
   const definition = worldEntityDefinitionById.get(entity.definitionId)
   const bodyHeight = definition?.body.heightStuds ?? 5
-  const radius = getBodyRadius(entity)
+  const body = definition?.body
+  const radius = body?.shape === 'capsule'
+    ? body.radiusStuds
+    : body ? Math.hypot(body.widthStuds, body.depthStuds) / 2 : 0.7
   const obstacleIndex = getCachedObstacleIndex(bricks)
   const resultCache = new Map<string, boolean>()
   return (x: number, z: number) => {
     const key = `${x}:${z}`
     const cached = resultCache.get(key)
     if (cached !== undefined) return cached
-    const blocked = queryWorldObstacleBounds(obstacleIndex, {
+    const blockedByBrick = queryWorldObstacleBounds(obstacleIndex, {
       minX: x - radius,
       maxX: x + radius,
       minZ: z - radius,
@@ -66,6 +74,12 @@ const createObstacleTest = (bricks: PlacedBrick[], entity: WorldEntity) => {
     z > item!.minZ - radius &&
     z < item!.maxZ + radius
     ))
+    const blocked = blockedByBrick || isWorldEntityPositionOccupied(
+      entityOccupancy,
+      entity,
+      { x, z },
+      { allowSeparatingFromCurrent: true },
+    )
     resultCache.set(key, blocked)
     return blocked
   }
@@ -288,6 +302,7 @@ const moveEntityToward = (
   target: WorldTargetRef,
   targetPoint: Point,
   bricks: PlacedBrick[],
+  entityOccupancy: WorldEntityOccupancyIndex,
   deltaSeconds: number,
 ) => {
   const definition = worldEntityDefinitionById.get(entity.definitionId)
@@ -296,7 +311,7 @@ const moveEntityToward = (
   let path = targetChanged ? [] : entity.navigation.path
   let pathIndex = targetChanged ? 0 : entity.navigation.pathIndex
   if (path.length === 0 || pathIndex >= path.length) {
-    path = findWorldPath(entity.transform, targetPoint, createObstacleTest(bricks, entity))
+    path = findWorldPath(entity.transform, targetPoint, createObstacleTest(bricks, entity, entityOccupancy))
     pathIndex = 0
   }
   const destination = path[pathIndex] ?? targetPoint
@@ -326,14 +341,33 @@ const moveEntityToward = (
 
   const step = Math.min(distance, definition.movement.speedStudsPerSecond * deltaSeconds)
   const nextPathIndex = distance <= step + 0.001 ? Math.min(path.length, pathIndex + 1) : pathIndex
+  const nextPoint = {
+    x: entity.transform.x + dx / Math.max(distance, 0.0001) * step,
+    z: entity.transform.z + dz / Math.max(distance, 0.0001) * step,
+  }
+  if (isWorldEntityPositionOccupied(
+    entityOccupancy,
+    entity,
+    nextPoint,
+    { allowSeparatingFromCurrent: true },
+  )) {
+    return {
+      entity: {
+        ...entity,
+        behaviorState: 'blocked' as const,
+        navigation: { status: 'blocked' as const, target, path: [], pathIndex: 0 },
+      },
+      arrived: false,
+    }
+  }
   return {
     entity: {
       ...entity,
       behaviorState: 'moving' as const,
       transform: {
         ...entity.transform,
-        x: entity.transform.x + dx / Math.max(distance, 0.0001) * step,
-        z: entity.transform.z + dz / Math.max(distance, 0.0001) * step,
+        x: nextPoint.x,
+        z: nextPoint.z,
         rotationRadians: Math.atan2(dx, dz),
       },
       navigation: { status: 'moving' as const, target, path, pathIndex: nextPathIndex },
@@ -386,7 +420,7 @@ export const stepWorldSimulation = (
 ): WorldState => {
   if (world.paused || world.entities.length === 0 || deltaSeconds <= 0) return world
   const timeSeconds = world.elapsedSeconds + deltaSeconds
-  const entities = world.entities.map((entity) => ({
+  const entities = resolveOverlappingWorldEntities(world.entities).map((entity) => ({
     ...entity,
     combat: {
       cooldownRemainingSeconds: Math.max(0, entity.combat.cooldownRemainingSeconds - deltaSeconds),
@@ -399,6 +433,7 @@ export const stepWorldSimulation = (
     structurePointById: new Map(),
   }
   const hasLineOfSight = createWorldLineOfSightTest(bricks)
+  const entityOccupancy = createWorldEntityOccupancyIndex(entities)
   const events: WorldEvent[] = []
   const pendingImpacts = world.pendingImpacts.filter((impact) => impact.impactAtSeconds > timeSeconds)
   const dueImpacts = world.pendingImpacts.filter((impact) => impact.impactAtSeconds <= timeSeconds)
@@ -472,6 +507,18 @@ export const stepWorldSimulation = (
     const isAttack = activeCommand.type === 'attack'
     const targetEntityIndex = target.kind === 'entity' ? targetLookup.entityIndexById.get(target.id) : undefined
     const targetEntity = targetEntityIndex === undefined ? undefined : entities[targetEntityIndex]
+    const isInteractionInReach = activeCommand.type === 'interact'
+      && targetEntity
+      && targetDistance <= (
+        getWorldEntityCollisionRadius(entity)
+        + getWorldEntityCollisionRadius(targetEntity)
+        + arrivalDistanceStuds
+      )
+    if (isInteractionInReach) {
+      events.push(makeEvent(timeSeconds, 'interaction', entity.id, target.id))
+      entities[index] = { ...entity, activeCommand: undefined, behaviorState: 'idle' }
+      continue
+    }
     const hasAttackLineOfSight = definition?.combat.projectileKind !== 'arrow' || !targetEntity || hasLineOfSight(entity, targetEntity)
     if (isAttack && definition && targetDistance <= definition.combat.attackRangeStuds && hasAttackLineOfSight) {
       entity = { ...entity, behaviorState: 'attacking' }
@@ -512,7 +559,7 @@ export const stepWorldSimulation = (
       continue
     }
 
-    const movement = moveEntityToward(entity, target, targetPoint, bricks, deltaSeconds)
+    const movement = moveEntityToward(entity, target, targetPoint, bricks, entityOccupancy, deltaSeconds)
     entity = movement.entity
     if (movement.arrived && !isAttack && activeCommand.type !== 'follow') {
       events.push(makeEvent(
@@ -524,6 +571,7 @@ export const stepWorldSimulation = (
       entity = { ...entity, activeCommand: undefined }
     }
     entities[index] = entity
+    updateWorldEntityOccupancy(entityOccupancy, entity)
   }
 
   const entityNameById = new Map(entities.map((entity) => [entity.id, entity.name]))

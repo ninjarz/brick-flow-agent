@@ -25,6 +25,7 @@ import { toggleBrickSelection } from './lib/brickSelection'
 import { dissolveBrickStructure, getBrickStructure, getExactSelectionStructure, pruneBrickStructures, solidifyBrickSelection, updateBrickStructure } from './lib/brickStructures'
 import { createEmptyWorldState, createWorldEntity, issueWorldEntityCommand } from './lib/worldEntity'
 import { stepWorldSimulation, worldSimulationStepSeconds } from './lib/worldSimulation'
+import { findNearestAvailableWorldEntityPoint } from './lib/worldEntityCollision'
 import { advanceWorldFixedStepClock, createWorldFixedStepClock } from './lib/worldClock'
 import { addWorldStory, createLocalTavernStory } from './lib/worldNarrative'
 import { applyWorldAiTurn, buildWorldAiTurnPrompt, createWorldAiSnapshot, formatWorldAiTurnSummary, requestWorldAiTurn, worldAiSystemPrompt } from './lib/worldAi'
@@ -1220,6 +1221,11 @@ function App() {
     const entity = createWorldEntity(definition, {
       existingNames: world.entities.map((candidate) => candidate.name),
     })
+    const initialPoint = findNearestAvailableWorldEntityPoint(entity, entity.transform, world.entities)
+    if (initialPoint) {
+      entity.transform.x = initialPoint.x
+      entity.transform.z = initialPoint.z
+    }
     placementPointerKeyRef.current = ''
     setPlacementSession(undefined)
     setWorldEntityPlacement({ entity })
@@ -1264,9 +1270,11 @@ function App() {
         ...current.entity,
         transform: {
           ...current.entity.transform,
-          x: normalizeHorizontalStud(point.x),
+          ...findNearestAvailableWorldEntityPoint(current.entity, {
+            x: normalizeHorizontalStud(point.x),
+            z: normalizeHorizontalStud(point.z),
+          }, worldRef.current.entities),
           y: 0,
-          z: normalizeHorizontalStud(point.z),
         },
       },
     } : current)
@@ -1310,14 +1318,28 @@ function App() {
 
   const confirmActivePlacement = useCallback(() => {
     if (worldEntityPlacement) {
+      const availablePoint = findNearestAvailableWorldEntityPoint(
+        worldEntityPlacement.entity,
+        worldEntityPlacement.entity.transform,
+        worldRef.current.entities,
+      )
+      if (!availablePoint) return
+      const placedEntity = {
+        ...worldEntityPlacement.entity,
+        transform: {
+          ...worldEntityPlacement.entity.transform,
+          x: availablePoint.x,
+          z: availablePoint.z,
+        },
+      }
       setWorld((current) => ({
         ...current,
-        entities: [...current.entities, worldEntityPlacement.entity],
+        entities: [...current.entities, placedEntity],
       }))
       placementPointerKeyRef.current = ''
       setSelectedId('')
       setSelectedGroupIds([])
-      setSelectedWorldEntityId(worldEntityPlacement.entity.id)
+      setSelectedWorldEntityId(placedEntity.id)
       setWorldEntityPlacement(undefined)
       return
     }

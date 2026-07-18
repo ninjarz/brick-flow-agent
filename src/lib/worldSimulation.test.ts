@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { createEmptyWorldState, createWorldEntity, issueWorldEntityCommand } from './worldEntity'
 import { findWorldPath, hasWorldLineOfSight, stepWorldSimulation } from './worldSimulation'
+import { getWorldEntityCollisionRadius } from './worldEntityCollision'
 import { makeBrick } from './planUtils'
 
 describe('WorldEntity simulation', () => {
@@ -146,5 +147,48 @@ describe('WorldEntity simulation', () => {
 
     const next = stepWorldSimulation(interacted, [], 0.1)
     expect(next.events.filter((event) => event.type === 'interaction')).toHaveLength(1)
+  })
+
+  it('keeps moving units outside each other body radius', () => {
+    const knight = worldEntityDefinitionById.get('knight')!
+    const red = createWorldEntity(knight, {
+      id: 'red-moving',
+      factionId: 'red',
+      transform: { x: -5, z: 0 },
+    })
+    const blue = createWorldEntity(knight, {
+      id: 'blue-moving',
+      factionId: 'blue',
+      transform: { x: 5, z: 0 },
+    })
+    let world = { ...createEmptyWorldState('plan-1'), entities: [red, blue] }
+
+    for (let step = 0; step < 80; step += 1) world = stepWorldSimulation(world, [], 0.1)
+
+    const distance = Math.hypot(
+      world.entities[0].transform.x - world.entities[1].transform.x,
+      world.entities[0].transform.z - world.entities[1].transform.z,
+    )
+    expect(distance).toBeGreaterThanOrEqual(
+      getWorldEntityCollisionRadius(world.entities[0])
+      + getWorldEntityCollisionRadius(world.entities[1])
+      - 0.021,
+    )
+  })
+
+  it('repairs overlapping stored units before processing the next step', () => {
+    const knight = worldEntityDefinitionById.get('knight')!
+    const first = createWorldEntity(knight, { id: 'overlap-a', controller: 'player', transform: { x: 0, z: 0 } })
+    const second = createWorldEntity(knight, { id: 'overlap-b', controller: 'player', transform: { x: 0, z: 0 } })
+    const world = { ...createEmptyWorldState('plan-1'), entities: [first, second] }
+
+    const next = stepWorldSimulation(world, [], 0.1)
+    const distance = Math.hypot(
+      next.entities[0].transform.x - next.entities[1].transform.x,
+      next.entities[0].transform.z - next.entities[1].transform.z,
+    )
+    expect(distance).toBeGreaterThanOrEqual(
+      getWorldEntityCollisionRadius(first) + getWorldEntityCollisionRadius(second) - 0.021,
+    )
   })
 })

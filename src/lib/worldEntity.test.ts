@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { worldEntityDefinitionById, worldEntityDefinitions } from '../data/worldEntityDefinitions'
 import type { WorldState } from '../types/world'
 import { changeWorldEntityController, createEmptyWorldState, createWorldEntity, generateWorldEntityName, issueWorldEntityCommand, parseStoredWorldState } from './worldEntity'
+import { getWorldEntityCollisionRadius } from './worldEntityCollision'
 
 describe('WorldEntity foundation', () => {
   it('gives every catalog unit a usable name source and physical scale', () => {
@@ -135,6 +136,25 @@ describe('WorldEntity foundation', () => {
 
     expect(parseStoredWorldState(world, 'plan-1')).toEqual(world)
     expect(parseStoredWorldState(world, 'plan-2')).toBeUndefined()
+  })
+
+  it('separates overlapping units while restoring a paused stored world', () => {
+    const knight = worldEntityDefinitionById.get('knight')!
+    const first = createWorldEntity(knight, { id: 'stored-a', transform: { x: 0, z: 0 } })
+    const second = createWorldEntity(knight, { id: 'stored-b', transform: { x: 0, z: 0 } })
+    const restored = parseStoredWorldState({
+      ...createEmptyWorldState('plan-overlap'),
+      paused: true,
+      entities: [first, second],
+    }, 'plan-overlap')!
+
+    const distance = Math.hypot(
+      restored.entities[0].transform.x - restored.entities[1].transform.x,
+      restored.entities[0].transform.z - restored.entities[1].transform.z,
+    )
+    expect(distance).toBeGreaterThanOrEqual(
+      getWorldEntityCollisionRadius(first) + getWorldEntityCollisionRadius(second) - 0.021,
+    )
   })
 
   it('rejects non-finite entity transforms and sanitizes unsafe runtime state', () => {

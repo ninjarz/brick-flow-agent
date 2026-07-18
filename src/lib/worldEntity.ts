@@ -8,6 +8,7 @@ import type {
   WorldTargetRef,
 } from '../types/world'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
+import { resolveOverlappingWorldEntities } from './worldEntityCollision'
 
 const normalizeName = (value: string) => value.trim().replace(/\s+/g, ' ')
 const comparableName = (value: string) => normalizeName(value).toLocaleLowerCase()
@@ -247,7 +248,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
   if (!isRecord(value) || value.planId !== planId || !Array.isArray(value.entities)) return undefined
   const entities = value.entities.map(parseStoredEntity)
   if (entities.some((entity) => !entity)) return undefined
-  const safeEntities = entities as WorldEntity[]
+  const safeEntities = resolveOverlappingWorldEntities(entities as WorldEntity[])
   const entityIds = new Set(safeEntities.map((entity) => entity.id))
   const events = parseStoredEvents(value.events)
   const pendingImpacts = Array.isArray(value.pendingImpacts) ? value.pendingImpacts.filter((impact): impact is WorldState['pendingImpacts'][number] => (
