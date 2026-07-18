@@ -17,6 +17,8 @@ import {
 export const worldSimulationStepSeconds = 0.1
 const navigationGridStuds = 0.5
 const navigationMarginStuds = 8
+const minimumNavigationGoalSearchRadiusStuds = 16
+const maximumNavigationGoalSearchRadiusStuds = 64
 const maxNavigationNodes = 3_000
 const maxEventHistory = 500
 const arrivalDistanceStuds = 0.35
@@ -145,6 +147,46 @@ const reconstructPath = (cameFrom: Map<string, string>, nodes: Map<string, GridN
   return path.slice(1)
 }
 
+const navigationRingNodes = (center: GridNode, radius: number) => {
+  const nodes: GridNode[] = []
+  for (let offset = -radius; offset <= radius; offset += 1) {
+    nodes.push(
+      { x: center.x + offset, z: center.z - radius },
+      { x: center.x + offset, z: center.z + radius },
+    )
+  }
+  for (let offset = -radius + 1; offset < radius; offset += 1) {
+    nodes.push(
+      { x: center.x - radius, z: center.z + offset },
+      { x: center.x + radius, z: center.z + offset },
+    )
+  }
+  return nodes
+}
+
+const findNearestOpenGoalNode = (
+  start: GridNode,
+  blockedGoal: GridNode,
+  isBlocked: (x: number, z: number) => boolean,
+) => {
+  const distanceFromGoal = Math.hypot(start.x - blockedGoal.x, start.z - blockedGoal.z) * navigationGridStuds
+  const searchRadiusStuds = Math.min(
+    maximumNavigationGoalSearchRadiusStuds,
+    Math.max(minimumNavigationGoalSearchRadiusStuds, distanceFromGoal + navigationMarginStuds),
+  )
+  const maxRadius = Math.ceil(searchRadiusStuds / navigationGridStuds)
+  for (let radius = 1; radius <= maxRadius; radius += 1) {
+    const candidates = navigationRingNodes(blockedGoal, radius)
+      .filter((node) => !isBlocked(fromGrid(node.x), fromGrid(node.z)))
+      .sort((left, right) => (
+        Math.hypot(left.x - start.x, left.z - start.z)
+        - Math.hypot(right.x - start.x, right.z - start.z)
+      ))
+    if (candidates.length > 0) return candidates[0]
+  }
+  return undefined
+}
+
 export const findWorldPath = (
   start: Point,
   goal: Point,
@@ -153,12 +195,7 @@ export const findWorldPath = (
   const startNode = { x: toGrid(start.x), z: toGrid(start.z) }
   let goalNode = { x: toGrid(goal.x), z: toGrid(goal.z) }
   if (isBlocked(fromGrid(goalNode.x), fromGrid(goalNode.z))) {
-    const openGoal = [1, 2, 3, 4].flatMap((radius) => [
-      { x: goalNode.x + radius, z: goalNode.z },
-      { x: goalNode.x - radius, z: goalNode.z },
-      { x: goalNode.x, z: goalNode.z + radius },
-      { x: goalNode.x, z: goalNode.z - radius },
-    ]).find((node) => !isBlocked(fromGrid(node.x), fromGrid(node.z)))
+    const openGoal = findNearestOpenGoalNode(startNode, goalNode, isBlocked)
     if (!openGoal) return []
     goalNode = openGoal
   }

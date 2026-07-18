@@ -18,6 +18,17 @@ describe('WorldEntity simulation', () => {
     expect(path.at(-1)).toMatchObject({ x: 4, z: 0 })
   })
 
+  it('approaches the near edge of a large occupied target area', () => {
+    const path = findWorldPath(
+      { x: -20, y: 0, z: 0 },
+      { x: 0, y: 0, z: 0 },
+      (x, z) => Math.abs(x) <= 16 && Math.abs(z) <= 16,
+    )
+
+    expect(path.length).toBeGreaterThan(0)
+    expect(path.at(-1)).toMatchObject({ x: -16.5, z: 0 })
+  })
+
   it('automatically acquires and damages a nearby hostile unit', () => {
     const knight = worldEntityDefinitionById.get('knight')!
     const red = createWorldEntity(knight, {
@@ -172,6 +183,42 @@ describe('WorldEntity simulation', () => {
     expect(distance).toBeGreaterThanOrEqual(
       getWorldEntityCollisionRadius(world.entities[0])
       + getWorldEntityCollisionRadius(world.entities[1])
+      - 0.021,
+    )
+  })
+
+  it('moves toward large occupied targets without getting stuck at their center', () => {
+    const knightDefinition = worldEntityDefinitionById.get('knight')!
+    const catapultDefinition = worldEntityDefinitionById.get('catapult')!
+    const actor = createWorldEntity(knightDefinition, {
+      id: 'commanded-knight',
+      controller: 'player',
+      transform: { x: 0, z: 0 },
+    })
+    const target = createWorldEntity(catapultDefinition, {
+      id: 'large-target',
+      controller: 'player',
+      transform: { x: 12, z: 0 },
+    })
+    actor.activeCommand = { type: 'move', target: { kind: 'entity', id: target.id } }
+    let world = { ...createEmptyWorldState('plan-1'), entities: [actor, target] }
+
+    world = stepWorldSimulation(world, [], 0.1)
+    expect(world.entities[0].behaviorState).toBe('moving')
+    expect(world.entities[0].transform.x).toBeGreaterThan(actor.transform.x)
+
+    for (let step = 0; step < 80; step += 1) world = stepWorldSimulation(world, [], 0.1)
+
+    const movedActor = world.entities[0]
+    const distance = Math.hypot(
+      movedActor.transform.x - target.transform.x,
+      movedActor.transform.z - target.transform.z,
+    )
+    expect(movedActor.activeCommand).toBeUndefined()
+    expect(movedActor.behaviorState).toBe('idle')
+    expect(distance).toBeGreaterThanOrEqual(
+      getWorldEntityCollisionRadius(movedActor)
+      + getWorldEntityCollisionRadius(target)
       - 0.021,
     )
   })
