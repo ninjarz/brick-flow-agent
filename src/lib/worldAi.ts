@@ -1,4 +1,5 @@
 import type { BrickStructure, LlmConfig, PlacedBrick } from '../types/bricks'
+import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import type {
   WorldEntityCommand,
   WorldState,
@@ -24,8 +25,19 @@ export type WorldAiSnapshot = {
     controller: 'rule' | 'player' | 'ai'
     health: number
     maxHealth: number
+    role?: string
+    combat?: {
+      attackRangeStuds: number
+      minimumRangeStuds: number
+      damage: number
+      cooldownSeconds: number
+    }
     position: { x: number; y: number; z: number }
     behaviorState: string
+    activeOrder?: { type: string; target?: WorldTargetRef }
+    queuedOrderCount: number
+    nearbyHostileIds: string[]
+    nearbyFriendlyIds: string[]
     recentMemories: Array<{ type: string; otherId?: string; otherName?: string; importance: number }>
     relationships: Array<{ targetEntityId: string; affinity: number; encounters: number }>
   }>
@@ -107,7 +119,16 @@ export const createWorldAiSnapshot = (
   elapsedSeconds: Number(world.elapsedSeconds.toFixed(2)),
   brickCount: bricks.length,
   brickSnapshotTruncated: selectedBricks.length < bricks.length,
-  entities: world.entities.map((entity) => ({
+  entities: world.entities.map((entity) => {
+    const definition = worldEntityDefinitionById.get(entity.definitionId)
+    const nearbyEntities = world.entities.filter((candidate) => (
+      candidate.id !== entity.id
+      && candidate.health > 0
+      && Math.hypot(candidate.transform.x - entity.transform.x, candidate.transform.z - entity.transform.z)
+        <= (definition?.perception.detectionRangeStuds ?? 0)
+    ))
+    const activeTarget = entity.activeCommand && 'target' in entity.activeCommand ? entity.activeCommand.target : undefined
+    return ({
     id: entity.id,
     name: entity.name,
     definitionId: entity.definitionId,
@@ -115,12 +136,27 @@ export const createWorldAiSnapshot = (
     controller: entity.controller,
     health: entity.health,
     maxHealth: entity.maxHealth,
+    role: definition?.role,
+    combat: definition ? {
+      attackRangeStuds: definition.combat.attackRangeStuds,
+      minimumRangeStuds: definition.combat.minimumRangeStuds ?? 0,
+      damage: definition.combat.damage,
+      cooldownSeconds: definition.combat.cooldownSeconds,
+    } : undefined,
     position: {
       x: Number(entity.transform.x.toFixed(2)),
       y: Number(entity.transform.y.toFixed(2)),
       z: Number(entity.transform.z.toFixed(2)),
     },
     behaviorState: entity.behaviorState,
+    activeOrder: entity.activeCommand ? { type: entity.activeCommand.type, target: activeTarget } : undefined,
+    queuedOrderCount: entity.commandQueue.length,
+    nearbyHostileIds: nearbyEntities
+      .filter((candidate) => entity.factionId !== 'neutral' && candidate.factionId !== 'neutral' && candidate.factionId !== entity.factionId)
+      .map((candidate) => candidate.id),
+    nearbyFriendlyIds: nearbyEntities
+      .filter((candidate) => entity.factionId === 'neutral' || candidate.factionId === 'neutral' || candidate.factionId === entity.factionId)
+      .map((candidate) => candidate.id),
     recentMemories: (world.narrative.memoriesByEntityId[entity.id] ?? []).slice(-8).map((memory) => ({
       type: memory.type,
       otherId: memory.otherId,
@@ -132,7 +168,7 @@ export const createWorldAiSnapshot = (
       affinity: relationship.affinity,
       encounters: relationship.encounters,
     })),
-  })),
+  })}),
   bricks: selectedBricks.map((brick) => ({
     id: brick.id,
     brickId: brick.brickId,
@@ -181,6 +217,10 @@ Return this exact shape:
 
 Rules:
 - Return at most one command per AI-controlled entity and at most 12 commands total.
+- AI-controlled units already use local combat and social behavior between model turns. Issue a command only when it improves their current plan.
+- Respect role and range: melee units close distance, ranged units preserve minimum range, and siege units prefer valuable distant targets.
+- Protect threatened allies and prioritize enemies already attacking the unit or its faction.
+- Avoid replacing an active order with an identical order.
 - The bricks array may contain only the nearest relevant subset; brickCount is the total scene count.
 - Attack may target only an entity, brick, or structure. Follow may target only an entity.
 - A unit may not target itself.
@@ -219,6 +259,21 @@ const containsDirectMutation = (value: unknown) => {
   return Object.keys(value).some((key) => [
     'x', 'y', 'z', 'position', 'transform', 'health', 'maxHealth', 'damage', 'cooldown', 'rotationRadians',
   ].includes(key)) || Object.values(value).some((child) => containsDirectMutation(child))
+}
+
+const sameTarget = (left?: WorldTargetRef, right?: WorldTargetRef) => (
+  (!left && !right) || (left?.kind === right?.kind && left?.id === right?.id)
+)
+
+const sameCommand = (left: WorldEntityCommand | undefined, right: WorldEntityCommand) => {
+  if (!left || left.type !== right.type) return false
+  if (left.type === 'patrol' && right.type === 'patrol') {
+    return left.waypointIds.length === right.waypointIds.length
+      && left.waypointIds.every((id, index) => id === right.waypointIds[index])
+  }
+  const leftTarget = 'target' in left ? left.target : undefined
+  const rightTarget = 'target' in right ? right.target : undefined
+  return sameTarget(leftTarget, rightTarget)
 }
 
 const parseAiStory = (value: unknown, world: WorldState): WorldStory | undefined => {
@@ -278,6 +333,10 @@ export const applyWorldAiTurn = (
       return
     }
     commandedEntityIds.add(parsed.entityId)
+    if (sameCommand(entity.activeCommand ?? entity.commandQueue[0], parsed.command)) {
+      accepted += 1
+      return
+    }
     const result = issueWorldEntityCommand(nextWorld, parsed.entityId, parsed.command, targetExists, 'replace')
     if (result.ok === false) {
       const issue: WorldAiCommandRejection = result.issue === 'SELF_TARGET'

@@ -22,7 +22,13 @@ describe('world AI adapter', () => {
       id: 'brick-1', brickId: 'lego-brick-2x2', color: 'gray',
       pose: { xStud: 4, yStud: 0, zStud: 2, rotationQuarterTurns: 0 },
     }], [{ id: 'tower-1', name: 'Tower', description: 'A tower', brickIds: ['brick-1'] }])
-    expect(snapshot.entities[0]).toMatchObject({ id: 'ai-knight', position: { x: 2, y: 0, z: 0 } })
+    expect(snapshot.entities[0]).toMatchObject({
+      id: 'ai-knight',
+      role: 'melee',
+      position: { x: 2, y: 0, z: 0 },
+      combat: { attackRangeStuds: 1.5, damage: 18 },
+      nearbyHostileIds: ['rule-knight'],
+    })
     expect(snapshot.structures[0]).toMatchObject({ id: 'tower-1', brickCount: 1, position: { x: 4, y: 0, z: 2 } })
     expect(buildWorldAiTurnPrompt(snapshot)).toContain('Never return coordinates')
   })
@@ -55,6 +61,23 @@ describe('world AI adapter', () => {
     expect(result.world.entities[0].commandQueue).toEqual([{ type: 'attack', target: { kind: 'entity', id: 'rule-knight' } }])
     expect(result.story).toMatchObject({ source: 'ai', title: 'A Challenge' })
     expect(result.story?.eventIds).toContain(result.world.events.at(-1)?.id)
+  })
+
+  it('keeps an identical active AI order instead of resetting its navigation', () => {
+    const world = makeWorld()
+    world.entities[0].activeCommand = { type: 'attack', target: { kind: 'entity', id: 'rule-knight' } }
+    world.entities[0].navigation = {
+      status: 'moving',
+      target: { kind: 'entity', id: 'rule-knight' },
+      path: [{ x: 3, y: 0, z: 0 }],
+      pathIndex: 0,
+    }
+    const result = applyWorldAiTurn(world, {
+      commands: [{ entityId: 'ai-knight', type: 'attack', target: { kind: 'entity', id: 'rule-knight' } }],
+    })
+    expect(result.accepted).toBe(1)
+    expect(result.world).toBe(world)
+    expect(result.world.entities[0].navigation.status).toBe('moving')
   })
 
   it('rejects direct state mutation, unknown IDs, self targets, and non-AI actors', () => {

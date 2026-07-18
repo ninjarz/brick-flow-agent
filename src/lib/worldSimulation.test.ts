@@ -81,6 +81,40 @@ describe('WorldEntity simulation', () => {
     expect(next.entities[0].behaviorState).toBe('idle')
   })
 
+  it('keeps AI-controlled units active with local decisions between LLM turns', () => {
+    const knight = worldEntityDefinitionById.get('knight')!
+    const aiUnit = createWorldEntity(knight, {
+      id: 'local-ai', controller: 'ai', factionId: 'blue', transform: { x: 0, z: 0 },
+    })
+    const enemy = createWorldEntity(knight, {
+      id: 'local-enemy', controller: 'player', factionId: 'red', transform: { x: 1.4, z: 0 },
+    })
+    const next = stepWorldSimulation({ ...createEmptyWorldState('plan-1'), entities: [aiUnit, enemy] }, [], 0.1)
+    expect(next.entities[1].health).toBeLessThan(enemy.health)
+    expect(next.entities[0].behaviorState).toBe('attacking')
+  })
+
+  it('prioritizes an enemy threatening an ally over a slightly closer idle enemy', () => {
+    const knight = worldEntityDefinitionById.get('knight')!
+    const defender = createWorldEntity(knight, {
+      id: 'smart-defender', factionId: 'blue', transform: { x: 0, z: 0 },
+    })
+    const ally = createWorldEntity(knight, {
+      id: 'threatened-ally', controller: 'player', factionId: 'blue', transform: { x: 2, z: 0 },
+    })
+    const idleEnemy = createWorldEntity(knight, {
+      id: 'idle-enemy', controller: 'player', factionId: 'red', transform: { x: 1.2, z: 0 },
+    })
+    const threat = createWorldEntity(knight, {
+      id: 'active-threat', controller: 'player', factionId: 'red', transform: { x: 2.4, z: 0 },
+    })
+    threat.activeCommand = { type: 'attack', target: { kind: 'entity', id: ally.id } }
+    const next = stepWorldSimulation({
+      ...createEmptyWorldState('plan-1'), entities: [defender, ally, idleEnemy, threat],
+    }, [], 0.1)
+    expect(next.entities[0].activeCommand).toEqual({ type: 'attack', target: { kind: 'entity', id: threat.id } })
+  })
+
   it('makes ranged units retreat before firing at a target that is too close', () => {
     const archer = worldEntityDefinitionById.get('archer')!
     const knight = worldEntityDefinitionById.get('knight')!

@@ -324,16 +324,35 @@ const findNearestEntity = (
   return nearest
 }
 
-const findNearestEnemy = (entity: WorldEntity, entities: WorldEntity[]) => {
+const findBestEnemy = (entity: WorldEntity, entities: WorldEntity[]) => {
   if (entity.factionId === 'neutral') return undefined
   const detectionRange = worldEntityDefinitionById.get(entity.definitionId)?.perception.detectionRangeStuds ?? 0
-  return findNearestEntity(entity, entities, (candidate) => (
-      candidate.id !== entity.id &&
-      candidate.health > 0 &&
-      candidate.factionId !== 'neutral' &&
-      candidate.factionId !== entity.factionId &&
-      distance2d(entity.transform, candidate.transform) <= detectionRange
-  ))
+  return entities
+    .filter((candidate) => (
+      candidate.id !== entity.id
+      && candidate.health > 0
+      && candidate.factionId !== 'neutral'
+      && candidate.factionId !== entity.factionId
+      && distance2d(entity.transform, candidate.transform) <= detectionRange
+    ))
+    .map((candidate) => {
+      const candidateTarget = candidate.activeCommand && 'target' in candidate.activeCommand
+        ? candidate.activeCommand.target
+        : undefined
+      const threateningSelf = candidate.activeCommand?.type === 'attack'
+        && candidateTarget?.kind === 'entity'
+        && candidateTarget.id === entity.id
+      const threateningAlly = candidate.activeCommand?.type === 'attack'
+        && candidateTarget?.kind === 'entity'
+        && entities.some((ally) => ally.id === candidateTarget.id && ally.factionId === entity.factionId)
+      const healthRatio = candidate.health / Math.max(1, candidate.maxHealth)
+      const score = distance2d(entity.transform, candidate.transform)
+        + healthRatio * 1.5
+        - (threateningSelf ? detectionRange * 2 : 0)
+        - (threateningAlly ? detectionRange : 0)
+      return { candidate, score }
+    })
+    .sort((left, right) => left.score - right.score || left.candidate.id.localeCompare(right.candidate.id))[0]?.candidate
 }
 
 const findNearestGuardEnemy = (entity: WorldEntity, entities: WorldEntity[], guardPoint: Point) => {
@@ -668,8 +687,8 @@ export const stepWorldSimulation = (
       commandQueue = commandQueue.slice(1)
       commandStarted = true
     }
-    if (!activeCommand && entity.controller === 'rule') {
-      const enemy = findNearestEnemy(entity, entities)
+    if (!activeCommand && entity.controller !== 'player') {
+      const enemy = findBestEnemy(entity, entities)
       if (enemy) {
         activeCommand = { type: 'attack', target: { kind: 'entity', id: enemy.id } }
         commandStarted = true
