@@ -2718,6 +2718,36 @@ button:disabled {
   font-weight: 800;
 }
 
+.world-entity-speech-bubble {
+  position: relative;
+  max-width: min(240px, 32vw);
+  padding: 7px 10px;
+  border: 1px solid #64748b;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
+  color: #172033;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.world-entity-speech-bubble::after {
+  position: absolute;
+  bottom: -7px;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  border-right: 1px solid #64748b;
+  border-bottom: 1px solid #64748b;
+  background: inherit;
+  content: '';
+  transform: translateX(-50%) rotate(45deg);
+}
+
 .world-command-panel {
   display: grid;
   gap: 8px;

@@ -1,4 +1,5 @@
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
+import { brickById } from '../data/basicBricks'
 import type { BrickStructure, PlacedBrick } from '../types/bricks'
 import type { WorldEntity, WorldEntityCommand, WorldEvent, WorldPendingImpact, WorldState, WorldTargetRef } from '../types/world'
 import { getBrickBounds } from './planUtils'
@@ -23,6 +24,7 @@ const maxNavigationNodes = 3_000
 const maxEventHistory = 500
 const arrivalDistanceStuds = 0.35
 const guardDetectionRadiusStuds = 8
+const commandSpeechDurationSeconds = 3
 
 type Point = { x: number; y: number; z: number }
 type GridNode = { x: number; z: number }
@@ -525,6 +527,25 @@ const makeEvent = (
 
 const commandTarget = (command: WorldEntityCommand) => 'target' in command ? command.target : undefined
 
+const getCommandTargetName = (
+  command: WorldEntityCommand,
+  entities: WorldEntity[],
+  lookup: WorldTargetLookup,
+) => {
+  const target = commandTarget(command)
+  if (!target) return undefined
+  if (target.kind === 'entity') {
+    const index = lookup.entityIndexById.get(target.id)
+    return index === undefined ? target.id : entities[index]?.name ?? target.id
+  }
+  if (target.kind === 'structure') return lookup.structureById.get(target.id)?.name ?? target.id
+  if (target.kind === 'brick') {
+    const brick = lookup.brickById.get(target.id)
+    return brick ? brickById.get(brick.brickId)?.name ?? target.id : target.id
+  }
+  return target.id
+}
+
 const createPendingImpact = (
   timeSeconds: number,
   actor: WorldEntity,
@@ -552,8 +573,9 @@ export const stepWorldSimulation = (
 ): WorldState => {
   if (world.paused || world.entities.length === 0 || deltaSeconds <= 0) return world
   const timeSeconds = world.elapsedSeconds + deltaSeconds
-  const entities = resolveOverlappingWorldEntities(world.entities).map((entity) => ({
+  const entities: WorldEntity[] = resolveOverlappingWorldEntities(world.entities).map((entity): WorldEntity => ({
     ...entity,
+    speech: entity.speech && entity.speech.expiresAtSeconds > timeSeconds ? entity.speech : undefined,
     combat: {
       cooldownRemainingSeconds: Math.max(0, entity.combat.cooldownRemainingSeconds - deltaSeconds),
     },
@@ -584,6 +606,7 @@ export const stepWorldSimulation = (
             health: 0,
             activeCommand: undefined,
             commandQueue: [],
+            speech: undefined,
             behaviorState: 'dead',
             navigation: { status: 'idle', path: [], pathIndex: 0 },
           }
@@ -611,6 +634,7 @@ export const stepWorldSimulation = (
         ...entity,
         activeCommand: undefined,
         commandQueue: [],
+        speech: undefined,
         behaviorState: 'dead',
         navigation: { status: 'idle', path: [], pathIndex: 0 },
       }
@@ -618,24 +642,40 @@ export const stepWorldSimulation = (
     }
     let activeCommand = entity.activeCommand
     let commandQueue = entity.commandQueue
+    let commandStarted = false
     if (!activeCommand && commandQueue.length > 0) {
       activeCommand = commandQueue[0]
       commandQueue = commandQueue.slice(1)
+      commandStarted = true
     }
     if (!activeCommand && entity.controller === 'rule') {
       const enemy = findNearestEnemy(entity, entities)
       if (enemy) {
         activeCommand = { type: 'attack', target: { kind: 'entity', id: enemy.id } }
+        commandStarted = true
       } else if (timeSeconds >= entity.autonomy.nextDecisionAtSeconds) {
         const socialTarget = findNearestSocialTarget(entity, entities)
         entity = {
           ...entity,
           autonomy: { nextDecisionAtSeconds: timeSeconds + nextSocialDecisionDelay(entity.id, timeSeconds) },
         }
-        if (socialTarget) activeCommand = { type: 'interact', target: { kind: 'entity', id: socialTarget.id } }
+        if (socialTarget) {
+          activeCommand = { type: 'interact', target: { kind: 'entity', id: socialTarget.id } }
+          commandStarted = true
+        }
       }
     }
     entity = { ...entity, activeCommand, commandQueue }
+    if (commandStarted && activeCommand) {
+      entity = {
+        ...entity,
+        speech: {
+          commandType: activeCommand.type,
+          targetName: getCommandTargetName(activeCommand, entities, targetLookup),
+          expiresAtSeconds: timeSeconds + commandSpeechDurationSeconds,
+        },
+      }
+    }
     if (!activeCommand || activeCommand.type === 'stop') {
       entities[index] = { ...entity, activeCommand: undefined, behaviorState: 'idle' }
       continue
@@ -733,6 +773,7 @@ export const stepWorldSimulation = (
                   health: 0,
                   activeCommand: undefined,
                   commandQueue: [],
+                  speech: undefined,
                   behaviorState: 'dead',
                   navigation: { status: 'idle', path: [], pathIndex: 0 },
                 }

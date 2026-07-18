@@ -244,6 +244,27 @@ describe('WorldEntity simulation', () => {
     expect(next.narrative.memoriesByEntityId[actor.id]?.at(-1)).toMatchObject({ type: 'command-issued' })
   })
 
+  it('shows a short self-talk bubble whenever the next queued command starts', () => {
+    const knight = worldEntityDefinitionById.get('knight')!
+    const actor = createWorldEntity(knight, { id: 'talking-actor', controller: 'player', transform: { x: 0, z: 0 } })
+    const target = createWorldEntity(knight, { id: 'named-target', name: '城门守卫', controller: 'player', transform: { x: 1.5, z: 0 } })
+    actor.commandQueue = [
+      { type: 'move', target: { kind: 'entity', id: target.id } },
+      { type: 'guard', target: { kind: 'entity', id: target.id } },
+    ]
+    let world = { ...createEmptyWorldState('plan-1'), entities: [actor, target] }
+
+    world = stepWorldSimulation(world, [], 0.1)
+    expect(world.entities[0].speech).toMatchObject({ commandType: 'move', targetName: target.name })
+    expect(world.entities[0].speech!.expiresAtSeconds).toBeGreaterThan(world.elapsedSeconds)
+
+    world = stepWorldSimulation(world, [], 0.1)
+    expect(world.entities[0].speech).toMatchObject({ commandType: 'guard', targetName: target.name })
+
+    world = stepWorldSimulation(world, [], 3.1)
+    expect(world.entities[0].speech).toBeUndefined()
+  })
+
   it('turns a completed interaction order into social memory and affinity', () => {
     const knight = worldEntityDefinitionById.get('knight')!
     const actor = createWorldEntity(knight, { id: 'actor', controller: 'player', transform: { x: 0, z: 0 } })

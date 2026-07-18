@@ -1,4 +1,4 @@
-import { Billboard, Edges, Line, OrbitControls, Text } from '@react-three/drei'
+import { Billboard, Edges, Html, Line, OrbitControls, Text } from '@react-three/drei'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
 import { memo, type ReactNode, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -1806,6 +1806,7 @@ const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementAct
   paused?: boolean
   onSelect?: (id: string) => void
 }) => {
+  const { t } = useI18n()
   const definition = worldEntityDefinitionById.get(entity.definitionId)
   const groupRef = useRef<Group>(null)
   const animationTimeRef = useRef(0)
@@ -1833,6 +1834,9 @@ const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementAct
     groupRef.current.position.y = entity.transform.y + movingBob + attackBob
   })
   if (!definition) return null
+  const speechText = entity.speech
+    ? t(`worldEntity.speech.${entity.speech.commandType}`, { target: entity.speech.targetName ?? entity.name })
+    : ''
   const healthRatio = Math.max(0, Math.min(1, entity.health / Math.max(1, entity.maxHealth)))
   const healthColor = healthRatio > 0.6 ? '#16a34a' : healthRatio > 0.3 ? '#f59e0b' : '#dc2626'
   return (
@@ -1864,6 +1868,11 @@ const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementAct
             <meshBasicMaterial color={healthColor} depthWrite={false} />
           </mesh>
         </Billboard>
+      )}
+      {!ghost && speechText && (
+        <Html position={[0, definition.visual.heightStuds + 1.55, 0]} center style={{ pointerEvents: 'none' }}>
+          <div className="world-entity-speech-bubble" role="status">{speechText}</div>
+        </Html>
       )}
       {selected && (
         <mesh position={[0, 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]}>

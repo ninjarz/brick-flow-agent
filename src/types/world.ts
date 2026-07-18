@@ -34,6 +34,12 @@ export type WorldEntityNavigationState = {
   pathIndex: number
 }
 
+export type WorldEntitySpeech = {
+  commandType: WorldEntityCommand['type']
+  targetName?: string
+  expiresAtSeconds: number
+}
+
 export type WorldEntity = {
   id: string
   definitionId: string
@@ -48,6 +54,7 @@ export type WorldEntity = {
   commandQueue: WorldEntityCommand[]
   activeCommand?: WorldEntityCommand
   navigation: WorldEntityNavigationState
+  speech?: WorldEntitySpeech
   behaviorState: 'idle' | 'moving' | 'following' | 'guarding' | 'attacking' | 'blocked' | 'dead'
   combat: {
     cooldownRemainingSeconds: number
