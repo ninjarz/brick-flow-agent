@@ -212,6 +212,7 @@ Return this exact shape:
 {
   "commands": [
     { "entityId": "existing AI-controlled entity id", "type": "stop" },
+    { "entityId": "existing AI-controlled entity id", "type": "wander" },
     { "entityId": "existing AI-controlled entity id", "type": "move|attack|guard|follow|interact", "target": { "kind": "entity|brick|structure", "id": "existing target id" } }
   ],
   "story": { "title": "optional short title", "body": "optional grounded account of the decision" }
@@ -244,6 +245,7 @@ const parseCommand = (value: unknown): { entityId: string; command: WorldEntityC
   const type = value.type
   if (!entityId || typeof type !== 'string') return undefined
   if (type === 'stop' && exactKeys(value, ['entityId', 'type'])) return { entityId, command: { type } }
+  if (type === 'wander' && exactKeys(value, ['entityId', 'type'])) return { entityId, command: { type } }
   if (type === 'patrol' && exactKeys(value, ['entityId', 'type', 'waypointIds']) && Array.isArray(value.waypointIds)) {
     const waypointIds = value.waypointIds.map((id) => asCleanString(id, 160)).filter(Boolean).slice(0, 16)
     return { entityId, command: { type, waypointIds } }

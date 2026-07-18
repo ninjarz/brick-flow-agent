@@ -104,6 +104,7 @@ const commandName = (type: WorldEvent['commandType'], locale: 'zh-CN' | 'en-US')
   if (locale === 'en-US') return type ?? 'act'
   return ({
     stop: '停止',
+    wander: '闲逛',
     move: '移动',
     attack: '攻击',
     guard: '守卫',

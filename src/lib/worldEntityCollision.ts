@@ -161,11 +161,19 @@ export const resolveOverlappingWorldEntities = (entities: WorldEntity[]) => {
       updateWorldEntityOccupancy(occupancy, entity)
       continue
     }
+    const previousHome = entity.autonomy.home ?? entity.transform
     const repositioned = {
       ...entity,
       transform: { ...entity.transform, x: availablePoint.x, z: availablePoint.z },
       behaviorState: entity.health > 0 ? 'blocked' : entity.behaviorState,
       navigation: { status: 'blocked', path: [], pathIndex: 0, target: entity.navigation.target },
+      autonomy: {
+        ...entity.autonomy,
+        home: {
+          x: previousHome.x + availablePoint.x - entity.transform.x,
+          z: previousHome.z + availablePoint.z - entity.transform.z,
+        },
+      },
     } satisfies WorldEntity
     resolved.push(repositioned)
     updateWorldEntityOccupancy(occupancy, repositioned)

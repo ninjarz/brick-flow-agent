@@ -12,6 +12,7 @@ export type WorldTargetRef =
 
 export type WorldEntityCommand =
   | { type: 'stop' }
+  | { type: 'wander'; seed?: number }
   | { type: 'move'; target: WorldTargetRef }
   | { type: 'attack'; target: Extract<WorldTargetRef, { kind: 'entity' | 'brick' | 'structure' }> }
   | { type: 'guard'; target: WorldTargetRef }
@@ -67,6 +68,7 @@ export type WorldEntity = {
   }
   autonomy: {
     nextDecisionAtSeconds: number
+    home: { x: number; z: number }
   }
 }
 

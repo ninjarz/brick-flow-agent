@@ -582,9 +582,18 @@ describe('WorldEntity simulation', () => {
     expect(interacted.events.some((event) => event.type === 'interaction' && event.actorId === first.id)).toBe(true)
     expect(interacted.narrative.relationshipsByEntityId[first.id][second.id].affinity).toBe(5)
     expect(interacted.entities[0].autonomy.nextDecisionAtSeconds).toBeGreaterThan(interacted.elapsedSeconds + 6)
+    expect(interacted.entities[0].activeCommand?.type).toBe('wander')
 
-    const next = stepWorldSimulation(interacted, [], 0.1)
+    let next = stepWorldSimulation(interacted, [], 0.1)
     expect(next.events.filter((event) => event.type === 'interaction')).toHaveLength(1)
+    for (let step = 0; step < 40; step += 1) next = stepWorldSimulation(next, [], 0.1)
+    const separation = Math.hypot(
+      next.entities[0].transform.x - next.entities[1].transform.x,
+      next.entities[0].transform.z - next.entities[1].transform.z,
+    )
+    expect(separation).toBeGreaterThan(
+      getWorldEntityCollisionRadius(next.entities[0]) + getWorldEntityCollisionRadius(next.entities[1]) + 1,
+    )
   })
 
   it('keeps moving units outside each other body radius', () => {

@@ -26,6 +26,9 @@ const arrivalDistanceStuds = 0.35
 const guardDetectionRadiusStuds = 8
 const commandSpeechDurationSeconds = 3
 const conversationSpeechDurationSeconds = 4
+const minimumWanderRadiusStuds = 3
+const wanderRadiusStepStuds = 0.75
+const wanderDestinationAttempts = 16
 
 type Point = { x: number; y: number; z: number }
 type GridNode = { x: number; z: number }
@@ -435,6 +438,33 @@ const stableDirectionRadians = (entityId: string) => {
   return hash / 0xffffffff * Math.PI * 2
 }
 
+const getWanderDestination = (
+  entity: WorldEntity,
+  seed: number,
+  bricks: PlacedBrick[],
+  entityOccupancy: WorldEntityOccupancyIndex,
+): Point | undefined => {
+  const center = entity.controller === 'player'
+    ? entity.transform
+    : { ...entity.transform, ...(entity.autonomy.home ?? entity.transform) }
+  const startingDirection = stableDirectionRadians(`${entity.id}:${seed}`)
+  for (let attempt = 0; attempt < wanderDestinationAttempts; attempt += 1) {
+    const direction = startingDirection + attempt * Math.PI * (3 - Math.sqrt(5))
+    const radius = minimumWanderRadiusStuds
+      + ((Math.abs(seed) + attempt * 7) % 6) * wanderRadiusStepStuds
+    const point = {
+      x: center.x + Math.sin(direction) * radius,
+      y: entity.transform.y,
+      z: center.z + Math.cos(direction) * radius,
+    }
+    if (Math.hypot(point.x - entity.transform.x, point.z - entity.transform.z) < minimumWanderRadiusStuds * 0.5) continue
+    if (isWorldEntityGroundPointBlockedByBricks(entity, point, bricks)) continue
+    if (isWorldEntityPositionOccupied(entityOccupancy, entity, point)) continue
+    return point
+  }
+  return undefined
+}
+
 const getRetreatPoint = (entity: WorldEntity, targetPoint: Point, minimumRangeStuds: number): Point => {
   let dx = entity.transform.x - targetPoint.x
   let dz = entity.transform.z - targetPoint.z
@@ -751,12 +781,23 @@ export const stepWorldSimulation = (
         commandStarted = true
       } else if (timeSeconds >= entity.autonomy.nextDecisionAtSeconds) {
         const socialTarget = findNearestSocialTarget(entity, entities)
+        const decisionSeed = Math.floor(timeSeconds * 10)
+        const socialTargetIsClose = socialTarget && distance2d(entity.transform, socialTarget.transform)
+          <= getWorldEntityCollisionRadius(entity) + getWorldEntityCollisionRadius(socialTarget) + arrivalDistanceStuds
+        const shouldSocialize = socialTarget
+          && (socialTargetIsClose || Math.floor(stableDirectionRadians(`${entity.id}:${decisionSeed}`) * 1_000) % 3 === 0)
         entity = {
           ...entity,
-          autonomy: { nextDecisionAtSeconds: timeSeconds + nextSocialDecisionDelay(entity.id, timeSeconds) },
+          autonomy: {
+            ...entity.autonomy,
+            nextDecisionAtSeconds: timeSeconds + nextSocialDecisionDelay(entity.id, timeSeconds),
+          },
         }
-        if (socialTarget) {
+        if (socialTarget && shouldSocialize) {
           activeCommand = { type: 'interact', target: { kind: 'entity', id: socialTarget.id } }
+          commandStarted = true
+        } else {
+          activeCommand = { type: 'wander', seed: decisionSeed }
           commandStarted = true
         }
       }
@@ -781,6 +822,60 @@ export const stepWorldSimulation = (
         behaviorState: 'idle',
         combat: { ...entity.combat, attackTargetId: undefined },
       }
+      continue
+    }
+
+    if (activeCommand.type === 'wander') {
+      const wanderCommand = activeCommand.seed === undefined
+        ? { ...activeCommand, seed: Math.floor(timeSeconds * 10) }
+        : activeCommand
+      const wanderTarget: WorldTargetRef = {
+        kind: 'waypoint',
+        id: `wander:${entity.id}:${wanderCommand.seed}`,
+      }
+      const continuingWander = entity.navigation.target?.kind === wanderTarget.kind
+        && entity.navigation.target.id === wanderTarget.id
+      const wanderPoint = continuingWander && entity.navigation.plannedTargetPoint
+        ? {
+            ...entity.transform,
+            x: entity.navigation.plannedTargetPoint.x,
+            z: entity.navigation.plannedTargetPoint.z,
+          }
+        : getWanderDestination(entity, wanderCommand.seed, bricks, entityOccupancy)
+      if (!wanderPoint) {
+        entities[index] = {
+          ...entity,
+          activeCommand: undefined,
+          behaviorState: 'idle',
+          navigation: { status: 'idle', path: [], pathIndex: 0 },
+          autonomy: {
+            ...entity.autonomy,
+            nextDecisionAtSeconds: Math.max(entity.autonomy.nextDecisionAtSeconds, timeSeconds + 2),
+          },
+        }
+        updateWorldEntityOccupancy(entityOccupancy, entities[index])
+        continue
+      }
+      const movement = moveEntityToward(
+        { ...entity, activeCommand: wanderCommand },
+        wanderTarget,
+        wanderPoint,
+        bricks,
+        entityOccupancy,
+        deltaSeconds,
+      )
+      const finished = movement.arrived || movement.entity.behaviorState === 'blocked'
+      entities[index] = finished ? {
+        ...movement.entity,
+        activeCommand: undefined,
+        behaviorState: 'idle',
+        navigation: { status: 'idle', path: [], pathIndex: 0 },
+        autonomy: {
+          ...movement.entity.autonomy,
+          nextDecisionAtSeconds: Math.max(movement.entity.autonomy.nextDecisionAtSeconds, timeSeconds + 2),
+        },
+      } : movement.entity
+      updateWorldEntityOccupancy(entityOccupancy, entities[index])
       continue
     }
 
@@ -829,15 +924,17 @@ export const stepWorldSimulation = (
       const listener = listenerIndex === undefined ? undefined : entities[listenerIndex]
       entities[index] = {
         ...entity,
-        activeCommand: undefined,
+        activeCommand: { type: 'wander', seed: Math.floor(timeSeconds * 10) + 1 },
         behaviorState: 'idle',
         speech: listener ? createConversationSpeech(entity, listener, timeSeconds) : entity.speech,
+        navigation: { status: 'idle', path: [], pathIndex: 0 },
       }
       if (listener && listener.health > 0) {
         entities[listenerIndex!] = {
           ...listener,
           speech: createConversationSpeech(listener, entity, timeSeconds, true),
           autonomy: {
+            ...listener.autonomy,
             nextDecisionAtSeconds: Math.max(listener.autonomy.nextDecisionAtSeconds, timeSeconds + 4),
           },
         }

@@ -19,7 +19,7 @@ type WorldEntityEditorPanelProps = {
 export const WorldEntityEditorPanel = ({ entity, commandTargets, onUpdate, onIssueCommand, onDelete, onClose }: WorldEntityEditorPanelProps) => {
   const { t } = useI18n()
   const [draftName, setDraftName] = useState(entity?.name ?? '')
-  const [commandType, setCommandType] = useState<'move' | 'attack' | 'guard' | 'follow' | 'interact'>('move')
+  const [commandType, setCommandType] = useState<'wander' | 'move' | 'attack' | 'guard' | 'follow' | 'interact'>('move')
   const [targetKey, setTargetKey] = useState('')
   const [commandFeedback, setCommandFeedback] = useState<'sent' | 'failed'>()
 
@@ -42,8 +42,10 @@ export const WorldEntityEditorPanel = ({ entity, commandTargets, onUpdate, onIss
   ))
   const selectedTarget = availableTargets.find((target) => `${target.kind}:${target.id}` === targetKey)
   const issueTargetCommand = () => {
-    if (!selectedTarget) return
-    const command = { type: commandType, target: { kind: selectedTarget.kind, id: selectedTarget.id } } as WorldEntityCommand
+    if (commandType !== 'wander' && !selectedTarget) return
+    const command = commandType === 'wander'
+      ? { type: 'wander' } as const
+      : { type: commandType, target: { kind: selectedTarget!.kind, id: selectedTarget!.id } } as WorldEntityCommand
     setCommandFeedback(onIssueCommand(entity.id, command) ? 'sent' : 'failed')
   }
   const issueStopCommand = () => setCommandFeedback(onIssueCommand(entity.id, { type: 'stop' }) ? 'sent' : 'failed')
@@ -129,11 +131,11 @@ export const WorldEntityEditorPanel = ({ entity, commandTargets, onUpdate, onIss
                   setCommandFeedback(undefined)
                 }}
               >
-                {(['move', 'attack', 'guard', 'follow', 'interact'] as const).map((type) => (
+                {(['wander', 'move', 'attack', 'guard', 'follow', 'interact'] as const).map((type) => (
                   <option key={type} value={type}>{t(`worldEntity.order.${type}`)}</option>
                 ))}
               </select>
-              <select aria-label={t('worldEntity.orderTarget')} value={targetKey} onChange={(event) => setTargetKey(event.target.value)}>
+              <select aria-label={t('worldEntity.orderTarget')} value={targetKey} onChange={(event) => setTargetKey(event.target.value)} disabled={commandType === 'wander'}>
                 <option value="">{t('worldEntity.selectTarget')}</option>
                 {availableTargets.map((target) => (
                   <option key={`${target.kind}:${target.id}`} value={`${target.kind}:${target.id}`}>{target.label}</option>
@@ -141,7 +143,7 @@ export const WorldEntityEditorPanel = ({ entity, commandTargets, onUpdate, onIss
               </select>
             </div>
             <div className="world-command-actions">
-              <button type="button" onClick={issueTargetCommand} disabled={!selectedTarget}>
+              <button type="button" onClick={issueTargetCommand} disabled={commandType !== 'wander' && !selectedTarget}>
                 <Send size={14} />{t('worldEntity.issueOrder')}
               </button>
               <button type="button" onClick={issueStopCommand}>

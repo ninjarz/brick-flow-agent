@@ -93,7 +93,13 @@ export const createWorldEntity = (
     },
     behaviorState: 'idle',
     combat: { cooldownRemainingSeconds: 0 },
-    autonomy: { nextDecisionAtSeconds: 2 + (stableEntityNumber(id) % 5) },
+    autonomy: {
+      nextDecisionAtSeconds: 2 + (stableEntityNumber(id) % 5),
+      home: {
+        x: options.transform?.x ?? 0,
+        z: options.transform?.z ?? 0,
+      },
+    },
   }
 }
 
@@ -124,6 +130,10 @@ export const changeWorldEntityController = (
   activeCommand: undefined,
   behaviorState: entity.health > 0 ? 'idle' : 'dead',
   navigation: { status: 'idle', path: [], pathIndex: 0 },
+  autonomy: {
+    ...entity.autonomy,
+    home: { x: entity.transform.x, z: entity.transform.z },
+  },
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -142,6 +152,9 @@ const parseTargetRef = (value: unknown): WorldTargetRef | undefined => {
 const parseStoredCommand = (value: unknown): WorldEntityCommand | undefined => {
   if (!isRecord(value) || typeof value.type !== 'string') return undefined
   if (value.type === 'stop') return { type: 'stop' }
+  if (value.type === 'wander') {
+    return isFiniteNumber(value.seed) ? { type: 'wander', seed: value.seed } : { type: 'wander' }
+  }
   if (value.type === 'patrol' && Array.isArray(value.waypointIds)) {
     const waypointIds = value.waypointIds.filter((id): id is string => typeof id === 'string' && Boolean(id.trim())).map((id) => id.trim()).slice(0, 32)
     return waypointIds.length > 0 ? { type: 'patrol', waypointIds } : undefined
@@ -208,6 +221,10 @@ const parseStoredEntity = (value: unknown): WorldEntity | undefined => {
       nextDecisionAtSeconds: isRecord(value.autonomy) && isFiniteNumber(value.autonomy.nextDecisionAtSeconds)
         ? Math.max(0, value.autonomy.nextDecisionAtSeconds)
         : 2 + (stableEntityNumber(entity.id) % 5),
+      home: isRecord(value.autonomy) && isRecord(value.autonomy.home)
+        && isFiniteNumber(value.autonomy.home.x) && isFiniteNumber(value.autonomy.home.z)
+        ? { x: value.autonomy.home.x, z: value.autonomy.home.z }
+        : { x: entity.transform.x, z: entity.transform.z },
     },
   }
 }

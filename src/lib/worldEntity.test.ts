@@ -64,6 +64,27 @@ describe('WorldEntity foundation', () => {
     })
   })
 
+  it('queues a targetless wander command without changing runtime coordinates', () => {
+    const knight = worldEntityDefinitionById.get('knight')!
+    const source = createWorldEntity(knight, {
+      id: 'wandering-knight',
+      transform: { x: 2, y: 0, z: 4 },
+    })
+    const world = { ...createEmptyWorldState('plan-1'), entities: [source] }
+
+    const result = issueWorldEntityCommand(world, source.id, { type: 'wander' })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.world.entities[0].transform).toEqual(source.transform)
+    expect(result.world.entities[0].commandQueue).toEqual([{ type: 'wander' }])
+    expect(result.world.events.at(-1)).toMatchObject({
+      type: 'command-issued',
+      actorId: source.id,
+      commandType: 'wander',
+    })
+  })
+
   it('reserves structure targets and validates them through a resolver', () => {
     const knight = worldEntityDefinitionById.get('knight')!
     const source = createWorldEntity(knight, { id: 'knight-1' })
