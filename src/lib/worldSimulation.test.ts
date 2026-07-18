@@ -55,12 +55,35 @@ describe('WorldEntity simulation', () => {
     }
 
     let next = world
-    for (let step = 0; step < 5 && next.entities[1].health === blue.health; step += 1) {
+    for (let step = 0; step < 15 && next.entities[1].health === blue.health; step += 1) {
       next = stepWorldSimulation(next, [], 0.1)
     }
 
     expect(next.entities[1].health).toBeLessThan(blue.health)
     expect(next.events.some((event) => event.type === 'damage')).toBe(true)
+  })
+
+  it('paces a standard melee takedown so hits remain readable', () => {
+    const knightDefinition = worldEntityDefinitionById.get('knight')!
+    const archerDefinition = worldEntityDefinitionById.get('archer')!
+    const attacker = createWorldEntity(knightDefinition, {
+      id: 'paced-attacker', controller: 'player', factionId: 'blue', transform: { x: 0, z: 0 },
+    })
+    const victim = createWorldEntity(archerDefinition, {
+      id: 'paced-victim', controller: 'player', factionId: 'red', transform: { x: 1, z: 0 },
+    })
+    attacker.activeCommand = { type: 'attack', target: { kind: 'entity', id: victim.id } }
+    let world = { ...createEmptyWorldState('plan-1'), entities: [attacker, victim] }
+
+    for (let step = 0; step < 5; step += 1) world = stepWorldSimulation(world, [], 0.1)
+    expect(world.entities[1].health).toBe(victim.health)
+    for (let step = 0; step < 200 && world.entities[1].health > 0; step += 1) {
+      world = stepWorldSimulation(world, [], 0.1)
+    }
+
+    expect(world.entities[1].health).toBe(0)
+    expect(world.elapsedSeconds).toBeGreaterThanOrEqual(10)
+    expect(world.elapsedSeconds).toBeLessThan(16)
   })
 
   it('does not acquire hostile units outside its perception radius', () => {
@@ -93,7 +116,7 @@ describe('WorldEntity simulation', () => {
       id: 'local-enemy', controller: 'player', factionId: 'red', transform: { x: 1.4, z: 0 },
     })
     let next = { ...createEmptyWorldState('plan-1'), entities: [aiUnit, enemy] }
-    for (let step = 0; step < 5 && next.entities[1].health === enemy.health; step += 1) {
+    for (let step = 0; step < 15 && next.entities[1].health === enemy.health; step += 1) {
       next = stepWorldSimulation(next, [], 0.1)
     }
     expect(next.entities[1].health).toBeLessThan(enemy.health)
@@ -139,10 +162,7 @@ describe('WorldEntity simulation', () => {
     ranged.activeCommand = { type: 'attack', target: { kind: 'entity', id: enemy.id } }
     const world = { ...createEmptyWorldState('plan-1'), entities: [ranged, enemy] }
 
-    let next = world
-    for (let step = 0; step < 5 && next.entities[1].health > 0; step += 1) {
-      next = stepWorldSimulation(next, [], 0.1)
-    }
+    const next = stepWorldSimulation(world, [], 0.1)
 
     expect(next.entities[0].transform.x).toBeLessThan(ranged.transform.x)
     expect(next.entities[0].behaviorState).toBe('moving')
@@ -223,7 +243,7 @@ describe('WorldEntity simulation', () => {
     const world = { ...createEmptyWorldState('plan-1'), entities: [attacker, victim] }
 
     let next = world
-    for (let step = 0; step < 5 && next.entities[1].health > 0; step += 1) {
+    for (let step = 0; step < 15 && next.entities[1].health > 0; step += 1) {
       next = stepWorldSimulation(next, [], 0.1)
     }
 
@@ -251,7 +271,10 @@ describe('WorldEntity simulation', () => {
     }
     const before = JSON.stringify(brick)
 
-    const next = stepWorldSimulation(world, [brick], 0.1)
+    let next = world
+    for (let step = 0; step < 10 && !next.events.some((event) => event.type === 'brick-hit'); step += 1) {
+      next = stepWorldSimulation(next, [brick], 0.1)
+    }
 
     expect(next.events.some((event) => event.type === 'brick-hit' && event.targetId === brick.id)).toBe(true)
     expect(JSON.stringify(brick)).toBe(before)
@@ -268,12 +291,16 @@ describe('WorldEntity simulation', () => {
     attacker.activeCommand = { type: 'attack', target: { kind: 'structure', id: 'gate-1' } }
     const world = { ...createEmptyWorldState('plan-1'), entities: [attacker] }
 
-    const next = stepWorldSimulation(world, [brick], 0.1, [{
+    const structures = [{
       id: 'gate-1',
       name: '城门',
       description: '',
       brickIds: [brick.id],
-    }])
+    }]
+    let next = world
+    for (let step = 0; step < 10 && !next.events.some((event) => event.type === 'structure-hit'); step += 1) {
+      next = stepWorldSimulation(next, [brick], 0.1, structures)
+    }
 
     expect(next.events.some((event) => event.type === 'structure-hit' && event.targetId === 'gate-1')).toBe(true)
   })
@@ -387,7 +414,7 @@ describe('WorldEntity simulation', () => {
     const world = { ...createEmptyWorldState('plan-1'), entities: [guard, protectedUnit, intruder] }
 
     let intercepting = world
-    for (let step = 0; step < 5 && intercepting.entities[2].health === intruder.health; step += 1) {
+    for (let step = 0; step < 15 && intercepting.entities[2].health === intruder.health; step += 1) {
       intercepting = stepWorldSimulation(intercepting, [], 0.1)
     }
 
@@ -436,7 +463,7 @@ describe('WorldEntity simulation', () => {
     const world = { ...createEmptyWorldState('plan-1'), entities: [guard, protectedUnit, intruder] }
 
     let launched = world
-    for (let step = 0; step < 5 && launched.pendingImpacts.length === 0; step += 1) {
+    for (let step = 0; step < 15 && launched.pendingImpacts.length === 0; step += 1) {
       launched = stepWorldSimulation(launched, [], 0.1)
     }
     expect(launched.pendingImpacts).toHaveLength(1)
@@ -463,7 +490,7 @@ describe('WorldEntity simulation', () => {
     expect(blocked.events.some((event) => event.type === 'attack')).toBe(false)
 
     let launched = blockedWorld
-    for (let step = 0; step < 5 && launched.pendingImpacts.length === 0; step += 1) {
+    for (let step = 0; step < 15 && launched.pendingImpacts.length === 0; step += 1) {
       launched = stepWorldSimulation(launched, [], 0.1)
     }
     expect(launched.events.some((event) => event.type === 'attack')).toBe(true)
@@ -486,7 +513,7 @@ describe('WorldEntity simulation', () => {
     knight.activeCommand = { type: 'attack', target: { kind: 'entity', id: catapult.id } }
     let world = { ...createEmptyWorldState('plan-1'), entities: [knight, catapult] }
 
-    for (let step = 0; step < 6 && world.entities[1].health === catapult.health; step += 1) {
+    for (let step = 0; step < 15 && world.entities[1].health === catapult.health; step += 1) {
       world = stepWorldSimulation(world, [], 0.1)
     }
 
@@ -506,7 +533,7 @@ describe('WorldEntity simulation', () => {
     })
     archer.activeCommand = { type: 'attack', target: { kind: 'entity', id: knight.id } }
     let world = { ...createEmptyWorldState('plan-1'), entities: [archer, knight] }
-    for (let step = 0; step < 5 && world.pendingImpacts.length === 0; step += 1) {
+    for (let step = 0; step < 15 && world.pendingImpacts.length === 0; step += 1) {
       world = stepWorldSimulation(world, [], 0.1)
     }
     expect(world.pendingImpacts).toHaveLength(1)
@@ -534,7 +561,7 @@ describe('WorldEntity simulation', () => {
     })
     aggressor.activeCommand = { type: 'attack', target: { kind: 'entity', id: neutral.id } }
     let world = { ...createEmptyWorldState('plan-1'), entities: [aggressor, neutral] }
-    for (let step = 0; step < 5 && world.entities[1].health === neutral.health; step += 1) {
+    for (let step = 0; step < 15 && world.entities[1].health === neutral.health; step += 1) {
       world = stepWorldSimulation(world, [], 0.1)
     }
 

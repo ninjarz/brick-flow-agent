@@ -59,6 +59,7 @@ export type WorldEntity = {
   behaviorState: 'idle' | 'moving' | 'following' | 'guarding' | 'attacking' | 'blocked' | 'dead'
   combat: {
     cooldownRemainingSeconds: number
+    attackTargetId?: string
     lastAttackerId?: string
     lastDamagedAtSeconds?: number
     lastDamageAmount?: number
@@ -174,6 +175,7 @@ export type WorldEntityDefinition = {
     attackRangeStuds: number
     minimumRangeStuds?: number
     damage: number
+    windupSeconds: number
     cooldownSeconds: number
     projectileKind?: 'arrow' | 'stone'
   }

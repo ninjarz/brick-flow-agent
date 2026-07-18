@@ -26,7 +26,7 @@ describe('world AI adapter', () => {
       id: 'ai-knight',
       role: 'melee',
       position: { x: 2, y: 0, z: 0 },
-      combat: { attackRangeStuds: 1.5, damage: 18 },
+      combat: { attackRangeStuds: 1.5, damage: 12, windupSeconds: 0.55 },
       nearbyHostileIds: ['rule-knight'],
     })
     expect(snapshot.structures[0]).toMatchObject({ id: 'tower-1', brickCount: 1, position: { x: 4, y: 0, z: 2 } })

@@ -30,6 +30,7 @@ export type WorldAiSnapshot = {
       attackRangeStuds: number
       minimumRangeStuds: number
       damage: number
+      windupSeconds: number
       cooldownSeconds: number
     }
     position: { x: number; y: number; z: number }
@@ -141,6 +142,7 @@ export const createWorldAiSnapshot = (
       attackRangeStuds: definition.combat.attackRangeStuds,
       minimumRangeStuds: definition.combat.minimumRangeStuds ?? 0,
       damage: definition.combat.damage,
+      windupSeconds: definition.combat.windupSeconds,
       cooldownSeconds: definition.combat.cooldownSeconds,
     } : undefined,
     position: {

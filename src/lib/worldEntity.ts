@@ -188,6 +188,9 @@ const parseStoredEntity = (value: unknown): WorldEntity | undefined => {
       cooldownRemainingSeconds: isRecord(value.combat) && isFiniteNumber(value.combat.cooldownRemainingSeconds)
         ? Math.max(0, value.combat.cooldownRemainingSeconds)
         : 0,
+      ...(isRecord(value.combat) && typeof value.combat.attackTargetId === 'string'
+        ? { attackTargetId: value.combat.attackTargetId }
+        : {}),
       ...(isRecord(value.combat) && typeof value.combat.lastAttackerId === 'string'
         ? { lastAttackerId: value.combat.lastAttackerId }
         : {}),

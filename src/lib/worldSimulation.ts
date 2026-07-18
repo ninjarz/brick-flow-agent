@@ -775,7 +775,12 @@ export const stepWorldSimulation = (
       }
     }
     if (!activeCommand || activeCommand.type === 'stop') {
-      entities[index] = { ...entity, activeCommand: undefined, behaviorState: 'idle' }
+      entities[index] = {
+        ...entity,
+        activeCommand: undefined,
+        behaviorState: 'idle',
+        combat: { ...entity.combat, attackTargetId: undefined },
+      }
       continue
     }
 
@@ -786,7 +791,12 @@ export const stepWorldSimulation = (
     }
     const assignedTargetPoint = getTargetPoint(assignedTarget, entities, targetLookup)
     if (!assignedTargetPoint) {
-      entities[index] = { ...entity, activeCommand: undefined, behaviorState: 'idle' }
+      entities[index] = {
+        ...entity,
+        activeCommand: undefined,
+        behaviorState: 'idle',
+        combat: { ...entity.combat, attackTargetId: undefined },
+      }
       continue
     }
     const guardEnemy = activeCommand.type === 'guard'
@@ -807,6 +817,9 @@ export const stepWorldSimulation = (
     const targetDistance = definition?.role === 'melee' && targetEntity
       ? Math.max(0, centerDistance - combinedBodyRadius)
       : centerDistance
+    if (!isAttack && entity.combat.attackTargetId) {
+      entity = { ...entity, combat: { ...entity.combat, attackTargetId: undefined } }
+    }
     const isInteractionInReach = activeCommand.type === 'interact'
       && targetEntity
       && centerDistance <= combinedBodyRadius + arrivalDistanceStuds
@@ -850,6 +863,7 @@ export const stepWorldSimulation = (
     }
     const hasAttackLineOfSight = definition?.combat.projectileKind !== 'arrow' || !targetEntity || hasLineOfSight(entity, targetEntity)
     if (isAttack && definition && targetDistance <= definition.combat.attackRangeStuds && hasAttackLineOfSight) {
+      const attackTargetChanged = entity.combat.attackTargetId !== target.id
       const nextRotation = turnEntityToward(
         entity,
         targetPoint,
@@ -861,6 +875,13 @@ export const stepWorldSimulation = (
       entity = {
         ...entity,
         behaviorState: 'attacking',
+        combat: {
+          ...entity.combat,
+          attackTargetId: target.id,
+          cooldownRemainingSeconds: attackTargetChanged
+            ? Math.max(entity.combat.cooldownRemainingSeconds, definition.combat.windupSeconds)
+            : entity.combat.cooldownRemainingSeconds,
+        },
         transform: {
           ...entity.transform,
           rotationRadians: nextRotation,
