@@ -1726,10 +1726,13 @@ const WorldEntityMaterial = ({ color, ghost }: { color: string; ghost: boolean }
 
 const HumanWorldEntityMesh = ({ entity, ghost }: { entity: WorldEntity; ghost: boolean }) => {
   const isArcher = entity.definitionId === 'archer'
+  const isPriest = entity.definitionId === 'priest'
   const factionColor = entity.factionId === 'red'
     ? '#dc2626'
     : entity.factionId === 'blue' ? '#2563eb' : '#64748b'
-  const tunicColor = entity.factionId === 'neutral' && isArcher ? '#15803d' : factionColor
+  const tunicColor = isPriest
+    ? entity.factionId === 'red' ? '#fca5a5' : entity.factionId === 'blue' ? '#bfdbfe' : '#f8fafc'
+    : entity.factionId === 'neutral' && isArcher ? '#15803d' : factionColor
   return (
     <group>
       {[-0.32, 0.32].map((x) => (
@@ -1748,7 +1751,7 @@ const HumanWorldEntityMesh = ({ entity, ghost }: { entity: WorldEntity; ghost: b
       </mesh>
       <mesh position={[0, 3.92, 0]} castShadow={!ghost}>
         <cylinderGeometry args={[0.62, 0.52, 0.34, 16]} />
-        <WorldEntityMaterial color={isArcher ? '#166534' : '#94a3b8'} ghost={ghost} />
+        <WorldEntityMaterial color={isArcher ? '#166534' : isPriest ? '#7e22ce' : '#94a3b8'} ghost={ghost} />
       </mesh>
       {isArcher ? (
         <group position={[0.95, 2.35, 0]} rotation={[Math.PI / 2, 0, 0]}>
@@ -1761,6 +1764,27 @@ const HumanWorldEntityMesh = ({ entity, ghost }: { entity: WorldEntity; ghost: b
             <WorldEntityMaterial color="#e2e8f0" ghost={ghost} />
           </mesh>
         </group>
+      ) : isPriest ? (
+        <>
+          <group position={[0.95, 2.25, 0]}>
+            <mesh>
+              <cylinderGeometry args={[0.065, 0.065, 2.8, 8]} />
+              <WorldEntityMaterial color="#92400e" ghost={ghost} />
+            </mesh>
+            <mesh position={[0, 1.18, 0]}>
+              <boxGeometry args={[0.72, 0.12, 0.12]} />
+              <WorldEntityMaterial color="#fbbf24" ghost={ghost} />
+            </mesh>
+            <mesh position={[0, 1.18, 0]}>
+              <boxGeometry args={[0.12, 0.72, 0.12]} />
+              <WorldEntityMaterial color="#fbbf24" ghost={ghost} />
+            </mesh>
+          </group>
+          <mesh position={[0, 4.2, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.62, 0.055, 8, 24]} />
+            <WorldEntityMaterial color="#fde68a" ghost={ghost} />
+          </mesh>
+        </>
       ) : (
         <>
           <mesh position={[1.02, 2.15, 0]} rotation={[0, 0, -0.18]}>
@@ -1833,7 +1857,9 @@ const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementAct
     groupRef.current.rotation.y += yawDelta * interpolation
     groupRef.current.rotation.z += ((entity.health <= 0 ? Math.PI / 2 : 0) - groupRef.current.rotation.z) * interpolation
     const movingBob = entity.behaviorState === 'moving' ? Math.abs(Math.sin(animationTimeRef.current * 9)) * 0.09 : 0
-    const attackBob = entity.behaviorState === 'attacking' ? Math.sin(animationTimeRef.current * 16) * 0.06 : 0
+    const attackBob = entity.behaviorState === 'attacking'
+      ? Math.sin(animationTimeRef.current * 16) * 0.06
+      : entity.behaviorState === 'reviving' ? Math.sin(animationTimeRef.current * 7) * 0.1 : 0
     groupRef.current.position.y = entity.transform.y + movingBob + attackBob
   })
   if (!definition) return null

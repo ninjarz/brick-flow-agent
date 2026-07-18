@@ -160,8 +160,9 @@ const parseStoredCommand = (value: unknown): WorldEntityCommand | undefined => {
     return waypointIds.length > 0 ? { type: 'patrol', waypointIds } : undefined
   }
   const target = parseTargetRef(value.target)
-  if (!target || !['move', 'attack', 'guard', 'follow', 'interact'].includes(value.type)) return undefined
+  if (!target || !['move', 'attack', 'revive', 'guard', 'follow', 'interact'].includes(value.type)) return undefined
   if (value.type === 'attack' && !['entity', 'brick', 'structure'].includes(target.kind)) return undefined
+  if (value.type === 'revive' && target.kind !== 'entity') return undefined
   if (value.type === 'follow' && target.kind !== 'entity') return undefined
   return { type: value.type, target } as WorldEntityCommand
 }
@@ -182,7 +183,7 @@ const parseStoredEntity = (value: unknown): WorldEntity | undefined => {
     transform: value.transform,
   })
   const health = isFiniteNumber(value.health) ? Math.max(0, Math.min(definition.combat.maxHealth, value.health)) : definition.combat.maxHealth
-  const behaviorStates: WorldEntity['behaviorState'][] = ['idle', 'moving', 'following', 'guarding', 'attacking', 'blocked', 'dead']
+  const behaviorStates: WorldEntity['behaviorState'][] = ['idle', 'moving', 'following', 'guarding', 'attacking', 'reviving', 'blocked', 'dead']
   const behaviorState = health <= 0
     ? 'dead'
     : behaviorStates.includes(value.behaviorState as WorldEntity['behaviorState']) ? value.behaviorState as WorldEntity['behaviorState'] : 'idle'
@@ -230,7 +231,7 @@ const parseStoredEntity = (value: unknown): WorldEntity | undefined => {
 }
 
 const eventTypes = new Set<WorldState['events'][number]['type']>([
-  'attack', 'damage', 'miss', 'defeated', 'brick-hit', 'structure-hit', 'interaction', 'command-issued', 'command-complete',
+  'attack', 'damage', 'miss', 'defeated', 'revive', 'brick-hit', 'structure-hit', 'interaction', 'command-issued', 'command-complete',
 ])
 
 const parseStoredEvents = (value: unknown): WorldState['events'] => Array.isArray(value)
@@ -324,6 +325,8 @@ export type WorldCommandIssue =
   | 'EMPTY_TARGET_ID'
   | 'SELF_TARGET'
   | 'TARGET_NOT_FOUND'
+  | 'TARGET_NOT_DEFEATED'
+  | 'UNSUPPORTED_COMMAND'
   | 'EMPTY_PATROL_ROUTE'
 
 export type WorldCommandResult =
@@ -341,6 +344,9 @@ export const issueWorldEntityCommand = (
 ): WorldCommandResult => {
   const entity = world.entities.find((candidate) => candidate.id === entityId)
   if (!entity) return { ok: false, world, issue: 'ENTITY_NOT_FOUND' }
+  if (command.type === 'revive' && !worldEntityDefinitionById.get(entity.definitionId)?.support) {
+    return { ok: false, world, issue: 'UNSUPPORTED_COMMAND' }
+  }
   if (command.type === 'patrol' && command.waypointIds.length === 0) {
     return { ok: false, world, issue: 'EMPTY_PATROL_ROUTE' }
   }
@@ -351,6 +357,11 @@ export const issueWorldEntityCommand = (
       return { ok: false, world, issue: 'SELF_TARGET' }
     }
     if (!targetExists(target)) return { ok: false, world, issue: 'TARGET_NOT_FOUND' }
+  }
+
+  if (command.type === 'revive') {
+    const reviveTarget = world.entities.find((candidate) => candidate.id === command.target.id)
+    if (!reviveTarget || reviveTarget.health > 0) return { ok: false, world, issue: 'TARGET_NOT_DEFEATED' }
   }
 
   const target = getCommandTargets(command)[0]

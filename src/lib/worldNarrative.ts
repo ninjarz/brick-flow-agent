@@ -5,7 +5,7 @@ const maxProcessedEvents = 1_000
 const maxStories = 80
 
 const eventImportance = (type: WorldEvent['type']): 1 | 2 | 3 => {
-  if (type === 'defeated') return 3
+  if (type === 'defeated' || type === 'revive') return 3
   if (type === 'damage' || type === 'brick-hit' || type === 'structure-hit') return 2
   return 1
 }
@@ -23,6 +23,7 @@ const clampAffinity = (value: number) => Math.max(-100, Math.min(100, value))
 
 const relationshipDelta = (event: WorldEvent, observerId: string) => {
   if (event.type === 'interaction') return 5
+  if (event.type === 'revive') return observerId === event.targetId ? 18 : 10
   if (event.type === 'defeated') return observerId === event.targetId ? -24 : -5
   if (event.type === 'damage') return observerId === event.targetId ? -10 : -3
   if (event.type === 'attack') return observerId === event.targetId ? -4 : -1
@@ -107,6 +108,7 @@ const commandName = (type: WorldEvent['commandType'], locale: 'zh-CN' | 'en-US')
     wander: '闲逛',
     move: '移动',
     attack: '攻击',
+    revive: '复活',
     guard: '守卫',
     follow: '跟随',
     interact: '交互',
@@ -126,6 +128,7 @@ export const formatWorldEvent = (event: WorldEvent, locale: 'zh-CN' | 'en-US') =
     if (event.type === 'damage') return `${target} took ${event.amount ?? 0} damage from ${actor}.`
     if (event.type === 'miss') return `${actor}'s attack missed ${target}.`
     if (event.type === 'defeated') return `${actor} defeated ${target}.`
+    if (event.type === 'revive') return `${actor} revived ${target} with ${event.amount ?? 0} health.`
     if (event.type === 'brick-hit') return `${actor} struck brick ${target}, but the structure was not damaged.`
     if (event.type === 'structure-hit') return `${actor} struck structure ${target}, but it remained intact.`
     if (event.type === 'interaction') return `${actor} interacted with ${target}.`
@@ -139,6 +142,7 @@ export const formatWorldEvent = (event: WorldEvent, locale: 'zh-CN' | 'en-US') =
   if (event.type === 'damage') return `${target}受到${actor}造成的 ${event.amount ?? 0} 点伤害。`
   if (event.type === 'miss') return `${actor}的攻击没有命中${target}。`
   if (event.type === 'defeated') return `${actor}击败了${target}。`
+  if (event.type === 'revive') return `${actor}复活了${target}，恢复 ${event.amount ?? 0} 点生命。`
   if (event.type === 'brick-hit') return `${actor}击中了砖块${target}，但建筑没有受损。`
   if (event.type === 'structure-hit') return `${actor}攻击了结构${target}，结构依然完好。`
   if (event.type === 'interaction') return `${actor}与${target}进行了互动。`

@@ -63,6 +63,30 @@ describe('world AI adapter', () => {
     expect(result.story?.eventIds).toContain(result.world.events.at(-1)?.id)
   })
 
+  it('accepts a priest revive command for a defeated entity', () => {
+    const priest = createWorldEntity(worldEntityDefinitionById.get('priest')!, {
+      id: 'ai-priest', controller: 'ai', factionId: 'blue',
+    })
+    const fallen = {
+      ...createWorldEntity(worldEntityDefinitionById.get('knight')!, {
+        id: 'fallen-ally', controller: 'player', factionId: 'blue',
+      }),
+      health: 0,
+      behaviorState: 'dead' as const,
+    }
+    const world = { ...createEmptyWorldState('plan-1'), entities: [priest, fallen] }
+
+    const result = applyWorldAiTurn(world, {
+      commands: [{ entityId: priest.id, type: 'revive', target: { kind: 'entity', id: fallen.id } }],
+      story: undefined,
+    })
+
+    expect(result.accepted).toBe(1)
+    expect(result.world.entities[0].commandQueue).toEqual([
+      { type: 'revive', target: { kind: 'entity', id: fallen.id } },
+    ])
+  })
+
   it('keeps an identical active AI order instead of resetting its navigation', () => {
     const world = makeWorld()
     world.entities[0].activeCommand = { type: 'attack', target: { kind: 'entity', id: 'rule-knight' } }

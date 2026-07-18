@@ -306,7 +306,7 @@ export const ControlPanel = ({
                 onClick={() => onAddWorldEntity(definition.id)}
               >
                 <span className={`npc-catalog-glyph ${definition.role}`} aria-hidden="true">
-                  {definition.id === 'knight' ? '♞' : definition.id === 'archer' ? '➶' : '⚙'}
+                  {definition.id === 'knight' ? '♞' : definition.id === 'archer' ? '➶' : definition.id === 'priest' ? '✚' : '⚙'}
                 </span>
                 <span className="part-copy">
                   <strong>{definition.displayName}</strong>

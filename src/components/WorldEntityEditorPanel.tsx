@@ -5,7 +5,7 @@ import { useI18n } from '../lib/i18n'
 import { changeWorldEntityController } from '../lib/worldEntity'
 import type { WorldEntity, WorldEntityCommand, WorldTargetRef } from '../types/world'
 
-export type WorldCommandTargetOption = WorldTargetRef & { label: string }
+export type WorldCommandTargetOption = WorldTargetRef & { label: string; health?: number }
 
 type WorldEntityEditorPanelProps = {
   entity?: WorldEntity
@@ -19,7 +19,7 @@ type WorldEntityEditorPanelProps = {
 export const WorldEntityEditorPanel = ({ entity, commandTargets, onUpdate, onIssueCommand, onDelete, onClose }: WorldEntityEditorPanelProps) => {
   const { t } = useI18n()
   const [draftName, setDraftName] = useState(entity?.name ?? '')
-  const [commandType, setCommandType] = useState<'wander' | 'move' | 'attack' | 'guard' | 'follow' | 'interact'>('move')
+  const [commandType, setCommandType] = useState<'wander' | 'move' | 'attack' | 'revive' | 'guard' | 'follow' | 'interact'>('move')
   const [targetKey, setTargetKey] = useState('')
   const [commandFeedback, setCommandFeedback] = useState<'sent' | 'failed'>()
 
@@ -38,7 +38,9 @@ export const WorldEntityEditorPanel = ({ entity, commandTargets, onUpdate, onIss
   }
   const availableTargets = commandTargets.filter((target) => (
     !(target.kind === 'entity' && target.id === entity.id) &&
-    (commandType !== 'follow' || target.kind === 'entity')
+    (commandType !== 'follow' || target.kind === 'entity') &&
+    (commandType !== 'revive' || (target.kind === 'entity' && target.health === 0)) &&
+    (commandType === 'revive' || target.kind !== 'entity' || target.health !== 0)
   ))
   const selectedTarget = availableTargets.find((target) => `${target.kind}:${target.id}` === targetKey)
   const issueTargetCommand = () => {
@@ -131,7 +133,11 @@ export const WorldEntityEditorPanel = ({ entity, commandTargets, onUpdate, onIss
                   setCommandFeedback(undefined)
                 }}
               >
-                {(['wander', 'move', 'attack', 'guard', 'follow', 'interact'] as const).map((type) => (
+                {([
+                  'wander', 'move', 'attack',
+                  ...(definition?.support ? ['revive' as const] : []),
+                  'guard', 'follow', 'interact',
+                ] as const).map((type) => (
                   <option key={type} value={type}>{t(`worldEntity.order.${type}`)}</option>
                 ))}
               </select>

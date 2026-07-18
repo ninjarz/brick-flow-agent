@@ -388,6 +388,16 @@ const findNearestSocialTarget = (entity: WorldEntity, entities: WorldEntity[]) =
   ),
 )
 
+const findNearestReviveTarget = (entity: WorldEntity, entities: WorldEntity[]) => {
+  const detectionRange = worldEntityDefinitionById.get(entity.definitionId)?.perception.detectionRangeStuds ?? 0
+  return findNearestEntity(entity, entities, (candidate) => (
+    candidate.id !== entity.id
+    && candidate.health <= 0
+    && (entity.factionId === 'neutral' || candidate.factionId === 'neutral' || candidate.factionId === entity.factionId)
+    && distance2d(entity.transform, candidate.transform) <= detectionRange
+  ))
+}
+
 const nextSocialDecisionDelay = (entityId: string, elapsedSeconds: number) => {
   const key = `${entityId}:${Math.floor(elapsedSeconds)}`
   const hash = [...key].reduce((value, character) => Math.imul(value ^ character.charCodeAt(0), 16777619) >>> 0, 2166136261)
@@ -775,8 +785,13 @@ export const stepWorldSimulation = (
       commandStarted = true
     }
     if (!activeCommand && entity.controller !== 'player') {
-      const enemy = findBestEnemy(entity, entities, timeSeconds)
-      if (enemy) {
+      const definition = worldEntityDefinitionById.get(entity.definitionId)
+      const reviveTarget = definition?.support ? findNearestReviveTarget(entity, entities) : undefined
+      const enemy = reviveTarget ? undefined : findBestEnemy(entity, entities, timeSeconds)
+      if (reviveTarget) {
+        activeCommand = { type: 'revive', target: { kind: 'entity', id: reviveTarget.id } }
+        commandStarted = true
+      } else if (enemy) {
         activeCommand = { type: 'attack', target: { kind: 'entity', id: enemy.id } }
         commandStarted = true
       } else if (timeSeconds >= entity.autonomy.nextDecisionAtSeconds) {
@@ -876,6 +891,110 @@ export const stepWorldSimulation = (
         },
       } : movement.entity
       updateWorldEntityOccupancy(entityOccupancy, entities[index])
+      continue
+    }
+
+    if (activeCommand.type === 'revive') {
+      const support = worldEntityDefinitionById.get(entity.definitionId)?.support
+      const targetIndex = targetLookup.entityIndexById.get(activeCommand.target.id)
+      const reviveTarget = targetIndex === undefined ? undefined : entities[targetIndex]
+      if (!support || !reviveTarget || reviveTarget.id === entity.id || reviveTarget.health > 0) {
+        entities[index] = {
+          ...entity,
+          activeCommand: undefined,
+          behaviorState: 'idle',
+          navigation: { status: 'idle', path: [], pathIndex: 0 },
+          combat: { ...entity.combat, attackTargetId: undefined },
+        }
+        updateWorldEntityOccupancy(entityOccupancy, entities[index])
+        continue
+      }
+
+      const combinedBodyRadius = getWorldEntityCollisionRadius(entity) + getWorldEntityCollisionRadius(reviveTarget)
+      const reviveDistance = Math.max(0, distance2d(entity.transform, reviveTarget.transform) - combinedBodyRadius)
+      if (reviveDistance <= support.reviveRangeStuds) {
+        const targetChanged = entity.combat.attackTargetId !== reviveTarget.id
+        const definition = worldEntityDefinitionById.get(entity.definitionId)!
+        const nextRotation = turnEntityToward(
+          entity,
+          reviveTarget.transform,
+          definition.movement.turningRadiansPerSecond,
+          deltaSeconds,
+        )
+        const desiredRotation = Math.atan2(
+          reviveTarget.transform.x - entity.transform.x,
+          reviveTarget.transform.z - entity.transform.z,
+        )
+        const aimError = Math.abs(normalizeAngleRadians(desiredRotation - nextRotation))
+        entity = {
+          ...entity,
+          behaviorState: 'reviving',
+          transform: { ...entity.transform, rotationRadians: nextRotation },
+          combat: {
+            ...entity.combat,
+            attackTargetId: reviveTarget.id,
+            cooldownRemainingSeconds: targetChanged
+              ? Math.max(entity.combat.cooldownRemainingSeconds, support.reviveWindupSeconds)
+              : entity.combat.cooldownRemainingSeconds,
+          },
+        }
+        if (entity.combat.cooldownRemainingSeconds <= 0 && aimError <= 0.22) {
+          const restoredHealth = Math.max(1, Math.round(reviveTarget.maxHealth * support.reviveHealthRatio))
+          entities[targetIndex!] = {
+            ...reviveTarget,
+            health: restoredHealth,
+            activeCommand: undefined,
+            commandQueue: [],
+            behaviorState: 'idle',
+            navigation: { status: 'idle', path: [], pathIndex: 0 },
+            speech: {
+              message: 'revived',
+              targetName: entity.name,
+              expiresAtSeconds: timeSeconds + 3,
+            },
+            combat: {
+              ...reviveTarget.combat,
+              cooldownRemainingSeconds: 0,
+              attackTargetId: undefined,
+            },
+            autonomy: {
+              ...reviveTarget.autonomy,
+              nextDecisionAtSeconds: Math.max(reviveTarget.autonomy.nextDecisionAtSeconds, timeSeconds + 2),
+            },
+          }
+          events.push(makeEvent(timeSeconds, 'revive', entity.id, reviveTarget.id, restoredHealth))
+          entity = {
+            ...entity,
+            activeCommand: undefined,
+            behaviorState: 'idle',
+            navigation: { status: 'idle', path: [], pathIndex: 0 },
+            speech: {
+              message: 'revive-success',
+              targetName: reviveTarget.name,
+              expiresAtSeconds: timeSeconds + 3,
+            },
+            combat: {
+              ...entity.combat,
+              cooldownRemainingSeconds: support.reviveCooldownSeconds,
+              attackTargetId: undefined,
+            },
+          }
+        }
+        entities[index] = entity
+        updateWorldEntityOccupancy(entityOccupancy, entity)
+        continue
+      }
+
+      const movement = moveEntityToward(
+        entity,
+        activeCommand.target,
+        reviveTarget.transform,
+        bricks,
+        entityOccupancy,
+        deltaSeconds,
+      )
+      entities[index] = movement.entity
+      updateWorldEntityOccupancy(entityOccupancy, movement.entity)
       continue
     }
 

@@ -85,6 +85,28 @@ describe('WorldEntity foundation', () => {
     })
   })
 
+  it('allows only support units to target defeated entities for revival', () => {
+    const priest = createWorldEntity(worldEntityDefinitionById.get('priest')!, { id: 'priest' })
+    const knight = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'knight' })
+    const fallen = { ...createWorldEntity(worldEntityDefinitionById.get('archer')!, { id: 'fallen' }), health: 0 }
+    const world = { ...createEmptyWorldState('plan-1'), entities: [priest, knight, fallen] }
+
+    const accepted = issueWorldEntityCommand(world, priest.id, {
+      type: 'revive', target: { kind: 'entity', id: fallen.id },
+    })
+    expect(accepted.ok).toBe(true)
+
+    const unsupported = issueWorldEntityCommand(world, knight.id, {
+      type: 'revive', target: { kind: 'entity', id: fallen.id },
+    })
+    expect(unsupported).toMatchObject({ ok: false, issue: 'UNSUPPORTED_COMMAND' })
+
+    const livingTarget = issueWorldEntityCommand(world, priest.id, {
+      type: 'revive', target: { kind: 'entity', id: knight.id },
+    })
+    expect(livingTarget).toMatchObject({ ok: false, issue: 'TARGET_NOT_DEFEATED' })
+  })
+
   it('reserves structure targets and validates them through a resolver', () => {
     const knight = worldEntityDefinitionById.get('knight')!
     const source = createWorldEntity(knight, { id: 'knight-1' })

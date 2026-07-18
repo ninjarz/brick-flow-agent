@@ -116,6 +116,48 @@ export const worldEntityDefinitions: WorldEntityDefinition[] = [
       projectileKind: 'stone',
     },
   },
+  {
+    id: 'priest',
+    displayName: '牧师',
+    description: '支援型单位，会接近倒下的友方并通过祈祷将其复活。',
+    kind: 'actor',
+    role: 'utility',
+    nameCandidates: ['艾登', '塞拉', '米迦勒', '伊莱', '露西亚', '诺亚'],
+    visual: {
+      kind: 'brick-assembly',
+      heightStuds: standardMinifigureHeightStuds,
+      widthStuds: 2,
+      depthStuds: 1.5,
+    },
+    body: {
+      shape: 'capsule',
+      radiusStuds: 0.7,
+      heightStuds: 4.8,
+      eyeHeightStuds: 4.2,
+      attackOriginHeightStuds: 3.6,
+    },
+    movement: {
+      speedStudsPerSecond: 2.2,
+      turningRadiansPerSecond: Math.PI * 1.7,
+      turningRadiusStuds: 0.45,
+    },
+    perception: {
+      detectionRangeStuds: 14,
+    },
+    combat: {
+      maxHealth: 110,
+      attackRangeStuds: 1.5,
+      damage: 5,
+      windupSeconds: 0.7,
+      cooldownSeconds: 1.8,
+    },
+    support: {
+      reviveRangeStuds: 1.8,
+      reviveHealthRatio: 0.45,
+      reviveWindupSeconds: 1.8,
+      reviveCooldownSeconds: 12,
+    },
+  },
 ]
 
 export const worldEntityDefinitionById = new Map(

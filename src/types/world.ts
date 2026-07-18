@@ -15,6 +15,7 @@ export type WorldEntityCommand =
   | { type: 'wander'; seed?: number }
   | { type: 'move'; target: WorldTargetRef }
   | { type: 'attack'; target: Extract<WorldTargetRef, { kind: 'entity' | 'brick' | 'structure' }> }
+  | { type: 'revive'; target: WorldTargetRef & { kind: 'entity' } }
   | { type: 'guard'; target: WorldTargetRef }
   | { type: 'follow'; target: WorldTargetRef & { kind: 'entity' } }
   | { type: 'interact'; target: WorldTargetRef }
@@ -37,7 +38,7 @@ export type WorldEntityNavigationState = {
 
 export type WorldEntitySpeech = {
   message: WorldEntityCommand['type'] | 'chat-greeting' | 'chat-question' | 'chat-support' | 'chat-reply' | 'chat-agree'
-    | 'combat-attack' | 'combat-hurt' | 'combat-victory'
+    | 'combat-attack' | 'combat-hurt' | 'combat-victory' | 'revive-success' | 'revived'
   targetName?: string
   expiresAtSeconds: number
 }
@@ -57,7 +58,7 @@ export type WorldEntity = {
   activeCommand?: WorldEntityCommand
   navigation: WorldEntityNavigationState
   speech?: WorldEntitySpeech
-  behaviorState: 'idle' | 'moving' | 'following' | 'guarding' | 'attacking' | 'blocked' | 'dead'
+  behaviorState: 'idle' | 'moving' | 'following' | 'guarding' | 'attacking' | 'reviving' | 'blocked' | 'dead'
   combat: {
     cooldownRemainingSeconds: number
     attackTargetId?: string
@@ -75,7 +76,7 @@ export type WorldEntity = {
 export type WorldEvent = {
   id: string
   timeSeconds: number
-  type: 'attack' | 'damage' | 'miss' | 'defeated' | 'brick-hit' | 'structure-hit' | 'interaction' | 'command-issued' | 'command-complete'
+  type: 'attack' | 'damage' | 'miss' | 'defeated' | 'revive' | 'brick-hit' | 'structure-hit' | 'interaction' | 'command-issued' | 'command-complete'
   actorId: string
   actorName?: string
   targetId?: string
@@ -180,6 +181,12 @@ export type WorldEntityDefinition = {
     windupSeconds: number
     cooldownSeconds: number
     projectileKind?: 'arrow' | 'stone'
+  }
+  support?: {
+    reviveRangeStuds: number
+    reviveHealthRatio: number
+    reviveWindupSeconds: number
+    reviveCooldownSeconds: number
   }
 }
 

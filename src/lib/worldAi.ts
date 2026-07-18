@@ -33,6 +33,11 @@ export type WorldAiSnapshot = {
       windupSeconds: number
       cooldownSeconds: number
     }
+    support?: {
+      reviveRangeStuds: number
+      reviveHealthRatio: number
+      reviveCooldownSeconds: number
+    }
     position: { x: number; y: number; z: number }
     behaviorState: string
     activeOrder?: { type: string; target?: WorldTargetRef }
@@ -145,6 +150,11 @@ export const createWorldAiSnapshot = (
       windupSeconds: definition.combat.windupSeconds,
       cooldownSeconds: definition.combat.cooldownSeconds,
     } : undefined,
+    support: definition?.support ? {
+      reviveRangeStuds: definition.support.reviveRangeStuds,
+      reviveHealthRatio: definition.support.reviveHealthRatio,
+      reviveCooldownSeconds: definition.support.reviveCooldownSeconds,
+    } : undefined,
     position: {
       x: Number(entity.transform.x.toFixed(2)),
       y: Number(entity.transform.y.toFixed(2)),
@@ -213,7 +223,8 @@ Return this exact shape:
   "commands": [
     { "entityId": "existing AI-controlled entity id", "type": "stop" },
     { "entityId": "existing AI-controlled entity id", "type": "wander" },
-    { "entityId": "existing AI-controlled entity id", "type": "move|attack|guard|follow|interact", "target": { "kind": "entity|brick|structure", "id": "existing target id" } }
+    { "entityId": "existing AI-controlled entity id", "type": "move|attack|guard|follow|interact", "target": { "kind": "entity|brick|structure", "id": "existing target id" } },
+    { "entityId": "existing AI-controlled priest id", "type": "revive", "target": { "kind": "entity", "id": "existing defeated entity id" } }
   ],
   "story": { "title": "optional short title", "body": "optional grounded account of the decision" }
 }
@@ -223,6 +234,7 @@ Rules:
 - AI-controlled units already use local combat and social behavior between model turns. Issue a command only when it improves their current plan.
 - Respect role and range: melee units close distance, ranged units preserve minimum range, and siege units prefer valuable distant targets.
 - Protect threatened allies and prioritize enemies already attacking the unit or its faction.
+- Priests should revive defeated allies before taking ordinary social or combat actions.
 - Avoid replacing an active order with an identical order.
 - The bricks array may contain only the nearest relevant subset; brickCount is the total scene count.
 - Attack may target only an entity, brick, or structure. Follow may target only an entity.
@@ -250,10 +262,11 @@ const parseCommand = (value: unknown): { entityId: string; command: WorldEntityC
     const waypointIds = value.waypointIds.map((id) => asCleanString(id, 160)).filter(Boolean).slice(0, 16)
     return { entityId, command: { type, waypointIds } }
   }
-  if (!['move', 'attack', 'guard', 'follow', 'interact'].includes(type) || !exactKeys(value, ['entityId', 'type', 'target'])) return undefined
+  if (!['move', 'attack', 'revive', 'guard', 'follow', 'interact'].includes(type) || !exactKeys(value, ['entityId', 'type', 'target'])) return undefined
   const target = parseTarget(value.target)
   if (!target) return undefined
   if (type === 'attack' && !['entity', 'brick', 'structure'].includes(target.kind)) return undefined
+  if (type === 'revive' && target.kind !== 'entity') return undefined
   if (type === 'follow' && target.kind !== 'entity') return undefined
   return { entityId, command: { type, target } as WorldEntityCommand }
 }

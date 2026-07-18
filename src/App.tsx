@@ -357,10 +357,11 @@ function App() {
     [selectedWorldEntityId, world.entities],
   )
   const worldCommandTargets = useMemo<WorldCommandTargetOption[]>(() => [
-    ...world.entities.filter((entity) => entity.health > 0).map((entity) => ({
+    ...world.entities.map((entity) => ({
       kind: 'entity' as const,
       id: entity.id,
-      label: `${entity.name} · ${t(`worldEntity.faction.${entity.factionId}`)}`,
+      label: `${entity.name} · ${t(`worldEntity.faction.${entity.factionId}`)}${entity.health <= 0 ? ` · ${t('worldEntity.behavior.dead')}` : ''}`,
+      health: entity.health,
     })),
     ...(plan.structures ?? []).map((structure) => ({
       kind: 'structure' as const,
@@ -1390,7 +1391,9 @@ function App() {
       entityId,
       command,
       (target) => target.kind === 'entity'
-        ? currentWorld.entities.some((entity) => entity.id === target.id && entity.health > 0)
+        ? currentWorld.entities.some((entity) => entity.id === target.id && (
+            command.type === 'revive' ? entity.health <= 0 : entity.health > 0
+          ))
         : target.kind === 'structure'
           ? (currentPlan.structures ?? []).some((structure) => structure.id === target.id)
           : target.kind === 'brick'

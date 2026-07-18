@@ -86,6 +86,58 @@ describe('WorldEntity simulation', () => {
     expect(world.elapsedSeconds).toBeLessThan(16)
   })
 
+  it('lets a priest revive a defeated unit after a readable cast time', () => {
+    const priestDefinition = worldEntityDefinitionById.get('priest')!
+    const knightDefinition = worldEntityDefinitionById.get('knight')!
+    const priest = createWorldEntity(priestDefinition, {
+      id: 'reviving-priest', controller: 'player', factionId: 'blue', transform: { x: 0, z: 0 },
+    })
+    const fallen = {
+      ...createWorldEntity(knightDefinition, {
+        id: 'fallen-knight', controller: 'player', factionId: 'blue', transform: { x: 1.5, z: 0 },
+      }),
+      health: 0,
+      behaviorState: 'dead' as const,
+    }
+    priest.activeCommand = { type: 'revive', target: { kind: 'entity', id: fallen.id } }
+    let world = { ...createEmptyWorldState('plan-1'), entities: [priest, fallen] }
+
+    world = stepWorldSimulation(world, [], 0.1)
+    expect(world.entities[1].health).toBe(0)
+    expect(world.entities[0].behaviorState).toBe('reviving')
+    for (let step = 0; step < 30 && world.entities[1].health === 0; step += 1) {
+      world = stepWorldSimulation(world, [], 0.1)
+    }
+
+    expect(world.elapsedSeconds).toBeGreaterThanOrEqual(priestDefinition.support!.reviveWindupSeconds)
+    expect(world.entities[1].health).toBe(Math.round(fallen.maxHealth * priestDefinition.support!.reviveHealthRatio))
+    expect(world.entities[1].behaviorState).toBe('idle')
+    expect(world.entities[0].activeCommand).toBeUndefined()
+    expect(world.entities[0].combat.cooldownRemainingSeconds).toBe(priestDefinition.support!.reviveCooldownSeconds)
+    expect(world.events.some((event) => event.type === 'revive' && event.targetId === fallen.id)).toBe(true)
+  })
+
+  it('makes an autonomous priest prioritize a defeated ally over a nearby enemy', () => {
+    const priest = createWorldEntity(worldEntityDefinitionById.get('priest')!, {
+      id: 'auto-priest', factionId: 'blue', transform: { x: 0, z: 0 },
+    })
+    const fallen = {
+      ...createWorldEntity(worldEntityDefinitionById.get('knight')!, {
+        id: 'fallen-ally', controller: 'player', factionId: 'blue', transform: { x: 5, z: 0 },
+      }),
+      health: 0,
+      behaviorState: 'dead' as const,
+    }
+    const enemy = createWorldEntity(worldEntityDefinitionById.get('knight')!, {
+      id: 'nearby-enemy', controller: 'player', factionId: 'red', transform: { x: 2, z: 0 },
+    })
+
+    const next = stepWorldSimulation({ ...createEmptyWorldState('plan-1'), entities: [priest, fallen, enemy] }, [], 0.1)
+
+    expect(next.entities[0].activeCommand).toEqual({ type: 'revive', target: { kind: 'entity', id: fallen.id } })
+    expect(next.entities[0].behaviorState).toBe('moving')
+  })
+
   it('does not acquire hostile units outside its perception radius', () => {
     const knight = worldEntityDefinitionById.get('knight')!
     const observer = createWorldEntity(knight, {
