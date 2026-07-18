@@ -35,7 +35,7 @@ export type WorldEntityNavigationState = {
 }
 
 export type WorldEntitySpeech = {
-  commandType: WorldEntityCommand['type']
+  message: WorldEntityCommand['type'] | 'chat-greeting' | 'chat-question' | 'chat-support' | 'chat-reply' | 'chat-agree'
   targetName?: string
   expiresAtSeconds: number
 }

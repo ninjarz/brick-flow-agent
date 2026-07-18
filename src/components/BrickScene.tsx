@@ -1835,7 +1835,7 @@ const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementAct
   })
   if (!definition) return null
   const speechText = entity.speech
-    ? t(`worldEntity.speech.${entity.speech.commandType}`, { target: entity.speech.targetName ?? entity.name })
+    ? t(`worldEntity.speech.${entity.speech.message}`, { target: entity.speech.targetName ?? entity.name })
     : ''
   const healthRatio = Math.max(0, Math.min(1, entity.health / Math.max(1, entity.maxHealth)))
   const healthColor = healthRatio > 0.6 ? '#16a34a' : healthRatio > 0.3 ? '#f59e0b' : '#dc2626'

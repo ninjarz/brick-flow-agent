@@ -25,6 +25,7 @@ const maxEventHistory = 500
 const arrivalDistanceStuds = 0.35
 const guardDetectionRadiusStuds = 8
 const commandSpeechDurationSeconds = 3
+const conversationSpeechDurationSeconds = 4
 
 type Point = { x: number; y: number; z: number }
 type GridNode = { x: number; z: number }
@@ -362,6 +363,25 @@ const nextSocialDecisionDelay = (entityId: string, elapsedSeconds: number) => {
   return 7 + (hash % 6)
 }
 
+const deterministicChoice = <T,>(values: readonly T[], key: string) => {
+  const hash = [...key].reduce((value, character) => Math.imul(value ^ character.charCodeAt(0), 16777619) >>> 0, 2166136261)
+  return values[hash % values.length]
+}
+
+const createConversationSpeech = (
+  speaker: WorldEntity,
+  listener: WorldEntity,
+  timeSeconds: number,
+  reply = false,
+): WorldEntity['speech'] => ({
+  message: deterministicChoice(
+    reply ? ['chat-reply', 'chat-agree'] as const : ['chat-greeting', 'chat-question', 'chat-support'] as const,
+    `${speaker.id}:${listener.id}:${Math.floor(timeSeconds / 5)}`,
+  ),
+  targetName: listener.name,
+  expiresAtSeconds: timeSeconds + conversationSpeechDurationSeconds,
+})
+
 const normalizeAngleRadians = (value: number) => Math.atan2(Math.sin(value), Math.cos(value))
 
 const turnEntityToward = (
@@ -670,7 +690,7 @@ export const stepWorldSimulation = (
       entity = {
         ...entity,
         speech: {
-          commandType: activeCommand.type,
+          message: activeCommand.type,
           targetName: getCommandTargetName(activeCommand, entities, targetLookup),
           expiresAtSeconds: timeSeconds + commandSpeechDurationSeconds,
         },
@@ -712,7 +732,23 @@ export const stepWorldSimulation = (
       )
     if (isInteractionInReach) {
       events.push(makeEvent(timeSeconds, 'interaction', entity.id, target.id))
-      entities[index] = { ...entity, activeCommand: undefined, behaviorState: 'idle' }
+      const listenerIndex = targetLookup.entityIndexById.get(target.id)
+      const listener = listenerIndex === undefined ? undefined : entities[listenerIndex]
+      entities[index] = {
+        ...entity,
+        activeCommand: undefined,
+        behaviorState: 'idle',
+        speech: listener ? createConversationSpeech(entity, listener, timeSeconds) : entity.speech,
+      }
+      if (listener && listener.health > 0) {
+        entities[listenerIndex!] = {
+          ...listener,
+          speech: createConversationSpeech(listener, entity, timeSeconds, true),
+          autonomy: {
+            nextDecisionAtSeconds: Math.max(listener.autonomy.nextDecisionAtSeconds, timeSeconds + 4),
+          },
+        }
+      }
       continue
     }
     const minimumRangeStuds = definition?.combat.minimumRangeStuds ?? 0

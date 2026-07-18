@@ -255,11 +255,11 @@ describe('WorldEntity simulation', () => {
     let world = { ...createEmptyWorldState('plan-1'), entities: [actor, target] }
 
     world = stepWorldSimulation(world, [], 0.1)
-    expect(world.entities[0].speech).toMatchObject({ commandType: 'move', targetName: target.name })
+    expect(world.entities[0].speech).toMatchObject({ message: 'move', targetName: target.name })
     expect(world.entities[0].speech!.expiresAtSeconds).toBeGreaterThan(world.elapsedSeconds)
 
     world = stepWorldSimulation(world, [], 0.1)
-    expect(world.entities[0].speech).toMatchObject({ commandType: 'guard', targetName: target.name })
+    expect(world.entities[0].speech).toMatchObject({ message: 'guard', targetName: target.name })
 
     world = stepWorldSimulation(world, [], 3.1)
     expect(world.entities[0].speech).toBeUndefined()
@@ -276,6 +276,8 @@ describe('WorldEntity simulation', () => {
     expect(next.events.at(-1)).toMatchObject({ type: 'interaction', actorId: actor.id, targetId: target.id })
     expect(next.narrative.relationshipsByEntityId[actor.id][target.id].affinity).toBe(5)
     expect(next.narrative.relationshipsByEntityId[target.id][actor.id].affinity).toBe(5)
+    expect(next.entities[0].speech).toMatchObject({ targetName: target.name })
+    expect(next.entities[1].speech).toMatchObject({ targetName: actor.name })
   })
 
   it('keeps follow orders active after reaching a safe following distance', () => {
