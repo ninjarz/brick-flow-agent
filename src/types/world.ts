@@ -47,7 +47,7 @@ export type WorldEntity = {
   commandQueue: WorldEntityCommand[]
   activeCommand?: WorldEntityCommand
   navigation: WorldEntityNavigationState
-  behaviorState: 'idle' | 'moving' | 'attacking' | 'blocked' | 'dead'
+  behaviorState: 'idle' | 'moving' | 'following' | 'guarding' | 'attacking' | 'blocked' | 'dead'
   combat: {
     cooldownRemainingSeconds: number
   }

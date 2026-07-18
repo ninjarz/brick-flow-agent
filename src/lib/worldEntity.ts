@@ -169,7 +169,7 @@ const parseStoredEntity = (value: unknown): WorldEntity | undefined => {
     transform: value.transform,
   })
   const health = isFiniteNumber(value.health) ? Math.max(0, Math.min(definition.combat.maxHealth, value.health)) : definition.combat.maxHealth
-  const behaviorStates: WorldEntity['behaviorState'][] = ['idle', 'moving', 'attacking', 'blocked', 'dead']
+  const behaviorStates: WorldEntity['behaviorState'][] = ['idle', 'moving', 'following', 'guarding', 'attacking', 'blocked', 'dead']
   const behaviorState = health <= 0
     ? 'dead'
     : behaviorStates.includes(value.behaviorState as WorldEntity['behaviorState']) ? value.behaviorState as WorldEntity['behaviorState'] : 'idle'

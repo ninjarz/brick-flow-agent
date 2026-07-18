@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { createEmptyWorldState, createWorldEntity, issueWorldEntityCommand } from './worldEntity'
-import { findWorldPath, hasWorldLineOfSight, stepWorldSimulation } from './worldSimulation'
+import { findWorldPath, hasWorldLineOfSight, isWorldEntityGroundPointBlockedByBricks, stepWorldSimulation } from './worldSimulation'
 import { getWorldEntityCollisionRadius } from './worldEntityCollision'
 import { makeBrick } from './planUtils'
 
@@ -27,6 +27,14 @@ describe('WorldEntity simulation', () => {
 
     expect(path.length).toBeGreaterThan(0)
     expect(path.at(-1)).toMatchObject({ x: -16.5, z: 0 })
+  })
+
+  it('uses the navigation body footprint when validating NPC placement against bricks', () => {
+    const knight = createWorldEntity(worldEntityDefinitionById.get('knight')!)
+    const brick = makeBrick('brick-1x1', 'gray', 0, 0, 0)
+
+    expect(isWorldEntityGroundPointBlockedByBricks(knight, { x: 0.5, z: 0.5 }, [brick])).toBe(true)
+    expect(isWorldEntityGroundPointBlockedByBricks(knight, { x: 4, z: 4 }, [brick])).toBe(false)
   })
 
   it('automatically acquires and damages a nearby hostile unit', () => {
@@ -117,6 +125,96 @@ describe('WorldEntity simulation', () => {
     expect(next.events.at(-1)).toMatchObject({ type: 'interaction', actorId: actor.id, targetId: target.id })
     expect(next.narrative.relationshipsByEntityId[actor.id][target.id].affinity).toBe(5)
     expect(next.narrative.relationshipsByEntityId[target.id][actor.id].affinity).toBe(5)
+  })
+
+  it('keeps follow orders active after reaching a safe following distance', () => {
+    const knight = worldEntityDefinitionById.get('knight')!
+    const follower = createWorldEntity(knight, { id: 'follower', controller: 'player', transform: { x: 0, z: 0 } })
+    const leader = createWorldEntity(knight, { id: 'leader', controller: 'player', transform: { x: 1.5, z: 0 } })
+    follower.activeCommand = { type: 'follow', target: { kind: 'entity', id: leader.id } }
+    const world = { ...createEmptyWorldState('plan-1'), entities: [follower, leader] }
+
+    const next = stepWorldSimulation(world, [], 0.1)
+
+    expect(next.entities[0].activeCommand).toEqual(follower.activeCommand)
+    expect(next.entities[0].behaviorState).toBe('following')
+  })
+
+  it('keeps guarding its post and intercepts hostile units inside the guard radius', () => {
+    const knight = worldEntityDefinitionById.get('knight')!
+    const guard = createWorldEntity(knight, {
+      id: 'guard',
+      controller: 'player',
+      factionId: 'blue',
+      transform: { x: 2, z: 0 },
+    })
+    const protectedUnit = createWorldEntity(knight, {
+      id: 'protected',
+      controller: 'player',
+      factionId: 'blue',
+      transform: { x: 0, z: 0 },
+    })
+    const intruder = createWorldEntity(knight, {
+      id: 'intruder',
+      controller: 'player',
+      factionId: 'red',
+      transform: { x: 3.5, z: 0 },
+    })
+    guard.activeCommand = { type: 'guard', target: { kind: 'entity', id: protectedUnit.id } }
+    const world = { ...createEmptyWorldState('plan-1'), entities: [guard, protectedUnit, intruder] }
+
+    const intercepting = stepWorldSimulation(world, [], 0.1)
+
+    expect(intercepting.entities[2].health).toBeLessThan(intruder.health)
+    expect(intercepting.entities[0].activeCommand).toEqual(guard.activeCommand)
+    expect(intercepting.entities[0].behaviorState).toBe('attacking')
+
+    const safeWorld = {
+      ...world,
+      entities: [
+        { ...guard, transform: { ...guard.transform, x: 1.5 } },
+        protectedUnit,
+        { ...intruder, transform: { ...intruder.transform, x: 20 } },
+      ],
+    }
+    const guarding = stepWorldSimulation(safeWorld, [], 0.1)
+    expect(guarding.entities[0].activeCommand).toEqual(guard.activeCommand)
+    expect(guarding.entities[0].behaviorState).toBe('guarding')
+  })
+
+  it('keeps a guard order after a delayed projectile defeats an intruder', () => {
+    const archerDefinition = worldEntityDefinitionById.get('archer')!
+    const knightDefinition = worldEntityDefinitionById.get('knight')!
+    const guard = createWorldEntity(archerDefinition, {
+      id: 'archer-guard',
+      controller: 'player',
+      factionId: 'blue',
+      transform: { x: 0, z: 0 },
+    })
+    const protectedUnit = createWorldEntity(knightDefinition, {
+      id: 'protected-archer-post',
+      controller: 'player',
+      factionId: 'blue',
+      transform: { x: -2, z: 0 },
+    })
+    const intruder = {
+      ...createWorldEntity(knightDefinition, {
+        id: 'fragile-intruder',
+        controller: 'player',
+        factionId: 'red',
+        transform: { x: 5, z: 0 },
+      }),
+      health: 1,
+    }
+    guard.activeCommand = { type: 'guard', target: { kind: 'entity', id: protectedUnit.id } }
+    const world = { ...createEmptyWorldState('plan-1'), entities: [guard, protectedUnit, intruder] }
+
+    const launched = stepWorldSimulation(world, [], 0.1)
+    expect(launched.pendingImpacts).toHaveLength(1)
+
+    const impacted = stepWorldSimulation(launched, [], 1)
+    expect(impacted.entities[2].health).toBe(0)
+    expect(impacted.entities[0].activeCommand).toEqual(guard.activeCommand)
   })
 
   it('blocks arrows with tall brick cover while leaving an open shot valid', () => {

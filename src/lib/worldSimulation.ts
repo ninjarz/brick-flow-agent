@@ -22,6 +22,7 @@ const maximumNavigationGoalSearchRadiusStuds = 64
 const maxNavigationNodes = 3_000
 const maxEventHistory = 500
 const arrivalDistanceStuds = 0.35
+const guardDetectionRadiusStuds = 8
 
 type Point = { x: number; y: number; z: number }
 type GridNode = { x: number; z: number }
@@ -46,10 +47,11 @@ const distance2d = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.z - b.z)
 const gridKey = (node: GridNode) => `${node.x}:${node.z}`
 const toGrid = (value: number) => Math.round(value / navigationGridStuds)
 const fromGrid = (value: number) => value * navigationGridStuds
-const createObstacleTest = (
-  bricks: PlacedBrick[],
+
+export const isWorldEntityGroundPointBlockedByBricks = (
   entity: WorldEntity,
-  entityOccupancy: WorldEntityOccupancyIndex,
+  point: { x: number; z: number },
+  bricks: PlacedBrick[],
 ) => {
   const definition = worldEntityDefinitionById.get(entity.definitionId)
   const bodyHeight = definition?.body.heightStuds ?? 5
@@ -58,24 +60,32 @@ const createObstacleTest = (
     ? body.radiusStuds
     : body ? Math.hypot(body.widthStuds, body.depthStuds) / 2 : 0.7
   const obstacleIndex = getCachedObstacleIndex(bricks)
+  return queryWorldObstacleBounds(obstacleIndex, {
+    minX: point.x - radius,
+    maxX: point.x + radius,
+    minZ: point.z - radius,
+    maxZ: point.z + radius,
+  }).some((item) => (
+    item!.minY < bodyHeight - 0.01
+    && item!.maxY > 0.05
+    && point.x > item!.minX - radius
+    && point.x < item!.maxX + radius
+    && point.z > item!.minZ - radius
+    && point.z < item!.maxZ + radius
+  ))
+}
+
+const createObstacleTest = (
+  bricks: PlacedBrick[],
+  entity: WorldEntity,
+  entityOccupancy: WorldEntityOccupancyIndex,
+) => {
   const resultCache = new Map<string, boolean>()
   return (x: number, z: number) => {
     const key = `${x}:${z}`
     const cached = resultCache.get(key)
     if (cached !== undefined) return cached
-    const blockedByBrick = queryWorldObstacleBounds(obstacleIndex, {
-      minX: x - radius,
-      maxX: x + radius,
-      minZ: z - radius,
-      maxZ: z + radius,
-    }).some((item) => (
-    item!.minY < bodyHeight - 0.01 &&
-    item!.maxY > 0.05 &&
-    x > item!.minX - radius &&
-    x < item!.maxX + radius &&
-    z > item!.minZ - radius &&
-    z < item!.maxZ + radius
-    ))
+    const blockedByBrick = isWorldEntityGroundPointBlockedByBricks(entity, { x, z }, bricks)
     const blocked = blockedByBrick || isWorldEntityPositionOccupied(
       entityOccupancy,
       entity,
@@ -206,6 +216,9 @@ export const findWorldPath = (
   const maxZ = Math.max(startNode.z, goalNode.z) + Math.ceil(navigationMarginStuds / navigationGridStuds)
   const startKey = gridKey(startNode)
   const goalKey = gridKey(goalNode)
+  if (startKey === goalKey) {
+    return [{ x: fromGrid(goalNode.x), y: 0, z: fromGrid(goalNode.z) }]
+  }
   const open = new Map<string, { node: GridNode; score: number }>([[startKey, { node: startNode, score: 0 }]])
   const nodes = new Map<string, GridNode>([[startKey, startNode]])
   const cameFrom = new Map<string, string>()
@@ -315,6 +328,17 @@ const findNearestEnemy = (entity: WorldEntity, entities: WorldEntity[]) => {
       candidate.health > 0 &&
       candidate.factionId !== 'neutral' &&
       candidate.factionId !== entity.factionId
+  ))
+}
+
+const findNearestGuardEnemy = (entity: WorldEntity, entities: WorldEntity[], guardPoint: Point) => {
+  if (entity.factionId === 'neutral') return undefined
+  return findNearestEntity(entity, entities, (candidate) => (
+    candidate.id !== entity.id
+    && candidate.health > 0
+    && candidate.factionId !== 'neutral'
+    && candidate.factionId !== entity.factionId
+    && distance2d(candidate.transform, guardPoint) <= guardDetectionRadiusStuds
   ))
 }
 
@@ -487,7 +511,9 @@ export const stepWorldSimulation = (
       events.push(makeEvent(timeSeconds, 'damage', impact.actorId, victim.id, impact.damage))
       if (nextHealth <= 0) {
         events.push(makeEvent(timeSeconds, 'defeated', impact.actorId, victim.id))
-        entities[actorIndex] = { ...entities[actorIndex], activeCommand: undefined }
+        if (entities[actorIndex].activeCommand?.type === 'attack') {
+          entities[actorIndex] = { ...entities[actorIndex], activeCommand: undefined }
+        }
       }
     } else if (impact.target.kind === 'brick') {
       if (targetLookup.brickById.has(impact.target.id)) {
@@ -529,19 +555,26 @@ export const stepWorldSimulation = (
       continue
     }
 
-    const target = commandTarget(activeCommand)
-    if (!target) {
+    const assignedTarget = commandTarget(activeCommand)
+    if (!assignedTarget) {
       entities[index] = entity
       continue
     }
-    const targetPoint = getTargetPoint(target, entities, targetLookup)
-    if (!targetPoint) {
+    const assignedTargetPoint = getTargetPoint(assignedTarget, entities, targetLookup)
+    if (!assignedTargetPoint) {
       entities[index] = { ...entity, activeCommand: undefined, behaviorState: 'idle' }
       continue
     }
+    const guardEnemy = activeCommand.type === 'guard'
+      ? findNearestGuardEnemy(entity, entities, assignedTargetPoint)
+      : undefined
+    const target: WorldTargetRef = guardEnemy
+      ? { kind: 'entity', id: guardEnemy.id }
+      : assignedTarget
+    const targetPoint = guardEnemy?.transform ?? assignedTargetPoint
     const definition = worldEntityDefinitionById.get(entity.definitionId)
     const targetDistance = distance2d(entity.transform, targetPoint)
-    const isAttack = activeCommand.type === 'attack'
+    const isAttack = activeCommand.type === 'attack' || Boolean(guardEnemy)
     const targetEntityIndex = target.kind === 'entity' ? targetLookup.entityIndexById.get(target.id) : undefined
     const targetEntity = targetEntityIndex === undefined ? undefined : entities[targetEntityIndex]
     const isInteractionInReach = activeCommand.type === 'interact'
@@ -583,7 +616,7 @@ export const stepWorldSimulation = (
             events.push(makeEvent(timeSeconds, 'damage', entity.id, victim.id, definition.combat.damage))
             if (nextHealth <= 0) {
               events.push(makeEvent(timeSeconds, 'defeated', entity.id, victim.id))
-              entity = { ...entity, activeCommand: undefined }
+              if (activeCommand.type === 'attack') entity = { ...entity, activeCommand: undefined }
             }
           }
         } else if (target.kind === 'brick') {
@@ -598,14 +631,20 @@ export const stepWorldSimulation = (
 
     const movement = moveEntityToward(entity, target, targetPoint, bricks, entityOccupancy, deltaSeconds)
     entity = movement.entity
-    if (movement.arrived && !isAttack && activeCommand.type !== 'follow') {
-      events.push(makeEvent(
-        timeSeconds,
-        activeCommand.type === 'interact' && target.kind === 'entity' ? 'interaction' : 'command-complete',
-        entity.id,
-        target.id,
-      ))
-      entity = { ...entity, activeCommand: undefined }
+    if (movement.arrived && !isAttack) {
+      if (activeCommand.type === 'follow') {
+        entity = { ...entity, behaviorState: 'following' }
+      } else if (activeCommand.type === 'guard') {
+        entity = { ...entity, behaviorState: 'guarding' }
+      } else {
+        events.push(makeEvent(
+          timeSeconds,
+          activeCommand.type === 'interact' && target.kind === 'entity' ? 'interaction' : 'command-complete',
+          entity.id,
+          target.id,
+        ))
+        entity = { ...entity, activeCommand: undefined }
+      }
     }
     entities[index] = entity
     updateWorldEntityOccupancy(entityOccupancy, entity)

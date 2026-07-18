@@ -123,13 +123,14 @@ const findNearestAvailablePointInIndex = (
   entity: WorldEntity,
   preferredPoint: WorldEntityGroundPoint,
   index: WorldEntityOccupancyIndex,
+  isBlocked: (point: WorldEntityGroundPoint) => boolean = () => false,
 ) => {
-  if (!isWorldEntityPositionOccupied(index, entity, preferredPoint)) return preferredPoint
+  if (!isBlocked(preferredPoint) && !isWorldEntityPositionOccupied(index, entity, preferredPoint)) return preferredPoint
 
   const maxRadiusSteps = Math.ceil(placementSearchRadiusStuds / placementGridStuds)
   for (let radiusSteps = 1; radiusSteps <= maxRadiusSteps; radiusSteps += 1) {
     const available = placementRingPoints(preferredPoint, radiusSteps)
-      .find((point) => !isWorldEntityPositionOccupied(index, entity, point))
+      .find((point) => !isBlocked(point) && !isWorldEntityPositionOccupied(index, entity, point))
     if (available) return available
   }
   return undefined
@@ -139,10 +140,12 @@ export const findNearestAvailableWorldEntityPoint = (
   entity: WorldEntity,
   preferredPoint: WorldEntityGroundPoint,
   otherEntities: WorldEntity[],
+  options: { isBlocked?: (point: WorldEntityGroundPoint) => boolean } = {},
 ) => findNearestAvailablePointInIndex(
   entity,
   preferredPoint,
   createWorldEntityOccupancyIndex(otherEntities),
+  options.isBlocked,
 )
 
 export const resolveOverlappingWorldEntities = (entities: WorldEntity[]) => {

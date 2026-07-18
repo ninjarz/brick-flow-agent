@@ -24,7 +24,7 @@ import { simplifiedBrickThreshold } from './lib/scenePerformance'
 import { toggleBrickSelection } from './lib/brickSelection'
 import { dissolveBrickStructure, getBrickStructure, getExactSelectionStructure, pruneBrickStructures, solidifyBrickSelection, updateBrickStructure } from './lib/brickStructures'
 import { createEmptyWorldState, createWorldEntity, issueWorldEntityCommand } from './lib/worldEntity'
-import { stepWorldSimulation, worldSimulationStepSeconds } from './lib/worldSimulation'
+import { isWorldEntityGroundPointBlockedByBricks, stepWorldSimulation, worldSimulationStepSeconds } from './lib/worldSimulation'
 import { findNearestAvailableWorldEntityPoint } from './lib/worldEntityCollision'
 import { advanceWorldFixedStepClock, createWorldFixedStepClock } from './lib/worldClock'
 import { addWorldStory, createLocalTavernStory } from './lib/worldNarrative'
@@ -1223,7 +1223,9 @@ function App() {
     const entity = createWorldEntity(definition, {
       existingNames: world.entities.map((candidate) => candidate.name),
     })
-    const initialPoint = findNearestAvailableWorldEntityPoint(entity, entity.transform, world.entities)
+    const initialPoint = findNearestAvailableWorldEntityPoint(entity, entity.transform, world.entities, {
+      isBlocked: (point) => isWorldEntityGroundPointBlockedByBricks(entity, point, planRef.current.bricks),
+    })
     if (initialPoint) {
       entity.transform.x = initialPoint.x
       entity.transform.z = initialPoint.z
@@ -1275,7 +1277,9 @@ function App() {
           ...findNearestAvailableWorldEntityPoint(current.entity, {
             x: normalizeHorizontalStud(point.x),
             z: normalizeHorizontalStud(point.z),
-          }, worldRef.current.entities),
+          }, worldRef.current.entities, {
+            isBlocked: (candidate) => isWorldEntityGroundPointBlockedByBricks(current.entity, candidate, planRef.current.bricks),
+          }),
           y: 0,
         },
       },
@@ -1324,6 +1328,13 @@ function App() {
         worldEntityPlacement.entity,
         worldEntityPlacement.entity.transform,
         worldRef.current.entities,
+        {
+          isBlocked: (point) => isWorldEntityGroundPointBlockedByBricks(
+            worldEntityPlacement.entity,
+            point,
+            planRef.current.bricks,
+          ),
+        },
       )
       if (!availablePoint) return
       const placedEntity = {
