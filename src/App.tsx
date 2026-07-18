@@ -68,6 +68,7 @@ type WorldEntityPlacementSession = {
 }
 const workspaceDraftSaveDebounceMs = 120
 const sceneViewModeOrder: BrickSceneViewMode[] = ['border', 'borderless', 'xray', 'voxel']
+const ignoreSceneInteraction = () => {}
 
 const getNextSceneViewMode = (mode: BrickSceneViewMode) =>
   sceneViewModeOrder[(sceneViewModeOrder.indexOf(mode) + 1) % sceneViewModeOrder.length]
@@ -2595,10 +2596,10 @@ function App() {
                       highlightedIds={selectedManualStep.addPieces.map((piece) => piece.instanceId)}
                       cameraFrameKey={`${manualPlan?.id ?? 'manual'}:${selectedManualStep.stepNumber}:${isManualExploded ? 'exploded' : 'assembled'}`}
                       initialCameraAzimuthDegrees={selectedManualStep.cameraAzimuthDegrees}
-                      onSelect={() => {}}
-                      onNudgeSelected={() => {}}
-                      onRotateSelected={() => {}}
-                      onDeleteSelected={() => {}}
+                      onSelect={ignoreSceneInteraction}
+                      onNudgeSelected={ignoreSceneInteraction}
+                      onRotateSelected={ignoreSceneInteraction}
+                      onDeleteSelected={ignoreSceneInteraction}
                     />
                   </Suspense>
                 </div>

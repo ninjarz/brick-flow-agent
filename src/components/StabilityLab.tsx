@@ -13,6 +13,7 @@ import {
   type DisasterSimulationWorkerResponse,
 } from '../lib/disasterSimulation'
 import { useI18n } from '../lib/i18n'
+import { getSimulationPlaybackFps } from '../lib/scenePerformance'
 import type { BuildPlan } from '../types/bricks'
 
 type StabilityLabProps = {
@@ -21,6 +22,7 @@ type StabilityLabProps = {
 }
 
 const weatherParticleCount = 18
+const ignoreSceneEdit = () => {}
 const failedConnectionColor = '#dc2626'
 const connectionHeatColor = (utilization: number) => {
   if (utilization <= 0.001) return '#64748b'
@@ -98,6 +100,7 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
   const [inspectedBrickId, setInspectedBrickId] = useState('')
   const workerRef = useRef<Worker>()
   const simulationRunRef = useRef(0)
+  const simulationPlaybackIntervalMs = 1000 / getSimulationPlaybackFps(plan.bricks.length)
 
   const stopWorker = useCallback(() => {
     workerRef.current?.terminate()
@@ -163,6 +166,10 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
     let animationFrame = 0
     let previousTime = performance.now()
     const animate = (now: number) => {
+      if (now - previousTime < simulationPlaybackIntervalMs * 0.9) {
+        animationFrame = requestAnimationFrame(animate)
+        return
+      }
       const elapsed = Math.min(0.12, (now - previousTime) / 1000)
       previousTime = now
       setTimeSeconds((current) => {
@@ -177,7 +184,11 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
     }
     animationFrame = requestAnimationFrame(animate)
     return () => cancelAnimationFrame(animationFrame)
-  }, [isPlaying, result])
+  }, [isPlaying, result, simulationPlaybackIntervalMs])
+
+  const inspectBrick = useCallback((brickId: string) => {
+    setInspectedBrickId((current) => current === brickId ? '' : brickId)
+  }, [])
 
   const frame = useMemo(() => result ? getDisasterFrame(result, timeSeconds) : undefined, [result, timeSeconds])
   const sceneDisplayColorByBrickId = useMemo(() => {
@@ -444,10 +455,10 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
                 displayColorByBrickId={sceneDisplayColorByBrickId}
                 transformsByBrickId={sceneTransformsByBrickId}
                 onCameraAzimuthChange={setCameraAzimuthDegrees}
-                onSelect={(brickId) => setInspectedBrickId((current) => current === brickId ? '' : brickId)}
-                onNudgeSelected={() => {}}
-                onRotateSelected={() => {}}
-                onDeleteSelected={() => {}}
+                onSelect={inspectBrick}
+                onNudgeSelected={ignoreSceneEdit}
+                onRotateSelected={ignoreSceneEdit}
+                onDeleteSelected={ignoreSceneEdit}
               />
               {result.options.scenario !== 'rain' && (
                 <div className="simulation-wind-direction">

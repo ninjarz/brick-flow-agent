@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   getScenePerformanceSettings,
+  getSimulationPlaybackFps,
   shadowBrickThreshold,
   simplifiedBrickThreshold,
 } from './scenePerformance'
@@ -18,5 +19,11 @@ describe('scene performance policy', () => {
     expect(getScenePerformanceSettings(simplifiedBrickThreshold, 'border').useSimplifiedView).toBe(true)
     expect(getScenePerformanceSettings(simplifiedBrickThreshold, 'xray').useSimplifiedView).toBe(true)
     expect(getScenePerformanceSettings(simplifiedBrickThreshold, 'voxel').useSimplifiedView).toBe(false)
+  })
+
+  it('caps React-driven simulation playback based on model size', () => {
+    expect(getSimulationPlaybackFps(100)).toBe(30)
+    expect(getSimulationPlaybackFps(shadowBrickThreshold)).toBe(20)
+    expect(getSimulationPlaybackFps(simplifiedBrickThreshold)).toBe(12)
   })
 })
