@@ -270,6 +270,30 @@ describe('WorldEntity simulation', () => {
     expect(next.entities[0].behaviorState).toBe('following')
   })
 
+  it('replans a completed follow path when the followed unit moves again', () => {
+    const knight = worldEntityDefinitionById.get('knight')!
+    const follower = createWorldEntity(knight, { id: 'dynamic-follower', controller: 'player', transform: { x: 0, z: 0 } })
+    const leader = createWorldEntity(knight, { id: 'dynamic-leader', controller: 'player', transform: { x: 1.5, z: 0 } })
+    follower.activeCommand = { type: 'follow', target: { kind: 'entity', id: leader.id } }
+    let world = { ...createEmptyWorldState('plan-1'), entities: [follower, leader] }
+
+    world = stepWorldSimulation(world, [], 0.1)
+    expect(world.entities[0].behaviorState).toBe('following')
+
+    world = {
+      ...world,
+      entities: [
+        world.entities[0],
+        { ...world.entities[1], transform: { ...world.entities[1].transform, x: 5 } },
+      ],
+    }
+    const resumed = stepWorldSimulation(world, [], 0.1)
+
+    expect(resumed.entities[0].behaviorState).toBe('moving')
+    expect(resumed.entities[0].transform.x).toBeGreaterThan(world.entities[0].transform.x)
+    expect(resumed.entities[0].activeCommand).toEqual(follower.activeCommand)
+  })
+
   it('keeps guarding its post and intercepts hostile units inside the guard radius', () => {
     const knight = worldEntityDefinitionById.get('knight')!
     const guard = createWorldEntity(knight, {

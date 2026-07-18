@@ -1798,19 +1798,38 @@ const CatapultWorldEntityMesh = ({ entity, ghost }: { entity: WorldEntity; ghost
   </group>
 )
 
-const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementActive = false, onSelect }: {
+const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementActive = false, paused = false, onSelect }: {
   entity: WorldEntity
   ghost?: boolean
   selected?: boolean
   placementActive?: boolean
+  paused?: boolean
   onSelect?: (id: string) => void
 }) => {
   const definition = worldEntityDefinitionById.get(entity.definitionId)
   const groupRef = useRef<Group>(null)
-  useFrame((state) => {
-    if (!groupRef.current || ghost || entity.health <= 0) return
-    const movingBob = entity.behaviorState === 'moving' ? Math.abs(Math.sin(state.clock.elapsedTime * 9)) * 0.09 : 0
-    const attackBob = entity.behaviorState === 'attacking' ? Math.sin(state.clock.elapsedTime * 16) * 0.06 : 0
+  const animationTimeRef = useRef(0)
+  const initialVisualStateRef = useRef({ transform: entity.transform, health: entity.health })
+  useLayoutEffect(() => {
+    if (!groupRef.current || ghost) return
+    const initial = initialVisualStateRef.current
+    groupRef.current.position.set(initial.transform.x, initial.transform.y, initial.transform.z)
+    groupRef.current.rotation.set(0, initial.transform.rotationRadians, initial.health <= 0 ? Math.PI / 2 : 0)
+  }, [entity.id, ghost])
+  useFrame((_state, deltaSeconds) => {
+    if (!groupRef.current || ghost) return
+    if (!paused) animationTimeRef.current += Math.min(deltaSeconds, 0.05)
+    const interpolation = 1 - Math.exp(-Math.min(deltaSeconds, 0.05) * 18)
+    groupRef.current.position.x += (entity.transform.x - groupRef.current.position.x) * interpolation
+    groupRef.current.position.z += (entity.transform.z - groupRef.current.position.z) * interpolation
+    const yawDelta = Math.atan2(
+      Math.sin(entity.transform.rotationRadians - groupRef.current.rotation.y),
+      Math.cos(entity.transform.rotationRadians - groupRef.current.rotation.y),
+    )
+    groupRef.current.rotation.y += yawDelta * interpolation
+    groupRef.current.rotation.z += ((entity.health <= 0 ? Math.PI / 2 : 0) - groupRef.current.rotation.z) * interpolation
+    const movingBob = entity.behaviorState === 'moving' ? Math.abs(Math.sin(animationTimeRef.current * 9)) * 0.09 : 0
+    const attackBob = entity.behaviorState === 'attacking' ? Math.sin(animationTimeRef.current * 16) * 0.06 : 0
     groupRef.current.position.y = entity.transform.y + movingBob + attackBob
   })
   if (!definition) return null
@@ -1819,8 +1838,8 @@ const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementAct
   return (
     <group
       ref={groupRef}
-      position={[entity.transform.x, entity.transform.y, entity.transform.z]}
-      rotation={[entity.health <= 0 ? 0 : 0, entity.transform.rotationRadians, entity.health <= 0 ? Math.PI / 2 : 0]}
+      position={ghost ? [entity.transform.x, entity.transform.y, entity.transform.z] : undefined}
+      rotation={ghost ? [0, entity.transform.rotationRadians, 0] : undefined}
       userData={ghost ? { placementGhost: true } : undefined}
       onClick={ghost || !onSelect ? undefined : (event) => {
         if (placementActive) return
@@ -1917,6 +1936,7 @@ const WorldEntityScene = ({ entities, events, elapsedSeconds, paused, preview, s
       <WorldEntityMesh
         key={entity.id}
         entity={entity}
+        paused={paused}
         selected={entity.id === selectedId}
         placementActive={placementActive}
         onSelect={onSelect}

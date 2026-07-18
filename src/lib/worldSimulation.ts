@@ -414,11 +414,19 @@ const moveEntityToward = (
   const definition = worldEntityDefinitionById.get(entity.definitionId)
   if (!definition) return { entity: { ...entity, behaviorState: 'blocked' as const }, arrived: false }
   const targetChanged = entity.navigation.target?.kind !== target.kind || entity.navigation.target?.id !== target.id
-  let path = targetChanged ? [] : entity.navigation.path
-  let pathIndex = targetChanged ? 0 : entity.navigation.pathIndex
+  const plannedTargetPoint = entity.navigation.plannedTargetPoint
+  const movingTargetChangedPosition = target.kind === 'entity' && (
+    !plannedTargetPoint
+    || Math.hypot(targetPoint.x - plannedTargetPoint.x, targetPoint.z - plannedTargetPoint.z) >= navigationGridStuds
+  )
+  const shouldReplan = targetChanged || movingTargetChangedPosition
+  let path = shouldReplan ? [] : entity.navigation.path
+  let pathIndex = shouldReplan ? 0 : entity.navigation.pathIndex
+  let nextPlannedTargetPoint = shouldReplan ? undefined : plannedTargetPoint
   if (path.length === 0 || pathIndex >= path.length) {
     path = findWorldPath(entity.transform, targetPoint, createObstacleTest(bricks, entity, entityOccupancy))
     pathIndex = 0
+    nextPlannedTargetPoint = { x: targetPoint.x, z: targetPoint.z }
   }
   const destination = path[pathIndex] ?? targetPoint
   const dx = destination.x - entity.transform.x
@@ -429,7 +437,7 @@ const moveEntityToward = (
       entity: {
         ...entity,
         behaviorState: 'idle' as const,
-        navigation: { status: 'idle' as const, target, path, pathIndex },
+        navigation: { status: 'idle' as const, target, plannedTargetPoint: nextPlannedTargetPoint, path, pathIndex },
       },
       arrived: true,
     }
@@ -439,7 +447,7 @@ const moveEntityToward = (
       entity: {
         ...entity,
         behaviorState: 'blocked' as const,
-        navigation: { status: 'blocked' as const, target, path: [], pathIndex: 0 },
+        navigation: { status: 'blocked' as const, target, plannedTargetPoint: nextPlannedTargetPoint, path: [], pathIndex: 0 },
       },
       arrived: false,
     }
@@ -473,7 +481,7 @@ const moveEntityToward = (
       entity: {
         ...entity,
         behaviorState: 'blocked' as const,
-        navigation: { status: 'blocked' as const, target, path: [], pathIndex: 0 },
+        navigation: { status: 'blocked' as const, target, plannedTargetPoint: nextPlannedTargetPoint, path: [], pathIndex: 0 },
       },
       arrived: false,
     }
@@ -488,7 +496,13 @@ const moveEntityToward = (
         z: nextPoint.z,
         rotationRadians: nextRotation,
       },
-      navigation: { status: 'moving' as const, target, path, pathIndex: nextPathIndex },
+      navigation: {
+        status: 'moving' as const,
+        target,
+        plannedTargetPoint: nextPlannedTargetPoint,
+        path,
+        pathIndex: nextPathIndex,
+      },
     },
     arrived: false,
   }

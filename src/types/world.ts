@@ -29,6 +29,7 @@ export type WorldEntityTransform = {
 export type WorldEntityNavigationState = {
   status: 'idle' | 'planning' | 'moving' | 'blocked'
   target?: WorldTargetRef
+  plannedTargetPoint?: { x: number; z: number }
   path: Array<{ x: number; y: number; z: number }>
   pathIndex: number
 }
