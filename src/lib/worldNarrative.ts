@@ -123,6 +123,7 @@ export const formatWorldEvent = (event: WorldEvent, locale: 'zh-CN' | 'en-US') =
     }
     if (event.type === 'attack') return `${actor} attacked ${target}.`
     if (event.type === 'damage') return `${target} took ${event.amount ?? 0} damage from ${actor}.`
+    if (event.type === 'miss') return `${actor}'s attack missed ${target}.`
     if (event.type === 'defeated') return `${actor} defeated ${target}.`
     if (event.type === 'brick-hit') return `${actor} struck brick ${target}, but the structure was not damaged.`
     if (event.type === 'structure-hit') return `${actor} struck structure ${target}, but it remained intact.`
@@ -135,6 +136,7 @@ export const formatWorldEvent = (event: WorldEvent, locale: 'zh-CN' | 'en-US') =
   }
   if (event.type === 'attack') return `${actor}向${target}发起了攻击。`
   if (event.type === 'damage') return `${target}受到${actor}造成的 ${event.amount ?? 0} 点伤害。`
+  if (event.type === 'miss') return `${actor}的攻击没有命中${target}。`
   if (event.type === 'defeated') return `${actor}击败了${target}。`
   if (event.type === 'brick-hit') return `${actor}击中了砖块${target}，但建筑没有受损。`
   if (event.type === 'structure-hit') return `${actor}攻击了结构${target}，结构依然完好。`

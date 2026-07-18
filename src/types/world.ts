@@ -36,6 +36,7 @@ export type WorldEntityNavigationState = {
 
 export type WorldEntitySpeech = {
   message: WorldEntityCommand['type'] | 'chat-greeting' | 'chat-question' | 'chat-support' | 'chat-reply' | 'chat-agree'
+    | 'combat-attack' | 'combat-hurt' | 'combat-victory'
   targetName?: string
   expiresAtSeconds: number
 }
@@ -58,6 +59,10 @@ export type WorldEntity = {
   behaviorState: 'idle' | 'moving' | 'following' | 'guarding' | 'attacking' | 'blocked' | 'dead'
   combat: {
     cooldownRemainingSeconds: number
+    lastAttackerId?: string
+    lastDamagedAtSeconds?: number
+    lastDamageAmount?: number
+    damageIndicatorExpiresAtSeconds?: number
   }
   autonomy: {
     nextDecisionAtSeconds: number
@@ -67,7 +72,7 @@ export type WorldEntity = {
 export type WorldEvent = {
   id: string
   timeSeconds: number
-  type: 'attack' | 'damage' | 'defeated' | 'brick-hit' | 'structure-hit' | 'interaction' | 'command-issued' | 'command-complete'
+  type: 'attack' | 'damage' | 'miss' | 'defeated' | 'brick-hit' | 'structure-hit' | 'interaction' | 'command-issued' | 'command-complete'
   actorId: string
   actorName?: string
   targetId?: string
@@ -75,6 +80,9 @@ export type WorldEvent = {
   amount?: number
   commandType?: WorldEntityCommand['type']
   commandSource?: WorldEntityControllerKind
+  projectileKind?: 'arrow' | 'stone'
+  origin?: { x: number; y: number; z: number }
+  impactPoint?: { x: number; y: number; z: number }
 }
 
 export type WorldPendingImpact = {
@@ -84,6 +92,7 @@ export type WorldPendingImpact = {
   damage: number
   projectileKind: 'arrow' | 'stone'
   impactAtSeconds: number
+  impactPoint: { x: number; y: number; z: number }
 }
 
 export type WorldMemory = {

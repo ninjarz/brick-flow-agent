@@ -27,9 +27,19 @@ export const getWorldProjectileVisuals = (
     const target = entitiesById.get(event.targetId)
     const actorDefinition = actor ? worldEntityDefinitionById.get(actor.definitionId) : undefined
     const targetDefinition = target ? worldEntityDefinitionById.get(target.definitionId) : undefined
-    const kind = actorDefinition?.combat.projectileKind
-    if (!actor || !target || !kind) return []
-    const distance = Math.hypot(target.transform.x - actor.transform.x, target.transform.z - actor.transform.z)
+    const kind = event.projectileKind ?? actorDefinition?.combat.projectileKind
+    const start = event.origin ?? (actor && actorDefinition ? {
+      x: actor.transform.x,
+      y: actor.transform.y + actorDefinition.body.attackOriginHeightStuds,
+      z: actor.transform.z,
+    } : undefined)
+    const end = event.impactPoint ?? (target ? {
+      x: target.transform.x,
+      y: target.transform.y + (targetDefinition?.body.heightStuds ?? 2) * 0.55,
+      z: target.transform.z,
+    } : undefined)
+    if (!kind || !start || !end) return []
+    const distance = Math.hypot(end.x - start.x, end.z - start.z)
     const lifetimeSeconds = getWorldProjectileFlightSeconds(kind, distance)
     if (elapsedSeconds - event.timeSeconds > lifetimeSeconds + 0.15) return []
     return [{
@@ -37,16 +47,8 @@ export const getWorldProjectileVisuals = (
       kind,
       createdAtSeconds: event.timeSeconds,
       lifetimeSeconds,
-      start: {
-        x: actor.transform.x,
-        y: actor.transform.y + actorDefinition.body.attackOriginHeightStuds,
-        z: actor.transform.z,
-      },
-      end: {
-        x: target.transform.x,
-        y: target.transform.y + (targetDefinition?.body.heightStuds ?? 2) * 0.55,
-        z: target.transform.z,
-      },
+      start,
+      end,
       arcHeightStuds: kind === 'stone' ? Math.max(2.2, distance * 0.28) : Math.min(0.45, distance * 0.03),
     }]
   })

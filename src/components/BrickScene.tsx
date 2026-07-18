@@ -1798,12 +1798,13 @@ const CatapultWorldEntityMesh = ({ entity, ghost }: { entity: WorldEntity; ghost
   </group>
 )
 
-const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementActive = false, paused = false, onSelect }: {
+const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementActive = false, paused = false, elapsedSeconds = 0, onSelect }: {
   entity: WorldEntity
   ghost?: boolean
   selected?: boolean
   placementActive?: boolean
   paused?: boolean
+  elapsedSeconds?: number
   onSelect?: (id: string) => void
 }) => {
   const { t } = useI18n()
@@ -1839,6 +1840,9 @@ const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementAct
     : ''
   const healthRatio = Math.max(0, Math.min(1, entity.health / Math.max(1, entity.maxHealth)))
   const healthColor = healthRatio > 0.6 ? '#16a34a' : healthRatio > 0.3 ? '#f59e0b' : '#dc2626'
+  const showDamage = !ghost
+    && Boolean(entity.combat.lastDamageAmount)
+    && (entity.combat.damageIndicatorExpiresAtSeconds ?? 0) > elapsedSeconds
   return (
     <group
       ref={groupRef}
@@ -1872,6 +1876,11 @@ const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementAct
       {!ghost && speechText && (
         <Html position={[0, definition.visual.heightStuds + 1.55, 0]} center style={{ pointerEvents: 'none' }}>
           <div className="world-entity-speech-bubble" role="status">{speechText}</div>
+        </Html>
+      )}
+      {showDamage && (
+        <Html position={[0, definition.visual.heightStuds + 0.7, 0]} center style={{ pointerEvents: 'none' }}>
+          <div className="world-entity-damage-number">-{entity.combat.lastDamageAmount}</div>
         </Html>
       )}
       {selected && (
@@ -1946,6 +1955,7 @@ const WorldEntityScene = ({ entities, events, elapsedSeconds, paused, preview, s
         key={entity.id}
         entity={entity}
         paused={paused}
+        elapsedSeconds={elapsedSeconds}
         selected={entity.id === selectedId}
         placementActive={placementActive}
         onSelect={onSelect}

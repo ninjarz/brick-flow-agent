@@ -101,6 +101,13 @@ export const WorldEntityEditorPanel = ({ entity, commandTargets, onUpdate, onIss
       </div>
       <div className="world-entity-stats">
         <span>{t('worldEntity.health', { current: entity.health, max: entity.maxHealth })}</span>
+        {definition && (
+          <span>{t('worldEntity.combatStats', {
+            damage: definition.combat.damage,
+            range: definition.combat.attackRangeStuds,
+            cooldown: definition.combat.cooldownSeconds,
+          })}</span>
+        )}
         <span>{t(`worldEntity.controller.${entity.controller}`)}</span>
         <span>{t(`worldEntity.behavior.${entity.behaviorState}`)}</span>
         {visibleCommand && <span>{t('worldEntity.currentOrder', { order: t(`worldEntity.order.${visibleCommand.type}`) })}</span>}

@@ -2748,6 +2748,15 @@ button:disabled {
   transform: translateX(-50%) rotate(45deg);
 }
 
+.world-entity-damage-number {
+  color: #dc2626;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: 0 1px 0 #fff, 0 0 5px rgba(255, 255, 255, 0.95);
+  user-select: none;
+}
+
 .world-command-panel {
   display: grid;
   gap: 8px;

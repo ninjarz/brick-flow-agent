@@ -188,6 +188,18 @@ const parseStoredEntity = (value: unknown): WorldEntity | undefined => {
       cooldownRemainingSeconds: isRecord(value.combat) && isFiniteNumber(value.combat.cooldownRemainingSeconds)
         ? Math.max(0, value.combat.cooldownRemainingSeconds)
         : 0,
+      ...(isRecord(value.combat) && typeof value.combat.lastAttackerId === 'string'
+        ? { lastAttackerId: value.combat.lastAttackerId }
+        : {}),
+      ...(isRecord(value.combat) && isFiniteNumber(value.combat.lastDamagedAtSeconds)
+        ? { lastDamagedAtSeconds: Math.max(0, value.combat.lastDamagedAtSeconds) }
+        : {}),
+      ...(isRecord(value.combat) && isFiniteNumber(value.combat.lastDamageAmount)
+        ? { lastDamageAmount: Math.max(0, value.combat.lastDamageAmount) }
+        : {}),
+      ...(isRecord(value.combat) && isFiniteNumber(value.combat.damageIndicatorExpiresAtSeconds)
+        ? { damageIndicatorExpiresAtSeconds: Math.max(0, value.combat.damageIndicatorExpiresAtSeconds) }
+        : {}),
     },
     autonomy: {
       nextDecisionAtSeconds: isRecord(value.autonomy) && isFiniteNumber(value.autonomy.nextDecisionAtSeconds)
@@ -198,7 +210,7 @@ const parseStoredEntity = (value: unknown): WorldEntity | undefined => {
 }
 
 const eventTypes = new Set<WorldState['events'][number]['type']>([
-  'attack', 'damage', 'defeated', 'brick-hit', 'structure-hit', 'interaction', 'command-issued', 'command-complete',
+  'attack', 'damage', 'miss', 'defeated', 'brick-hit', 'structure-hit', 'interaction', 'command-issued', 'command-complete',
 ])
 
 const parseStoredEvents = (value: unknown): WorldState['events'] => Array.isArray(value)
@@ -255,7 +267,9 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
     isRecord(impact) && typeof impact.id === 'string' && typeof impact.actorId === 'string' && entityIds.has(impact.actorId) &&
     Boolean(parseTargetRef(impact.target)) && isRecord(impact.target) && ['entity', 'brick', 'structure'].includes(String(impact.target.kind)) &&
     isFiniteNumber(impact.damage) && impact.damage > 0 &&
-    (impact.projectileKind === 'arrow' || impact.projectileKind === 'stone') && isFiniteNumber(impact.impactAtSeconds)
+    (impact.projectileKind === 'arrow' || impact.projectileKind === 'stone') && isFiniteNumber(impact.impactAtSeconds) &&
+    isRecord(impact.impactPoint) && isFiniteNumber(impact.impactPoint.x) &&
+    isFiniteNumber(impact.impactPoint.y) && isFiniteNumber(impact.impactPoint.z)
   )).slice(-100) : []
   const narrative = isRecord(value.narrative) ? value.narrative : {}
 

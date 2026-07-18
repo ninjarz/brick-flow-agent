@@ -12,6 +12,24 @@ describe('world projectile visuals', () => {
     expect(getWorldProjectileVisuals([{ ...event, actorId: knight.id, targetId: archer.id }], [archer, knight], 2)).toHaveLength(0)
   })
 
+  it('keeps a fired projectile on its recorded trajectory when units move', () => {
+    const archer = createWorldEntity(worldEntityDefinitionById.get('archer')!, { id: 'fixed-archer', transform: { x: 3, z: 0 } })
+    const knight = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'moving-target', transform: { x: 12, z: 0 } })
+    const event = {
+      id: 'fixed-shot',
+      timeSeconds: 2,
+      type: 'attack' as const,
+      actorId: archer.id,
+      targetId: knight.id,
+      projectileKind: 'arrow' as const,
+      origin: { x: 0, y: 4, z: 0 },
+      impactPoint: { x: 8, y: 2.5, z: 0 },
+    }
+    const projectile = getWorldProjectileVisuals([event], [archer, knight], 2)[0]
+    expect(projectile.start).toEqual(event.origin)
+    expect(projectile.end).toEqual(event.impactPoint)
+  })
+
   it('samples a ballistic arc and expires old visuals', () => {
     const catapult = createWorldEntity(worldEntityDefinitionById.get('catapult')!, { id: 'catapult', transform: { x: 0, z: 0 } })
     const knight = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'knight', transform: { x: 10, z: 0 } })

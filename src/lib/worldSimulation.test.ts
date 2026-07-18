@@ -54,7 +54,10 @@ describe('WorldEntity simulation', () => {
       entities: [red, blue],
     }
 
-    const next = stepWorldSimulation(world, [], 0.1)
+    let next = world
+    for (let step = 0; step < 5 && next.entities[1].health === blue.health; step += 1) {
+      next = stepWorldSimulation(next, [], 0.1)
+    }
 
     expect(next.entities[1].health).toBeLessThan(blue.health)
     expect(next.events.some((event) => event.type === 'damage')).toBe(true)
@@ -89,7 +92,10 @@ describe('WorldEntity simulation', () => {
     const enemy = createWorldEntity(knight, {
       id: 'local-enemy', controller: 'player', factionId: 'red', transform: { x: 1.4, z: 0 },
     })
-    const next = stepWorldSimulation({ ...createEmptyWorldState('plan-1'), entities: [aiUnit, enemy] }, [], 0.1)
+    let next = { ...createEmptyWorldState('plan-1'), entities: [aiUnit, enemy] }
+    for (let step = 0; step < 5 && next.entities[1].health === enemy.health; step += 1) {
+      next = stepWorldSimulation(next, [], 0.1)
+    }
     expect(next.entities[1].health).toBeLessThan(enemy.health)
     expect(next.entities[0].behaviorState).toBe('attacking')
   })
@@ -133,7 +139,10 @@ describe('WorldEntity simulation', () => {
     ranged.activeCommand = { type: 'attack', target: { kind: 'entity', id: enemy.id } }
     const world = { ...createEmptyWorldState('plan-1'), entities: [ranged, enemy] }
 
-    const next = stepWorldSimulation(world, [], 0.1)
+    let next = world
+    for (let step = 0; step < 5 && next.entities[1].health > 0; step += 1) {
+      next = stepWorldSimulation(next, [], 0.1)
+    }
 
     expect(next.entities[0].transform.x).toBeLessThan(ranged.transform.x)
     expect(next.entities[0].behaviorState).toBe('moving')
@@ -213,7 +222,10 @@ describe('WorldEntity simulation', () => {
     attacker.activeCommand = { type: 'attack', target: { kind: 'entity', id: victim.id } }
     const world = { ...createEmptyWorldState('plan-1'), entities: [attacker, victim] }
 
-    const next = stepWorldSimulation(world, [], 0.1)
+    let next = world
+    for (let step = 0; step < 5 && next.entities[1].health > 0; step += 1) {
+      next = stepWorldSimulation(next, [], 0.1)
+    }
 
     expect(next.entities[1]).toMatchObject({
       health: 0,
@@ -374,7 +386,10 @@ describe('WorldEntity simulation', () => {
     guard.activeCommand = { type: 'guard', target: { kind: 'entity', id: protectedUnit.id } }
     const world = { ...createEmptyWorldState('plan-1'), entities: [guard, protectedUnit, intruder] }
 
-    const intercepting = stepWorldSimulation(world, [], 0.1)
+    let intercepting = world
+    for (let step = 0; step < 5 && intercepting.entities[2].health === intruder.health; step += 1) {
+      intercepting = stepWorldSimulation(intercepting, [], 0.1)
+    }
 
     expect(intercepting.entities[2].health).toBeLessThan(intruder.health)
     expect(intercepting.entities[0].activeCommand).toEqual(guard.activeCommand)
@@ -420,7 +435,10 @@ describe('WorldEntity simulation', () => {
     guard.activeCommand = { type: 'guard', target: { kind: 'entity', id: protectedUnit.id } }
     const world = { ...createEmptyWorldState('plan-1'), entities: [guard, protectedUnit, intruder] }
 
-    const launched = stepWorldSimulation(world, [], 0.1)
+    let launched = world
+    for (let step = 0; step < 5 && launched.pendingImpacts.length === 0; step += 1) {
+      launched = stepWorldSimulation(launched, [], 0.1)
+    }
     expect(launched.pendingImpacts).toHaveLength(1)
 
     const impacted = stepWorldSimulation(launched, [], 1)
@@ -439,17 +457,90 @@ describe('WorldEntity simulation', () => {
     expect(hasWorldLineOfSight(archer, knight, wall)).toBe(false)
 
     const blockedWorld = { ...createEmptyWorldState('plan-1'), entities: [archer, knight] }
-    const blocked = stepWorldSimulation(blockedWorld, wall, 0.1)
+    let blocked = blockedWorld
+    for (let step = 0; step < 5; step += 1) blocked = stepWorldSimulation(blocked, wall, 0.1)
     expect(blocked.entities[1].health).toBe(knight.health)
     expect(blocked.events.some((event) => event.type === 'attack')).toBe(false)
 
-    const launched = stepWorldSimulation(blockedWorld, [], 0.1)
+    let launched = blockedWorld
+    for (let step = 0; step < 5 && launched.pendingImpacts.length === 0; step += 1) {
+      launched = stepWorldSimulation(launched, [], 0.1)
+    }
     expect(launched.events.some((event) => event.type === 'attack')).toBe(true)
     expect(launched.entities[1].health).toBe(knight.health)
     expect(launched.pendingImpacts).toHaveLength(1)
     const impacted = stepWorldSimulation(launched, [], 0.8)
     expect(impacted.entities[1].health).toBeLessThan(knight.health)
     expect(impacted.pendingImpacts).toHaveLength(0)
+  })
+
+  it('lets melee units strike the near edge of a large target body', () => {
+    const knightDefinition = worldEntityDefinitionById.get('knight')!
+    const catapultDefinition = worldEntityDefinitionById.get('catapult')!
+    const knight = createWorldEntity(knightDefinition, {
+      id: 'large-target-attacker', controller: 'player', factionId: 'blue', transform: { x: 0, z: 0 },
+    })
+    const catapult = createWorldEntity(catapultDefinition, {
+      id: 'large-target-victim', controller: 'player', factionId: 'red', transform: { x: 5, z: 0 },
+    })
+    knight.activeCommand = { type: 'attack', target: { kind: 'entity', id: catapult.id } }
+    let world = { ...createEmptyWorldState('plan-1'), entities: [knight, catapult] }
+
+    for (let step = 0; step < 6 && world.entities[1].health === catapult.health; step += 1) {
+      world = stepWorldSimulation(world, [], 0.1)
+    }
+
+    expect(world.entities[1].health).toBeLessThan(catapult.health)
+    expect(world.entities[1].combat.lastAttackerId).toBe(knight.id)
+    expect(world.entities[1].combat.lastDamageAmount).toBe(knightDefinition.combat.damage)
+  })
+
+  it('lets a moving target dodge a projectile aimed at its launch position', () => {
+    const archerDefinition = worldEntityDefinitionById.get('archer')!
+    const knightDefinition = worldEntityDefinitionById.get('knight')!
+    const archer = createWorldEntity(archerDefinition, {
+      id: 'dodge-archer', controller: 'player', factionId: 'red', transform: { x: 0, z: 0 },
+    })
+    const knight = createWorldEntity(knightDefinition, {
+      id: 'dodging-knight', controller: 'player', factionId: 'blue', transform: { x: 7, z: 0 },
+    })
+    archer.activeCommand = { type: 'attack', target: { kind: 'entity', id: knight.id } }
+    let world = { ...createEmptyWorldState('plan-1'), entities: [archer, knight] }
+    for (let step = 0; step < 5 && world.pendingImpacts.length === 0; step += 1) {
+      world = stepWorldSimulation(world, [], 0.1)
+    }
+    expect(world.pendingImpacts).toHaveLength(1)
+    world = {
+      ...world,
+      entities: [world.entities[0], {
+        ...world.entities[1],
+        transform: { ...world.entities[1].transform, x: 10 },
+      }],
+    }
+
+    world = stepWorldSimulation(world, [], 1)
+
+    expect(world.entities[1].health).toBe(knight.health)
+    expect(world.events.some((event) => event.type === 'miss' && event.targetId === knight.id)).toBe(true)
+  })
+
+  it('makes a neutral autonomous unit retaliate against a recent attacker', () => {
+    const knightDefinition = worldEntityDefinitionById.get('knight')!
+    const aggressor = createWorldEntity(knightDefinition, {
+      id: 'neutral-aggressor', controller: 'player', factionId: 'red', transform: { x: 0, z: 0 },
+    })
+    const neutral = createWorldEntity(knightDefinition, {
+      id: 'retaliating-neutral', controller: 'rule', factionId: 'neutral', transform: { x: 1, z: 0 },
+    })
+    aggressor.activeCommand = { type: 'attack', target: { kind: 'entity', id: neutral.id } }
+    let world = { ...createEmptyWorldState('plan-1'), entities: [aggressor, neutral] }
+    for (let step = 0; step < 5 && world.entities[1].health === neutral.health; step += 1) {
+      world = stepWorldSimulation(world, [], 0.1)
+    }
+
+    expect(world.entities[1].combat.lastAttackerId).toBe(aggressor.id)
+    expect(world.entities[1].activeCommand).toEqual({ type: 'attack', target: { kind: 'entity', id: aggressor.id } })
+    expect(world.entities[1].speech?.message).toBe('combat-hurt')
   })
 
   it('lets idle rule-controlled allies socialize at a throttled deterministic cadence', () => {

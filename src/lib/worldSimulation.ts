@@ -324,9 +324,18 @@ const findNearestEntity = (
   return nearest
 }
 
-const findBestEnemy = (entity: WorldEntity, entities: WorldEntity[]) => {
-  if (entity.factionId === 'neutral') return undefined
+const findBestEnemy = (entity: WorldEntity, entities: WorldEntity[], timeSeconds: number) => {
   const detectionRange = worldEntityDefinitionById.get(entity.definitionId)?.perception.detectionRangeStuds ?? 0
+  const recentAttacker = entity.combat.lastAttackerId
+    && (entity.combat.lastDamagedAtSeconds ?? -Infinity) + 8 >= timeSeconds
+    ? entities.find((candidate) => (
+        candidate.id === entity.combat.lastAttackerId
+        && candidate.health > 0
+        && distance2d(entity.transform, candidate.transform) <= detectionRange * 1.5
+      ))
+    : undefined
+  if (recentAttacker) return recentAttacker
+  if (entity.factionId === 'neutral') return undefined
   return entities
     .filter((candidate) => (
       candidate.id !== entity.id
@@ -555,6 +564,7 @@ const makeEvent = (
   actorId: string,
   targetId?: string,
   amount?: number,
+  details: Pick<WorldEvent, 'projectileKind' | 'origin' | 'impactPoint'> = {},
 ): WorldEvent => ({
   id: `event-${Math.round(timeSeconds * 1000)}-${actorId}-${type}`,
   timeSeconds,
@@ -562,6 +572,7 @@ const makeEvent = (
   actorId,
   targetId,
   amount,
+  ...details,
 })
 
 const commandTarget = (command: WorldEntityCommand) => 'target' in command ? command.target : undefined
@@ -598,6 +609,7 @@ const createPendingImpact = (
   target,
   damage,
   projectileKind,
+  impactPoint: { ...targetPoint },
   impactAtSeconds: timeSeconds + getWorldProjectileFlightSeconds(
     projectileKind,
     distance2d(actor.transform, targetPoint),
@@ -616,6 +628,7 @@ export const stepWorldSimulation = (
     ...entity,
     speech: entity.speech && entity.speech.expiresAtSeconds > timeSeconds ? entity.speech : undefined,
     combat: {
+      ...entity.combat,
       cooldownRemainingSeconds: Math.max(0, entity.combat.cooldownRemainingSeconds - deltaSeconds),
     },
   }))
@@ -631,6 +644,60 @@ export const stepWorldSimulation = (
   const pendingImpacts = world.pendingImpacts.filter((impact) => impact.impactAtSeconds > timeSeconds)
   const dueImpacts = world.pendingImpacts.filter((impact) => impact.impactAtSeconds <= timeSeconds)
 
+  const applyEntityDamage = (actorIndex: number, targetIndex: number, damage: number) => {
+    const actor = entities[actorIndex]
+    const victim = entities[targetIndex]
+    if (!actor || !victim || victim.health <= 0) return false
+    const nextHealth = Math.max(0, victim.health - damage)
+    const defeated = nextHealth <= 0
+    entities[targetIndex] = defeated
+      ? {
+          ...victim,
+          health: 0,
+          activeCommand: undefined,
+          commandQueue: [],
+          speech: undefined,
+          behaviorState: 'dead',
+          navigation: { status: 'idle', path: [], pathIndex: 0 },
+          combat: {
+            ...victim.combat,
+            lastAttackerId: actor.id,
+            lastDamagedAtSeconds: timeSeconds,
+            lastDamageAmount: damage,
+            damageIndicatorExpiresAtSeconds: timeSeconds + 1.1,
+          },
+        }
+      : {
+          ...victim,
+          health: nextHealth,
+          speech: {
+            message: 'combat-hurt',
+            targetName: actor.name,
+            expiresAtSeconds: timeSeconds + 2.4,
+          },
+          combat: {
+            ...victim.combat,
+            lastAttackerId: actor.id,
+            lastDamagedAtSeconds: timeSeconds,
+            lastDamageAmount: damage,
+            damageIndicatorExpiresAtSeconds: timeSeconds + 1.1,
+          },
+        }
+    events.push(makeEvent(timeSeconds, 'damage', actor.id, victim.id, damage))
+    if (defeated) {
+      events.push(makeEvent(timeSeconds, 'defeated', actor.id, victim.id))
+      entities[actorIndex] = {
+        ...entities[actorIndex],
+        speech: {
+          message: 'combat-victory',
+          targetName: victim.name,
+          expiresAtSeconds: timeSeconds + 3,
+        },
+      }
+    }
+    return defeated
+  }
+
   for (const impact of dueImpacts) {
     const actorIndex = targetLookup.entityIndexById.get(impact.actorId)
     if (actorIndex === undefined) continue
@@ -638,21 +705,11 @@ export const stepWorldSimulation = (
       const targetIndex = targetLookup.entityIndexById.get(impact.target.id)
       if (targetIndex === undefined || entities[targetIndex].health <= 0) continue
       const victim = entities[targetIndex]
-      const nextHealth = Math.max(0, victim.health - impact.damage)
-      entities[targetIndex] = nextHealth <= 0
-        ? {
-            ...victim,
-            health: 0,
-            activeCommand: undefined,
-            commandQueue: [],
-            speech: undefined,
-            behaviorState: 'dead',
-            navigation: { status: 'idle', path: [], pathIndex: 0 },
-          }
-        : { ...victim, health: nextHealth }
-      events.push(makeEvent(timeSeconds, 'damage', impact.actorId, victim.id, impact.damage))
-      if (nextHealth <= 0) {
-        events.push(makeEvent(timeSeconds, 'defeated', impact.actorId, victim.id))
+      const hitRadius = getWorldEntityCollisionRadius(victim) + (impact.projectileKind === 'stone' ? 1.25 : 0.3)
+      const missed = distance2d(victim.transform, impact.impactPoint) > hitRadius
+      if (missed) {
+        events.push(makeEvent(timeSeconds, 'miss', impact.actorId, victim.id))
+      } else if (applyEntityDamage(actorIndex, targetIndex, impact.damage)) {
         if (entities[actorIndex].activeCommand?.type === 'attack') {
           entities[actorIndex] = { ...entities[actorIndex], activeCommand: undefined }
         }
@@ -688,7 +745,7 @@ export const stepWorldSimulation = (
       commandStarted = true
     }
     if (!activeCommand && entity.controller !== 'player') {
-      const enemy = findBestEnemy(entity, entities)
+      const enemy = findBestEnemy(entity, entities, timeSeconds)
       if (enemy) {
         activeCommand = { type: 'attack', target: { kind: 'entity', id: enemy.id } }
         commandStarted = true
@@ -708,11 +765,13 @@ export const stepWorldSimulation = (
     if (commandStarted && activeCommand) {
       entity = {
         ...entity,
-        speech: {
-          message: activeCommand.type,
-          targetName: getCommandTargetName(activeCommand, entities, targetLookup),
-          expiresAtSeconds: timeSeconds + commandSpeechDurationSeconds,
-        },
+        speech: entity.speech?.message === 'combat-hurt' || entity.speech?.message === 'combat-victory'
+          ? entity.speech
+          : {
+              message: activeCommand.type,
+              targetName: getCommandTargetName(activeCommand, entities, targetLookup),
+              expiresAtSeconds: timeSeconds + commandSpeechDurationSeconds,
+            },
       }
     }
     if (!activeCommand || activeCommand.type === 'stop') {
@@ -738,17 +797,19 @@ export const stepWorldSimulation = (
       : assignedTarget
     const targetPoint = guardEnemy?.transform ?? assignedTargetPoint
     const definition = worldEntityDefinitionById.get(entity.definitionId)
-    const targetDistance = distance2d(entity.transform, targetPoint)
     const isAttack = activeCommand.type === 'attack' || Boolean(guardEnemy)
     const targetEntityIndex = target.kind === 'entity' ? targetLookup.entityIndexById.get(target.id) : undefined
     const targetEntity = targetEntityIndex === undefined ? undefined : entities[targetEntityIndex]
+    const centerDistance = distance2d(entity.transform, targetPoint)
+    const combinedBodyRadius = targetEntity
+      ? getWorldEntityCollisionRadius(entity) + getWorldEntityCollisionRadius(targetEntity)
+      : 0
+    const targetDistance = definition?.role === 'melee' && targetEntity
+      ? Math.max(0, centerDistance - combinedBodyRadius)
+      : centerDistance
     const isInteractionInReach = activeCommand.type === 'interact'
       && targetEntity
-      && targetDistance <= (
-        getWorldEntityCollisionRadius(entity)
-        + getWorldEntityCollisionRadius(targetEntity)
-        + arrivalDistanceStuds
-      )
+      && centerDistance <= combinedBodyRadius + arrivalDistanceStuds
     if (isInteractionInReach) {
       events.push(makeEvent(timeSeconds, 'interaction', entity.id, target.id))
       const listenerIndex = targetLookup.entityIndexById.get(target.id)
@@ -776,7 +837,7 @@ export const stepWorldSimulation = (
       const retreat = moveEntityToward(
         entity,
         retreatTarget,
-        getRetreatPoint(entity, targetPoint, minimumRangeStuds),
+        getRetreatPoint(entity, targetPoint, minimumRangeStuds + combinedBodyRadius),
         bricks,
         entityOccupancy,
         deltaSeconds,
@@ -789,25 +850,45 @@ export const stepWorldSimulation = (
     }
     const hasAttackLineOfSight = definition?.combat.projectileKind !== 'arrow' || !targetEntity || hasLineOfSight(entity, targetEntity)
     if (isAttack && definition && targetDistance <= definition.combat.attackRangeStuds && hasAttackLineOfSight) {
+      const nextRotation = turnEntityToward(
+        entity,
+        targetPoint,
+        definition.movement.turningRadiansPerSecond,
+        deltaSeconds,
+      )
+      const desiredRotation = Math.atan2(targetPoint.x - entity.transform.x, targetPoint.z - entity.transform.z)
+      const aimError = Math.abs(normalizeAngleRadians(desiredRotation - nextRotation))
       entity = {
         ...entity,
         behaviorState: 'attacking',
         transform: {
           ...entity.transform,
-          rotationRadians: turnEntityToward(
-            entity,
-            targetPoint,
-            definition.movement.turningRadiansPerSecond,
-            deltaSeconds,
-          ),
+          rotationRadians: nextRotation,
         },
       }
-      if (entity.combat.cooldownRemainingSeconds <= 0) {
+      if (entity.combat.cooldownRemainingSeconds <= 0 && aimError <= 0.22) {
         entity = {
           ...entity,
-          combat: { cooldownRemainingSeconds: definition.combat.cooldownSeconds },
+          speech: entity.speech ?? {
+            message: 'combat-attack',
+            targetName: getCommandTargetName({ type: 'attack', target: target as Extract<WorldTargetRef, { kind: 'entity' | 'brick' | 'structure' }> }, entities, targetLookup),
+            expiresAtSeconds: timeSeconds + 2.4,
+          },
+          combat: { ...entity.combat, cooldownRemainingSeconds: definition.combat.cooldownSeconds },
         }
-        events.push(makeEvent(timeSeconds, 'attack', entity.id, target.id, definition.combat.damage))
+        events.push(makeEvent(timeSeconds, 'attack', entity.id, target.id, definition.combat.damage, definition.combat.projectileKind ? {
+          projectileKind: definition.combat.projectileKind,
+          origin: {
+            x: entity.transform.x,
+            y: entity.transform.y + definition.body.attackOriginHeightStuds,
+            z: entity.transform.z,
+          },
+          impactPoint: targetEntity ? {
+            x: targetPoint.x,
+            y: targetPoint.y + (worldEntityDefinitionById.get(targetEntity.definitionId)?.body.heightStuds ?? 2) * 0.55,
+            z: targetPoint.z,
+          } : { ...targetPoint },
+        } : {}))
         if (definition.combat.projectileKind) {
           pendingImpacts.push(createPendingImpact(
             timeSeconds,
@@ -820,22 +901,10 @@ export const stepWorldSimulation = (
         } else if (target.kind === 'entity') {
           const targetIndex = targetLookup.entityIndexById.get(target.id)
           if (targetIndex !== undefined) {
-            const victim = entities[targetIndex]
-            const nextHealth = Math.max(0, victim.health - definition.combat.damage)
-            entities[targetIndex] = nextHealth <= 0
-              ? {
-                  ...victim,
-                  health: 0,
-                  activeCommand: undefined,
-                  commandQueue: [],
-                  speech: undefined,
-                  behaviorState: 'dead',
-                  navigation: { status: 'idle', path: [], pathIndex: 0 },
-                }
-              : { ...victim, health: nextHealth }
-            events.push(makeEvent(timeSeconds, 'damage', entity.id, victim.id, definition.combat.damage))
-            if (nextHealth <= 0) {
-              events.push(makeEvent(timeSeconds, 'defeated', entity.id, victim.id))
+            entities[index] = entity
+            const defeated = applyEntityDamage(index, targetIndex, definition.combat.damage)
+            entity = entities[index]
+            if (defeated) {
               if (activeCommand.type === 'attack') entity = { ...entity, activeCommand: undefined }
             }
           }
