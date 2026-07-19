@@ -5,6 +5,9 @@ import { createId, createPlanSpatialState, createSingleBrickSteps, getBrickBound
 export type IncrementalAssetImportResult = {
   plan: BuildPlan
   importedBrickIds: string[]
+  brickIdMap: Record<string, string>
+  structureIdMap: Record<string, string>
+  placementOffset: { x: number; y: number; z: number }
 }
 
 type Bounds2d = {
@@ -68,15 +71,25 @@ const remapAssetPlan = (
   })).filter((step) => step.brickIds.length > 0)
 
   const usedStructureIds = new Set((currentPlan.structures ?? []).map((structure) => structure.id))
+  const structureIdMap = new Map((assetPlan.structures ?? []).map((structure) => [
+    structure.id,
+    makeUniqueId('structure', usedStructureIds, idFactory),
+  ]))
   const structures = (assetPlan.structures ?? []).map((structure) => ({
     ...structure,
-    id: makeUniqueId('structure', usedStructureIds, idFactory),
+    id: structureIdMap.get(structure.id)!,
     brickIds: structure.brickIds
       .map((brickId) => brickIdMap.get(brickId))
       .filter((brickId): brickId is string => Boolean(brickId)),
   })).filter((structure) => structure.brickIds.length > 0)
 
-  return { bricks, steps, structures }
+  return {
+    bricks,
+    steps,
+    structures,
+    brickIdMap: Object.fromEntries(brickIdMap),
+    structureIdMap: Object.fromEntries(structureIdMap),
+  }
 }
 
 const getPlacementPoints = (
@@ -165,6 +178,13 @@ export const importAssetPlanIncrementally = (
 
   return {
     importedBrickIds: placedBricks.map((brick) => brick.id),
+    brickIdMap: remapped.brickIdMap,
+    structureIdMap: remapped.structureIdMap,
+    placementOffset: {
+      x: placedBricks[0].pose.xStud - remapped.bricks[0].pose.xStud,
+      y: placedBricks[0].pose.yStud - remapped.bricks[0].pose.yStud,
+      z: placedBricks[0].pose.zStud - remapped.bricks[0].pose.zStud,
+    },
     plan: {
       ...currentPlan,
       bricks: [...currentPlan.bricks, ...placedBricks],
