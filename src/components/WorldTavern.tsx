@@ -1,4 +1,4 @@
-import { Beer, BookOpen, Bot, Clipboard, Eye, Sparkles, Trash2, X } from 'lucide-react'
+import { Activity, Beer, BookOpen, Bot, Clipboard, Eye, Sparkles, Trash2, Users, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useI18n } from '../lib/i18n'
 import { formatWorldEvent } from '../lib/worldNarrative'
@@ -6,7 +6,7 @@ import type { WorldState } from '../types/world'
 
 type WorldTavernProps = {
   world: WorldState
-  onGenerateStory: () => void
+  onGenerateStory: (focusEntityId?: string) => void
   onRunAiTurn: () => void
   onGetAiContext: () => string
   onClearHistory: () => void
@@ -32,6 +32,8 @@ export const WorldTavern = ({
   const [confirmClear, setConfirmClear] = useState(false)
   const [aiContext, setAiContext] = useState('')
   const [contextCopyStatus, setContextCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
+  const [chronicleScope, setChronicleScope] = useState<'world' | 'character'>('world')
+  const [storyScope, setStoryScope] = useState<'world' | 'character'>('world')
   useEffect(() => {
     if (world.entities.some((entity) => entity.id === selectedEntityId)) return
     setSelectedEntityId(world.entities[0]?.id ?? '')
@@ -41,7 +43,28 @@ export const WorldTavern = ({
   const selectedRelationships = Object.values(world.narrative.relationshipsByEntityId[selectedEntityId] ?? {})
     .sort((a, b) => Math.abs(b.affinity) - Math.abs(a.affinity) || b.encounters - a.encounters)
   const aiEntityCount = world.entities.filter((entity) => entity.controller === 'ai' && entity.health > 0).length
+  const livingCount = world.entities.filter((entity) => entity.health > 0).length
+  const defeatedCount = world.entities.length - livingCount
+  const activeOrderCount = world.entities.filter((entity) => entity.activeCommand || entity.commandQueue.length > 0).length
   const eventsById = useMemo(() => new Map(world.events.map((event) => [event.id, event])), [world.events])
+  const visibleEvents = chronicleScope === 'character' && selectedEntityId
+    ? world.events.filter((event) => event.actorId === selectedEntityId || event.targetId === selectedEntityId)
+    : world.events
+  const getStoryCharacterIds = (story: WorldState['narrative']['stories'][number]) => story.characterIds ?? Array.from(new Set(
+    story.eventIds.flatMap((eventId) => {
+      const event = eventsById.get(eventId)
+      return event ? [event.actorId, event.targetId].filter((id): id is string => Boolean(id)) : []
+    }),
+  ))
+  const visibleStories = storyScope === 'character' && selectedEntityId
+    ? world.narrative.stories.filter((story) => getStoryCharacterIds(story).includes(selectedEntityId))
+    : world.narrative.stories
+  const formatWorldTime = (seconds: number) => {
+    const totalSeconds = Math.max(0, Math.floor(seconds))
+    const minutes = Math.floor(totalSeconds / 60)
+    const remainder = totalSeconds % 60
+    return `${minutes}:${remainder.toString().padStart(2, '0')}`
+  }
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -81,7 +104,13 @@ export const WorldTavern = ({
 
         <div className="tavern-layout">
           <aside className="tavern-characters">
-            <strong>{t('tavern.characters')}</strong>
+            <strong><Users size={14} />{t('tavern.characters')}</strong>
+            <div className="tavern-world-pulse" aria-label={t('tavern.worldPulse')}>
+              <div><strong>{livingCount}</strong><small>{t('tavern.living')}</small></div>
+              <div><strong>{defeatedCount}</strong><small>{t('tavern.defeated')}</small></div>
+              <div><strong>{activeOrderCount}</strong><small>{t('tavern.activeOrders')}</small></div>
+              <div><strong>{world.narrative.stories.length}</strong><small>{t('tavern.chapters')}</small></div>
+            </div>
             {world.entities.map((entity) => (
               <button
                 key={entity.id}
@@ -92,7 +121,7 @@ export const WorldTavern = ({
                 <span>{entity.name.slice(0, 1)}</span>
                 <div>
                   <strong>{entity.name}</strong>
-                  <small>{t(`worldEntity.faction.${entity.factionId}`)} · {entity.health}/{entity.maxHealth}</small>
+                  <small>{t(`worldEntity.faction.${entity.factionId}`)} · {entity.health}/{entity.maxHealth} · {t(`worldEntity.behavior.${entity.behaviorState}`)}</small>
                 </div>
               </button>
             ))}
@@ -102,6 +131,15 @@ export const WorldTavern = ({
           <div className="tavern-content">
             <section className="tavern-memory-panel">
               <h3>{selectedEntity ? t('tavern.memoriesOf', { name: selectedEntity.name }) : t('tavern.memories')}</h3>
+              {selectedEntity && (
+                <div className="tavern-character-summary">
+                  <Activity size={14} />
+                  <span>{t(`worldEntity.behavior.${selectedEntity.behaviorState}`)}</span>
+                  <span>{selectedEntity.activeCommand
+                    ? t('worldEntity.currentOrder', { order: t(`worldEntity.order.${selectedEntity.activeCommand.type}`) })
+                    : t('tavern.noActiveOrder')}</span>
+                </div>
+              )}
               <ol>
                 {[...selectedMemories].reverse().slice(0, 16).map((memory) => {
                   const event = eventsById.get(memory.eventId)
@@ -119,10 +157,19 @@ export const WorldTavern = ({
                   const target = world.entities.find((entity) => entity.id === relationship.targetEntityId)
                   const tone = relationship.affinity >= 20 ? 'friendly' : relationship.affinity <= -20 ? 'hostile' : 'neutral'
                   return (
-                    <div key={relationship.targetEntityId} className={tone}>
+                    <button
+                      type="button"
+                      key={relationship.targetEntityId}
+                      className={tone}
+                      onClick={() => target && setSelectedEntityId(target.id)}
+                      disabled={!target}
+                    >
                       <span>{target?.name ?? relationship.targetEntityId}</span>
+                      <span className="tavern-affinity-track" aria-hidden="true">
+                        <i style={{ width: `${Math.abs(relationship.affinity)}%` }} />
+                      </span>
                       <small>{t(`tavern.relationship.${tone}`)} · {relationship.affinity > 0 ? '+' : ''}{relationship.affinity} · {t('tavern.encounters', { count: relationship.encounters })}</small>
-                    </div>
+                    </button>
                   )
                 })}
                 {selectedRelationships.length === 0 && <p className="muted">{t('tavern.noRelationships')}</p>}
@@ -130,13 +177,19 @@ export const WorldTavern = ({
             </section>
 
             <section className="tavern-chronicle">
-              <h3><BookOpen size={16} />{t('tavern.chronicle')}</h3>
+              <header className="tavern-section-header">
+                <h3><BookOpen size={16} />{t('tavern.chronicle')}</h3>
+                <div className="tavern-scope-toggle">
+                  <button type="button" className={chronicleScope === 'world' ? 'active' : ''} onClick={() => setChronicleScope('world')}>{t('tavern.scope.world')}</button>
+                  <button type="button" className={chronicleScope === 'character' ? 'active' : ''} onClick={() => setChronicleScope('character')} disabled={!selectedEntity}>{t('tavern.scope.character')}</button>
+                </div>
+              </header>
               <ol>
-                {[...world.events].reverse().slice(0, 24).map((event) => (
-                  <li key={event.id}>{formatWorldEvent(event, locale)}</li>
+                {[...visibleEvents].reverse().slice(0, 24).map((event) => (
+                  <li key={event.id}><time>{formatWorldTime(event.timeSeconds)}</time>{formatWorldEvent(event, locale)}</li>
                 ))}
               </ol>
-              {world.events.length === 0 && <p className="muted">{t('tavern.noEvents')}</p>}
+              {visibleEvents.length === 0 && <p className="muted">{t('tavern.noEvents')}</p>}
             </section>
 
             <section className="tavern-stories">
@@ -165,9 +218,15 @@ export const WorldTavern = ({
                     <Bot size={15} />
                     {isAiThinking ? t('tavern.aiThinking') : t('tavern.runAiTurn', { count: aiEntityCount })}
                   </button>
-                  <button type="button" onClick={onGenerateStory} disabled={world.entities.length === 0 && world.events.length === 0}>
+                  <button
+                    type="button"
+                    onClick={() => onGenerateStory(storyScope === 'character' ? selectedEntityId : undefined)}
+                    disabled={world.entities.length === 0 && world.events.length === 0}
+                  >
                     <Sparkles size={15} />
-                    {t('tavern.generateRumor')}
+                    {storyScope === 'character' && selectedEntity
+                      ? t('tavern.generateCharacterRumor', { name: selectedEntity.name })
+                      : t('tavern.generateRumor')}
                   </button>
                 </div>
               </header>
@@ -197,14 +256,33 @@ export const WorldTavern = ({
                 </section>
               )}
               {aiFeedback && <p className={`tavern-ai-feedback ${aiFeedback.tone}`}>{aiFeedback.text}</p>}
-              {[...world.narrative.stories].reverse().map((story) => (
+              <div className="tavern-story-filter">
+                <span>{t('tavern.storyScope')}</span>
+                <div className="tavern-scope-toggle">
+                  <button type="button" className={storyScope === 'world' ? 'active' : ''} onClick={() => setStoryScope('world')}>{t('tavern.scope.world')}</button>
+                  <button type="button" className={storyScope === 'character' ? 'active' : ''} onClick={() => setStoryScope('character')} disabled={!selectedEntity}>{t('tavern.scope.character')}</button>
+                </div>
+              </div>
+              {[...visibleStories].reverse().map((story) => {
+                const characterNames = getStoryCharacterIds(story)
+                  .map((id) => world.entities.find((entity) => entity.id === id)?.name)
+                  .filter((name): name is string => Boolean(name))
+                return (
                 <article key={story.id}>
                   <strong>{story.title}</strong>
                   <p>{story.body}</p>
-                  <small>{story.source === 'ai' ? t('tavern.sourceAi') : t('tavern.sourceLocal')}</small>
+                  <small>
+                    {t('tavern.storyMeta', {
+                      chapter: story.chapterNumber ?? world.narrative.stories.indexOf(story) + 1,
+                      time: formatWorldTime(story.createdAtSeconds),
+                      source: story.source === 'ai' ? t('tavern.sourceAi') : t('tavern.sourceLocal'),
+                    })}
+                    {characterNames.length > 0 ? ` · ${characterNames.join('、')}` : ''}
+                  </small>
                 </article>
-              ))}
-              {world.narrative.stories.length === 0 && <p className="muted">{t('tavern.noStories')}</p>}
+                )
+              })}
+              {visibleStories.length === 0 && <p className="muted">{storyScope === 'character' ? t('tavern.noCharacterStories') : t('tavern.noStories')}</p>}
             </section>
           </div>
         </div>

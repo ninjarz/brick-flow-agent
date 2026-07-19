@@ -116,6 +116,8 @@ export type WorldStory = {
   body: string
   createdAtSeconds: number
   eventIds: string[]
+  characterIds?: string[]
+  chapterNumber?: number
   source: 'local' | 'ai'
 }
 

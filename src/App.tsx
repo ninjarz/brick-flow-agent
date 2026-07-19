@@ -1406,8 +1406,8 @@ function App() {
     return true
   }, [])
 
-  const generateTavernStory = useCallback(() => {
-    setWorld((current) => addWorldStory(current, createLocalTavernStory(current, locale)))
+  const generateTavernStory = useCallback((focusEntityId?: string) => {
+    setWorld((current) => addWorldStory(current, createLocalTavernStory(current, locale, focusEntityId)))
   }, [locale])
 
   const runWorldAiTurn = useCallback(async () => {

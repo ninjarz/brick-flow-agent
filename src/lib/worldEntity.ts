@@ -256,7 +256,10 @@ const isStoredMemory = (value: unknown): value is WorldState['narrative']['memor
 
 const isStoredStory = (value: unknown): value is WorldState['narrative']['stories'][number] =>
   isRecord(value) && typeof value.id === 'string' && typeof value.title === 'string' && typeof value.body === 'string' &&
-  isFiniteNumber(value.createdAtSeconds) && Array.isArray(value.eventIds) && (value.source === 'local' || value.source === 'ai')
+  isFiniteNumber(value.createdAtSeconds) && Array.isArray(value.eventIds) && value.eventIds.every((id) => typeof id === 'string') &&
+  (value.characterIds === undefined || (Array.isArray(value.characterIds) && value.characterIds.every((id) => typeof id === 'string'))) &&
+  (value.chapterNumber === undefined || (isFiniteNumber(value.chapterNumber) && value.chapterNumber >= 1)) &&
+  (value.source === 'local' || value.source === 'ai')
 
 const normalizeRelationships = (value: unknown): WorldState['narrative']['relationshipsByEntityId'] => {
   if (!isRecord(value)) return {}

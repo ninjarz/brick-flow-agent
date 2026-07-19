@@ -48,6 +48,62 @@ describe('world narrative', () => {
     expect(next.narrative.stories).toContainEqual(story)
   })
 
+  it('creates a focused next chapter from fresh events instead of repeating covered ones', () => {
+    const knight = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'knight', name: '亚瑟' })
+    const archer = createWorldEntity(worldEntityDefinitionById.get('archer')!, { id: 'archer', name: '罗宾' })
+    const oldEvent: WorldEvent = {
+      id: 'event-old', timeSeconds: 1, type: 'interaction', actorId: knight.id, actorName: knight.name,
+      targetId: archer.id, targetName: archer.name,
+    }
+    const freshEvent: WorldEvent = {
+      id: 'event-fresh', timeSeconds: 2, type: 'revive', actorId: archer.id, actorName: archer.name,
+      targetId: knight.id, targetName: knight.name, amount: 63,
+    }
+    const unrelatedEvent: WorldEvent = {
+      id: 'event-unrelated', timeSeconds: 3, type: 'structure-hit', actorId: 'other', targetId: 'gate',
+    }
+    const world = {
+      ...createEmptyWorldState('plan-1'),
+      entities: [knight, archer],
+      events: [oldEvent, freshEvent, unrelatedEvent],
+      narrative: {
+        ...createEmptyWorldState('plan-1').narrative,
+        stories: [{
+          id: 'chapter-1', title: '第一章', body: '旧闻', createdAtSeconds: 1,
+          eventIds: [oldEvent.id], characterIds: [knight.id, archer.id], chapterNumber: 1, source: 'local' as const,
+        }],
+      },
+    }
+
+    const story = createLocalTavernStory(world, 'zh-CN', knight.id)
+
+    expect(story.title).toContain('第 2 章')
+    expect(story.title).toContain('重燃的生命')
+    expect(story.eventIds).toEqual([freshEvent.id])
+    expect(story.characterIds).toEqual(expect.arrayContaining([knight.id, archer.id]))
+    expect(story.body).toContain('亚瑟')
+    expect(story.body).toContain('第一章')
+  })
+
+  it('enriches AI stories with chapter and participant metadata', () => {
+    const knight = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'knight' })
+    const archer = createWorldEntity(worldEntityDefinitionById.get('archer')!, { id: 'archer' })
+    const event: WorldEvent = {
+      id: 'event-1', timeSeconds: 4, type: 'attack', actorId: knight.id, targetId: archer.id,
+    }
+    const world = { ...createEmptyWorldState('plan-1'), entities: [knight, archer], events: [event] }
+
+    const next = addWorldStory(world, {
+      id: 'ai-story', title: 'A Duel', body: 'They fought.', createdAtSeconds: 4,
+      eventIds: [event.id], source: 'ai',
+    })
+
+    expect(next.narrative.stories[0]).toMatchObject({
+      chapterNumber: 1,
+      characterIds: [knight.id, archer.id],
+    })
+  })
+
   it('explains who issued a high-level order without exposing coordinates', () => {
     const event: WorldEvent = {
       id: 'event-order',
