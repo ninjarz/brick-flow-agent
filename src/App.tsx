@@ -7,6 +7,7 @@ import type { BrickSceneViewMode } from './components/BrickScene'
 import { ControlPanel } from './components/ControlPanel'
 import { brickById, getDefaultBrickColor } from './data/basicBricks'
 import { worldEntityDefinitionById } from './data/worldEntityDefinitions'
+import { createDefaultWorldScenarios } from './data/worldScenarios'
 import { dropBrickGroupAtPoint, findNearestOpenBrickGroupAround, rotationRepositionSearchRadiusStuds, type StationaryPlanSpatialData } from './lib/brickGroupPlacement'
 import { generateBuildPlan } from './lib/localGenerator'
 import { buildLlmUserPrompt, generateLlmBuildPlan, isLlmConfigComplete, llmSystemPrompt, testLlmConnection } from './lib/llmGenerator'
@@ -33,6 +34,7 @@ import { analyzeBuildStability } from './lib/stabilityAnalysis'
 import { formatLDrawPlan, parseLDrawPlan } from './lib/ldrawPlan'
 import { getEffectiveInventory, loadInventoryOverrides, saveInventoryOverrides } from './lib/userInventory'
 import { importAssetPlanIncrementally } from './lib/incrementalAssetImport'
+import { addWorldScenario, startWorldScenario } from './lib/worldScenarioImport'
 import { clearWorkspaceDraft, hasIndexedDbWorkspaceDraft, loadWorkspaceDraft, loadWorkspaceDraftFromIndexedDb, saveWorkspaceDraft } from './lib/workspaceDraft'
 import type { BrickStructure, BuildPlan, FinishedAsset, LlmConfig, PlacedBrick } from './types/bricks'
 import type { WorldEntity, WorldEntityCommand } from './types/world'
@@ -68,6 +70,7 @@ type PlacementSession = {
 type WorldEntityPlacementSession = {
   entity: WorldEntity
 }
+type AssetLibraryKind = 'models' | 'scenarios'
 const workspaceDraftSaveDebounceMs = 120
 const sceneViewModeOrder: BrickSceneViewMode[] = ['border', 'borderless', 'xray', 'voxel']
 const ignoreSceneInteraction = () => {}
@@ -215,6 +218,8 @@ function App() {
   const [assetDescription, setAssetDescription] = useState('')
   const [assetQuery, setAssetQuery] = useState('')
   const [assetCategoryFilter, setAssetCategoryFilter] = useState('all')
+  const [assetLibraryKind, setAssetLibraryKind] = useState<AssetLibraryKind>('models')
+  const [scenarioQuery, setScenarioQuery] = useState('')
   const [sceneViewMode, setSceneViewMode] = useState<BrickSceneViewMode>('border')
   const [assetImportFrameVersion, setAssetImportFrameVersion] = useState(0)
   const [isAutoSnapEnabled, setIsAutoSnapEnabled] = useState(false)
@@ -465,6 +470,17 @@ function App() {
       return matchesCategory && matchesQuery
     })
   }, [assetCategoryFilter, assetQuery, localizedFinishedAssets])
+  const worldScenarios = useMemo(() => createDefaultWorldScenarios(locale), [locale])
+  const visibleWorldScenarios = useMemo(() => {
+    const query = scenarioQuery.trim().toLowerCase()
+    if (!query) return worldScenarios
+    return worldScenarios.filter((scenario) => [
+      scenario.title,
+      scenario.category,
+      scenario.description,
+      scenario.plan.prompt,
+    ].some((value) => value.toLowerCase().includes(query)))
+  }, [scenarioQuery, worldScenarios])
   const llmPromptPreview = useMemo(
     () => buildLlmUserPrompt({ prompt: prompt.trim() || fallbackPrompt, imageName, inventoryOverrides }),
     [fallbackPrompt, imageName, inventoryOverrides, prompt],
@@ -1790,6 +1806,32 @@ function App() {
     }
   }
 
+  const applyWorldScenario = (mode: 'start' | 'add', scenarioId: string) => {
+    const scenario = worldScenarios.find((candidate) => candidate.id === scenarioId)
+    if (!scenario) return
+    if (mode === 'start' && planRef.current.bricks.length > 0 && !window.confirm(t('asset.startScenarioConfirm'))) return
+    const result = mode === 'start'
+      ? startWorldScenario(scenario)
+      : addWorldScenario(planRef.current, worldRef.current, scenario)
+    if (!result) {
+      setGenerationFailure(t('error.assetNoSpace'))
+      setIsAssetLibraryOpen(false)
+      return
+    }
+
+    setPlan(result.plan)
+    setWorld(result.world)
+    if (mode === 'start') setPrompt(result.plan.prompt)
+    setSelectedId(result.importedBrickIds.at(-1) ?? '')
+    setSelectedGroupIds(result.importedBrickIds.length > 1 ? result.importedBrickIds : [])
+    setSelectedWorldEntityId('')
+    setPlacementSession(undefined)
+    setWorldEntityPlacement(undefined)
+    setAssetImportFrameVersion((version) => version + 1)
+    setIsAssetLibraryOpen(false)
+    clearGenerationFeedback()
+  }
+
   const addFinishedAsset = () => {
     const issues = validateBuildPlan(plan)
     if (getBlockingBuildPlanIssues(issues).length > 0) {
@@ -2473,13 +2515,35 @@ function App() {
             <header>
               <div>
                 <h2 id="asset-library-title">{t('asset.title')}</h2>
-                <p>{t('asset.count', { visible: visibleFinishedAssets.length, total: finishedAssets.length })}</p>
+                <p>{assetLibraryKind === 'models'
+                  ? t('asset.count', { visible: visibleFinishedAssets.length, total: finishedAssets.length })
+                  : t('asset.scenarioCount', { visible: visibleWorldScenarios.length, total: worldScenarios.length })}</p>
               </div>
               <button className="icon-button" type="button" aria-label={t('common.close')} title={t('common.close')} onClick={() => setIsAssetLibraryOpen(false)}>
                 <X size={18} />
               </button>
             </header>
 
+            <nav className="asset-kind-tabs" aria-label={t('asset.libraryKinds')}>
+              <button
+                type="button"
+                className={assetLibraryKind === 'models' ? 'active' : ''}
+                onClick={() => setAssetLibraryKind('models')}
+              >
+                <Boxes size={16} />
+                {t('asset.kind.models')}
+              </button>
+              <button
+                type="button"
+                className={assetLibraryKind === 'scenarios' ? 'active' : ''}
+                onClick={() => setAssetLibraryKind('scenarios')}
+              >
+                <BookOpen size={16} />
+                {t('asset.kind.scenarios')}
+              </button>
+            </nav>
+
+            {assetLibraryKind === 'models' ? <>
             <section className="asset-create">
               <div className="asset-create-fields">
                 <input value={assetTitle} onChange={(event) => setAssetTitle(event.target.value)} placeholder={t('asset.titlePlaceholder', { title: plan.title })} />
@@ -2555,6 +2619,42 @@ function App() {
               {finishedAssets.length === 0 && <p className="muted">{t('asset.empty')}</p>}
               {finishedAssets.length > 0 && visibleFinishedAssets.length === 0 && <p className="muted">{t('asset.noMatches')}</p>}
             </div>
+            </> : <>
+              <section className="asset-tools">
+                <input
+                  value={scenarioQuery}
+                  onChange={(event) => setScenarioQuery(event.target.value)}
+                  placeholder={t('asset.scenarioSearchPlaceholder')}
+                />
+              </section>
+
+              <div className="asset-list scenario-list">
+                {visibleWorldScenarios.map((scenario) => (
+                  <article key={scenario.id} className="asset-card scenario-card">
+                    <div>
+                      <span>{scenario.category}</span>
+                      <span className="asset-status scenario">{t('asset.scenarioBadge')}</span>
+                      <h3>{scenario.title}</h3>
+                      <p>{scenario.description}</p>
+                      <small>
+                        {t('common.parts', { count: scenario.plan.bricks.length })} · {t('asset.scenarioEntities', { count: scenario.world.entities.length })} · {t('asset.scenarioChapters', { count: scenario.world.narrative.stories.length })}
+                      </small>
+                    </div>
+                    <div className="asset-actions scenario-actions">
+                      <button type="button" onClick={() => applyWorldScenario('start', scenario.id)}>
+                        <Play size={15} />
+                        {t('asset.startScenario')}
+                      </button>
+                      <button type="button" onClick={() => applyWorldScenario('add', scenario.id)}>
+                        <Plus size={15} />
+                        {t('asset.addScenario')}
+                      </button>
+                    </div>
+                  </article>
+                ))}
+                {visibleWorldScenarios.length === 0 && <p className="muted">{t('asset.noScenarioMatches')}</p>}
+              </div>
+            </>}
           </section>
         </div>
       )}

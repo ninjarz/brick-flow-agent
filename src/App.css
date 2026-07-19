@@ -1930,6 +1930,34 @@ button.status-pill:hover {
   background: #f8fafc;
 }
 
+.asset-kind-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f1f5f9;
+}
+
+.asset-kind-tabs button {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-color: transparent;
+  background: transparent;
+  color: #64748b;
+}
+
+.asset-kind-tabs button.active {
+  border-color: #bfdbfe;
+  background: #fff;
+  color: #1d4ed8;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
 .asset-create-fields {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 140px;
@@ -2026,6 +2054,12 @@ button.status-pill:hover {
   color: #c2410c;
 }
 
+.asset-card .asset-status.scenario {
+  border-color: #ddd6fe;
+  background: #f5f3ff;
+  color: #6d28d9;
+}
+
 .asset-card h3 {
   margin: 0 0 7px;
   color: var(--ink);
@@ -2065,6 +2099,17 @@ button.status-pill:hover {
 .asset-link-button {
   flex: 1 1 0;
   min-width: 0;
+}
+
+.scenario-list {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.scenario-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .asset-link-button {

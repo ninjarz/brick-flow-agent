@@ -119,6 +119,13 @@ const remapScenarioWorld = (
       },
     })
   }
+  const importedEntityIdSet = new Set(importedEntities.map((entity) => entity.id))
+  const safeImportedEntities = importedEntities.map((entity) => ({
+    ...entity,
+    commandQueue: entity.commandQueue.filter((command) => (
+      !('target' in command) || command.target.kind !== 'entity' || importedEntityIdSet.has(command.target.id)
+    )),
+  }))
 
   const usedStoryIds = new Set(currentWorld.narrative.stories.map((story) => story.id))
   const importedStories = asset.world.narrative.stories.map((story) => ({
@@ -128,17 +135,17 @@ const remapScenarioWorld = (
     eventIds: [],
     characterIds: story.characterIds
       ?.map((id) => entityIdMap[id])
-      .filter((id): id is string => Boolean(id)),
+      .filter((id): id is string => Boolean(id) && importedEntityIdSet.has(id)),
     chapterNumber: currentWorld.narrative.stories.length + (story.chapterNumber ?? 1),
   }))
   const relationshipsByEntityId = { ...currentWorld.narrative.relationshipsByEntityId }
   for (const [sourceId, relationships] of Object.entries(asset.world.narrative.relationshipsByEntityId)) {
     const remappedSourceId = entityIdMap[sourceId]
-    if (!remappedSourceId) continue
+    if (!remappedSourceId || !importedEntityIdSet.has(remappedSourceId)) continue
     relationshipsByEntityId[remappedSourceId] = Object.fromEntries(
       Object.entries(relationships).flatMap(([targetId, relationship]) => {
         const remappedTargetId = entityIdMap[targetId]
-        if (!remappedTargetId) return []
+        if (!remappedTargetId || !importedEntityIdSet.has(remappedTargetId)) return []
         const remappedRelationship: WorldRelationship = {
           ...relationship,
           targetEntityId: remappedTargetId,
@@ -152,7 +159,7 @@ const remapScenarioWorld = (
   return {
     ...currentWorld,
     planId: nextPlan.id,
-    entities: [...currentWorld.entities, ...importedEntities],
+    entities: [...currentWorld.entities, ...safeImportedEntities],
     narrative: {
       ...currentWorld.narrative,
       relationshipsByEntityId,
