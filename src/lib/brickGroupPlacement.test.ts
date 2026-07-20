@@ -40,4 +40,19 @@ describe('dropBrickGroupAtPoint', () => {
       { xStud: 5, yStud: 0, zStud: 2 },
     ])
   })
+
+  it('keeps vertical layers rigid after the lowest brick reaches the ground', () => {
+    const base = makeBrick('plate-4x6', 'green', 0, 0, 0)
+    const wall = makeBrick('brick-2x4', 'tan', 1, 0.4, 1)
+    const result = dropBrickGroupAtPoint(
+      [base, wall],
+      base.id,
+      { x: 8, z: 5 },
+      spatialDataFor([]),
+    )!
+
+    expect(result[0].pose.yStud).toBe(0)
+    expect(result[1].pose.yStud - result[0].pose.yStud).toBeCloseTo(0.4)
+    expect(getBrickBounds(result[0])!.maxY).toBeCloseTo(getBrickBounds(result[1])!.minY)
+  })
 })

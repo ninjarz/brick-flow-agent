@@ -145,7 +145,10 @@ export const dropBrickGroupAtPoint = (
   const maxDropSteps = Math.ceil((stationaryMaxY + 1) / WORLD_SNAP_STEP_STUDS) + 2
   for (let step = 0; step < maxDropSteps; step += 1) {
     const lowered = translateBrickGroup(candidate, { yStud: -WORLD_SNAP_STEP_STUDS })
-    if (lowered.every((brick, index) => brick.pose.yStud === candidate[index].pose.yStud)) break
+    // normalizeYStud clamps at ground level. Once any member can no longer
+    // descend by the same delta, the rigid group has landed; continuing would
+    // compress upper layers into the grounded brick.
+    if (lowered.some((brick, index) => brick.pose.yStud === candidate[index].pose.yStud)) break
     if (!canPlaceDroppedGroup(lowered, stationaryData.stationaryBricks, collisionIndex)) break
     candidate = lowered
   }

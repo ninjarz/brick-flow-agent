@@ -4,7 +4,7 @@ import type { BuildPlan } from '../types/bricks'
 import { createEmptyWorldState, createWorldEntity } from './worldEntity'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { addWorldScenario, startWorldScenario } from './worldScenarioImport'
-import { makeBrick } from './planUtils'
+import { getBlockingBuildPlanIssues, makeBrick, validateBuildPlan } from './planUtils'
 
 const deterministicIds = () => {
   let index = 0
@@ -25,6 +25,7 @@ describe('world scenario import', () => {
       'target' in command && command.target.kind === 'structure' && result.plan.structures?.some((structure) => structure.id === command.target.id)
     ))).toBe(true)
     expect(result.plan.bricks).toHaveLength(asset.plan.bricks.length)
+    expect(getBlockingBuildPlanIssues(validateBuildPlan(result.plan))).toEqual([])
   })
 
   it('adds a scenario without replacing existing bricks, characters, or stories', () => {
@@ -71,5 +72,6 @@ describe('world scenario import', () => {
     expect(result.world.narrative.stories.map((story) => story.id)).toContain('existing-story')
     expect(result.world.narrative.stories.at(-1)?.chapterNumber).toBe(2)
     expect(result.plan.bricks).toHaveLength(1 + createDefaultWorldScenarios('zh-CN')[0].plan.bricks.length)
+    expect(getBlockingBuildPlanIssues(validateBuildPlan(result.plan))).toEqual([])
   })
 })
