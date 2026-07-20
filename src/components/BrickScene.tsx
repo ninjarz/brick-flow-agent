@@ -12,7 +12,7 @@ import { normalizeLDrawPartNumber } from '../lib/ldrawPartNumbers'
 import { createLoadedLDrawPartGeometry } from '../lib/ldrawVisualGeometry'
 import { getVisibleBricksDuringPlacement } from '../lib/brickPlacementPreview'
 import { createBuildGraph, getBrickBounds } from '../lib/planUtils'
-import { getScenePerformanceSettings } from '../lib/scenePerformance'
+import { getScenePerformanceSettings, getWorldAnimationFps } from '../lib/scenePerformance'
 import { getWorldProjectileVisuals, sampleWorldProjectilePosition, type WorldProjectileVisual } from '../lib/worldProjectiles'
 import { analyzeBuildStability, getStabilityRiskColor, type StabilityAnalysis } from '../lib/stabilityAnalysis'
 import { getBrickWorldRenderStructuralCellBoxes, type StructuralCellKind, type WorldStructuralCellBox } from '../lib/structuralGrid'
@@ -712,6 +712,31 @@ const CameraAzimuthObserver = ({ onChange }: {
     previousDegreesRef.current = degrees
     onChangeRef.current(Number(degrees.toFixed(1)))
   })
+
+  return null
+}
+
+const SceneAnimationDriver = ({ active, targetFps }: {
+  active: boolean
+  targetFps: number
+}) => {
+  const { invalidate } = useThree()
+
+  useEffect(() => {
+    if (!active || targetFps <= 0) return
+    const intervalMs = 1_000 / targetFps
+    let animationFrameId = 0
+    let previousRenderMs: number | undefined
+    const animate = (timeMs: number) => {
+      if (previousRenderMs === undefined || timeMs - previousRenderMs >= intervalMs - 1) {
+        previousRenderMs = timeMs
+        invalidate()
+      }
+      animationFrameId = window.requestAnimationFrame(animate)
+    }
+    animationFrameId = window.requestAnimationFrame(animate)
+    return () => window.cancelAnimationFrame(animationFrameId)
+  }, [active, invalidate, targetFps])
 
   return null
 }
@@ -2144,6 +2169,7 @@ export const BrickScene = ({
     return definition?.pack === 'lego' ? [normalizeLDrawPartNumber(definition.partNumber)] : []
   }))).sort().join('|'), [frameBricks])
   const performanceSettings = getScenePerformanceSettings(bricks.length, viewMode)
+  const worldAnimationFps = getWorldAnimationFps(bricks.length, worldEntities.length)
   const enableRealtimeShadows = performanceSettings.enableRealtimeShadows
   const preferDetailedGeometry = ldrawBoundsVersion > 0
   const useSimplifiedInteractionView = performanceSettings.useSimplifiedView
@@ -2359,6 +2385,10 @@ export const BrickScene = ({
         azimuthDegrees={initialCameraAzimuthDegrees}
       />
       <CameraAzimuthObserver onChange={onCameraAzimuthChange} />
+      <SceneAnimationDriver
+        active={worldEntities.length > 0 && !worldPaused}
+        targetFps={worldAnimationFps}
+      />
       <OrbitControls target={orbitTargetRef.current} makeDefault enabled={!placementActive} />
     </Canvas>
   )
