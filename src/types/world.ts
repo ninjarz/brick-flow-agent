@@ -136,6 +136,37 @@ export type WorldNarrativeState = {
   stories: WorldStory[]
 }
 
+export type WorldScenarioTrigger = {
+  eventType: WorldEvent['type']
+  actorId?: string
+  targetId?: string
+  commandType?: WorldEntityCommand['type']
+}
+
+export type WorldScenarioAction =
+  | { type: 'set-faction'; entityId: string; factionId: string }
+  | { type: 'issue-command'; entityId: string; command: WorldEntityCommand }
+  | { type: 'add-story'; title: string; body: string; characterIds?: string[] }
+
+export type WorldScenarioStage = {
+  id: string
+  title: string
+  description: string
+  status: 'locked' | 'active' | 'completed'
+  trigger: WorldScenarioTrigger
+  actions?: WorldScenarioAction[]
+  completedAtSeconds?: number
+}
+
+export type WorldScenarioRuntime = {
+  id: string
+  assetId: string
+  title: string
+  description: string
+  stages: WorldScenarioStage[]
+  processedEventIds: string[]
+}
+
 export type WorldEntityBody =
   | {
       shape: 'capsule'
@@ -202,4 +233,5 @@ export type WorldState = {
   events: WorldEvent[]
   pendingImpacts: WorldPendingImpact[]
   narrative: WorldNarrativeState
+  scenarios: WorldScenarioRuntime[]
 }

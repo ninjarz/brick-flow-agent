@@ -4,6 +4,7 @@ import type {
   WorldEntityControllerKind,
   WorldEntityDefinition,
   WorldEntityTransform,
+  WorldScenarioAction,
   WorldState,
   WorldTargetRef,
 } from '../types/world'
@@ -112,6 +113,7 @@ export const createEmptyWorldState = (planId: string): WorldState => ({
   entities: [],
   events: [],
   pendingImpacts: [],
+  scenarios: [],
   narrative: {
     processedEventIds: [],
     memoriesByEntityId: {},
@@ -297,6 +299,64 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
   )).slice(-100) : []
   const narrative = isRecord(value.narrative) ? value.narrative : {}
 
+  const scenarios: WorldState['scenarios'] = Array.isArray(value.scenarios)
+    ? value.scenarios.flatMap((scenario) => {
+        if (!isRecord(scenario) || typeof scenario.id !== 'string' || typeof scenario.assetId !== 'string' ||
+          typeof scenario.title !== 'string' || typeof scenario.description !== 'string' || !Array.isArray(scenario.stages)) return []
+        const stages = scenario.stages.flatMap((stage) => {
+          if (!isRecord(stage) || typeof stage.id !== 'string' || typeof stage.title !== 'string' ||
+            typeof stage.description !== 'string' || !['locked', 'active', 'completed'].includes(String(stage.status)) ||
+            !isRecord(stage.trigger) || !eventTypes.has(stage.trigger.eventType as WorldState['events'][number]['type'])) return []
+          const actions = Array.isArray(stage.actions) ? stage.actions.flatMap((action): WorldScenarioAction[] => {
+            if (!isRecord(action) || typeof action.type !== 'string') return []
+            if (action.type === 'set-faction' && typeof action.entityId === 'string' && typeof action.factionId === 'string') {
+              return [{ type: 'set-faction' as const, entityId: action.entityId, factionId: action.factionId }]
+            }
+            if (action.type === 'issue-command' && typeof action.entityId === 'string') {
+              const command = parseStoredCommand(action.command)
+              return command ? [{ type: 'issue-command' as const, entityId: action.entityId, command }] : []
+            }
+            if (action.type === 'add-story' && typeof action.title === 'string' && typeof action.body === 'string') {
+              return [{
+                type: 'add-story' as const,
+                title: action.title,
+                body: action.body,
+                characterIds: Array.isArray(action.characterIds)
+                  ? action.characterIds.filter((id): id is string => typeof id === 'string')
+                  : undefined,
+              }]
+            }
+            return []
+          }) : undefined
+          return [{
+            id: stage.id,
+            title: stage.title,
+            description: stage.description,
+            status: stage.status as 'locked' | 'active' | 'completed',
+            trigger: {
+              eventType: stage.trigger.eventType as WorldState['events'][number]['type'],
+              ...(typeof stage.trigger.actorId === 'string' ? { actorId: stage.trigger.actorId } : {}),
+              ...(typeof stage.trigger.targetId === 'string' ? { targetId: stage.trigger.targetId } : {}),
+              ...(typeof stage.trigger.commandType === 'string' ? { commandType: stage.trigger.commandType as WorldEntityCommand['type'] } : {}),
+            },
+            ...(actions ? { actions } : {}),
+            ...(isFiniteNumber(stage.completedAtSeconds) ? { completedAtSeconds: Math.max(0, stage.completedAtSeconds) } : {}),
+          }]
+        })
+        if (stages.length === 0) return []
+        return [{
+          id: scenario.id,
+          assetId: scenario.assetId,
+          title: scenario.title,
+          description: scenario.description,
+          stages,
+          processedEventIds: Array.isArray(scenario.processedEventIds)
+            ? scenario.processedEventIds.filter((id): id is string => typeof id === 'string').slice(-500)
+            : [],
+        }]
+      }).slice(-20)
+    : []
+
   return {
     id: typeof value.id === 'string' && value.id.trim() ? value.id.trim() : `world-${planId}`,
     planId,
@@ -306,6 +366,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
     entities: safeEntities,
     events,
     pendingImpacts,
+    scenarios,
     narrative: {
       processedEventIds: Array.isArray(narrative.processedEventIds)
         ? narrative.processedEventIds.filter((id): id is string => typeof id === 'string').slice(-1_000)

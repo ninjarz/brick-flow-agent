@@ -1,5 +1,5 @@
 import type { BuildPlan } from './bricks'
-import type { WorldState } from './world'
+import type { WorldScenarioRuntime, WorldState } from './world'
 
 export type WorldScenarioAsset = {
   id: string
@@ -8,6 +8,7 @@ export type WorldScenarioAsset = {
   description: string
   plan: BuildPlan
   world: WorldState
+  scenario?: WorldScenarioRuntime
 }
 
 export type WorldScenarioLoadResult = {

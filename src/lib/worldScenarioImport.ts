@@ -1,6 +1,6 @@
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import type { BuildPlan } from '../types/bricks'
-import type { WorldEntity, WorldEntityCommand, WorldRelationship, WorldState, WorldTargetRef } from '../types/world'
+import type { WorldEntity, WorldEntityCommand, WorldRelationship, WorldScenarioAction, WorldScenarioStage, WorldState, WorldTargetRef } from '../types/world'
 import type { WorldScenarioAsset, WorldScenarioLoadResult } from '../types/worldScenario'
 import { importAssetPlanIncrementally } from './incrementalAssetImport'
 import { createId } from './planUtils'
@@ -156,10 +156,47 @@ const remapScenarioWorld = (
     )
   }
 
+  const remapKnownId = (id: string) => entityIdMap[id] ?? maps.brickIdMap[id] ?? maps.structureIdMap[id]
+  const importedScenario = asset.scenario ? {
+    ...asset.scenario,
+    id: makeUniqueId('scenario', new Set(currentWorld.scenarios.map((scenario) => scenario.id)), idFactory),
+    stages: asset.scenario.stages.flatMap((stage): WorldScenarioStage[] => {
+      const actorId = stage.trigger.actorId ? entityIdMap[stage.trigger.actorId] : undefined
+      const targetId = stage.trigger.targetId ? remapKnownId(stage.trigger.targetId) : undefined
+      if ((stage.trigger.actorId && !actorId) || (stage.trigger.targetId && !targetId)) return []
+      const actions = (stage.actions ?? []).flatMap((action): WorldScenarioAction[] => {
+        if (action.type === 'set-faction') {
+          const entityId = entityIdMap[action.entityId]
+          return entityId ? [{ ...action, entityId }] : []
+        }
+        if (action.type === 'issue-command') {
+          const entityId = entityIdMap[action.entityId]
+          const command = remapCommand(action.command, entityIdMap, maps.brickIdMap, maps.structureIdMap)
+          return entityId && command ? [{ ...action, entityId, command }] : []
+        }
+        return [{
+          ...action,
+          characterIds: action.characterIds
+            ?.map((id) => entityIdMap[id])
+            .filter((id): id is string => Boolean(id) && importedEntityIdSet.has(id)),
+        }]
+      })
+      return [{
+        ...stage,
+        trigger: { ...stage.trigger, ...(actorId ? { actorId } : {}), ...(targetId ? { targetId } : {}) },
+        actions,
+      }]
+    }),
+    processedEventIds: [],
+  } : undefined
+
   return {
     ...currentWorld,
     planId: nextPlan.id,
     entities: [...currentWorld.entities, ...safeImportedEntities],
+    scenarios: importedScenario?.stages.length
+      ? [...currentWorld.scenarios, importedScenario]
+      : currentWorld.scenarios,
     narrative: {
       ...currentWorld.narrative,
       relationshipsByEntityId,
