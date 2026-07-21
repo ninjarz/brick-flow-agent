@@ -35,6 +35,7 @@ import { formatLDrawPlan, parseLDrawPlan } from './lib/ldrawPlan'
 import { getEffectiveInventory, loadInventoryOverrides, saveInventoryOverrides } from './lib/userInventory'
 import { importAssetPlanIncrementally } from './lib/incrementalAssetImport'
 import { addWorldScenario, startWorldScenario } from './lib/worldScenarioImport'
+import { advanceWorldScenarios, getActiveWorldScenarioStage } from './lib/worldScenarioRuntime'
 import { clearWorkspaceDraft, hasIndexedDbWorkspaceDraft, loadWorkspaceDraft, loadWorkspaceDraftFromIndexedDb, saveWorkspaceDraft } from './lib/workspaceDraft'
 import type { BrickStructure, BuildPlan, FinishedAsset, LlmConfig, PlacedBrick } from './types/bricks'
 import type { WorldEntity, WorldEntityCommand } from './types/world'
@@ -405,6 +406,7 @@ function App() {
     counts[entity.definitionId] = (counts[entity.definitionId] ?? 0) + 1
     return counts
   }, {}), [world.entities])
+  const activeWorldScenario = useMemo(() => getActiveWorldScenarioStage(world), [world])
   const manualSourcePlan = isManualOpen ? manualPlan ?? plan : undefined
   const buildManual = useMemo(() => manualSourcePlan ? serializeBuildManual(manualSourcePlan, locale) : undefined, [locale, manualSourcePlan])
   const manualMarkdown = useMemo(() => buildManual ? formatBuildManualMarkdown(buildManual, locale) : '', [buildManual, locale])
@@ -613,12 +615,12 @@ function App() {
         setWorld((current) => {
           let next = current
           for (let step = 0; step < advanced.stepCount; step += 1) {
-            next = stepWorldSimulation(
+            next = advanceWorldScenarios(stepWorldSimulation(
               next,
               planRef.current.bricks,
               worldSimulationStepSeconds,
               planRef.current.structures ?? [],
-            )
+            ))
           }
           return next
         })
@@ -1418,7 +1420,7 @@ function App() {
       'replace',
     )
     if (!result.ok) return false
-    setWorld(result.world)
+    setWorld(advanceWorldScenarios(result.world))
     return true
   }, [])
 
@@ -2088,6 +2090,17 @@ function App() {
                   {world.paused ? <Play size={14} /> : <Pause size={14} />}
                   {world.paused ? t('worldEntity.resume') : t('worldEntity.pause')}
                 </button>
+                {activeWorldScenario && (
+                  <button
+                    type="button"
+                    className="world-scenario-objective"
+                    title={activeWorldScenario.stage.description}
+                    onClick={() => setIsTavernOpen(true)}
+                  >
+                    <BookOpen size={14} />
+                    <span>{activeWorldScenario.stage.title}</span>
+                  </button>
+                )}
               </div>
               {isWorldRosterOpen && (
                 <section id="world-entity-roster" className="world-entity-roster" aria-label={t('worldEntity.roster')}>

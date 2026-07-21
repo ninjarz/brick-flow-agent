@@ -1,4 +1,4 @@
-import { Activity, Beer, BookOpen, Bot, Clipboard, Eye, Sparkles, Trash2, Users, X } from 'lucide-react'
+import { Activity, Beer, BookOpen, Bot, CheckCircle2, Circle, Clipboard, Eye, LockKeyhole, Sparkles, Trash2, Users, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useI18n } from '../lib/i18n'
 import { formatWorldEvent } from '../lib/worldNarrative'
@@ -129,6 +129,34 @@ export const WorldTavern = ({
           </aside>
 
           <div className="tavern-content">
+            {world.scenarios.map((scenario) => {
+              const completedCount = scenario.stages.filter((stage) => stage.status === 'completed').length
+              return (
+                <section className="tavern-quest" key={scenario.id}>
+                  <header>
+                    <div>
+                      <h3><BookOpen size={16} />{scenario.title}</h3>
+                      <p>{scenario.description}</p>
+                    </div>
+                    <strong>{t('tavern.questProgress', { completed: completedCount, total: scenario.stages.length })}</strong>
+                  </header>
+                  <ol>
+                    {scenario.stages.map((stage) => (
+                      <li key={stage.id} className={stage.status}>
+                        {stage.status === 'completed'
+                          ? <CheckCircle2 size={17} />
+                          : stage.status === 'active' ? <Circle size={17} /> : <LockKeyhole size={16} />}
+                        <div>
+                          <strong>{stage.title}</strong>
+                          <span>{stage.description}</span>
+                        </div>
+                        {stage.status === 'active' && <small>{t('tavern.currentObjective')}</small>}
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+              )
+            })}
             <section className="tavern-memory-panel">
               <h3>{selectedEntity ? t('tavern.memoriesOf', { name: selectedEntity.name }) : t('tavern.memories')}</h3>
               {selectedEntity && (
