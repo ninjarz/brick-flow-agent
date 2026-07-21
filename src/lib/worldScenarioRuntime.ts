@@ -8,6 +8,18 @@ const eventMatchesTrigger = (event: WorldEvent, trigger: WorldScenarioTrigger) =
   (!trigger.commandType || event.commandType === trigger.commandType)
 )
 
+const findLatestMatchingEvent = (
+  events: WorldEvent[],
+  consumedEventIds: Set<string>,
+  trigger: WorldScenarioTrigger,
+) => {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    if (!consumedEventIds.has(event.id) && eventMatchesTrigger(event, trigger)) return event
+  }
+  return undefined
+}
+
 const applyScenarioAction = (
   world: WorldState,
   scenario: WorldScenarioRuntime,
@@ -59,7 +71,7 @@ export const advanceWorldScenarios = (world: WorldState): WorldState => {
     if (activeStageIndex < 0) return scenario
     const consumedEventIds = new Set(scenario.processedEventIds)
     const activeStage = scenario.stages[activeStageIndex]
-    const event = world.events.find((candidate) => !consumedEventIds.has(candidate.id) && eventMatchesTrigger(candidate, activeStage.trigger))
+    const event = findLatestMatchingEvent(world.events, consumedEventIds, activeStage.trigger)
     if (!event) return scenario
 
     scenariosChanged = true
@@ -71,7 +83,10 @@ export const advanceWorldScenarios = (world: WorldState): WorldState => {
     const updatedScenario = {
       ...scenario,
       stages,
-      processedEventIds: [...scenario.processedEventIds, event.id].slice(-500),
+      processedEventIds: Array.from(new Set([
+        ...scenario.processedEventIds,
+        ...world.events.map((candidate) => candidate.id),
+      ])).slice(-500),
     }
     for (const action of activeStage.actions ?? []) {
       nextWorld = applyScenarioAction(nextWorld, updatedScenario, action, event)
