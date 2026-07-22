@@ -56,6 +56,12 @@ const generationMaxTokens = 12_800
 const generationThinkingMaxTokens = 128_000
 export const maxLlmBricks = 64
 
+let omitUnsupportedThinkingParameters = false
+
+export const resetLlmThinkingCompatibility = () => {
+  omitUnsupportedThinkingParameters = false
+}
+
 const llmText: Record<LlmLocale, {
   configTestContext: string
   responseContext: string
@@ -404,6 +410,30 @@ const requestLlmChat = (config: LlmConfig, payload: LlmRequestPayload, signal: A
   })
 }
 
+const withoutThinkingParameters = (payload: LlmRequestPayload): LlmRequestPayload => {
+  const { thinking: _thinking, enable_thinking: _enableThinking, ...compatiblePayload } = payload
+  return compatiblePayload
+}
+
+const hasThinkingParameterError = async (response: Response) => {
+  if (response.ok) return false
+  const detail = (await response.clone().text()).toLowerCase()
+  return detail.includes('thinking') || detail.includes('enable_thinking')
+}
+
+const requestLlmChatWithCompatibility = async (
+  config: LlmConfig,
+  payload: LlmRequestPayload,
+  signal: AbortSignal,
+) => {
+  const effectivePayload = omitUnsupportedThinkingParameters ? withoutThinkingParameters(payload) : payload
+  const response = await requestLlmChat(config, effectivePayload, signal)
+  if (omitUnsupportedThinkingParameters || !await hasThinkingParameterError(response)) return response
+
+  omitUnsupportedThinkingParameters = true
+  return requestLlmChat(config, withoutThinkingParameters(payload), signal)
+}
+
 const formatFetchError = (error: unknown, requestMode: LlmConfig['requestMode'], locale: LlmLocale) => {
   if (requestMode === 'direct' && error instanceof TypeError) {
     return new Error(llmText[locale].directCors)
@@ -524,6 +554,7 @@ export const isLlmConfigComplete = (config: LlmConfig) =>
   Boolean(config.modelName.trim() && config.endpoint.trim() && config.apiKey.trim())
 
 export const testLlmConnection = async (config: LlmConfig, locale: LlmLocale = 'zh-CN') => {
+  resetLlmThinkingCompatibility()
   if (!isLlmConfigComplete(config)) throw new Error(llmText[locale].incompleteConfig)
 
   const controller = new AbortController()
@@ -531,7 +562,7 @@ export const testLlmConnection = async (config: LlmConfig, locale: LlmLocale = '
   let response: Response
 
   try {
-    response = await requestLlmChat(config, applyThinkingMode({
+    response = await requestLlmChatWithCompatibility(config, applyThinkingMode({
       model: config.modelName.trim(),
       messages: [
         {
@@ -587,7 +618,7 @@ export const requestLlmJsonContent = async ({
   let response: Response
 
   try {
-    response = await requestLlmChat(config, applyThinkingMode({
+    response = await requestLlmChatWithCompatibility(config, applyThinkingMode({
       model: config.modelName.trim(),
       messages: [
         { role: 'system', content: systemPrompt },
@@ -631,7 +662,7 @@ export const generateLlmBuildPlan = async ({ prompt, imageName, imageDataUrl, in
   }`
 
   try {
-    response = await requestLlmChat(config, applyThinkingMode({
+    response = await requestLlmChatWithCompatibility(config, applyThinkingMode({
       model: config.modelName.trim(),
       messages: [
         {

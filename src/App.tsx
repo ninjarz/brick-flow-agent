@@ -10,7 +10,7 @@ import { worldEntityDefinitionById } from './data/worldEntityDefinitions'
 import { createDefaultWorldScenarios } from './data/worldScenarios'
 import { dropBrickGroupAtPoint, findNearestOpenBrickGroupAround, rotationRepositionSearchRadiusStuds, type StationaryPlanSpatialData } from './lib/brickGroupPlacement'
 import { generateBuildPlan } from './lib/localGenerator'
-import { buildLlmUserPrompt, generateLlmBuildPlan, isLlmConfigComplete, llmSystemPrompt, testLlmConnection } from './lib/llmGenerator'
+import { buildLlmUserPrompt, generateLlmBuildPlan, isLlmConfigComplete, llmSystemPrompt, resetLlmThinkingCompatibility, testLlmConnection } from './lib/llmGenerator'
 import { loadLlmConfig, saveLlmConfig } from './lib/llmConfig'
 import { defaultFinishedAssets, hasIndexedDbFinishedAssets, isDefaultFinishedAsset, loadAllDefaultFinishedAssets, loadFinishedAssets, loadFinishedAssetsFromIndexedDb, mergeWithDefaultAssets, saveFinishedAssets } from './lib/finishedAssets'
 import { formatBuildManualHtml, formatBuildManualMarkdown, serializeBuildManual } from './lib/manualSerializer'
@@ -24,7 +24,7 @@ import { prepareReferenceImage } from './lib/referenceImage'
 import { simplifiedBrickThreshold } from './lib/scenePerformance'
 import { toggleBrickSelection } from './lib/brickSelection'
 import { dissolveBrickStructure, getBrickStructure, getExactSelectionStructure, pruneBrickStructures, solidifyBrickSelection, updateBrickStructure } from './lib/brickStructures'
-import { createEmptyWorldState, createWorldEntity, issueWorldEntityCommand } from './lib/worldEntity'
+import { changeAllWorldEntityControllers, createEmptyWorldState, createWorldEntity, issueWorldEntityCommand } from './lib/worldEntity'
 import { isWorldEntityGroundPointBlockedByBricks, stepWorldSimulation, worldSimulationStepSeconds } from './lib/worldSimulation'
 import { findNearestAvailableWorldEntityPoint } from './lib/worldEntityCollision'
 import { advanceWorldFixedStepClock, createWorldFixedStepClock } from './lib/worldClock'
@@ -38,7 +38,7 @@ import { addWorldScenario, startWorldScenario } from './lib/worldScenarioImport'
 import { advanceWorldScenarios, getActiveWorldScenarioStage } from './lib/worldScenarioRuntime'
 import { clearWorkspaceDraft, hasIndexedDbWorkspaceDraft, loadWorkspaceDraft, loadWorkspaceDraftFromIndexedDb, saveWorkspaceDraft } from './lib/workspaceDraft'
 import type { BrickStructure, BuildPlan, FinishedAsset, LlmConfig, PlacedBrick } from './types/bricks'
-import type { WorldEntity, WorldEntityCommand } from './types/world'
+import type { WorldEntity, WorldEntityCommand, WorldEntityControllerKind } from './types/world'
 import './App.css'
 
 const BrickScene = lazy(() => import('./components/BrickScene').then((module) => ({ default: module.BrickScene })))
@@ -406,6 +406,12 @@ function App() {
     counts[entity.definitionId] = (counts[entity.definitionId] ?? 0) + 1
     return counts
   }, {}), [world.entities])
+  const globalWorldController = useMemo<WorldEntityControllerKind | 'mixed'>(() => {
+    const firstController = world.entities[0]?.controller
+    return firstController && world.entities.every((entity) => entity.controller === firstController)
+      ? firstController
+      : 'mixed'
+  }, [world.entities])
   const activeWorldScenario = useMemo(() => getActiveWorldScenarioStage(world), [world])
   const manualSourcePlan = isManualOpen ? manualPlan ?? plan : undefined
   const buildManual = useMemo(() => manualSourcePlan ? serializeBuildManual(manualSourcePlan, locale) : undefined, [locale, manualSourcePlan])
@@ -487,6 +493,12 @@ function App() {
     () => buildLlmUserPrompt({ prompt: prompt.trim() || fallbackPrompt, imageName, inventoryOverrides }),
     [fallbackPrompt, imageName, inventoryOverrides, prompt],
   )
+
+  const updateLlmConfig = (nextConfig: LlmConfig) => {
+    resetLlmThinkingCompatibility()
+    setLlmConfigFeedback(undefined)
+    setLlmConfig(nextConfig)
+  }
 
   useEffect(() => {
     saveLlmConfig(llmConfig)
@@ -923,6 +935,7 @@ function App() {
   }
 
   const handleTestLlmConfig = async () => {
+    resetLlmThinkingCompatibility()
     setLlmConfigFeedback(undefined)
 
     if (!llmConfigComplete) {
@@ -1389,6 +1402,10 @@ function App() {
       ...current,
       entities: current.entities.map((entity) => entity.id === updated.id ? updated : entity),
     }))
+  }, [])
+
+  const updateAllWorldEntityControllers = useCallback((controller: WorldEntityControllerKind) => {
+    setWorld((current) => changeAllWorldEntityControllers(current, controller))
   }, [])
 
   const deleteWorldEntity = useCallback((entityId: string) => {
@@ -2110,7 +2127,27 @@ function App() {
                       <X size={14} />
                     </button>
                   </header>
-                  <div>
+                  <div className="world-entity-roster-controls">
+                    <span>
+                      <strong>{t('worldEntity.globalController')}</strong>
+                      <small>{t(`worldEntity.controller.${globalWorldController}`)}</small>
+                    </span>
+                    <div role="group" aria-label={t('worldEntity.globalController')}>
+                      {(['rule', 'player', 'ai'] as const).map((controller) => (
+                        <button
+                          key={controller}
+                          type="button"
+                          className={globalWorldController === controller ? 'active' : ''}
+                          aria-pressed={globalWorldController === controller}
+                          title={t(`worldEntity.controller.${controller}`)}
+                          onClick={() => updateAllWorldEntityControllers(controller)}
+                        >
+                          {t(`worldEntity.controllerShort.${controller}`)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="world-entity-roster-list">
                     {world.entities.map((entity) => (
                       <button
                         key={entity.id}
@@ -2358,8 +2395,7 @@ function App() {
                   <input
                     value={llmConfig.modelName}
                     onChange={(event) => {
-                      setLlmConfigFeedback(undefined)
-                      setLlmConfig({ ...llmConfig, modelName: event.target.value })
+                      updateLlmConfig({ ...llmConfig, modelName: event.target.value })
                     }}
                     placeholder={t('config.modelPlaceholder')}
                     autoComplete="off"
@@ -2372,8 +2408,7 @@ function App() {
                     <input
                       value={llmConfig.endpoint}
                       onChange={(event) => {
-                        setLlmConfigFeedback(undefined)
-                        setLlmConfig({ ...llmConfig, endpoint: event.target.value })
+                        updateLlmConfig({ ...llmConfig, endpoint: event.target.value })
                       }}
                       placeholder="https://api.example.com/v1/chat/completions"
                       type="url"
@@ -2388,8 +2423,7 @@ function App() {
                     <input
                       value={llmConfig.apiKey}
                       onChange={(event) => {
-                        setLlmConfigFeedback(undefined)
-                        setLlmConfig({ ...llmConfig, apiKey: event.target.value })
+                        updateLlmConfig({ ...llmConfig, apiKey: event.target.value })
                       }}
                       placeholder="sk-..."
                       type="password"
@@ -2406,8 +2440,7 @@ function App() {
                         type="button"
                         className={llmConfig.requestMode === requestMode ? 'active' : ''}
                         onClick={() => {
-                          setLlmConfigFeedback(undefined)
-                          setLlmConfig({ ...llmConfig, requestMode })
+                          updateLlmConfig({ ...llmConfig, requestMode })
                         }}
                       >
                         {requestMode === 'direct' ? <Globe2 size={15} /> : <Link size={15} />}
@@ -2424,8 +2457,7 @@ function App() {
                     type="checkbox"
                     checked={llmConfig.enableThinking}
                     onChange={(event) => {
-                      setLlmConfigFeedback(undefined)
-                      setLlmConfig({ ...llmConfig, enableThinking: event.target.checked })
+                      updateLlmConfig({ ...llmConfig, enableThinking: event.target.checked })
                     }}
                   />
                   <span>
@@ -2438,8 +2470,7 @@ function App() {
                     type="checkbox"
                     checked={llmConfig.autoRepair}
                     onChange={(event) => {
-                      setLlmConfigFeedback(undefined)
-                      setLlmConfig({ ...llmConfig, autoRepair: event.target.checked })
+                      updateLlmConfig({ ...llmConfig, autoRepair: event.target.checked })
                     }}
                   />
                   <span>

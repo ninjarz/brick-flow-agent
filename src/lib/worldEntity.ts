@@ -138,6 +138,19 @@ export const changeWorldEntityController = (
   },
 }
 
+export const changeAllWorldEntityControllers = (
+  world: WorldState,
+  controller: WorldEntityControllerKind,
+): WorldState => {
+  let changed = false
+  const entities = world.entities.map((entity) => {
+    const nextEntity = changeWorldEntityController(entity, controller)
+    if (nextEntity !== entity) changed = true
+    return nextEntity
+  })
+  return changed ? { ...world, entities } : world
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
 

@@ -1892,7 +1892,7 @@ const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementAct
     ? t(`worldEntity.speech.${entity.speech.message}`, { target: entity.speech.targetName ?? entity.name })
     : ''
   const healthRatio = Math.max(0, Math.min(1, entity.health / Math.max(1, entity.maxHealth)))
-  const healthColor = healthRatio > 0.6 ? '#16a34a' : healthRatio > 0.3 ? '#f59e0b' : '#dc2626'
+  const healthColor = healthRatio > 0.6 ? '#4ade80' : healthRatio > 0.3 ? '#facc15' : '#ff3b30'
   const showDamage = !ghost
     && Boolean(entity.combat.lastDamageAmount)
     && (entity.combat.damageIndicatorExpiresAtSeconds ?? 0) > elapsedSeconds
@@ -1916,13 +1916,13 @@ const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementAct
           <Text position={[0, 0.25, 0]} fontSize={0.3} color="#0f172a" anchorY="bottom">
             {entity.name}
           </Text>
-          <mesh position={[0, 0, 0]}>
+          <mesh position={[0, 0, 0]} renderOrder={10}>
             <planeGeometry args={[1.65, 0.16]} />
-            <meshBasicMaterial color="#0f172a" transparent opacity={0.72} depthWrite={false} />
+            <meshBasicMaterial color="#020617" transparent opacity={0.92} depthTest={false} depthWrite={false} />
           </mesh>
-          <mesh position={[-0.8 + healthRatio * 0.8, 0, 0.006]}>
+          <mesh position={[-0.8 + healthRatio * 0.8, 0, 0.006]} renderOrder={11}>
             <planeGeometry args={[1.55 * healthRatio, 0.1]} />
-            <meshBasicMaterial color={healthColor} depthWrite={false} />
+            <meshBasicMaterial color={healthColor} transparent opacity={1} depthTest={false} depthWrite={false} />
           </mesh>
         </Billboard>
       )}

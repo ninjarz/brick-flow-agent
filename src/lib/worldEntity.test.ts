@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { worldEntityDefinitionById, worldEntityDefinitions } from '../data/worldEntityDefinitions'
 import type { WorldState } from '../types/world'
-import { changeWorldEntityController, createEmptyWorldState, createWorldEntity, generateWorldEntityName, issueWorldEntityCommand, parseStoredWorldState } from './worldEntity'
+import { changeAllWorldEntityControllers, changeWorldEntityController, createEmptyWorldState, createWorldEntity, generateWorldEntityName, issueWorldEntityCommand, parseStoredWorldState } from './worldEntity'
 import { getWorldEntityCollisionRadius } from './worldEntityCollision'
 
 describe('WorldEntity foundation', () => {
@@ -145,6 +145,21 @@ describe('WorldEntity foundation', () => {
     expect(changed).toMatchObject({ controller: 'ai', behaviorState: 'idle', commandQueue: [], navigation: { status: 'idle', path: [] } })
     expect(changed.activeCommand).toBeUndefined()
     expect(changeWorldEntityController(changed, 'ai')).toBe(changed)
+  })
+
+  it('changes every unit controller through the global control mode', () => {
+    const knight = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'global-knight', controller: 'player' })
+    const archer = {
+      ...createWorldEntity(worldEntityDefinitionById.get('archer')!, { id: 'global-archer', controller: 'rule' }),
+      commandQueue: [{ type: 'wander' } as const],
+      behaviorState: 'moving' as const,
+    }
+    const world = { ...createEmptyWorldState('global-plan'), entities: [knight, archer] }
+
+    const changed = changeAllWorldEntityControllers(world, 'ai')
+    expect(changed.entities.map((entity) => entity.controller)).toEqual(['ai', 'ai'])
+    expect(changed.entities.every((entity) => entity.commandQueue.length === 0 && entity.behaviorState === 'idle')).toBe(true)
+    expect(changeAllWorldEntityControllers(changed, 'ai')).toBe(changed)
   })
 
   it('can replace the active order without directly changing the transform', () => {
