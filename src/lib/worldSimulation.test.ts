@@ -274,6 +274,82 @@ describe('WorldEntity simulation', () => {
     }
   })
 
+  it('fans ranged attackers into distinct firing positions at a safe distance', () => {
+    const archerDefinition = worldEntityDefinitionById.get('archer')!
+    const knightDefinition = worldEntityDefinitionById.get('knight')!
+    const target = {
+      ...createWorldEntity(knightDefinition, {
+        id: 'ranged-formation-target',
+        controller: 'player',
+        factionId: 'red',
+        transform: { x: 12, z: 0 },
+      }),
+      health: 10_000,
+      maxHealth: 10_000,
+    }
+    const attackers = [-1.6, 0, 1.6].map((z, index) => {
+      const attacker = createWorldEntity(archerDefinition, {
+        id: `ranged-formation-attacker-${index}`,
+        controller: 'player',
+        factionId: 'blue',
+        transform: { x: 0, z },
+      })
+      attacker.activeCommand = { type: 'attack', target: { kind: 'entity', id: target.id } }
+      return attacker
+    })
+    let world = { ...createEmptyWorldState('plan-1'), entities: [...attackers, target] }
+
+    world = stepWorldSimulation(world, [], 0.1)
+    const plannedPositions = world.entities.slice(0, attackers.length)
+      .map((entity) => entity.navigation.plannedTargetPoint)
+    expect(new Set(plannedPositions.map((point) => `${point?.x.toFixed(2)}:${point?.z.toFixed(2)}`)).size).toBe(3)
+
+    for (let step = 0; step < 180; step += 1) world = stepWorldSimulation(world, [], 0.1)
+
+    const attackEvents = world.events.filter((event) => event.type === 'attack' && event.targetId === target.id)
+    expect(new Set(attackEvents.map((event) => event.actorId))).toEqual(new Set(attackers.map((attacker) => attacker.id)))
+    for (const attacker of world.entities.slice(0, attackers.length)) {
+      const distance = Math.hypot(
+        attacker.transform.x - target.transform.x,
+        attacker.transform.z - target.transform.z,
+      )
+      expect(distance).toBeGreaterThanOrEqual(archerDefinition.combat.minimumRangeStuds!)
+      expect(distance).toBeLessThanOrEqual(archerDefinition.combat.attackRangeStuds)
+    }
+  })
+
+  it('retreats instead of firing when a ranged target is inside minimum range', () => {
+    const archerDefinition = worldEntityDefinitionById.get('archer')!
+    const knightDefinition = worldEntityDefinitionById.get('knight')!
+    const archer = createWorldEntity(archerDefinition, {
+      id: 'retreating-archer',
+      controller: 'player',
+      factionId: 'blue',
+      transform: { x: 0, z: 0 },
+    })
+    const target = createWorldEntity(knightDefinition, {
+      id: 'close-target',
+      controller: 'player',
+      factionId: 'red',
+      transform: { x: 1.8, z: 0 },
+    })
+    archer.activeCommand = { type: 'attack', target: { kind: 'entity', id: target.id } }
+    const startingDistance = Math.hypot(
+      archer.transform.x - target.transform.x,
+      archer.transform.z - target.transform.z,
+    )
+    let world = { ...createEmptyWorldState('plan-1'), entities: [archer, target] }
+
+    for (let step = 0; step < 8; step += 1) world = stepWorldSimulation(world, [], 0.1)
+
+    const distance = Math.hypot(
+      world.entities[0].transform.x - world.entities[1].transform.x,
+      world.entities[0].transform.z - world.entities[1].transform.z,
+    )
+    expect(distance).toBeGreaterThan(startingDistance)
+    expect(world.events.some((event) => event.type === 'attack' && event.actorId === archer.id)).toBe(false)
+  })
+
   it('lets a priest revive a defeated unit after a readable cast time', () => {
     const priestDefinition = worldEntityDefinitionById.get('priest')!
     const knightDefinition = worldEntityDefinitionById.get('knight')!
@@ -728,6 +804,13 @@ describe('WorldEntity simulation', () => {
     for (let step = 0; step < 5; step += 1) blocked = stepWorldSimulation(blocked, wall, 0.1)
     expect(blocked.entities[1].health).toBe(knight.health)
     expect(blocked.events.some((event) => event.type === 'attack')).toBe(false)
+
+    let flanking = blockedWorld
+    for (let step = 0; step < 160 && !flanking.events.some((event) => event.type === 'attack'); step += 1) {
+      flanking = stepWorldSimulation(flanking, wall, 0.1)
+    }
+    expect(flanking.events.some((event) => event.type === 'attack' && event.actorId === archer.id)).toBe(true)
+    expect(Math.abs(flanking.entities[0].transform.z)).toBeGreaterThan(1)
 
     let launched = blockedWorld
     for (let step = 0; step < 15 && launched.pendingImpacts.length === 0; step += 1) {

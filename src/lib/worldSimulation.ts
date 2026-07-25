@@ -538,6 +538,76 @@ const getContactAttackApproachPoint = (
   }
 }
 
+const getRangedAttackApproachPoint = (
+  entity: WorldEntity,
+  targetEntity: WorldEntity,
+  entities: WorldEntity[],
+  minimumRangeStuds: number,
+  maximumRangeStuds: number,
+  bricks: PlacedBrick[],
+  entityOccupancy: WorldEntityOccupancyIndex,
+  groundBounds: WorldGroundBounds,
+  requiresLineOfSight: boolean,
+  hasLineOfSight: (actor: WorldEntity, target: WorldEntity) => boolean,
+): Point => {
+  const rangedAttackers = entities
+    .filter((candidate) => {
+      const definition = worldEntityDefinitionById.get(candidate.definitionId)
+      return candidate.health > 0
+        && Boolean(definition?.combat.projectileKind)
+        && (
+          candidate.id === entity.id
+          || (
+            candidate.activeCommand?.type === 'attack'
+            && candidate.activeCommand.target.kind === 'entity'
+            && candidate.activeCommand.target.id === targetEntity.id
+          )
+        )
+    })
+    .sort((left, right) => left.id.localeCompare(right.id))
+  const actorIndex = Math.max(0, rangedAttackers.findIndex((candidate) => candidate.id === entity.id))
+  const averageApproachPoint = rangedAttackers.reduce(
+    (point, candidate) => ({
+      x: point.x + candidate.transform.x / rangedAttackers.length,
+      z: point.z + candidate.transform.z / rangedAttackers.length,
+    }),
+    { x: 0, z: 0 },
+  )
+  const approachDx = averageApproachPoint.x - targetEntity.transform.x
+  const approachDz = averageApproachPoint.z - targetEntity.transform.z
+  const baseAngle = Math.hypot(approachDx, approachDz) > 0.001
+    ? Math.atan2(approachDx, approachDz)
+    : stableDirectionRadians(targetEntity.id)
+  const angleSpacing = rangedAttackers.length > 1
+    ? Math.min(Math.PI / 8, Math.PI * 2 / rangedAttackers.length)
+    : 0
+  const assignedAngle = baseAngle + (actorIndex - (rangedAttackers.length - 1) / 2) * angleSpacing
+  const preferredRange = minimumRangeStuds + (maximumRangeStuds - minimumRangeStuds) * 0.68
+  const candidateAngles = [assignedAngle]
+  for (let offset = 1; offset <= 8; offset += 1) {
+    candidateAngles.push(assignedAngle + offset * Math.PI / 8, assignedAngle - offset * Math.PI / 8)
+  }
+  for (const angle of candidateAngles) {
+    const point = {
+      x: targetEntity.transform.x + Math.sin(angle) * preferredRange,
+      y: targetEntity.transform.y,
+      z: targetEntity.transform.z + Math.cos(angle) * preferredRange,
+    }
+    if (!isEntityPointInsideGround(entity, point, groundBounds)) continue
+    if (isWorldEntityGroundPointBlockedByBricks(entity, point, bricks)) continue
+    if (isWorldEntityPositionOccupied(entityOccupancy, entity, point)) continue
+    if (requiresLineOfSight) {
+      const positionedEntity = {
+        ...entity,
+        transform: { ...entity.transform, x: point.x, z: point.z },
+      }
+      if (!hasLineOfSight(positionedEntity, targetEntity)) continue
+    }
+    return point
+  }
+  return getRetreatPoint(entity, targetEntity.transform, preferredRange)
+}
+
 const getWanderDestination = (
   entity: WorldEntity,
   seed: number,
@@ -1227,22 +1297,33 @@ export const stepWorldSimulation = (
       continue
     }
     const minimumRangeStuds = definition?.combat.minimumRangeStuds ?? 0
+    const rangedAttackPoint = isAttack && targetEntity && definition?.combat.projectileKind
+      ? getRangedAttackApproachPoint(
+          entity,
+          targetEntity,
+          entities,
+          minimumRangeStuds,
+          definition.combat.attackRangeStuds,
+          bricks,
+          entityOccupancy,
+          groundBounds,
+          definition.combat.projectileKind === 'arrow',
+          hasLineOfSight,
+        )
+      : undefined
     if (isAttack && targetEntity && minimumRangeStuds > 0 && targetDistance < minimumRangeStuds) {
-      const retreatTarget: WorldTargetRef = { kind: 'waypoint', id: `retreat:${target.id}` }
       const retreat = moveEntityToward(
         entity,
-        retreatTarget,
-        getRetreatPoint(entity, targetPoint, minimumRangeStuds + combinedBodyRadius),
+        target,
+        rangedAttackPoint ?? getRetreatPoint(entity, targetPoint, minimumRangeStuds + combinedBodyRadius),
         bricks,
         entityOccupancy,
         deltaSeconds,
         groundBounds,
       )
-      if (retreat.entity.behaviorState !== 'blocked') {
-        entities[index] = retreat.entity
-        updateWorldEntityOccupancy(entityOccupancy, retreat.entity)
-        continue
-      }
+      entities[index] = retreat.entity
+      updateWorldEntityOccupancy(entityOccupancy, retreat.entity)
+      continue
     }
     const hasAttackLineOfSight = definition?.combat.projectileKind !== 'arrow' || !targetEntity || hasLineOfSight(entity, targetEntity)
     if (isAttack && definition && targetDistance <= definition.combat.attackRangeStuds && hasAttackLineOfSight) {
@@ -1324,7 +1405,7 @@ export const stepWorldSimulation = (
 
     const movementTargetPoint = isAttack && targetEntity && definition && !definition.combat.projectileKind
       ? getContactAttackApproachPoint(entity, targetEntity, entities, definition.combat.attackRangeStuds)
-      : targetPoint
+      : rangedAttackPoint ?? targetPoint
     const movement = moveEntityToward(entity, target, movementTargetPoint, bricks, entityOccupancy, deltaSeconds, groundBounds)
     entity = movement.entity
     if (movement.arrived && !isAttack) {
