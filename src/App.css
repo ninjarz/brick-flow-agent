@@ -3400,6 +3400,46 @@ button:disabled {
 }
 
 .scenario-editor textarea { resize: vertical; }
+.scenario-validation-summary {
+  display: grid;
+  gap: 7px;
+  padding: 9px 10px;
+  border: 1px solid #bbf7d0;
+  border-radius: 9px;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.scenario-validation-summary.has-errors {
+  border-color: #fecaca;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.scenario-validation-summary > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.scenario-validation-summary > header small {
+  color: inherit;
+  font-size: 10px;
+  opacity: .78;
+}
+
+.scenario-validation-summary ol {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 20px;
+  font-size: 10px;
+}
+
+.scenario-validation-summary li.warning { color: #92400e; }
+.scenario-validation-summary li.error { color: #b91c1c; font-weight: 750; }
+.scenario-validation-summary a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .scenario-editor details { border: 1px solid #eadfc9; border-radius: 8px; background: #fffaf0; }
 .scenario-editor summary { cursor: pointer; padding: 8px 10px; color: #78350f; font-size: 11px; font-weight: 900; }
 .scenario-stage-editor { display: grid; gap: 10px; padding: 0 9px 9px; }

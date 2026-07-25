@@ -1,6 +1,7 @@
 import { Plus, Trash2 } from 'lucide-react'
 import type { WorldEntity, WorldEntityCommand, WorldEvent, WorldScenarioAction, WorldScenarioRuntime, WorldScenarioStage } from '../types/world'
 import type { BrickStructure } from '../types/bricks'
+import { validateWorldScenario, type WorldScenarioValidationIssue } from '../lib/worldScenarioValidation'
 
 type Props = {
   scenario: WorldScenarioRuntime
@@ -37,6 +38,11 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
   })
   const firstEntityId = entities[0]?.id ?? ''
   const hiddenTargetKeys = new Set(hiddenTargets.map((target) => `${target.kind}:${target.id}`))
+  const validationIssues = validateWorldScenario(scenario, {
+    entityIds: entities.map((entity) => entity.id),
+    structureIds: structures.map((structure) => structure.id),
+  })
+  const validationErrorCount = validationIssues.filter((issue) => issue.severity === 'error').length
 
   return (
     <div className="scenario-editor">
@@ -44,6 +50,25 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
         <label>{zh ? '剧情名称' : 'Scenario title'}<input value={scenario.title} onChange={(event) => patchScenario({ title: event.target.value })} /></label>
         <label>{zh ? '剧情简介' : 'Description'}<input value={scenario.description} onChange={(event) => patchScenario({ description: event.target.value })} /></label>
       </div>
+      <section className={`scenario-validation-summary${validationErrorCount > 0 ? ' has-errors' : ''}`} aria-live="polite">
+        <header>
+          <strong>{validationIssues.length === 0
+            ? (zh ? '剧情结构检查通过' : 'Scenario structure is valid')
+            : (zh ? `发现 ${validationIssues.length} 个创作问题` : `${validationIssues.length} authoring issue(s)`)}</strong>
+          {validationIssues.length > 0 && <small>{zh ? `${validationErrorCount} 个错误 · ${validationIssues.length - validationErrorCount} 个提醒` : `${validationErrorCount} error(s) · ${validationIssues.length - validationErrorCount} warning(s)`}</small>}
+        </header>
+        {validationIssues.length > 0 && (
+          <ol>
+            {validationIssues.map((issue, issueIndex) => (
+              <li className={issue.severity} key={`${issue.code}-${issue.stageIndex ?? 'scenario'}-${issue.branchIndex ?? ''}-${issue.referenceId ?? ''}-${issueIndex}`}>
+                {issue.stageIndex === undefined
+                  ? <span>{formatValidationIssue(issue, scenario, zh)}</span>
+                  : <a href={`#scenario-stage-${issue.stageIndex}`}>{formatValidationIssue(issue, scenario, zh)}</a>}
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
       <div className="scenario-editor-section scenario-revealables">
         <header><strong>{zh ? '登场对象' : 'Revealable objects'}</strong><small>{zh ? '隐藏对象在游玩时不显示、不碰撞、也不会执行 AI；可用场景上方的“显影”按钮查看和编辑幽灵。' : 'Hidden objects do not render, collide, or run AI during play. Use Reveal above the scene to edit their ghosts.'}</small></header>
         <div>
@@ -58,7 +83,7 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
         </div>
       </div>
       {scenario.stages.map((stage, stageIndex) => (
-        <details key={stage.id} open={stage.status === 'active'}>
+        <details id={`scenario-stage-${stageIndex}`} key={`${stage.id}-${stageIndex}`} open={stage.status === 'active'}>
           <summary>{stageIndex + 1}. {stage.title} · {zh ? ({ locked: '未解锁', active: '当前阶段', completed: '已完成' }[stage.status]) : stage.status}</summary>
           <div className="scenario-stage-editor">
             <div className="scenario-editor-grid">
@@ -169,4 +194,36 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
   function addAction(stageIndex: number, action: WorldScenarioAction) {
     patchStage(stageIndex, { actions: [...(scenario.stages[stageIndex]?.actions ?? []), action] })
   }
+}
+
+const formatValidationIssue = (
+  issue: WorldScenarioValidationIssue,
+  scenario: WorldScenarioRuntime,
+  zh: boolean,
+) => {
+  const stageTitle = issue.stageIndex === undefined
+    ? ''
+    : scenario.stages[issue.stageIndex]?.title || `${zh ? '阶段' : 'Stage'} ${issue.stageIndex + 1}`
+  const location = stageTitle ? `${stageTitle}：` : ''
+  const reference = issue.referenceId ? `“${issue.referenceId}”` : ''
+  const messages: Record<WorldScenarioValidationIssue['code'], string> = zh ? {
+    'duplicate-stage-id': `阶段 ID ${reference} 重复`,
+    'duplicate-branch-id': `分支 ID ${reference} 重复`,
+    'missing-stage': `找不到下一阶段 ${reference}`,
+    'unreachable-stage': '无法从第一阶段到达',
+    'cyclic-stage-flow': '剧情跳转形成循环，运行时无法重新激活已完成阶段',
+    'missing-entity': `引用的单位 ${reference} 不存在`,
+    'missing-structure': `引用的建筑 ${reference} 不存在`,
+    'invalid-dialogue': '台词为空或显示时间不足 0.5 秒',
+  } : {
+    'duplicate-stage-id': `Duplicate stage ID ${reference}`,
+    'duplicate-branch-id': `Duplicate branch ID ${reference}`,
+    'missing-stage': `Next stage ${reference} does not exist`,
+    'unreachable-stage': 'Cannot be reached from the first stage',
+    'cyclic-stage-flow': 'Stage flow contains a cycle; completed stages cannot reactivate',
+    'missing-entity': `Referenced entity ${reference} does not exist`,
+    'missing-structure': `Referenced structure ${reference} does not exist`,
+    'invalid-dialogue': 'Dialogue is empty or shorter than 0.5 seconds',
+  }
+  return `${location}${messages[issue.code]}`
 }
