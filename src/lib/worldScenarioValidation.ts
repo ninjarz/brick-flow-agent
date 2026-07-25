@@ -112,7 +112,9 @@ export const validateWorldScenario = (
   )
   const edges = scenario.stages.map((stage, stageIndex) => {
     const targetIds = [
-      stage.nextStageId ?? (stageIndex + 1 < scenario.stages.length ? scenario.stages[stageIndex + 1].id : undefined),
+      stage.nextStageId === null
+        ? undefined
+        : stage.nextStageId ?? (stageIndex + 1 < scenario.stages.length ? scenario.stages[stageIndex + 1].id : undefined),
       ...(stage.branches ?? []).map((branch) => branch.nextStageId),
     ].filter((id): id is string => Boolean(id))
     const targetIndexes: number[] = []

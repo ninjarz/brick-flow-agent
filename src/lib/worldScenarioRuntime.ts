@@ -141,9 +141,11 @@ const completeStage = (
   const activeStage = scenario.stages[activeStageIndex]
   const nextStageIndex = branch
     ? branch.nextStageId ? scenario.stages.findIndex((stage) => stage.id === branch.nextStageId) : -1
-    : activeStage.nextStageId
-      ? scenario.stages.findIndex((stage) => stage.id === activeStage.nextStageId)
-      : activeStageIndex + 1
+    : activeStage.nextStageId === null
+      ? -1
+      : activeStage.nextStageId
+        ? scenario.stages.findIndex((stage) => stage.id === activeStage.nextStageId)
+        : activeStageIndex + 1
   const stages = scenario.stages.map((stage, index) => {
     if (index === activeStageIndex) return { ...stage, status: 'completed' as const, completedAtSeconds: world.elapsedSeconds }
     if (index === nextStageIndex && stage.status === 'locked') return { ...stage, status: 'active' as const }
@@ -153,7 +155,7 @@ const completeStage = (
     ...scenario,
     stages,
     activeDialogue: undefined,
-    ...(branch ? { outcomeId: branch.id } : nextStageIndex >= stages.length ? { outcomeId: 'completed' } : {}),
+    ...(branch ? { outcomeId: branch.id } : nextStageIndex < 0 || nextStageIndex >= stages.length ? { outcomeId: 'completed' } : {}),
   }
   let nextWorld = clearDialogueSpeech(world, activeStage)
   for (const action of branch?.actions ?? activeStage.actions ?? []) {

@@ -469,7 +469,9 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
             },
             ...(dialogue?.length ? { dialogue } : {}),
             ...(actions ? { actions } : {}),
-            ...(typeof stage.nextStageId === 'string' ? { nextStageId: stage.nextStageId } : {}),
+            ...(stage.nextStageId === null
+              ? { nextStageId: null }
+              : typeof stage.nextStageId === 'string' ? { nextStageId: stage.nextStageId } : {}),
             ...(branches?.length ? { branches } : {}),
             ...(isFiniteNumber(stage.completedAtSeconds) ? { completedAtSeconds: Math.max(0, stage.completedAtSeconds) } : {}),
           }]

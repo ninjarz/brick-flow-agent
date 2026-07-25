@@ -183,7 +183,7 @@ export type WorldScenarioStage = {
   trigger: WorldScenarioTrigger
   dialogue?: WorldScenarioDialogueLine[]
   actions?: WorldScenarioAction[]
-  nextStageId?: string
+  nextStageId?: string | null
   branches?: WorldScenarioBranch[]
   completedAtSeconds?: number
 }

@@ -1,7 +1,16 @@
-import { Plus, Trash2 } from 'lucide-react'
+import { GitBranch, ListTree, Plus, Trash2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import type { WorldEntity, WorldEntityCommand, WorldEvent, WorldScenarioAction, WorldScenarioRuntime, WorldScenarioStage } from '../types/world'
 import type { BrickStructure } from '../types/bricks'
 import { validateWorldScenario, type WorldScenarioValidationIssue } from '../lib/worldScenarioValidation'
+import {
+  addWorldScenarioStage,
+  deleteWorldScenarioStage,
+  duplicateWorldScenarioStage,
+  moveWorldScenarioStage,
+  updateWorldScenarioStageTransition,
+} from '../lib/worldScenarioAuthoring'
+import { WorldScenarioFlowEditor } from './WorldScenarioFlowEditor'
 
 type Props = {
   scenario: WorldScenarioRuntime
@@ -32,6 +41,14 @@ const getCommandTargetId = (command: WorldEntityCommand) => 'target' in command 
 
 export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTargets, locale, onChange, onSetTargetVisibility }: Props) => {
   const zh = locale === 'zh-CN'
+  const [editorMode, setEditorMode] = useState<'flow' | 'form'>('flow')
+  const [selectedStageId, setSelectedStageId] = useState(
+    () => scenario.stages.find((stage) => stage.status === 'active')?.id ?? scenario.stages[0]?.id ?? '',
+  )
+  useEffect(() => {
+    if (scenario.stages.some((stage) => stage.id === selectedStageId)) return
+    setSelectedStageId(scenario.stages.find((stage) => stage.status === 'active')?.id ?? scenario.stages[0]?.id ?? '')
+  }, [scenario.stages, selectedStageId])
   const patchScenario = (patch: Partial<WorldScenarioRuntime>) => onChange({ ...scenario, ...patch, authoringVersion: 2 })
   const patchStage = (stageIndex: number, patch: Partial<WorldScenarioStage>) => patchScenario({
     stages: scenario.stages.map((stage, index) => index === stageIndex ? { ...stage, ...patch } : stage),
@@ -43,6 +60,9 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
     structureIds: structures.map((structure) => structure.id),
   })
   const validationErrorCount = validationIssues.filter((issue) => issue.severity === 'error').length
+  const visibleStages = editorMode === 'flow'
+    ? scenario.stages.filter((stage) => stage.id === selectedStageId)
+    : scenario.stages
 
   return (
     <div className="scenario-editor">
@@ -50,6 +70,40 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
         <label>{zh ? '剧情名称' : 'Scenario title'}<input value={scenario.title} onChange={(event) => patchScenario({ title: event.target.value })} /></label>
         <label>{zh ? '剧情简介' : 'Description'}<input value={scenario.description} onChange={(event) => patchScenario({ description: event.target.value })} /></label>
       </div>
+      <div className="scenario-editor-mode" role="group" aria-label={zh ? '剧情编辑模式' : 'Scenario editor mode'}>
+        <button type="button" className={editorMode === 'flow' ? 'active' : ''} aria-pressed={editorMode === 'flow'} onClick={() => setEditorMode('flow')}><GitBranch size={14} />{zh ? '流程图' : 'Flowchart'}</button>
+        <button type="button" className={editorMode === 'form' ? 'active' : ''} aria-pressed={editorMode === 'form'} onClick={() => setEditorMode('form')}><ListTree size={14} />{zh ? '完整表单' : 'Full form'}</button>
+      </div>
+      {editorMode === 'flow' && (
+        <WorldScenarioFlowEditor
+          scenario={scenario}
+          selectedStageId={selectedStageId}
+          issues={validationIssues}
+          locale={locale}
+          onSelectStage={setSelectedStageId}
+          onAddStage={() => {
+            const result = addWorldScenarioStage(scenario, locale)
+            setSelectedStageId(result.stageId)
+            onChange({ ...result.scenario, authoringVersion: 2 })
+          }}
+          onDuplicateStage={() => {
+            const result = duplicateWorldScenarioStage(scenario, selectedStageId, locale)
+            if (!result) return
+            setSelectedStageId(result.stageId)
+            onChange({ ...result.scenario, authoringVersion: 2 })
+          }}
+          onDeleteStage={() => {
+            const result = deleteWorldScenarioStage(scenario, selectedStageId)
+            if (!result) return
+            setSelectedStageId(result.selectedStageId)
+            onChange({ ...result.scenario, authoringVersion: 2 })
+          }}
+          onMoveStage={(direction) => onChange({
+            ...moveWorldScenarioStage(scenario, selectedStageId, direction),
+            authoringVersion: 2,
+          })}
+        />
+      )}
       <section className={`scenario-validation-summary${validationErrorCount > 0 ? ' has-errors' : ''}`} aria-live="polite">
         <header>
           <strong>{validationIssues.length === 0
@@ -63,7 +117,14 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
               <li className={issue.severity} key={`${issue.code}-${issue.stageIndex ?? 'scenario'}-${issue.branchIndex ?? ''}-${issue.referenceId ?? ''}-${issueIndex}`}>
                 {issue.stageIndex === undefined
                   ? <span>{formatValidationIssue(issue, scenario, zh)}</span>
-                  : <a href={`#scenario-stage-${issue.stageIndex}`}>{formatValidationIssue(issue, scenario, zh)}</a>}
+                  : <a
+                      href={editorMode === 'flow' ? `#scenario-flow-stage-${issue.stageIndex}` : `#scenario-stage-${issue.stageIndex}`}
+                      onClick={() => {
+                        if (editorMode === 'flow') setSelectedStageId(scenario.stages[issue.stageIndex!]?.id ?? selectedStageId)
+                      }}
+                    >
+                      {formatValidationIssue(issue, scenario, zh)}
+                    </a>}
               </li>
             ))}
           </ol>
@@ -82,13 +143,32 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
           })}
         </div>
       </div>
-      {scenario.stages.map((stage, stageIndex) => (
-        <details id={`scenario-stage-${stageIndex}`} key={`${stage.id}-${stageIndex}`} open={stage.status === 'active'}>
+      {visibleStages.map((stage) => {
+        const stageIndex = scenario.stages.findIndex((candidate) => candidate.id === stage.id)
+        return (
+        <details id={`scenario-stage-${stageIndex}`} key={`${stage.id}-${stageIndex}`} open={editorMode === 'flow' || stage.status === 'active'}>
           <summary>{stageIndex + 1}. {stage.title} · {zh ? ({ locked: '未解锁', active: '当前阶段', completed: '已完成' }[stage.status]) : stage.status}</summary>
           <div className="scenario-stage-editor">
             <div className="scenario-editor-grid">
               <label>{zh ? '阶段名称' : 'Stage title'}<input value={stage.title} onChange={(event) => patchStage(stageIndex, { title: event.target.value })} /></label>
               <label>{zh ? '玩家目标' : 'Objective'}<input value={stage.description} onChange={(event) => patchStage(stageIndex, { description: event.target.value })} /></label>
+              <label>{zh ? '默认下一阶段' : 'Default next stage'}
+                <select
+                  value={stage.nextStageId === null ? '__end__' : stage.nextStageId ?? '__auto__'}
+                  onChange={(event) => {
+                    const value = event.target.value
+                    const nextStageId = value === '__auto__' ? undefined : value === '__end__' ? null : value
+                    onChange({
+                      ...updateWorldScenarioStageTransition(scenario, stage.id, nextStageId),
+                      authoringVersion: 2,
+                    })
+                  }}
+                >
+                  <option value="__auto__">{zh ? '按流程图顺序继续' : 'Continue in flow order'}</option>
+                  <option value="__end__">{zh ? '在此结束剧情线' : 'End storyline here'}</option>
+                  {scenario.stages.filter((candidate) => candidate.id !== stage.id).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.title}</option>)}
+                </select>
+              </label>
               <label>{zh ? '触发事件' : 'Trigger event'}
                 <select value={stage.trigger.eventType} onChange={(event) => patchStage(stageIndex, { trigger: { ...stage.trigger, eventType: event.target.value as WorldEvent['type'] } })}>
                   {triggerTypes.map((type) => <option key={type} value={type}>{type}</option>)}
@@ -187,7 +267,8 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
             </div>
           </div>
         </details>
-      ))}
+        )
+      })}
     </div>
   )
 

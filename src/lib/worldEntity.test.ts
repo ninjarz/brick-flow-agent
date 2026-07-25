@@ -217,6 +217,31 @@ describe('WorldEntity foundation', () => {
     expect(restored.scenarios[0].stages[1].branches).toBeUndefined()
   })
 
+  it('preserves explicitly terminal authored stages while restoring storage', () => {
+    const stored = {
+      ...createEmptyWorldState('terminal-plan'),
+      scenarios: [{
+        id: 'terminal-story',
+        assetId: 'custom',
+        title: 'Terminal story',
+        description: 'Terminal story',
+        processedEventIds: [],
+        stages: [{
+          id: 'ending',
+          title: 'Ending',
+          description: 'Ending',
+          status: 'active',
+          trigger: { eventType: 'interaction' },
+          nextStageId: null,
+        }],
+      }],
+    }
+
+    const restored = parseStoredWorldState(JSON.parse(JSON.stringify(stored)), stored.planId)!
+
+    expect(restored.scenarios[0].stages[0].nextStageId).toBeNull()
+  })
+
   it('separates overlapping units while restoring a paused stored world', () => {
     const knight = worldEntityDefinitionById.get('knight')!
     const first = createWorldEntity(knight, { id: 'stored-a', transform: { x: 0, z: 0 } })

@@ -180,4 +180,41 @@ describe('world scenario runtime', () => {
     expect(world.hiddenTargets).toEqual([])
     expect(world.scenarios[0].stages[0].status).toBe('completed')
   })
+
+  it('ends an explicitly terminal stage instead of unlocking the following stage', () => {
+    const actor = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'terminal-actor' })
+    const scenario: WorldScenarioRuntime = {
+      id: 'terminal',
+      assetId: 'asset',
+      title: 'Terminal',
+      description: 'Terminal',
+      processedEventIds: [],
+      stages: [
+        {
+          id: 'ending',
+          title: 'Ending',
+          description: 'Ending',
+          status: 'active',
+          trigger: { eventType: 'interaction', actorId: actor.id },
+          nextStageId: null,
+        },
+        {
+          id: 'unused',
+          title: 'Unused',
+          description: 'Unused',
+          status: 'locked',
+          trigger: { eventType: 'interaction' },
+        },
+      ],
+    }
+    const advanced = advanceWorldScenarios({
+      ...createEmptyWorldState('plan'),
+      entities: [actor],
+      scenarios: [scenario],
+      events: [{ id: 'ending-event', timeSeconds: 1, type: 'interaction', actorId: actor.id }],
+    })
+
+    expect(advanced.scenarios[0].outcomeId).toBe('completed')
+    expect(advanced.scenarios[0].stages.map((stage) => stage.status)).toEqual(['completed', 'locked'])
+  })
 })
