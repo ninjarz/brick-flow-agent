@@ -157,7 +157,7 @@ export const WorldTavern = ({
             {world.entities.length === 0 && <p className="muted">{t('tavern.noCharacters')}</p>}
           </aside>
 
-          <div className="tavern-content">
+          <div className={`tavern-content${editingScenarioId ? ' is-authoring' : ''}`}>
             <section className="tavern-quick-play">
               <header>
                 <div>

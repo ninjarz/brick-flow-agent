@@ -3106,6 +3106,18 @@ button:disabled {
   padding: 14px;
 }
 
+.tavern-content.is-authoring {
+  grid-template-rows: none;
+  grid-auto-rows: auto;
+  align-content: start;
+}
+
+.tavern-content.is-authoring > .tavern-memory-panel,
+.tavern-content.is-authoring > .tavern-chronicle {
+  height: min(360px, 45vh);
+  min-height: 220px;
+}
+
 .tavern-content > .tavern-quest {
   grid-column: 1 / -1;
   overflow: visible;
@@ -3440,7 +3452,12 @@ button:disabled {
 .scenario-validation-summary li.warning { color: #92400e; }
 .scenario-validation-summary li.error { color: #b91c1c; font-weight: 750; }
 .scenario-validation-summary a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
-.scenario-editor details { border: 1px solid #eadfc9; border-radius: 8px; background: #fffaf0; }
+.scenario-editor details {
+  scroll-margin-top: 12px;
+  border: 1px solid #eadfc9;
+  border-radius: 8px;
+  background: #fffaf0;
+}
 .scenario-editor summary { cursor: pointer; padding: 8px 10px; color: #78350f; font-size: 11px; font-weight: 900; }
 .scenario-stage-editor { display: grid; gap: 10px; padding: 0 9px 9px; }
 .scenario-editor-section { display: grid; gap: 7px; padding-top: 9px; border-top: 1px solid #eadfc9; }
