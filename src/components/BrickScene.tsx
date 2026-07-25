@@ -1,7 +1,7 @@
 import { Billboard, Edges, Html, Line, OrbitControls, Text } from '@react-three/drei'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
-import { memo, type ReactNode, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, type CSSProperties, type ReactNode, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { BufferGeometry, DoubleSide, Float32BufferAttribute, Object3D, Vector3, type DirectionalLight, type Group, type InstancedMesh } from 'three'
 import { brickById, colorHex, colorOpacity } from '../data/basicBricks'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
@@ -15,6 +15,7 @@ import { createBuildGraph, getBrickBounds } from '../lib/planUtils'
 import { getScenePerformanceSettings, getWorldAnimationFps } from '../lib/scenePerformance'
 import { getSceneCameraFrameRequestKey } from '../lib/sceneCamera'
 import { getWorldProjectileVisuals, sampleWorldProjectilePosition, type WorldProjectileVisual } from '../lib/worldProjectiles'
+import { layoutWorldSpeechBubbles } from '../lib/worldSpeechLayout'
 import { analyzeBuildStability, getStabilityRiskColor, type StabilityAnalysis } from '../lib/stabilityAnalysis'
 import { getBrickWorldRenderStructuralCellBoxes, type StructuralCellKind, type WorldStructuralCellBox } from '../lib/structuralGrid'
 import { WORLD_EDIT_STEP_STUDS, getBrickConnectors, getBrickWorldFrame, poseToWorld } from '../lib/brickUnits'
@@ -1957,7 +1958,6 @@ const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementAct
   elapsedSeconds?: number
   onSelect?: (id: string) => void
 }) => {
-  const { t } = useI18n()
   const definition = worldEntityDefinitionById.get(entity.definitionId)
   const groupRef = useRef<Group>(null)
   const animationTimeRef = useRef(0)
@@ -1987,9 +1987,6 @@ const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementAct
     groupRef.current.position.y = entity.transform.y + movingBob + attackBob
   })
   if (!definition) return null
-  const speechText = entity.speech
-    ? entity.speech.text ?? t(`worldEntity.speech.${entity.speech.message}`, { target: entity.speech.targetName ?? entity.name })
-    : ''
   const healthRatio = Math.max(0, Math.min(1, entity.health / Math.max(1, entity.maxHealth)))
   const healthColor = healthRatio > 0.6 ? '#4ade80' : healthRatio > 0.3 ? '#facc15' : '#ff3b30'
   const showDamage = !ghost
@@ -2025,11 +2022,6 @@ const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementAct
           </mesh>
         </Billboard>
       )}
-      {!ghost && speechText && (
-        <Html position={[0, definition.visual.heightStuds + 1.55, 0]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
-          <div className="world-entity-speech-bubble" role="status">{speechText}</div>
-        </Html>
-      )}
       {showDamage && (
         <Html position={[0, definition.visual.heightStuds + 0.7, 0]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
           <div className="world-entity-damage-number">-{entity.combat.lastDamageAmount}</div>
@@ -2041,6 +2033,101 @@ const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementAct
           <meshBasicMaterial color="#0ea5e9" transparent opacity={0.9} depthWrite={false} />
         </mesh>
       )}
+    </group>
+  )
+}
+
+const speechBubbleStyle = {
+  pointerEvents: 'none',
+  '--speech-tail-x': '0px',
+} as CSSProperties
+
+const WorldEntitySpeechLayer = ({ entities }: { entities: WorldEntity[] }) => {
+  const { t } = useI18n()
+  const anchorRefs = useRef(new Map<string, Group>())
+  const bubbleRefs = useRef(new Map<string, HTMLDivElement>())
+  const projectedPoint = useMemo(() => new Vector3(), [])
+  const speakingEntities = useMemo(
+    () => entities.filter((entity) => Boolean(entity.speech) && entity.health > 0),
+    [entities],
+  )
+
+  useFrame(({ camera, size }, deltaSeconds) => {
+    const inputs = speakingEntities.flatMap((entity) => {
+      const anchor = anchorRefs.current.get(entity.id)
+      const bubble = bubbleRefs.current.get(entity.id)
+      const definition = worldEntityDefinitionById.get(entity.definitionId)
+      if (!anchor || !bubble || !definition) return []
+      const interpolation = 1 - Math.exp(-Math.min(deltaSeconds, 0.05) * 18)
+      anchor.position.x += (entity.transform.x - anchor.position.x) * interpolation
+      anchor.position.y += (entity.transform.y - anchor.position.y) * interpolation
+      anchor.position.z += (entity.transform.z - anchor.position.z) * interpolation
+      projectedPoint.set(
+        anchor.position.x,
+        anchor.position.y + definition.visual.heightStuds + 0.85,
+        anchor.position.z,
+      ).project(camera)
+      const anchorX = (projectedPoint.x + 1) * size.width / 2
+      const anchorY = (1 - projectedPoint.y) * size.height / 2
+      const visible = projectedPoint.z >= -1 && projectedPoint.z <= 1
+        && anchorX >= -120 && anchorX <= size.width + 120
+        && anchorY >= -120 && anchorY <= size.height + 120
+      bubble.style.visibility = visible ? 'visible' : 'hidden'
+      if (!visible) return []
+      return [{
+        id: entity.id,
+        anchorX,
+        anchorY,
+        width: bubble.offsetWidth || 180,
+        height: bubble.offsetHeight || 58,
+      }]
+    })
+    const layout = layoutWorldSpeechBubbles(inputs, size)
+    for (const item of layout) {
+      const bubble = bubbleRefs.current.get(item.id)
+      if (!bubble) continue
+      bubble.style.transform = `translate3d(${item.offsetX.toFixed(1)}px, ${item.offsetY.toFixed(1)}px, 0)`
+      bubble.style.setProperty('--speech-tail-x', `${item.tailOffsetX.toFixed(1)}px`)
+      bubble.dataset.tailSide = item.tailSide
+    }
+  })
+
+  return (
+    <group>
+      {speakingEntities.map((entity) => {
+        const definition = worldEntityDefinitionById.get(entity.definitionId)
+        if (!definition || !entity.speech) return null
+        const speechText = entity.speech.text
+          ?? t(`worldEntity.speech.${entity.speech.message}`, { target: entity.speech.targetName ?? entity.name })
+        return (
+          <group
+            key={entity.id}
+            ref={(node) => {
+              if (node) anchorRefs.current.set(entity.id, node)
+              else anchorRefs.current.delete(entity.id)
+            }}
+            position={[entity.transform.x, entity.transform.y, entity.transform.z]}
+          >
+            <Html position={[0, definition.visual.heightStuds + 0.85, 0]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
+              <div
+                ref={(node) => {
+                  if (node) bubbleRefs.current.set(entity.id, node)
+                  else bubbleRefs.current.delete(entity.id)
+                }}
+                className="world-entity-speech-bubble"
+                data-faction={entity.factionId}
+                data-tail-side="bottom"
+                role="status"
+                aria-label={`${entity.name}: ${speechText}`}
+                style={speechBubbleStyle}
+              >
+                <strong className="world-entity-speech-speaker">{entity.name}</strong>
+                <span>{speechText}</span>
+              </div>
+            </Html>
+          </group>
+        )
+      })}
     </group>
   )
 }
@@ -2120,6 +2207,7 @@ const WorldEntityScene = ({ entities, events, elapsedSeconds, paused, preview, s
         onSelect={onSelect}
       />
     ))}
+    <WorldEntitySpeechLayer entities={renderedEntities.filter((entity) => !hiddenEntityIdSet.has(entity.id))} />
     {preview && <WorldEntityMesh entity={preview} ghost />}
     {projectiles.map((projectile) => (
       <WorldProjectileMesh

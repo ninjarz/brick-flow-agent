@@ -1,0 +1,50 @@
+import { describe, expect, it } from 'vitest'
+import { layoutWorldSpeechBubbles } from './worldSpeechLayout'
+
+const overlaps = (
+  left: ReturnType<typeof layoutWorldSpeechBubbles>[number]['rect'],
+  right: ReturnType<typeof layoutWorldSpeechBubbles>[number]['rect'],
+) => left.left < right.right && left.right > right.left && left.top < right.bottom && left.bottom > right.top
+
+describe('world speech bubble layout', () => {
+  it('separates several bubbles sharing nearly the same screen anchor', () => {
+    const layout = layoutWorldSpeechBubbles([
+      { id: 'a', anchorX: 300, anchorY: 260, width: 180, height: 58 },
+      { id: 'b', anchorX: 305, anchorY: 263, width: 180, height: 58 },
+      { id: 'c', anchorX: 296, anchorY: 258, width: 180, height: 58 },
+    ], { width: 640, height: 420 })
+
+    expect(layout).toHaveLength(3)
+    for (let left = 0; left < layout.length; left += 1) {
+      for (let right = left + 1; right < layout.length; right += 1) {
+        expect(overlaps(layout[left].rect, layout[right].rect)).toBe(false)
+      }
+    }
+  })
+
+  it('keeps bubbles inside the viewport and points the tail back toward the speaker', () => {
+    const layout = layoutWorldSpeechBubbles([
+      { id: 'left', anchorX: 2, anchorY: 30, width: 220, height: 72 },
+      { id: 'right', anchorX: 498, anchorY: 35, width: 220, height: 72 },
+    ], { width: 500, height: 300 })
+
+    expect(layout.every((item) => (
+      item.rect.left >= 0
+      && item.rect.right <= 500
+      && item.rect.top >= 0
+      && item.rect.bottom <= 300
+    ))).toBe(true)
+    expect(layout.find((item) => item.id === 'left')!.tailOffsetX).toBeLessThan(0)
+    expect(layout.find((item) => item.id === 'right')!.tailOffsetX).toBeGreaterThan(0)
+    expect(layout.every((item) => item.tailSide === 'top')).toBe(true)
+  })
+
+  it('is deterministic regardless of input order', () => {
+    const inputs = [
+      { id: 'a', anchorX: 200, anchorY: 160, width: 160, height: 50 },
+      { id: 'b', anchorX: 205, anchorY: 160, width: 160, height: 50 },
+    ]
+    expect(layoutWorldSpeechBubbles(inputs, { width: 500, height: 300 }))
+      .toEqual(layoutWorldSpeechBubbles([...inputs].reverse(), { width: 500, height: 300 }))
+  })
+})
