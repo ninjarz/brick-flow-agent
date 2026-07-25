@@ -411,7 +411,9 @@ const requestLlmChat = (config: LlmConfig, payload: LlmRequestPayload, signal: A
 }
 
 const withoutThinkingParameters = (payload: LlmRequestPayload): LlmRequestPayload => {
-  const { thinking: _thinking, enable_thinking: _enableThinking, ...compatiblePayload } = payload
+  const compatiblePayload = { ...payload }
+  delete compatiblePayload.thinking
+  delete compatiblePayload.enable_thinking
   return compatiblePayload
 }
 

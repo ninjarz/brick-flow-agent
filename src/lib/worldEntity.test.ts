@@ -196,6 +196,27 @@ describe('WorldEntity foundation', () => {
     expect(parseStoredWorldState(world, 'plan-2')).toBeUndefined()
   })
 
+  it('upgrades legacy Gray Raven stages with contact-triggered dialogue', () => {
+    const world = {
+      ...createEmptyWorldState('gray-raven-plan'),
+      scenarios: [{
+        id: 'legacy-runtime', assetId: 'scenario-border-tavern', title: '没有归来的商队', description: '旧存档', processedEventIds: [],
+        stages: [
+          { id: 'scenario-border-tavern-investigate', title: '询问', description: '询问', status: 'active' as const, trigger: { eventType: 'command-issued' as const, actorId: 'roland', targetId: 'eileen', commandType: 'interact' as const } },
+          { id: 'scenario-border-tavern-confront', title: '对质', description: '对质', status: 'locked' as const, trigger: { eventType: 'command-issued' as const, actorId: 'roland', targetId: 'envoy', commandType: 'interact' as const } },
+        ],
+      }],
+    }
+
+    const restored = parseStoredWorldState(world, world.planId)!
+    expect(restored.scenarios[0].authoringVersion).toBe(2)
+    expect(restored.scenarios[0].stages[0].trigger).toMatchObject({ eventType: 'interaction', actorId: 'roland', targetId: 'eileen' })
+    expect(restored.scenarios[0].stages[0].trigger.commandType).toBeUndefined()
+    expect(restored.scenarios[0].stages[0].dialogue).toHaveLength(3)
+    expect(restored.scenarios[0].stages[1].dialogue?.at(-1)?.speakerId).toBe('envoy')
+    expect(restored.scenarios[0].stages[1].branches).toBeUndefined()
+  })
+
   it('separates overlapping units while restoring a paused stored world', () => {
     const knight = worldEntityDefinitionById.get('knight')!
     const first = createWorldEntity(knight, { id: 'stored-a', transform: { x: 0, z: 0 } })

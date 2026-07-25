@@ -38,7 +38,8 @@ export type WorldEntityNavigationState = {
 
 export type WorldEntitySpeech = {
   message: WorldEntityCommand['type'] | 'chat-greeting' | 'chat-question' | 'chat-support' | 'chat-reply' | 'chat-agree'
-    | 'combat-attack' | 'combat-hurt' | 'combat-victory' | 'revive-success' | 'revived'
+    | 'combat-attack' | 'combat-hurt' | 'combat-victory' | 'revive-success' | 'revived' | 'scenario-dialogue'
+  text?: string
   targetName?: string
   expiresAtSeconds: number
 }
@@ -50,6 +51,7 @@ export type WorldEntity = {
   name: string
   description: string
   factionId: string
+  storylineId?: string
   controller: WorldEntityControllerKind
   health: number
   maxHealth: number
@@ -147,6 +149,31 @@ export type WorldScenarioAction =
   | { type: 'set-faction'; entityId: string; factionId: string }
   | { type: 'issue-command'; entityId: string; command: WorldEntityCommand }
   | { type: 'add-story'; title: string; body: string; characterIds?: string[] }
+  | { type: 'set-visibility'; target: Extract<WorldTargetRef, { kind: 'entity' | 'brick' | 'structure' }>; visible: boolean }
+
+export type WorldScenarioDialogueLine = {
+  id: string
+  speakerId: string
+  text: string
+  durationSeconds: number
+}
+
+export type WorldScenarioDialogueState = {
+  stageId: string
+  eventId: string
+  branchId?: string
+  lineIndex: number
+  lineEndsAtSeconds: number
+}
+
+export type WorldScenarioBranch = {
+  id: string
+  title: string
+  trigger: WorldScenarioTrigger
+  nextStageId?: string
+  dialogue?: WorldScenarioDialogueLine[]
+  actions?: WorldScenarioAction[]
+}
 
 export type WorldScenarioStage = {
   id: string
@@ -154,7 +181,10 @@ export type WorldScenarioStage = {
   description: string
   status: 'locked' | 'active' | 'completed'
   trigger: WorldScenarioTrigger
+  dialogue?: WorldScenarioDialogueLine[]
   actions?: WorldScenarioAction[]
+  nextStageId?: string
+  branches?: WorldScenarioBranch[]
   completedAtSeconds?: number
 }
 
@@ -163,8 +193,12 @@ export type WorldScenarioRuntime = {
   assetId: string
   title: string
   description: string
+  castEntityIds?: string[]
   stages: WorldScenarioStage[]
   processedEventIds: string[]
+  activeDialogue?: WorldScenarioDialogueState
+  outcomeId?: string
+  authoringVersion?: number
 }
 
 export type WorldEntityBody =
@@ -234,4 +268,5 @@ export type WorldState = {
   pendingImpacts: WorldPendingImpact[]
   narrative: WorldNarrativeState
   scenarios: WorldScenarioRuntime[]
+  hiddenTargets: Array<Extract<WorldTargetRef, { kind: 'entity' | 'brick' | 'structure' }>>
 }

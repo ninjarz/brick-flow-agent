@@ -33,6 +33,22 @@ describe('world AI adapter', () => {
     expect(buildWorldAiTurnPrompt(snapshot)).toContain('Never return coordinates')
   })
 
+  it('keeps hidden entities and structures out of AI context', () => {
+    const world = makeWorld()
+    world.hiddenTargets = [
+      { kind: 'entity', id: 'rule-knight' },
+      { kind: 'structure', id: 'secret-tower' },
+    ]
+    const snapshot = createWorldAiSnapshot(world, [{
+      id: 'secret-brick', brickId: 'lego-brick-2x2', color: 'gray',
+      pose: { xStud: 4, yStud: 0, zStud: 2, rotationQuarterTurns: 0 },
+    }], [{ id: 'secret-tower', name: 'Secret Tower', description: '', brickIds: ['secret-brick'] }])
+
+    expect(snapshot.entities.map((entity) => entity.id)).toEqual(['ai-knight'])
+    expect(snapshot.structures).toEqual([])
+    expect(snapshot.bricks).toEqual([])
+  })
+
   it('caps large brick snapshots to the nearest relevant targets', () => {
     const world = makeWorld()
     const bricks = Array.from({ length: 300 }, (_, index) => ({

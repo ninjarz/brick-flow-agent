@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, Box, Boxes, Download, Eye, FileUp, Gauge, Github, Globe2, KeyRound, Link, MessageCircle, Pause, Play, Plus, Redo2, RotateCcw, ScanLine, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
+import { BookOpen, Box, Boxes, Download, Eye, EyeOff, FileUp, Gauge, Github, Globe2, KeyRound, Link, MessageCircle, Pause, Play, Plus, Redo2, RotateCcw, ScanLine, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
 import { BrickEditorPanel } from './components/BrickEditorPanel'
 import { BrickCountsPanel } from './components/BrickCountsPanel'
 import type { WorldCommandTargetOption } from './components/WorldEntityEditorPanel'
@@ -8,7 +8,7 @@ import { ControlPanel } from './components/ControlPanel'
 import { brickById, getDefaultBrickColor } from './data/basicBricks'
 import { worldEntityDefinitionById } from './data/worldEntityDefinitions'
 import { createDefaultWorldScenarios } from './data/worldScenarios'
-import { dropBrickGroupAtPoint, findNearestOpenBrickGroupAround, rotationRepositionSearchRadiusStuds, type StationaryPlanSpatialData } from './lib/brickGroupPlacement'
+import { dropBrickGroupAtPoint, findNearestOpenBrickGroupAround, getBrickGroupDragPointerOffset, offsetBrickGroupDragPoint, rotationRepositionSearchRadiusStuds, type HorizontalDropPoint, type StationaryPlanSpatialData } from './lib/brickGroupPlacement'
 import { generateBuildPlan } from './lib/localGenerator'
 import { buildLlmUserPrompt, generateLlmBuildPlan, isLlmConfigComplete, llmSystemPrompt, resetLlmThinkingCompatibility, testLlmConnection } from './lib/llmGenerator'
 import { loadLlmConfig, saveLlmConfig } from './lib/llmConfig'
@@ -29,6 +29,8 @@ import { isWorldEntityGroundPointBlockedByBricks, stepWorldSimulation, worldSimu
 import { findNearestAvailableWorldEntityPoint } from './lib/worldEntityCollision'
 import { advanceWorldFixedStepClock, createWorldFixedStepClock } from './lib/worldClock'
 import { addWorldStory, createLocalTavernStory } from './lib/worldNarrative'
+import { playTavernActivity, type TavernActivityKind, type TavernActivityResult } from './lib/worldTavernActivities'
+import { applyTavernAiResponse, requestTavernAiActivity } from './lib/worldTavernAi'
 import { applyWorldAiTurn, buildWorldAiTurnPrompt, createWorldAiSnapshot, formatWorldAiTurnSummary, requestWorldAiTurn, worldAiSystemPrompt } from './lib/worldAi'
 import { analyzeBuildStability } from './lib/stabilityAnalysis'
 import { formatLDrawPlan, parseLDrawPlan } from './lib/ldrawPlan'
@@ -38,7 +40,7 @@ import { addWorldScenario, startWorldScenario } from './lib/worldScenarioImport'
 import { advanceWorldScenarios, getActiveWorldScenarioStage } from './lib/worldScenarioRuntime'
 import { clearWorkspaceDraft, hasIndexedDbWorkspaceDraft, loadWorkspaceDraft, loadWorkspaceDraftFromIndexedDb, saveWorkspaceDraft } from './lib/workspaceDraft'
 import type { BrickStructure, BuildPlan, FinishedAsset, LlmConfig, PlacedBrick } from './types/bricks'
-import type { WorldEntity, WorldEntityCommand, WorldEntityControllerKind } from './types/world'
+import type { WorldEntity, WorldEntityCommand, WorldEntityControllerKind, WorldState } from './types/world'
 import './App.css'
 
 const BrickScene = lazy(() => import('./components/BrickScene').then((module) => ({ default: module.BrickScene })))
@@ -67,6 +69,7 @@ type PlacementSession = {
   anchorBrickId: string
   sourceBricks: PlacedBrick[]
   previewBricks: PlacedBrick[]
+  dragPointerOffset?: HorizontalDropPoint
 }
 type WorldEntityPlacementSession = {
   entity: WorldEntity
@@ -200,8 +203,10 @@ function App() {
   const [isTavernOpen, setIsTavernOpen] = useState(false)
   const [isWorldRosterOpen, setIsWorldRosterOpen] = useState(false)
   const [isWorldAiThinking, setIsWorldAiThinking] = useState(false)
+  const [isTavernAiThinking, setIsTavernAiThinking] = useState(false)
   const [worldAiFeedback, setWorldAiFeedback] = useState<{ tone: 'success' | 'error'; text: string }>()
   const worldAiAbortRef = useRef<AbortController>()
+  const tavernAiAbortRef = useRef<AbortController>()
   const [isManualOpen, setIsManualOpen] = useState(false)
   const [manualPlan, setManualPlan] = useState<BuildPlan>()
   const [manualStepIndex, setManualStepIndex] = useState(0)
@@ -222,8 +227,12 @@ function App() {
   const [assetLibraryKind, setAssetLibraryKind] = useState<AssetLibraryKind>('models')
   const [scenarioQuery, setScenarioQuery] = useState('')
   const [sceneViewMode, setSceneViewMode] = useState<BrickSceneViewMode>('border')
+  const [showHiddenScenarioObjects, setShowHiddenScenarioObjects] = useState(false)
   const [assetImportFrameVersion, setAssetImportFrameVersion] = useState(0)
   const [isAutoSnapEnabled, setIsAutoSnapEnabled] = useState(false)
+  useEffect(() => {
+    if (world.hiddenTargets.length === 0) setShowHiddenScenarioObjects(false)
+  }, [world.hiddenTargets.length])
   const sceneStabilityAnalysis = useMemo(
     () => sceneViewMode === 'xray' ? analyzeBuildStability(plan.bricks) : undefined,
     [plan.bricks, sceneViewMode],
@@ -363,7 +372,7 @@ function App() {
     [selectedWorldEntityId, world.entities],
   )
   const worldCommandTargets = useMemo<WorldCommandTargetOption[]>(() => [
-    ...world.entities.map((entity) => ({
+    ...world.entities.filter((entity) => showHiddenScenarioObjects || !world.hiddenTargets.some((target) => target.kind === 'entity' && target.id === entity.id)).map((entity) => ({
       kind: 'entity' as const,
       id: entity.id,
       label: `${entity.name} · ${t(`worldEntity.faction.${entity.factionId}`)}${entity.health <= 0 ? ` · ${t('worldEntity.behavior.dead')}` : ''}`,
@@ -374,7 +383,7 @@ function App() {
       id: structure.id,
       label: `${structure.name} · ${t('structure.solidified')}`,
     })),
-  ], [plan.structures, t, world.entities])
+  ], [plan.structures, showHiddenScenarioObjects, t, world.entities, world.hiddenTargets])
   const activeSelectedIds = useMemo(() => {
     if (!selectedId) return []
     const liveBrickIds = new Set(plan.bricks.map((brick) => brick.id))
@@ -413,6 +422,17 @@ function App() {
       : 'mixed'
   }, [world.entities])
   const activeWorldScenario = useMemo(() => getActiveWorldScenarioStage(world), [world])
+  const hiddenScenarioEntityIds = useMemo(() => world.hiddenTargets.filter((target) => target.kind === 'entity').map((target) => target.id), [world.hiddenTargets])
+  const visibleWorldEntities = useMemo(() => {
+    if (showHiddenScenarioObjects) return world.entities
+    const hiddenIds = new Set(hiddenScenarioEntityIds)
+    return world.entities.filter((entity) => !hiddenIds.has(entity.id))
+  }, [hiddenScenarioEntityIds, showHiddenScenarioObjects, world.entities])
+  const hiddenScenarioBrickIds = useMemo(() => {
+    const directIds = world.hiddenTargets.filter((target) => target.kind === 'brick').map((target) => target.id)
+    const hiddenStructureIds = new Set(world.hiddenTargets.filter((target) => target.kind === 'structure').map((target) => target.id))
+    return [...new Set([...directIds, ...(plan.structures ?? []).filter((structure) => hiddenStructureIds.has(structure.id)).flatMap((structure) => structure.brickIds)])]
+  }, [plan.structures, world.hiddenTargets])
   const manualSourcePlan = isManualOpen ? manualPlan ?? plan : undefined
   const buildManual = useMemo(() => manualSourcePlan ? serializeBuildManual(manualSourcePlan, locale) : undefined, [locale, manualSourcePlan])
   const manualMarkdown = useMemo(() => buildManual ? formatBuildManualMarkdown(buildManual, locale) : '', [buildManual, locale])
@@ -1279,13 +1299,16 @@ function App() {
     const sourceBricks = planRef.current.bricks.filter((brick) => selectedIdSet.has(brick.id))
     if (sourceBricks.length === 0) return
     const stationaryData = getStationarySpatialState(planRef.current.bricks, selectedIdSet)
-    const previewBricks = dropBrickGroupAtPoint(sourceBricks, brickId, point, stationaryData) ?? sourceBricks
-    placementPointerKeyRef.current = `${normalizeHorizontalStud(point.x)}:${normalizeHorizontalStud(point.z)}`
+    const dragPointerOffset = getBrickGroupDragPointerOffset(sourceBricks, brickId, point)
+    const anchoredPoint = offsetBrickGroupDragPoint(point, dragPointerOffset)
+    const previewBricks = dropBrickGroupAtPoint(sourceBricks, brickId, anchoredPoint, stationaryData) ?? sourceBricks
+    placementPointerKeyRef.current = `${normalizeHorizontalStud(anchoredPoint.x)}:${normalizeHorizontalStud(anchoredPoint.z)}`
     setPlacementSession({
       kind: 'move',
       anchorBrickId: brickId,
       sourceBricks,
       previewBricks,
+      dragPointerOffset,
     })
   }, [activeSelectedIds, getStationarySpatialState, placementSession, worldEntityPlacement])
 
@@ -1299,10 +1322,11 @@ function App() {
         ? new Set(current.sourceBricks.map((brick) => brick.id))
         : new Set<string>()
       const stationaryData = getStationarySpatialState(planRef.current.bricks, excludedIds)
+      const anchoredPoint = offsetBrickGroupDragPoint(point, current.dragPointerOffset)
       const previewBricks = dropBrickGroupAtPoint(
         current.sourceBricks,
         current.anchorBrickId,
-        point,
+        anchoredPoint,
         stationaryData,
       )
       return previewBricks ? { ...current, previewBricks } : current
@@ -1404,6 +1428,35 @@ function App() {
     }))
   }, [])
 
+  const updateWorldScenario = useCallback((updated: WorldState['scenarios'][number]) => {
+    setWorld((current) => ({
+      ...current,
+      scenarios: current.scenarios.map((scenario) => scenario.id === updated.id ? updated : scenario),
+    }))
+  }, [])
+
+  const setWorldTargetVisibility = useCallback((target: WorldState['hiddenTargets'][number], visible: boolean) => {
+    const key = `${target.kind}:${target.id}`
+    setWorld((current) => ({
+      ...current,
+      hiddenTargets: visible
+        ? current.hiddenTargets.filter((item) => `${item.kind}:${item.id}` !== key)
+        : current.hiddenTargets.some((item) => `${item.kind}:${item.id}` === key)
+          ? current.hiddenTargets
+          : [...current.hiddenTargets, target],
+      entities: !visible && target.kind === 'entity'
+        ? current.entities.map((entity) => entity.id === target.id ? {
+            ...entity,
+            activeCommand: undefined,
+            commandQueue: [],
+            speech: undefined,
+            behaviorState: 'idle' as const,
+            navigation: { status: 'idle' as const, path: [], pathIndex: 0 },
+          } : entity)
+        : current.entities,
+    }))
+  }, [])
+
   const updateAllWorldEntityControllers = useCallback((controller: WorldEntityControllerKind) => {
     setWorld((current) => changeAllWorldEntityControllers(current, controller))
   }, [])
@@ -1444,6 +1497,81 @@ function App() {
   const generateTavernStory = useCallback((focusEntityId?: string) => {
     setWorld((current) => addWorldStory(current, createLocalTavernStory(current, locale, focusEntityId)))
   }, [locale])
+
+  const runTavernActivity = useCallback((activity: TavernActivityKind, focusEntityId?: string) => {
+    const result = playTavernActivity(worldRef.current, activity, locale, focusEntityId)
+    if (!result) return undefined
+    worldRef.current = result.world
+    setWorld(result.world)
+    return result
+  }, [locale])
+
+  const runAiTavernActivity = useCallback(async (activity: TavernActivityKind, focusEntityId?: string) => {
+    if (!llmConfigComplete || isTavernAiThinking) return undefined
+    const startingWorld = worldRef.current
+    const base = playTavernActivity(startingWorld, activity, locale, focusEntityId)
+    if (!base) return undefined
+    worldRef.current = base.world
+    setWorld(base.world)
+    tavernAiAbortRef.current?.abort()
+    const controller = new AbortController()
+    tavernAiAbortRef.current = controller
+    setIsTavernAiThinking(true)
+    try {
+      const response = await requestTavernAiActivity({
+        world: startingWorld,
+        activity,
+        base,
+        config: llmConfig,
+        locale,
+        signal: controller.signal,
+      })
+      const result = applyTavernAiResponse(worldRef.current, base, response)
+      worldRef.current = result.world
+      setWorld(result.world)
+      return result
+    } catch {
+      if (controller.signal.aborted) return undefined
+      return {
+        ...base,
+        world: worldRef.current,
+        notice: locale === 'zh-CN'
+          ? 'AI 主持暂时离席，已保留本地结果。'
+          : 'The AI host stepped away; the local result was kept.',
+      }
+    } finally {
+      if (tavernAiAbortRef.current === controller) {
+        tavernAiAbortRef.current = undefined
+        setIsTavernAiThinking(false)
+      }
+    }
+  }, [isTavernAiThinking, llmConfig, llmConfigComplete, locale])
+
+  const watchTavernActivity = useCallback((result: TavernActivityResult) => {
+    const speechByEntityId = new Map(result.world.entities.flatMap((entity) => (
+      entity.speech && result.participantIds.includes(entity.id) ? [[entity.id, entity.speech] as const] : []
+    )))
+    setWorld((current) => {
+      const expiresAtSeconds = current.elapsedSeconds + 9
+      const next = {
+        ...current,
+        entities: current.entities.map((entity) => {
+          const speech = speechByEntityId.get(entity.id)
+          return speech ? {
+            ...entity,
+            activeCommand: undefined,
+            commandQueue: [],
+            behaviorState: 'idle' as const,
+            navigation: { status: 'idle' as const, path: [], pathIndex: 0 },
+            speech: { ...speech, expiresAtSeconds },
+            autonomy: { ...entity.autonomy, nextDecisionAtSeconds: expiresAtSeconds },
+          } : entity
+        }),
+      }
+      worldRef.current = next
+      return next
+    })
+  }, [])
 
   const runWorldAiTurn = useCallback(async () => {
     if (!llmConfigComplete || isWorldAiThinking) return
@@ -2054,15 +2182,6 @@ function App() {
                 <button
                   className="icon-button"
                   type="button"
-                  aria-label={t('top.tavern')}
-                  title={t('top.tavern')}
-                  onClick={() => setIsTavernOpen(true)}
-                >
-                  <MessageCircle size={18} />
-                </button>
-                <button
-                  className="icon-button"
-                  type="button"
                   aria-label={t('top.config')}
                   title={t('top.config')}
                   onClick={() => setIsConfigOpen(true)}
@@ -2085,29 +2204,57 @@ function App() {
         </header>
 
         <div className="viewer">
-          {world.entities.length > 0 && (
+          {(world.entities.length > 0 || world.hiddenTargets.length > 0) && (
             <>
               <div className="world-simulation-toolbar" role="status">
-                <span>{t('worldEntity.worldCount', { count: world.entities.length })}</span>
-                <button
-                  type="button"
-                  aria-expanded={isWorldRosterOpen}
-                  aria-controls="world-entity-roster"
-                  onClick={() => setIsWorldRosterOpen((open) => !open)}
-                >
-                  <Globe2 size={14} />
-                  {t('worldEntity.roster')}
-                </button>
-                <button
-                  type="button"
-                  aria-label={world.paused ? t('worldEntity.resume') : t('worldEntity.pause')}
-                  title={world.paused ? t('worldEntity.resume') : t('worldEntity.pause')}
-                  onClick={() => setWorld((current) => ({ ...current, paused: !current.paused }))}
-                >
-                  {world.paused ? <Play size={14} /> : <Pause size={14} />}
-                  {world.paused ? t('worldEntity.resume') : t('worldEntity.pause')}
-                </button>
-                {activeWorldScenario && (
+                <span>{t('worldEntity.worldCount', { count: visibleWorldEntities.length })}</span>
+                {world.entities.length > 0 && (
+                  <>
+                    {visibleWorldEntities.length > 0 && (
+                      <button
+                        type="button"
+                        aria-label={t('top.tavern')}
+                        title={t('top.tavern')}
+                        onClick={() => setIsTavernOpen(true)}
+                      >
+                        <MessageCircle size={14} />
+                        {t('top.tavern')}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      aria-expanded={isWorldRosterOpen}
+                      aria-controls="world-entity-roster"
+                      onClick={() => setIsWorldRosterOpen((open) => !open)}
+                    >
+                      <Globe2 size={14} />
+                      {t('worldEntity.roster')}
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={world.paused ? t('worldEntity.resume') : t('worldEntity.pause')}
+                      title={world.paused ? t('worldEntity.resume') : t('worldEntity.pause')}
+                      onClick={() => setWorld((current) => ({ ...current, paused: !current.paused }))}
+                    >
+                      {world.paused ? <Play size={14} /> : <Pause size={14} />}
+                      {world.paused ? t('worldEntity.resume') : t('worldEntity.pause')}
+                    </button>
+                  </>
+                )}
+                {world.hiddenTargets.length > 0 && (
+                  <button
+                    className={`world-authoring-reveal${showHiddenScenarioObjects ? ' active' : ''}`}
+                    type="button"
+                    aria-pressed={showHiddenScenarioObjects}
+                    aria-label={locale === 'zh-CN' ? '创作显影：显示剧情隐藏对象' : 'Authoring reveal: show hidden story objects'}
+                    title={locale === 'zh-CN' ? `创作显影：${world.hiddenTargets.length} 个剧情隐藏对象` : `Authoring reveal: ${world.hiddenTargets.length} hidden story object(s)`}
+                    onClick={() => setShowHiddenScenarioObjects((current) => !current)}
+                  >
+                    {showHiddenScenarioObjects ? <Eye size={14} /> : <EyeOff size={14} />}
+                    {locale === 'zh-CN' ? (showHiddenScenarioObjects ? '显影中' : '显影') : (showHiddenScenarioObjects ? 'Revealing' : 'Reveal')}
+                  </button>
+                )}
+                {activeWorldScenario && visibleWorldEntities.length > 0 && (
                   <button
                     type="button"
                     className="world-scenario-objective"
@@ -2148,7 +2295,7 @@ function App() {
                     </div>
                   </div>
                   <div className="world-entity-roster-list">
-                    {world.entities.map((entity) => (
+                    {visibleWorldEntities.map((entity) => (
                       <button
                         key={entity.id}
                         type="button"
@@ -2171,7 +2318,7 @@ function App() {
             </>
           )}
           {plan.bricks.length >= simplifiedBrickThreshold && sceneViewMode !== 'voxel' && (
-            <div className={`performance-badge ${world.entities.length > 0 ? 'with-world-toolbar' : ''}`}>{t('scene.performanceMode')}</div>
+            <div className={`performance-badge ${visibleWorldEntities.length > 0 ? 'with-world-toolbar' : ''}`}>{t('scene.performanceMode')}</div>
           )}
           {sceneViewMode === 'voxel' && (
             <div className="voxel-legend" aria-label={t('voxel.legend')}>
@@ -2211,6 +2358,9 @@ function App() {
               worldEvents={world.events}
               worldElapsedSeconds={world.elapsedSeconds}
               worldPaused={world.paused}
+              hiddenBrickIds={hiddenScenarioBrickIds}
+              hiddenWorldEntityIds={hiddenScenarioEntityIds}
+              showHiddenObjects={showHiddenScenarioObjects}
               worldEntityPlacementPreview={worldEntityPlacement?.entity}
               selectedWorldEntityId={selectedWorldEntityId}
               placementPreviewBricks={placementSession?.previewBricks}
@@ -2337,10 +2487,20 @@ function App() {
             onRunAiTurn={runWorldAiTurn}
             onGetAiContext={getWorldAiContextPreview}
             onClearHistory={clearTavernHistory}
+            onUpdateScenario={updateWorldScenario}
+            structures={plan.structures ?? []}
+            onSetTargetVisibility={setWorldTargetVisibility}
+            onPlayActivity={runTavernActivity}
+            onPlayAiActivity={runAiTavernActivity}
+            onWatchActivity={watchTavernActivity}
             llmConfigured={llmConfigComplete}
             isAiThinking={isWorldAiThinking}
+            isAiActivityThinking={isTavernAiThinking}
             aiFeedback={worldAiFeedback}
-            onClose={() => setIsTavernOpen(false)}
+            onClose={() => {
+              tavernAiAbortRef.current?.abort()
+              setIsTavernOpen(false)
+            }}
           />
         </Suspense>
       )}

@@ -272,6 +272,18 @@ button.status-pill:hover {
   font-size: 11px;
 }
 
+.world-simulation-toolbar .world-authoring-reveal {
+  border-color: rgba(124, 58, 237, 0.3);
+  color: #6d28d9;
+}
+
+.world-simulation-toolbar .world-authoring-reveal.active {
+  border-color: #7c3aed;
+  background: #7c3aed;
+  color: #fff;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.14);
+}
+
 .world-simulation-toolbar .world-scenario-objective {
   max-width: min(240px, 30vw);
   border-color: rgba(37, 99, 235, 0.35);
@@ -2814,7 +2826,8 @@ button:disabled {
 
 .world-entity-speech-bubble {
   position: relative;
-  max-width: min(240px, 32vw);
+  width: max-content;
+  max-width: min(280px, calc(100vw - 32px));
   padding: 7px 10px;
   border: 1px solid #64748b;
   border-radius: 10px;
@@ -2825,7 +2838,9 @@ button:disabled {
   font-weight: 700;
   line-height: 1.3;
   text-align: center;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  word-break: break-word;
   user-select: none;
 }
 
@@ -3098,6 +3113,162 @@ button:disabled {
   background: linear-gradient(135deg, #fffaf0, #fffdf8);
 }
 
+.tavern-content > .tavern-quick-play {
+  grid-column: 1 / -1;
+  background: linear-gradient(135deg, #fff8e8, #fffdf7);
+  border-color: #e8c98d;
+}
+
+.tavern-quick-play > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tavern-quick-play > header h3,
+.tavern-quick-play > header small { margin: 0; }
+.tavern-quick-play > header small { color: #8a6b43; }
+.tavern-quick-meta {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.tavern-quick-meta > span {
+  flex: none;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #fff;
+  color: #92400e;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.tavern-host-toggle {
+  display: flex;
+  padding: 2px;
+  border: 1px solid #ead7b4;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.tavern-host-toggle button {
+  min-height: 23px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #8b7355;
+  font-size: 9px;
+}
+
+.tavern-host-toggle button.active {
+  background: #713f12;
+  color: #fff8e8;
+}
+
+.tavern-quick-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 11px;
+}
+
+.tavern-quick-actions > button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #ead7b4;
+  border-radius: 11px;
+  background: #fff;
+  color: #73451d;
+  text-align: left;
+}
+
+.tavern-quick-actions > button:hover:not(:disabled) {
+  border-color: #c78a35;
+  background: #fffaf0;
+  transform: translateY(-1px);
+}
+
+.tavern-quick-actions > button > span { display: grid; min-width: 0; }
+.tavern-quick-actions strong { font-size: 12px; }
+.tavern-quick-actions small {
+  overflow: hidden;
+  color: #8b7355;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tavern-quick-loading {
+  min-height: 55px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+  border: 1px dashed #d6b878;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #785f42;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.tavern-quick-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #5b3518;
+  color: #fff8e8;
+}
+
+.tavern-quick-result div { min-width: 0; }
+.tavern-quick-result strong { font-size: 11px; }
+.tavern-quick-result strong small {
+  margin-left: 7px;
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fce7c2;
+  font-size: 8px;
+}
+.tavern-quick-result p {
+  margin: 2px 0 0;
+  overflow: hidden;
+  font-size: 10px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tavern-quick-result p em {
+  color: #fcd34d;
+  font-style: normal;
+}
+.tavern-quick-result-actions {
+  flex: none;
+  display: flex;
+  gap: 5px;
+}
+.tavern-quick-result button {
+  flex: none;
+  border-color: #f5d79f;
+  background: #fff8e8;
+  color: #713f12;
+}
+
 .tavern-quest > header {
   display: flex;
   align-items: flex-start;
@@ -3113,12 +3284,30 @@ button:disabled {
   font-size: 11px;
 }
 
-.tavern-quest > header > strong {
+.tavern-quest-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tavern-quest-actions > strong {
   flex: none;
   padding: 5px 8px;
   border-radius: 999px;
   background: #fef3c7;
   color: #92400e;
+  font-size: 10px;
+}
+
+.tavern-quest-actions > button,
+.scenario-editor button {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 8px;
   font-size: 10px;
 }
 
@@ -3147,6 +3336,132 @@ button:disabled {
 .tavern-quest li.completed { color: #15803d; background: #f0fdf4; }
 .tavern-quest li.active { border-color: #60a5fa; color: #1d4ed8; background: #eff6ff; }
 .tavern-quest li.locked { color: #94a3b8; background: #f8fafc; }
+
+.tavern-dialogue-progress {
+  margin-top: 9px;
+  padding: 7px 9px;
+  border: 1px solid #93c5fd;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.tavern-scenario-outcome {
+  margin-top: 9px;
+  padding: 7px 9px;
+  border: 1px solid #c4b5fd;
+  border-radius: 8px;
+  background: #f5f3ff;
+  color: #6d28d9;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.scenario-editor {
+  display: grid;
+  gap: 9px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid #d6b878;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.scenario-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.scenario-editor label,
+.scenario-editor-section > header {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  color: #785f42;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.scenario-editor input,
+.scenario-editor select,
+.scenario-editor textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 7px;
+  border: 1px solid #ddcda9;
+  border-radius: 7px;
+  background: #fff;
+  color: #172033;
+  font: inherit;
+  font-size: 11px;
+}
+
+.scenario-editor textarea { resize: vertical; }
+.scenario-editor details { border: 1px solid #eadfc9; border-radius: 8px; background: #fffaf0; }
+.scenario-editor summary { cursor: pointer; padding: 8px 10px; color: #78350f; font-size: 11px; font-weight: 900; }
+.scenario-stage-editor { display: grid; gap: 10px; padding: 0 9px 9px; }
+.scenario-editor-section { display: grid; gap: 7px; padding-top: 9px; border-top: 1px solid #eadfc9; }
+.scenario-editor-section > header small { color: #927b60; font-weight: 500; }
+
+.scenario-revealables > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.scenario-revealables button {
+  display: grid;
+  justify-items: start;
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.scenario-revealables button.hidden {
+  border-color: #c4b5fd;
+  background: #f5f3ff;
+  color: #6d28d9;
+}
+
+.scenario-revealables button small { font-size: 8px; opacity: 0.8; }
+
+.scenario-dialogue-row {
+  display: grid;
+  grid-template-columns: 18px 110px minmax(180px, 1fr) 70px 30px;
+  align-items: center;
+  gap: 6px;
+}
+
+.scenario-dialogue-row > span { text-align: center; color: #92400e; font-weight: 900; }
+.scenario-dialogue-row > label { display: grid; grid-template-columns: 1fr auto; align-items: center; }
+
+.scenario-action-row {
+  display: grid;
+  grid-template-columns: 90px repeat(3, minmax(90px, 1fr)) 30px;
+  align-items: center;
+  gap: 6px;
+}
+
+.scenario-action-row > strong { color: #92400e; font-size: 9px; }
+.scenario-action-row textarea { grid-column: span 2; }
+.scenario-action-row > .icon-button { grid-column: -2 / -1; }
+.scenario-add-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.scenario-branch-card {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.3fr) repeat(4, minmax(90px, 1fr)) minmax(120px, auto) 30px;
+  align-items: center;
+  gap: 6px;
+  padding: 7px;
+  border: 1px solid #ddd6fe;
+  border-radius: 8px;
+  background: #faf5ff;
+}
+
+.scenario-branch-card > small { color: #6b21a8; font-size: 9px; font-weight: 800; }
 
 .tavern-content > section {
   min-width: 0;
@@ -3409,6 +3724,15 @@ button:disabled {
   .tavern-stories { grid-column: auto; }
   .tavern-content > .tavern-quest { grid-column: auto; }
   .tavern-quest > ol { grid-template-columns: 1fr; }
+  .tavern-content > .tavern-quick-play { grid-column: auto; }
+  .tavern-quick-actions { grid-template-columns: 1fr; }
+  .scenario-editor-grid { grid-template-columns: 1fr; }
+  .scenario-dialogue-row,
+  .scenario-action-row,
+  .scenario-branch-card { grid-template-columns: 1fr; }
+  .scenario-dialogue-row > span { text-align: left; }
+  .scenario-action-row textarea,
+  .scenario-action-row > .icon-button { grid-column: auto; }
 }
 
 .inventory-tools {

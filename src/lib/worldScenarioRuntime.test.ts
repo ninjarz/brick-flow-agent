@@ -98,4 +98,86 @@ describe('world scenario runtime', () => {
     })
     expect(secondAdvance.scenarios[0].stages.every((stage) => stage.status === 'completed')).toBe(true)
   })
+
+  it('plays readable dialogue before applying hostile actions', () => {
+    const knight = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'knight', factionId: 'blue' })
+    const stranger = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'stranger', factionId: 'neutral' })
+    const scenario: WorldScenarioRuntime = {
+      id: 'dialogue-runtime', assetId: 'asset', title: 'Confrontation', description: 'Talk first', processedEventIds: [],
+      stages: [{
+        id: 'talk', title: 'Talk', description: 'Talk', status: 'active',
+        trigger: { eventType: 'interaction', actorId: knight.id, targetId: stranger.id },
+        dialogue: [
+          { id: 'line-1', speakerId: knight.id, text: 'Explain yourself.', durationSeconds: 3 },
+          { id: 'line-2', speakerId: stranger.id, text: 'Then fight me.', durationSeconds: 4 },
+        ],
+        actions: [
+          { type: 'set-faction', entityId: stranger.id, factionId: 'red' },
+          { type: 'issue-command', entityId: stranger.id, command: { type: 'attack', target: { kind: 'entity', id: knight.id } } },
+        ],
+      }],
+    }
+    let world = advanceWorldScenarios({
+      ...createEmptyWorldState('plan'), elapsedSeconds: 10, entities: [knight, stranger], scenarios: [scenario],
+      events: [{ id: 'talk-event', timeSeconds: 10, type: 'interaction', actorId: knight.id, targetId: stranger.id }],
+    })
+    expect(world.scenarios[0].stages[0].status).toBe('active')
+    expect(world.entities[0].speech?.text).toBe('Explain yourself.')
+    expect(world.entities[1].factionId).toBe('neutral')
+
+    world = advanceWorldScenarios({ ...world, elapsedSeconds: 13 })
+    expect(world.entities[1].speech?.text).toBe('Then fight me.')
+    expect(world.entities[1].factionId).toBe('neutral')
+
+    world = advanceWorldScenarios({ ...world, elapsedSeconds: 17 })
+    expect(world.scenarios[0].stages[0].status).toBe('completed')
+    expect(world.entities[1].factionId).toBe('red')
+    expect(world.entities[1].commandQueue[0]?.type).toBe('attack')
+  })
+
+  it('takes a matching failure branch without unlocking the linear next stage', () => {
+    const hero = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'hero', factionId: 'blue' })
+    const enemy = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'enemy', factionId: 'red' })
+    const scenario: WorldScenarioRuntime = {
+      id: 'branching', assetId: 'asset', title: 'Branching', description: 'Branching', processedEventIds: [],
+      stages: [
+        {
+          id: 'battle', title: 'Battle', description: 'Battle', status: 'active', trigger: { eventType: 'defeated', targetId: enemy.id },
+          branches: [{
+            id: 'retreat', title: 'Retreat', trigger: { eventType: 'defeated', targetId: hero.id },
+            actions: [{ type: 'set-faction', entityId: enemy.id, factionId: 'neutral' }],
+          }],
+        },
+        { id: 'victory', title: 'Victory', description: 'Victory', status: 'locked', trigger: { eventType: 'interaction' } },
+      ],
+    }
+    const advanced = advanceWorldScenarios({
+      ...createEmptyWorldState('plan'), entities: [hero, enemy], scenarios: [scenario],
+      events: [{ id: 'hero-fell', timeSeconds: 3, type: 'defeated', actorId: enemy.id, targetId: hero.id }],
+    })
+
+    expect(advanced.scenarios[0].outcomeId).toBe('retreat')
+    expect(advanced.scenarios[0].stages.map((stage) => stage.status)).toEqual(['completed', 'locked'])
+    expect(advanced.entities[1].factionId).toBe('neutral')
+  })
+
+  it('reveals a hidden entity through a scenario action', () => {
+    const actor = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'actor' })
+    const hidden = createWorldEntity(worldEntityDefinitionById.get('archer')!, { id: 'hidden' })
+    const scenario: WorldScenarioRuntime = {
+      id: 'reveal', assetId: 'asset', title: 'Reveal', description: 'Reveal', processedEventIds: [],
+      stages: [{
+        id: 'stage', title: 'Reveal', description: 'Reveal', status: 'active', trigger: { eventType: 'interaction', actorId: actor.id },
+        actions: [{ type: 'set-visibility', target: { kind: 'entity', id: hidden.id }, visible: true }],
+      }],
+    }
+    const world = advanceWorldScenarios({
+      ...createEmptyWorldState('plan'), entities: [actor, hidden], scenarios: [scenario],
+      hiddenTargets: [{ kind: 'entity', id: hidden.id }],
+      events: [{ id: 'reveal-event', timeSeconds: 1, type: 'interaction', actorId: actor.id }],
+    })
+
+    expect(world.hiddenTargets).toEqual([])
+    expect(world.scenarios[0].stages[0].status).toBe('completed')
+  })
 })

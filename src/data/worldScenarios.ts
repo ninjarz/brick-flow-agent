@@ -29,7 +29,36 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
     makeBrick('brick-1x1', 'brown', 13, 0.4, 0),
     makeBrick('round-1x1-plate', 'yellow', 13, 1.6, 0),
   ]
-  const bricks = [...house.bricks, ...courtyard]
+  const quarryEntrance = [
+    makeBrick('plate-4x6', 'gray', 17, 0, 5),
+    makeBrick('slope-2x2', 'gray', 17, 0.4, 5, 1),
+    makeBrick('slope-2x2', 'gray', 19, 0.4, 5, 3),
+    makeBrick('brick-1x1', 'black', 17, 0.4, 8),
+    makeBrick('brick-1x1', 'black', 20, 0.4, 8),
+    makeBrick('tile-1x2', 'black', 18, 0.4, 8, 1),
+    makeBrick('round-1x1-plate', 'yellow', 20, 1.6, 8),
+  ]
+  const blackrockOutpostSource = generateBuildPlan({
+    prompt: zh ? '一座废弃的灰色小房子' : 'an abandoned small gray house',
+  })
+  const blackrockOutpost = blackrockOutpostSource.bricks.map((brick) => ({
+    ...brick,
+    color: brick.color === 'red'
+      ? 'black' as const
+      : brick.color === 'tan'
+        ? 'gray' as const
+        : brick.color,
+    pose: {
+      ...brick.pose,
+      xStud: brick.pose.xStud + 2,
+      zStud: brick.pose.zStud + 8,
+    },
+  }))
+  const tavernStructureId = 'scenario-border-tavern-structure'
+  const courtyardStructureId = 'scenario-border-tavern-courtyard'
+  const quarryEntranceStructureId = 'scenario-border-tavern-quarry-entrance'
+  const blackrockOutpostStructureId = 'scenario-border-tavern-blackrock-outpost'
+  const bricks = [...house.bricks, ...courtyard, ...quarryEntrance, ...blackrockOutpost]
   const plan = {
     ...house,
     id: 'scenario-border-tavern-plan',
@@ -37,12 +66,32 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
     prompt,
     bricks,
     steps: createSingleBrickSteps(bricks),
-    structures: [{
-      id: 'scenario-border-tavern-structure',
-      name: zh ? '灰鸦酒馆' : 'Gray Raven Tavern',
-      description: zh ? '旅人交换消息、佣兵等待委托的边境酒馆。' : 'A frontier inn where travelers trade news and mercenaries wait for work.',
-      brickIds: bricks.map((brick) => brick.id),
-    }],
+    structures: [
+      {
+        id: tavernStructureId,
+        name: zh ? '灰鸦酒馆' : 'Gray Raven Tavern',
+        description: zh ? '旅人交换消息、佣兵等待委托的边境酒馆。' : 'A frontier inn where travelers trade news and mercenaries wait for work.',
+        brickIds: house.bricks.map((brick) => brick.id),
+      },
+      {
+        id: courtyardStructureId,
+        name: zh ? '酒馆马厩与庭院' : 'Tavern Stable and Yard',
+        description: zh ? '酒馆东侧的马厩、长桌与路灯，是角色集结和交谈的开放区域。' : 'The stable, long table, and lantern yard east of the tavern where characters gather.',
+        brickIds: courtyard.map((brick) => brick.id),
+      },
+      {
+        id: quarryEntranceStructureId,
+        name: zh ? '旧采石场密门' : 'Old Quarry Hidden Door',
+        description: zh ? '被碎石伪装的地下入口；调查断箭后才会显露，通往扣押商队的旧采石场。' : 'A rubble-disguised underground entrance revealed by investigating the broken arrow.',
+        brickIds: quarryEntrance.map((brick) => brick.id),
+      },
+      {
+        id: blackrockOutpostStructureId,
+        name: zh ? '黑岩废弃前哨' : 'Abandoned Blackrock Outpost',
+        description: zh ? '藏在酒馆后方林线、实际仍存放补给和军用箭矢的隐蔽前哨，在使者暴露身份后出现。' : 'A concealed outpost behind the tavern tree line, still holding supplies and military arrows until the envoy is exposed.',
+        brickIds: blackrockOutpost.map((brick) => brick.id),
+      },
+    ],
   }
 
   const innkeeper = createWorldEntityDefinition('priest', {
@@ -83,6 +132,10 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
     paused: true,
     randomSeed: 42731,
     entities: [innkeeper, knight, archer, stranger],
+    hiddenTargets: [
+      { kind: 'structure', id: quarryEntranceStructureId },
+      { kind: 'structure', id: blackrockOutpostStructureId },
+    ],
     narrative: {
       processedEventIds: [],
       memoriesByEntityId: {},
@@ -125,8 +178,8 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
     title: plan.title,
     category: zh ? '剧情场景' : 'Story Scene',
     description: zh
-      ? '包含灰鸦酒馆、4 名具名角色、阵营关系、初始命令与开场章节。载入后可在世界酒馆继续生成真实事件驱动的故事。'
-      : 'Includes the Gray Raven Tavern, four named characters, faction relationships, initial orders, and an opening chapter. Continue its event-driven story in the World Tavern.',
+      ? '包含灰鸦酒馆、4 名具名角色、两处随剧情显现的隐藏建筑、阵营关系与开场章节。可用“显影”提前编辑隐藏要素。'
+      : 'Includes the Gray Raven Tavern, four named characters, two story-revealed hidden buildings, faction relationships, and an opening chapter. Reveal mode keeps hidden elements editable.',
     plan,
     world,
     scenario: {
@@ -137,41 +190,78 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
         ? '由罗兰调查北路的断箭线索，揭开黑岩使者的真实目的，并守住灰鸦酒馆。'
         : 'Guide Roland through the broken-arrow clue, expose the Blackrock Envoy, and defend the Gray Raven Tavern.',
       processedEventIds: [],
+      authoringVersion: 3,
       stages: [
         {
           id: 'scenario-border-tavern-investigate',
           title: zh ? '询问北路斥候' : 'Question the Northern Scout',
           description: zh
-            ? '选择罗兰，将控制器设为“玩家”（已预设），向艾琳下达“交互”命令。'
-            : 'Select Roland and issue an Interact order targeting Eileen. His controller is already set to Player.',
+            ? '选择罗兰，向艾琳下达“交互”命令。对话结束后，断箭指向的旧采石场密门会显现。'
+            : 'Have Roland interact with Eileen. When the dialogue ends, the hidden quarry door indicated by the arrow will be revealed.',
           status: 'active',
           trigger: { eventType: 'interaction', actorId: knight.id, targetId: archer.id },
-          actions: [{
-            type: 'add-story',
-            title: zh ? '第 2 章 · 断箭上的新伤' : 'Chapter 2 · Fresh Marks on the Broken Arrow',
-            body: zh
-              ? '艾琳摊开断箭：黑岩纹章旁还有新鲜的灰白石粉，只可能来自酒馆东侧的旧采石场。她压低声音说，那个陌生人的靴边也沾着同样的粉末。'
-              : 'Eileen lays out the broken arrow. Fresh pale dust clings beside the Blackrock crest—the same stone found only in the old quarry east of the tavern. The stranger has that dust on his boots.',
-            characterIds: [knight.id, archer.id, stranger.id],
-          }],
+          dialogue: [
+            {
+              id: 'investigate-roland', speakerId: knight.id, durationSeconds: 3.8,
+              text: zh ? '艾琳，把你在北路找到的东西再说一遍。' : 'Eileen, tell me again what you found on the northern road.',
+            },
+            {
+              id: 'investigate-eileen', speakerId: archer.id, durationSeconds: 5.2,
+              text: zh ? '断箭上有黑岩纹章，还有旧采石场独有的灰白石粉。那个使者的靴边也沾着同样的粉末。' : 'The broken arrow bears the Blackrock crest and pale dust unique to the old quarry. The envoy has the same dust on his boots.',
+            },
+            {
+              id: 'investigate-roland-answer', speakerId: knight.id, durationSeconds: 3.8,
+              text: zh ? '明白了。我去问问他，失踪的商队究竟去了哪里。' : 'Understood. I will ask him where the missing caravan really went.',
+            },
+          ],
+          actions: [
+            {
+              type: 'add-story',
+              title: zh ? '第 2 章 · 断箭上的新伤' : 'Chapter 2 · Fresh Marks on the Broken Arrow',
+              body: zh
+                ? '艾琳摊开断箭：黑岩纹章旁还有新鲜的灰白石粉，只可能来自酒馆东侧的旧采石场。循着石粉，众人在乱石间找到了伪装的密门。'
+                : 'Eileen lays out the broken arrow. Fresh pale dust clings beside the Blackrock crest. Following it, the group finds a disguised door among the quarry rubble.',
+              characterIds: [knight.id, archer.id, stranger.id],
+            },
+            { type: 'set-visibility', target: { kind: 'structure', id: quarryEntranceStructureId }, visible: true },
+          ],
         },
         {
           id: 'scenario-border-tavern-confront',
           title: zh ? '对质黑岩使者' : 'Confront the Blackrock Envoy',
           description: zh
-            ? '让罗兰向黑岩使者下达“交互”命令，逼他解释采石场与失踪商队的关系。'
-            : 'Have Roland Interact with the Blackrock Envoy and demand an explanation for the quarry and the missing caravan.',
+            ? '让罗兰与黑岩使者交互。完整对话后使者才会转为敌对，同时暴露远处伪装成废墟的黑岩前哨。'
+            : 'Have Roland interact with the envoy. Only after the full dialogue does he turn hostile and expose the disguised Blackrock outpost.',
           status: 'locked',
           trigger: { eventType: 'interaction', actorId: knight.id, targetId: stranger.id },
+          dialogue: [
+            {
+              id: 'confront-roland', speakerId: knight.id, durationSeconds: 5,
+              text: zh ? '北路商队在哪里？你靴上的石粉来自旧采石场。' : 'Where is the northern caravan? The dust on your boots came from the old quarry.',
+            },
+            {
+              id: 'confront-envoy-denial', speakerId: stranger.id, durationSeconds: 4.5,
+              text: zh ? '一支断箭和一点尘土，也敢当作证据？' : 'A broken arrow and a little dust—you call that evidence?',
+            },
+            {
+              id: 'confront-eileen', speakerId: archer.id, durationSeconds: 5.2,
+              text: zh ? '箭尾的切口是黑岩军用制式。你骗不了我们。' : 'The cut on the shaft is Blackrock military issue. You cannot deceive us.',
+            },
+            {
+              id: 'confront-envoy-threat', speakerId: stranger.id, durationSeconds: 5,
+              text: zh ? '既然你们已经知道，那就都别想活着离开。' : 'Since you already know, none of you will leave here alive.',
+            },
+          ],
           actions: [
             {
               type: 'add-story',
               title: zh ? '第 3 章 · 酒杯落地' : 'Chapter 3 · The Fallen Cup',
               body: zh
-                ? '罗兰刚说出“采石场”，黑岩使者便将酒杯摔碎，拔剑承认商队被扣作诱饵。玛拉推上门闩，艾琳占住窗边——灰鸦酒馆必须撑到巡逻队抵达。'
-                : 'At the word “quarry,” the envoy shatters his cup and draws steel, admitting the caravan was taken as bait. Mara bars the door and Eileen takes the window—the tavern must hold until the patrol arrives.',
+                ? '罗兰刚说出“采石场”，黑岩使者便将酒杯摔碎，拔剑承认商队被扣作诱饵。酒馆后方林线里，伪装成废墟的前哨亮起暗红信号，玛拉推上门闩——灰鸦酒馆必须撑到巡逻队抵达。'
+                : 'At the word “quarry,” the envoy shatters his cup and draws steel. Behind the tavern tree line, a dark red signal lights in an outpost disguised as a ruin, and Mara bars the door.',
               characterIds: [innkeeper.id, knight.id, archer.id, stranger.id],
             },
+            { type: 'set-visibility', target: { kind: 'structure', id: blackrockOutpostStructureId }, visible: true },
             { type: 'set-faction', entityId: stranger.id, factionId: 'red' },
             { type: 'issue-command', entityId: stranger.id, command: { type: 'attack', target: { kind: 'entity', id: knight.id } } },
           ],
@@ -184,6 +274,23 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
             : 'Defeat the Blackrock Envoy. Roland can attack directly while Eileen and Mara support according to their roles.',
           status: 'locked',
           trigger: { eventType: 'defeated', targetId: stranger.id },
+          branches: [{
+            id: 'gray-raven-retreat',
+            title: zh ? '罗兰倒下 · 停战撤退' : 'Roland Falls · Retreat',
+            trigger: { eventType: 'defeated', targetId: knight.id },
+            actions: [
+              { type: 'set-faction', entityId: stranger.id, factionId: 'neutral' },
+              { type: 'issue-command', entityId: stranger.id, command: { type: 'stop' } },
+              {
+                type: 'add-story',
+                title: zh ? '败局 · 灰鸦暂熄' : 'Defeat · The Gray Raven Dims',
+                body: zh
+                  ? '罗兰倒下后，玛拉举起白布换来短暂停战。黑岩使者带伤撤退，酒馆保住了性命，却失去了追查商队的最佳时机。'
+                  : 'When Roland falls, Mara raises a white cloth and wins a brief truce. The wounded envoy retreats; the tavern survives, but the best chance to find the caravan is lost.',
+                characterIds: [knight.id, archer.id, stranger.id],
+              },
+            ],
+          }],
           actions: [{
             type: 'add-story',
             title: zh ? '第 4 章 · 黎明前的灰鸦' : 'Chapter 4 · The Gray Raven Before Dawn',

@@ -6,6 +6,56 @@ import { getWorldEntityCollisionRadius } from './worldEntityCollision'
 import { makeBrick } from './planUtils'
 
 describe('WorldEntity simulation', () => {
+  it('keeps autonomous combat isolated between independent storylines', () => {
+    const first = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'first', factionId: 'blue', transform: { x: 0, z: 0 } })
+    const second = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'second', factionId: 'red', transform: { x: 3, z: 0 } })
+    first.storylineId = 'story-a'
+    second.storylineId = 'story-b'
+    const world = stepWorldSimulation({ ...createEmptyWorldState('plan'), entities: [first, second] }, [], 0.1)
+
+    expect(world.entities.every((entity) => entity.activeCommand?.type !== 'attack')).toBe(true)
+    expect(world.events.some((event) => event.type === 'attack')).toBe(false)
+  })
+
+  it('locks the full cast while scenario dialogue is playing', () => {
+    const actor = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'actor' })
+    actor.autonomy.nextDecisionAtSeconds = 0
+    actor.commandQueue = [{ type: 'wander' }]
+    const world = stepWorldSimulation({
+      ...createEmptyWorldState('plan'),
+      entities: [actor],
+      scenarios: [{
+        id: 'story', assetId: 'asset', title: 'Story', description: 'Story', castEntityIds: [actor.id], processedEventIds: [],
+        activeDialogue: { stageId: 'stage', eventId: 'event', lineIndex: 0, lineEndsAtSeconds: 5 },
+        stages: [{ id: 'stage', title: 'Stage', description: 'Stage', status: 'active', trigger: { eventType: 'interaction' }, dialogue: [{ id: 'line', speakerId: actor.id, text: 'Wait', durationSeconds: 5 }] }],
+      }],
+    }, [], 0.1)
+
+    expect(world.entities[0].activeCommand).toBeUndefined()
+    expect(world.entities[0].commandQueue).toEqual([])
+    expect(world.entities[0].behaviorState).toBe('idle')
+  })
+
+  it('returns out-of-bounds units to the visible ground grid', () => {
+    const actor = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'actor', transform: { x: 100, z: -100 } })
+    const world = stepWorldSimulation({ ...createEmptyWorldState('plan'), entities: [actor] }, [], 0.1)
+    expect(world.entities[0].transform.x).toBeLessThan(15)
+    expect(world.entities[0].transform.z).toBeGreaterThan(-15)
+  })
+
+  it('keeps hidden units dormant and out of autonomous combat', () => {
+    const guard = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'guard', factionId: 'blue', transform: { x: 0, z: 0 } })
+    const ambusher = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'ambusher', factionId: 'red', transform: { x: 2, z: 0 } })
+    ambusher.commandQueue = [{ type: 'attack', target: { kind: 'entity', id: guard.id } }]
+    const world = stepWorldSimulation({
+      ...createEmptyWorldState('plan'), entities: [guard, ambusher], hiddenTargets: [{ kind: 'entity', id: ambusher.id }],
+    }, [], 0.5)
+
+    expect(world.entities.find((entity) => entity.id === ambusher.id)?.commandQueue).toHaveLength(1)
+    expect(world.events.some((event) => event.actorId === ambusher.id)).toBe(false)
+    expect(world.entities.find((entity) => entity.id === guard.id)?.health).toBe(guard.health)
+  })
+
   it('finds a deterministic ground path around blocked cells', () => {
     const path = findWorldPath(
       { x: 0, y: 0, z: 0 },
@@ -84,6 +134,46 @@ describe('WorldEntity simulation', () => {
     expect(world.entities[1].health).toBe(0)
     expect(world.elapsedSeconds).toBeGreaterThanOrEqual(10)
     expect(world.elapsedSeconds).toBeLessThan(16)
+  })
+
+  it('lets multiple allied units attack the same target concurrently', () => {
+    const knightDefinition = worldEntityDefinitionById.get('knight')!
+    const archerDefinition = worldEntityDefinitionById.get('archer')!
+    const priestDefinition = worldEntityDefinitionById.get('priest')!
+    const target = {
+      ...createWorldEntity(knightDefinition, {
+        id: 'shared-target',
+        controller: 'player',
+        factionId: 'red',
+        transform: { x: 7, z: 0 },
+      }),
+      health: 1_000,
+      maxHealth: 1_000,
+    }
+    const attackers = [
+      createWorldEntity(knightDefinition, {
+        id: 'allied-knight', controller: 'player', factionId: 'blue', transform: { x: 0, z: -1.6 },
+      }),
+      createWorldEntity(archerDefinition, {
+        id: 'allied-archer', controller: 'player', factionId: 'blue', transform: { x: 0, z: 0 },
+      }),
+      createWorldEntity(priestDefinition, {
+        id: 'allied-priest', controller: 'player', factionId: 'blue', transform: { x: 0, z: 1.6 },
+      }),
+    ]
+    for (const attacker of attackers) {
+      attacker.activeCommand = { type: 'attack', target: { kind: 'entity', id: target.id } }
+    }
+    let world = { ...createEmptyWorldState('plan-1'), entities: [...attackers, target] }
+
+    for (let step = 0; step < 160; step += 1) world = stepWorldSimulation(world, [], 0.1)
+
+    const attackingActorIds = new Set(
+      world.events
+        .filter((event) => event.type === 'attack' && event.targetId === target.id)
+        .map((event) => event.actorId),
+    )
+    expect(attackingActorIds).toEqual(new Set(attackers.map((attacker) => attacker.id)))
   })
 
   it('lets a priest revive a defeated unit after a readable cast time', () => {

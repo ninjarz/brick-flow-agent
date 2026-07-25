@@ -13,6 +13,7 @@ import { createLoadedLDrawPartGeometry } from '../lib/ldrawVisualGeometry'
 import { getVisibleBricksDuringPlacement } from '../lib/brickPlacementPreview'
 import { createBuildGraph, getBrickBounds } from '../lib/planUtils'
 import { getScenePerformanceSettings, getWorldAnimationFps } from '../lib/scenePerformance'
+import { getSceneCameraFrameRequestKey } from '../lib/sceneCamera'
 import { getWorldProjectileVisuals, sampleWorldProjectilePosition, type WorldProjectileVisual } from '../lib/worldProjectiles'
 import { analyzeBuildStability, getStabilityRiskColor, type StabilityAnalysis } from '../lib/stabilityAnalysis'
 import { getBrickWorldRenderStructuralCellBoxes, type StructuralCellKind, type WorldStructuralCellBox } from '../lib/structuralGrid'
@@ -57,6 +58,9 @@ type BrickSceneProps = {
   worldEvents?: WorldEvent[]
   worldElapsedSeconds?: number
   worldPaused?: boolean
+  hiddenBrickIds?: string[]
+  hiddenWorldEntityIds?: string[]
+  showHiddenObjects?: boolean
   worldEntityPlacementPreview?: WorldEntity
   selectedWorldEntityId?: string
   placementPreviewBricks?: PlacedBrick[]
@@ -90,9 +94,99 @@ const structuralVoxelStyle: Record<StructuralCellKind, { color: string; opacity:
 const structuralVoxelRenderOrder: StructuralCellKind[] = ['enterable', 'solid', 'studsocket', 'stud', 'socket']
 const defaultGridExtent = 15
 const gridPadding = 4
+const minimumRadialGridRadius = 30
 const nudgeRepeatDelayMs = 280
 const nudgeRepeatIntervalMs = 90
 const dragLongPressDelayMs = 420
+
+const radialGridVertexShader = `
+  varying vec2 vLocalGridPosition;
+
+  void main() {
+    vLocalGridPosition = position.xy;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`
+
+const radialGridFragmentShader = `
+  varying vec2 vLocalGridPosition;
+
+  uniform float uRadius;
+  uniform float uCenterX;
+  uniform float uCenterZ;
+
+  float gridLine(vec2 coordinate, float spacing) {
+    vec2 scaled = coordinate / spacing;
+    vec2 width = max(fwidth(scaled), vec2(0.0001));
+    vec2 distanceToLine = abs(fract(scaled - 0.5) - 0.5) / width;
+    return 1.0 - min(min(distanceToLine.x, distanceToLine.y), 1.0);
+  }
+
+  void main() {
+    float distanceFromCenter = length(vLocalGridPosition);
+    float radialFade = 1.0 - smoothstep(uRadius * 0.7, uRadius, distanceFromCenter);
+    if (radialFade <= 0.001) discard;
+
+    // The circle geometry is rotated onto XZ, so its local Y points toward -Z.
+    // Including the world-space center keeps grid lines aligned to integer studs.
+    vec2 worldGridPosition = vec2(
+      vLocalGridPosition.x + uCenterX,
+      uCenterZ - vLocalGridPosition.y
+    );
+    float minorLine = gridLine(worldGridPosition, 1.0);
+    float majorLine = gridLine(worldGridPosition, 5.0);
+
+    vec3 surfaceColor = vec3(0.843, 0.871, 0.902);
+    vec3 minorColor = vec3(0.710, 0.757, 0.804);
+    vec3 majorColor = vec3(0.514, 0.588, 0.663);
+    vec3 color = mix(surfaceColor, minorColor, minorLine * 0.58);
+    color = mix(color, majorColor, majorLine * 0.82);
+    float alpha = (0.72 + minorLine * 0.12 + majorLine * 0.13) * radialFade;
+
+    gl_FragColor = vec4(color, alpha);
+  }
+`
+
+const RadialGrid = memo(({
+  centerX,
+  centerZ,
+  radius,
+  receiveShadow,
+}: {
+  centerX: number
+  centerZ: number
+  radius: number
+  receiveShadow: boolean
+}) => {
+  const uniforms = useMemo(() => ({
+    uRadius: { value: radius },
+    uCenterX: { value: centerX },
+    uCenterZ: { value: centerZ },
+  }), [centerX, centerZ, radius])
+
+  return (
+    <group position={[centerX, 0, centerZ]}>
+      {receiveShadow && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} receiveShadow>
+          <circleGeometry args={[radius, 128]} />
+          <shadowMaterial transparent opacity={0.14} depthWrite={false} />
+        </mesh>
+      )}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]}>
+        <circleGeometry args={[radius, 128]} />
+        <shaderMaterial
+          uniforms={uniforms}
+          vertexShader={radialGridVertexShader}
+          fragmentShader={radialGridFragmentShader}
+          transparent
+          depthWrite={false}
+          side={DoubleSide}
+          toneMapped={false}
+        />
+      </mesh>
+    </group>
+  )
+})
 
 const isPlacementGhostObject = (object: Object3D) => {
   let current: Object3D | null = object
@@ -152,6 +246,11 @@ const useBrickInteractionHandlers = ({
     if (placementActive || event.button !== 0) return
     const brickId = resolveBrickId(event as unknown as ThreeEvent<MouseEvent>)
     if (!brickId || !canBeginDrag(brickId) || !onBeginDragSelected) return
+    // A press on an already-selected brick belongs to the placement gesture.
+    // Keep OrbitControls from consuming the same pointer-down before the
+    // long-press timer switches placement mode on.
+    event.stopPropagation()
+    event.nativeEvent.stopImmediatePropagation()
     clearLongPress()
     const point = { x: event.point.x, z: event.point.z }
     pointerDownRef.current = { x: event.clientX, y: event.clientY }
@@ -1889,7 +1988,7 @@ const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementAct
   })
   if (!definition) return null
   const speechText = entity.speech
-    ? t(`worldEntity.speech.${entity.speech.message}`, { target: entity.speech.targetName ?? entity.name })
+    ? entity.speech.text ?? t(`worldEntity.speech.${entity.speech.message}`, { target: entity.speech.targetName ?? entity.name })
     : ''
   const healthRatio = Math.max(0, Math.min(1, entity.health / Math.max(1, entity.maxHealth)))
   const healthColor = healthRatio > 0.6 ? '#4ade80' : healthRatio > 0.3 ? '#facc15' : '#ff3b30'
@@ -1927,12 +2026,12 @@ const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementAct
         </Billboard>
       )}
       {!ghost && speechText && (
-        <Html position={[0, definition.visual.heightStuds + 1.55, 0]} center style={{ pointerEvents: 'none' }}>
+        <Html position={[0, definition.visual.heightStuds + 1.55, 0]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
           <div className="world-entity-speech-bubble" role="status">{speechText}</div>
         </Html>
       )}
       {showDamage && (
-        <Html position={[0, definition.visual.heightStuds + 0.7, 0]} center style={{ pointerEvents: 'none' }}>
+        <Html position={[0, definition.visual.heightStuds + 0.7, 0]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
           <div className="world-entity-damage-number">-{entity.combat.lastDamageAmount}</div>
         </Html>
       )}
@@ -1987,7 +2086,7 @@ const WorldProjectileMesh = ({ projectile, elapsedSeconds, paused }: {
   )
 }
 
-const WorldEntityScene = ({ entities, events, elapsedSeconds, paused, preview, selectedId, placementActive, onSelect }: {
+const WorldEntityScene = ({ entities, events, elapsedSeconds, paused, preview, selectedId, placementActive, hiddenEntityIdSet, showHiddenObjects, onSelect }: {
   entities: WorldEntity[]
   events: WorldEvent[]
   elapsedSeconds: number
@@ -1995,15 +2094,21 @@ const WorldEntityScene = ({ entities, events, elapsedSeconds, paused, preview, s
   preview?: WorldEntity
   selectedId?: string
   placementActive: boolean
+  hiddenEntityIdSet: Set<string>
+  showHiddenObjects: boolean
   onSelect?: (id: string) => void
 }) => {
+  const renderedEntities = useMemo(
+    () => entities.filter((entity) => showHiddenObjects || !hiddenEntityIdSet.has(entity.id)),
+    [entities, hiddenEntityIdSet, showHiddenObjects],
+  )
   const projectiles = useMemo(
-    () => getWorldProjectileVisuals(events, entities, elapsedSeconds),
-    [elapsedSeconds, entities, events],
+    () => getWorldProjectileVisuals(events, renderedEntities, elapsedSeconds),
+    [elapsedSeconds, events, renderedEntities],
   )
   return (
     <group>
-    {entities.map((entity) => (
+    {renderedEntities.map((entity) => (
       <WorldEntityMesh
         key={entity.id}
         entity={entity}
@@ -2011,6 +2116,7 @@ const WorldEntityScene = ({ entities, events, elapsedSeconds, paused, preview, s
         elapsedSeconds={elapsedSeconds}
         selected={entity.id === selectedId}
         placementActive={placementActive}
+        ghost={hiddenEntityIdSet.has(entity.id)}
         onSelect={onSelect}
       />
     ))}
@@ -2134,6 +2240,9 @@ export const BrickScene = ({
   worldEvents = [],
   worldElapsedSeconds = 0,
   worldPaused = false,
+  hiddenBrickIds = [],
+  hiddenWorldEntityIds = [],
+  showHiddenObjects = false,
   worldEntityPlacementPreview,
   selectedWorldEntityId,
   placementPreviewBricks = [],
@@ -2156,28 +2265,44 @@ export const BrickScene = ({
   const xrayDebug = viewMode === 'xray'
   const showBrickEdges = viewMode === 'border' || xrayDebug
   const highlightedIdSet = useMemo(() => new Set(highlightedIds), [highlightedIds])
+  const hiddenBrickIdSet = useMemo(() => new Set(hiddenBrickIds), [hiddenBrickIds])
+  const hiddenWorldEntityIdSet = useMemo(() => new Set(hiddenWorldEntityIds), [hiddenWorldEntityIds])
   const visibleBricks = useMemo(
-    () => getVisibleBricksDuringPlacement(bricks, placementSourceBrickIds),
-    [bricks, placementSourceBrickIds],
+    () => getVisibleBricksDuringPlacement(bricks, placementSourceBrickIds)
+      .filter((brick) => showHiddenObjects || !hiddenBrickIdSet.has(brick.id)),
+    [bricks, hiddenBrickIdSet, placementSourceBrickIds, showHiddenObjects],
+  )
+  const cameraFrameBricks = useMemo(
+    () => bricks.filter((brick) => showHiddenObjects || !hiddenBrickIdSet.has(brick.id)),
+    [bricks, hiddenBrickIdSet, showHiddenObjects],
   )
   const [ldrawBoundsVersion, setLDrawBoundsVersion] = useState(0)
-  const deferredFrameBricks = useDeferredValue(bricks)
+  // Placement hides source meshes and shows ghosts instead. Camera framing
+  // must keep using the stable source plan, otherwise a long press can look
+  // like a model-bounds change and reset the user's view.
+  const deferredFrameBricks = useDeferredValue(cameraFrameBricks)
   const deferredCameraFrameKey = useDeferredValue(cameraFrameKey)
   const frameBricks = deferredFrameBricks
   const frameLDrawPartNumbersKey = useMemo(() => Array.from(new Set(frameBricks.flatMap((brick) => {
     const definition = brickById.get(brick.brickId)
     return definition?.pack === 'lego' ? [normalizeLDrawPartNumber(definition.partNumber)] : []
   }))).sort().join('|'), [frameBricks])
-  const performanceSettings = getScenePerformanceSettings(bricks.length, viewMode)
+  const performanceSettings = getScenePerformanceSettings(visibleBricks.length, viewMode)
   const worldAnimationFps = getWorldAnimationFps(bricks.length, worldEntities.length)
   const enableRealtimeShadows = performanceSettings.enableRealtimeShadows
   const preferDetailedGeometry = ldrawBoundsVersion > 0
-  const useSimplifiedInteractionView = performanceSettings.useSimplifiedView
+  const useSimplifiedInteractionView = performanceSettings.useSimplifiedView && !showHiddenObjects
   const resolvedCameraFrameKey = useMemo(
-    () => deferredCameraFrameKey ?? frameBricks.map((brick) => brick.id).join('|'),
+    () => getSceneCameraFrameRequestKey(deferredCameraFrameKey, frameBricks.map((brick) => brick.id)),
     [deferredCameraFrameKey, frameBricks],
   )
-  const boundsCameraFrameKey = `${resolvedCameraFrameKey}:ldraw-bounds-${ldrawBoundsVersion}`
+  // Detailed LDraw bounds may finish loading after the scene is already
+  // interactive. They should refresh geometry and bounds calculations, but
+  // must not turn an ordinary edit (delete, duplicate, undo, visibility)
+  // into a camera reset. Callers change cameraFrameKey only for intentional
+  // reframing operations such as loading/importing a plan or changing a
+  // manual step.
+  const cameraFrameRequestKey = resolvedCameraFrameKey
   const orbitTargetRef = useRef<[number, number, number]>([0, 1, 0])
   const orbitTargetKeyRef = useRef('')
 
@@ -2207,6 +2332,7 @@ export const BrickScene = ({
     const minZ = Math.min(defaultGridExtent * -1, modelMinZ - gridPadding)
     const maxZ = Math.max(defaultGridExtent, modelMaxZ + gridPadding)
     const size = Math.ceil(Math.max(maxX - minX, maxZ - minZ))
+    const gridRadius = Math.max(minimumRadialGridRadius, Math.ceil(size * 0.72))
     const modelHeight = modelMaxY - modelMinY
     const cameraSize = Math.max(
       8,
@@ -2216,6 +2342,7 @@ export const BrickScene = ({
 
     return {
       size,
+      gridRadius,
       cameraSize,
       centerX: (minX + maxX) / 2,
       modelCenterX: (modelMinX + modelMaxX) / 2,
@@ -2251,8 +2378,8 @@ export const BrickScene = ({
     ]))
   }, [deferredSupportBricks, ldrawBoundsVersion, resolvedStabilityAnalysis])
 
-  if (orbitTargetKeyRef.current !== boundsCameraFrameKey) {
-    orbitTargetKeyRef.current = boundsCameraFrameKey
+  if (orbitTargetKeyRef.current !== cameraFrameRequestKey) {
+    orbitTargetKeyRef.current = cameraFrameRequestKey
     orbitTargetRef.current = [gridFrame.modelCenterX, gridFrame.centerY, gridFrame.modelCenterZ]
   }
 
@@ -2292,11 +2419,12 @@ export const BrickScene = ({
           onCancelPlacement?.()
         }}
       >
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[gridFrame.centerX, -0.02, gridFrame.centerZ]} receiveShadow={enableRealtimeShadows}>
-          <planeGeometry args={[gridFrame.size, gridFrame.size]} />
-          <meshStandardMaterial color="#d7dee6" side={DoubleSide} />
-        </mesh>
-        <gridHelper args={[gridFrame.size, gridFrame.size, '#93a4b7', '#c4ced8']} position={[gridFrame.centerX, 0, gridFrame.centerZ]} />
+        <RadialGrid
+          centerX={gridFrame.centerX}
+          centerZ={gridFrame.centerZ}
+          radius={gridFrame.gridRadius}
+          receiveShadow={enableRealtimeShadows}
+        />
         {structuralDebug ? (
           <StructuralVoxelScene
             bricks={visibleBricks}
@@ -2335,6 +2463,7 @@ export const BrickScene = ({
               preferDetailedGeometry={preferDetailedGeometry}
               showEdges={showBrickEdges}
               displayColor={resolvedDisplayColorByBrickId?.get(brick.id)}
+              ghost={hiddenBrickIdSet.has(brick.id)}
               placementActive={placementActive}
               onSelect={onSelect}
               onSelectConnected={onSelectConnected}
@@ -2359,6 +2488,8 @@ export const BrickScene = ({
           preview={worldEntityPlacementPreview}
           selectedId={selectedWorldEntityId}
           placementActive={placementActive}
+          hiddenEntityIdSet={hiddenWorldEntityIdSet}
+          showHiddenObjects={showHiddenObjects}
           onSelect={onSelectWorldEntity}
         />
         {xrayDebug && resolvedStabilityAnalysis && <StabilityOverlay analysis={resolvedStabilityAnalysis} />}
@@ -2381,7 +2512,7 @@ export const BrickScene = ({
         centerY={gridFrame.centerY}
         centerZ={gridFrame.modelCenterZ}
         size={gridFrame.cameraSize}
-        frameKey={boundsCameraFrameKey}
+        frameKey={cameraFrameRequestKey}
         azimuthDegrees={initialCameraAzimuthDegrees}
       />
       <CameraAzimuthObserver onChange={onCameraAzimuthChange} />

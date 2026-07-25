@@ -1,8 +1,11 @@
-import { Activity, Beer, BookOpen, Bot, CheckCircle2, Circle, Clipboard, Eye, LockKeyhole, Sparkles, Trash2, Users, X } from 'lucide-react'
+import { Activity, Beer, BookOpen, Bot, CheckCircle2, Circle, Clipboard, Dice5, Eye, GlassWater, LockKeyhole, MessageCircle, Pencil, Sparkles, Trash2, Users, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useI18n } from '../lib/i18n'
 import { formatWorldEvent } from '../lib/worldNarrative'
-import type { WorldState } from '../types/world'
+import type { WorldScenarioRuntime, WorldState } from '../types/world'
+import { WorldScenarioEditor } from './WorldScenarioEditor'
+import type { BrickStructure } from '../types/bricks'
+import type { TavernActivityKind, TavernActivityResult } from '../lib/worldTavernActivities'
 
 type WorldTavernProps = {
   world: WorldState
@@ -10,8 +13,15 @@ type WorldTavernProps = {
   onRunAiTurn: () => void
   onGetAiContext: () => string
   onClearHistory: () => void
+  onUpdateScenario: (scenario: WorldScenarioRuntime) => void
+  structures: BrickStructure[]
+  onSetTargetVisibility: (target: WorldState['hiddenTargets'][number], visible: boolean) => void
+  onPlayActivity: (activity: TavernActivityKind, focusEntityId?: string) => TavernActivityResult | undefined
+  onPlayAiActivity: (activity: TavernActivityKind, focusEntityId?: string) => Promise<TavernActivityResult | undefined>
+  onWatchActivity: (result: TavernActivityResult) => void
   llmConfigured: boolean
   isAiThinking: boolean
+  isAiActivityThinking: boolean
   aiFeedback?: { tone: 'success' | 'error'; text: string }
   onClose: () => void
 }
@@ -22,8 +32,15 @@ export const WorldTavern = ({
   onRunAiTurn,
   onGetAiContext,
   onClearHistory,
+  onUpdateScenario,
+  structures,
+  onSetTargetVisibility,
+  onPlayActivity,
+  onPlayAiActivity,
+  onWatchActivity,
   llmConfigured,
   isAiThinking,
+  isAiActivityThinking,
   aiFeedback,
   onClose,
 }: WorldTavernProps) => {
@@ -34,6 +51,9 @@ export const WorldTavern = ({
   const [contextCopyStatus, setContextCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
   const [chronicleScope, setChronicleScope] = useState<'world' | 'character'>('world')
   const [storyScope, setStoryScope] = useState<'world' | 'character'>('world')
+  const [editingScenarioId, setEditingScenarioId] = useState('')
+  const [activityResult, setActivityResult] = useState<TavernActivityResult>()
+  const [activityHost, setActivityHost] = useState<'local' | 'ai'>('local')
   useEffect(() => {
     if (world.entities.some((entity) => entity.id === selectedEntityId)) return
     setSelectedEntityId(world.entities[0]?.id ?? '')
@@ -43,7 +63,9 @@ export const WorldTavern = ({
   const selectedRelationships = Object.values(world.narrative.relationshipsByEntityId[selectedEntityId] ?? {})
     .sort((a, b) => Math.abs(b.affinity) - Math.abs(a.affinity) || b.encounters - a.encounters)
   const aiEntityCount = world.entities.filter((entity) => entity.controller === 'ai' && entity.health > 0).length
+  const hiddenEntityIds = useMemo(() => new Set(world.hiddenTargets.filter((target) => target.kind === 'entity').map((target) => target.id)), [world.hiddenTargets])
   const livingCount = world.entities.filter((entity) => entity.health > 0).length
+  const tavernCharacterCount = world.entities.filter((entity) => entity.health > 0 && !hiddenEntityIds.has(entity.id)).length
   const defeatedCount = world.entities.length - livingCount
   const activeOrderCount = world.entities.filter((entity) => entity.activeCommand || entity.commandQueue.length > 0).length
   const eventsById = useMemo(() => new Map(world.events.map((event) => [event.id, event])), [world.events])
@@ -64,6 +86,13 @@ export const WorldTavern = ({
     const minutes = Math.floor(totalSeconds / 60)
     const remainder = totalSeconds % 60
     return `${minutes}:${remainder.toString().padStart(2, '0')}`
+  }
+  const playActivity = async (activity: TavernActivityKind) => {
+    setActivityResult(undefined)
+    const result = activityHost === 'ai'
+      ? await onPlayAiActivity(activity, selectedEntityId)
+      : onPlayActivity(activity, selectedEntityId)
+    setActivityResult(result)
   }
 
   return (
@@ -121,7 +150,7 @@ export const WorldTavern = ({
                 <span>{entity.name.slice(0, 1)}</span>
                 <div>
                   <strong>{entity.name}</strong>
-                  <small>{t(`worldEntity.faction.${entity.factionId}`)} · {entity.health}/{entity.maxHealth} · {t(`worldEntity.behavior.${entity.behaviorState}`)}</small>
+                  <small>{hiddenEntityIds.has(entity.id) ? `${locale === 'zh-CN' ? '剧情隐藏' : 'Story hidden'} · ` : ''}{t(`worldEntity.faction.${entity.factionId}`)} · {entity.health}/{entity.maxHealth} · {t(`worldEntity.behavior.${entity.behaviorState}`)}</small>
                 </div>
               </button>
             ))}
@@ -129,6 +158,51 @@ export const WorldTavern = ({
           </aside>
 
           <div className="tavern-content">
+            <section className="tavern-quick-play">
+              <header>
+                <div>
+                  <h3><Sparkles size={16} />{locale === 'zh-CN' ? '酒馆一刻' : 'Tavern Moment'}</h3>
+                  <small>{locale === 'zh-CN' ? '选中一个角色，点一下就有故事。' : 'Choose a character, then make a story in one click.'}</small>
+                </div>
+                <div className="tavern-quick-meta">
+                  <div className="tavern-host-toggle" role="group" aria-label={locale === 'zh-CN' ? '酒馆主持方式' : 'Tavern host mode'}>
+                    <button type="button" className={activityHost === 'local' ? 'active' : ''} disabled={isAiActivityThinking} onClick={() => { setActivityHost('local'); setActivityResult(undefined) }}>
+                      {locale === 'zh-CN' ? '本地' : 'Local'}
+                    </button>
+                    <button type="button" className={activityHost === 'ai' ? 'active' : ''} disabled={!llmConfigured || isAiActivityThinking} title={!llmConfigured ? (locale === 'zh-CN' ? '配置 LLM 后可用' : 'Configure the LLM first') : undefined} onClick={() => { setActivityHost('ai'); setActivityResult(undefined) }}>
+                      <Bot size={11} />{locale === 'zh-CN' ? 'AI 主持' : 'AI Host'}
+                    </button>
+                  </div>
+                  {selectedEntity && <span>{locale === 'zh-CN' ? `主角：${selectedEntity.name}` : `Lead: ${selectedEntity.name}`}</span>}
+                </div>
+              </header>
+              {isAiActivityThinking ? (
+                <div className="tavern-quick-loading" role="status"><Bot size={17} />{locale === 'zh-CN' ? 'AI 正在翻阅记忆、组织两句像样的话……' : 'AI is checking memories and composing a short scene…'}</div>
+              ) : !activityResult ? (
+                <div className="tavern-quick-actions">
+                  <button type="button" disabled={tavernCharacterCount === 0} onClick={() => void playActivity('toast')}>
+                    <GlassWater size={18} /><span><strong>{locale === 'zh-CN' ? '碰一杯' : 'Raise a Mug'}</strong><small>{locale === 'zh-CN' ? '让两名角色轻松聊聊' : 'Let two characters unwind'}</small></span>
+                  </button>
+                  <button type="button" disabled={tavernCharacterCount === 0} onClick={() => void playActivity('dice')}>
+                    <Dice5 size={18} /><span><strong>{locale === 'zh-CN' ? '掷骰子' : 'Roll Dice'}</strong><small>{locale === 'zh-CN' ? '一局定今晚的运气' : "Test tonight's luck"}</small></span>
+                  </button>
+                  <button type="button" disabled={tavernCharacterCount === 0} onClick={() => void playActivity('rumor')}>
+                    <MessageCircle size={18} /><span><strong>{locale === 'zh-CN' ? '听传闻' : 'Hear a Rumor'}</strong><small>{locale === 'zh-CN' ? '从当前任务长出线索' : 'Grow a hook from the quest'}</small></span>
+                  </button>
+                </div>
+              ) : (
+                <div className="tavern-quick-result" role="status">
+                  <div>
+                    <strong>{activityResult.title}<small>{activityResult.source === 'ai' ? (locale === 'zh-CN' ? 'AI 主持' : 'AI host') : (locale === 'zh-CN' ? '本地规则' : 'Local rules')}</small></strong>
+                    <p>{activityResult.body}{activityResult.notice && <em> · {activityResult.notice}</em>}</p>
+                  </div>
+                  <span className="tavern-quick-result-actions">
+                    <button type="button" onClick={() => setActivityResult(undefined)}>{locale === 'zh-CN' ? '再来一次' : 'Again'}</button>
+                    <button type="button" onClick={() => { onWatchActivity(activityResult); onClose() }}>{locale === 'zh-CN' ? '去看看' : 'Watch it'}</button>
+                  </span>
+                </div>
+              )}
+            </section>
             {world.scenarios.map((scenario) => {
               const completedCount = scenario.stages.filter((stage) => stage.status === 'completed').length
               return (
@@ -138,7 +212,17 @@ export const WorldTavern = ({
                       <h3><BookOpen size={16} />{scenario.title}</h3>
                       <p>{scenario.description}</p>
                     </div>
-                    <strong>{t('tavern.questProgress', { completed: completedCount, total: scenario.stages.length })}</strong>
+                    <div className="tavern-quest-actions">
+                      <strong>{t('tavern.questProgress', { completed: completedCount, total: scenario.stages.length })}</strong>
+                      <button
+                        type="button"
+                        disabled={Boolean(scenario.activeDialogue)}
+                        title={scenario.activeDialogue ? (locale === 'zh-CN' ? '对话演出结束后可编辑' : 'Editable after dialogue finishes') : undefined}
+                        onClick={() => setEditingScenarioId((current) => current === scenario.id ? '' : scenario.id)}
+                      >
+                        <Pencil size={13} />{locale === 'zh-CN' ? '创作' : 'Author'}
+                      </button>
+                    </div>
                   </header>
                   <ol>
                     {scenario.stages.map((stage) => (
@@ -149,11 +233,34 @@ export const WorldTavern = ({
                         <div>
                           <strong>{stage.title}</strong>
                           <span>{stage.description}</span>
+                          {Boolean(stage.branches?.length) && <span>{locale === 'zh-CN' ? `${stage.branches!.length} 个分支结果` : `${stage.branches!.length} branch outcomes`}</span>}
                         </div>
                         {stage.status === 'active' && <small>{t('tavern.currentObjective')}</small>}
                       </li>
                     ))}
                   </ol>
+                  {scenario.activeDialogue && (
+                    <div className="tavern-dialogue-progress">
+                      {locale === 'zh-CN' ? '剧情演出中' : 'Dialogue playing'} · {scenario.activeDialogue.lineIndex + 1}/{(() => {
+                        const stage = scenario.stages.find((candidate) => candidate.id === scenario.activeDialogue?.stageId)
+                        return scenario.activeDialogue?.branchId
+                          ? stage?.branches?.find((branch) => branch.id === scenario.activeDialogue?.branchId)?.dialogue?.length ?? 1
+                          : stage?.dialogue?.length ?? 1
+                      })()}
+                    </div>
+                  )}
+                  {scenario.outcomeId && <div className="tavern-scenario-outcome">{locale === 'zh-CN' ? '剧情结果' : 'Outcome'} · {scenario.stages.flatMap((stage) => stage.branches ?? []).find((branch) => branch.id === scenario.outcomeId)?.title ?? scenario.outcomeId}</div>}
+                  {editingScenarioId === scenario.id && !scenario.activeDialogue && (
+                    <WorldScenarioEditor
+                      scenario={scenario}
+                      entities={world.entities.filter((entity) => (scenario.castEntityIds ?? []).includes(entity.id))}
+                      structures={structures}
+                      hiddenTargets={world.hiddenTargets}
+                      locale={locale}
+                      onChange={onUpdateScenario}
+                      onSetTargetVisibility={onSetTargetVisibility}
+                    />
+                  )}
                 </section>
               )
             })}

@@ -8,7 +8,7 @@ import {
   isBrickAboveGround,
 } from './planUtils'
 import { brickById } from '../data/basicBricks'
-import { WORLD_SNAP_STEP_STUDS, getBrickWorldFrame, normalizeHorizontalStud, normalizeYStud } from './brickUnits'
+import { STUD_PITCH_WORLD, WORLD_SNAP_STEP_STUDS, getBrickWorldFrame, normalizeHorizontalStud, normalizeYStud, roundToGrid } from './brickUnits'
 import type { PlacedBrick } from '../types/bricks'
 
 export type StationaryPlanSpatialData = {
@@ -65,10 +65,30 @@ export const findNearestOpenBrickGroupAround = (
   return undefined
 }
 
-type HorizontalDropPoint = {
+export type HorizontalDropPoint = {
   x: number
   z: number
 }
+
+export const getBrickGroupDragPointerOffset = (
+  bricks: PlacedBrick[],
+  anchorBrickId: string,
+  point: HorizontalDropPoint,
+) => {
+  const anchor = bricks.find((brick) => brick.id === anchorBrickId) ?? bricks[0]
+  const definition = anchor ? brickById.get(anchor.brickId) : undefined
+  if (!anchor || !definition) return { x: 0, z: 0 }
+  const frame = getBrickWorldFrame(definition, anchor.pose)
+  return { x: frame.x - point.x, z: frame.z - point.z }
+}
+
+export const offsetBrickGroupDragPoint = (
+  point: HorizontalDropPoint,
+  offset?: HorizontalDropPoint,
+) => ({
+  x: point.x + (offset?.x ?? 0),
+  z: point.z + (offset?.z ?? 0),
+})
 
 const translateBrickGroup = (
   bricks: PlacedBrick[],
@@ -110,8 +130,10 @@ export const dropBrickGroupAtPoint = (
 
   const anchorFrame = getBrickWorldFrame(anchorDefinition, anchor.pose)
   const horizontallyAligned = translateBrickGroup(bricks, {
-    xStud: normalizeHorizontalStud(point.x - anchorFrame.x),
-    zStud: normalizeHorizontalStud(point.z - anchorFrame.z),
+    // Preserve any intentional sub-grid geometry inside the assembly, while
+    // keeping repeated drag operations aligned with the whole-stud world grid.
+    xStud: roundToGrid(point.x - anchorFrame.x, STUD_PITCH_WORLD),
+    zStud: roundToGrid(point.z - anchorFrame.z, STUD_PITCH_WORLD),
   })
   const groupBounds = horizontallyAligned.map(getBrickBounds).filter((bounds) => Boolean(bounds))
   if (groupBounds.length !== horizontallyAligned.length) return undefined

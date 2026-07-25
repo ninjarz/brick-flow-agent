@@ -67,6 +67,9 @@ const remapScenarioWorld = (
   },
   idFactory: IdFactory,
 ) => {
+  const importedScenarioId = asset.scenario
+    ? makeUniqueId('scenario', new Set(currentWorld.scenarios.map((scenario) => scenario.id)), idFactory)
+    : undefined
   const usedEntityIds = new Set(currentWorld.entities.map((entity) => entity.id))
   const entityIdMap = Object.fromEntries(asset.world.entities.map((entity) => [
     entity.id,
@@ -106,6 +109,7 @@ const remapScenarioWorld = (
     if (!availablePoint) continue
     importedEntities.push({
       ...entity,
+      ...(importedScenarioId ? { storylineId: importedScenarioId } : {}),
       transform: { ...entity.transform, ...availablePoint },
       commandQueue: template.commandQueue
         .map((command) => remapCommand(command, entityIdMap, maps.brickIdMap, maps.structureIdMap))
@@ -157,9 +161,14 @@ const remapScenarioWorld = (
   }
 
   const remapKnownId = (id: string) => entityIdMap[id] ?? maps.brickIdMap[id] ?? maps.structureIdMap[id]
+  const importedHiddenTargets = asset.world.hiddenTargets.flatMap((target) => {
+    const remapped = remapTarget(target, entityIdMap, maps.brickIdMap, maps.structureIdMap)
+    return remapped && remapped.kind !== 'waypoint' ? [remapped] : []
+  })
   const importedScenario = asset.scenario ? {
     ...asset.scenario,
-    id: makeUniqueId('scenario', new Set(currentWorld.scenarios.map((scenario) => scenario.id)), idFactory),
+    id: importedScenarioId!,
+    castEntityIds: [...importedEntityIdSet],
     stages: asset.scenario.stages.flatMap((stage): WorldScenarioStage[] => {
       const actorId = stage.trigger.actorId ? entityIdMap[stage.trigger.actorId] : undefined
       const targetId = stage.trigger.targetId ? remapKnownId(stage.trigger.targetId) : undefined
@@ -174,6 +183,10 @@ const remapScenarioWorld = (
           const command = remapCommand(action.command, entityIdMap, maps.brickIdMap, maps.structureIdMap)
           return entityId && command ? [{ ...action, entityId, command }] : []
         }
+        if (action.type === 'set-visibility') {
+          const target = remapTarget(action.target, entityIdMap, maps.brickIdMap, maps.structureIdMap)
+          return target && target.kind !== 'waypoint' ? [{ ...action, target }] : []
+        }
         return [{
           ...action,
           characterIds: action.characterIds
@@ -181,19 +194,60 @@ const remapScenarioWorld = (
             .filter((id): id is string => Boolean(id) && importedEntityIdSet.has(id)),
         }]
       })
+      const dialogue = (stage.dialogue ?? []).flatMap((line) => {
+        const speakerId = entityIdMap[line.speakerId]
+        return speakerId ? [{ ...line, speakerId }] : []
+      })
+      const branches = (stage.branches ?? []).flatMap((branch) => {
+        const branchActorId = branch.trigger.actorId ? entityIdMap[branch.trigger.actorId] : undefined
+        const branchTargetId = branch.trigger.targetId ? remapKnownId(branch.trigger.targetId) : undefined
+        if ((branch.trigger.actorId && !branchActorId) || (branch.trigger.targetId && !branchTargetId)) return []
+        const branchActions = (branch.actions ?? []).flatMap((action): WorldScenarioAction[] => {
+          if (action.type === 'set-faction') {
+            const entityId = entityIdMap[action.entityId]
+            return entityId ? [{ ...action, entityId }] : []
+          }
+          if (action.type === 'issue-command') {
+            const entityId = entityIdMap[action.entityId]
+            const command = remapCommand(action.command, entityIdMap, maps.brickIdMap, maps.structureIdMap)
+            return entityId && command ? [{ ...action, entityId, command }] : []
+          }
+          if (action.type === 'set-visibility') {
+            const target = remapTarget(action.target, entityIdMap, maps.brickIdMap, maps.structureIdMap)
+            return target && target.kind !== 'waypoint' ? [{ ...action, target }] : []
+          }
+          return [{
+            ...action,
+            characterIds: action.characterIds?.map((id) => entityIdMap[id]).filter((id): id is string => Boolean(id) && importedEntityIdSet.has(id)),
+          }]
+        })
+        return [{
+          ...branch,
+          trigger: { ...branch.trigger, ...(branchActorId ? { actorId: branchActorId } : {}), ...(branchTargetId ? { targetId: branchTargetId } : {}) },
+          dialogue: (branch.dialogue ?? []).flatMap((line) => {
+            const speakerId = entityIdMap[line.speakerId]
+            return speakerId ? [{ ...line, speakerId }] : []
+          }),
+          actions: branchActions,
+        }]
+      })
       return [{
         ...stage,
         trigger: { ...stage.trigger, ...(actorId ? { actorId } : {}), ...(targetId ? { targetId } : {}) },
+        dialogue,
+        branches,
         actions,
       }]
     }),
     processedEventIds: [],
+    activeDialogue: undefined,
   } : undefined
 
   return {
     ...currentWorld,
     planId: nextPlan.id,
     entities: [...currentWorld.entities, ...safeImportedEntities],
+    hiddenTargets: [...currentWorld.hiddenTargets, ...importedHiddenTargets],
     scenarios: importedScenario?.stages.length
       ? [...currentWorld.scenarios, importedScenario]
       : currentWorld.scenarios,

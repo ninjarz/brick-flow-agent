@@ -1,4 +1,4 @@
-import type { WorldEvent, WorldScenarioAction, WorldScenarioRuntime, WorldScenarioTrigger, WorldState } from '../types/world'
+import type { WorldEvent, WorldScenarioAction, WorldScenarioBranch, WorldScenarioDialogueLine, WorldScenarioRuntime, WorldScenarioStage, WorldScenarioTrigger, WorldState } from '../types/world'
 import { issueWorldEntityCommand } from './worldEntity'
 
 const eventMatchesTrigger = (event: WorldEvent, trigger: WorldScenarioTrigger) => (
@@ -35,6 +35,7 @@ const applyScenarioAction = (
     }
   }
   if (action.type === 'issue-command') {
+    if (world.hiddenTargets.some((target) => target.kind === 'entity' && target.id === action.entityId)) return world
     const result = issueWorldEntityCommand(
       world,
       action.entityId,
@@ -43,6 +44,29 @@ const applyScenarioAction = (
       'replace',
     )
     return result.ok ? result.world : world
+  }
+  if (action.type === 'set-visibility') {
+    const key = `${action.target.kind}:${action.target.id}`
+    const hiddenTargets = action.visible
+      ? world.hiddenTargets.filter((target) => `${target.kind}:${target.id}` !== key)
+      : world.hiddenTargets.some((target) => `${target.kind}:${target.id}` === key)
+        ? world.hiddenTargets
+        : [...world.hiddenTargets, action.target]
+    if (hiddenTargets === world.hiddenTargets) return world
+    return {
+      ...world,
+      hiddenTargets,
+      entities: !action.visible && action.target.kind === 'entity'
+        ? world.entities.map((entity) => entity.id === action.target.id ? {
+            ...entity,
+            activeCommand: undefined,
+            commandQueue: [],
+            speech: undefined,
+            behaviorState: 'idle' as const,
+            navigation: { status: 'idle' as const, path: [], pathIndex: 0 },
+          } : entity)
+        : world.entities,
+    }
   }
   const storyId = `story-scenario-${scenario.id}-${world.narrative.stories.length + 1}`
   return {
@@ -63,38 +87,169 @@ const applyScenarioAction = (
   }
 }
 
+const stopDialogueParticipants = (world: WorldState, scenario: WorldScenarioRuntime, dialogue: WorldScenarioDialogueLine[], lineIndex: number, lineEndsAtSeconds: number) => {
+  const currentLine = dialogue[lineIndex]
+  const participantIds = new Set([...(scenario.castEntityIds ?? []), ...dialogue.map((line) => line.speakerId)])
+  let changed = false
+  const entities = world.entities.map((entity) => {
+    if (!participantIds.has(entity.id) || entity.health <= 0) return entity
+    const speech = entity.id === currentLine?.speakerId ? {
+      message: 'scenario-dialogue' as const,
+      text: currentLine.text,
+      expiresAtSeconds: lineEndsAtSeconds,
+    } : entity.speech?.message === 'scenario-dialogue' ? undefined : entity.speech
+    const alreadyStopped = !entity.activeCommand && entity.commandQueue.length === 0 &&
+      entity.navigation.status === 'idle' && entity.navigation.path.length === 0 &&
+      entity.behaviorState === 'idle'
+    const sameSpeech = entity.speech?.message === speech?.message && entity.speech?.text === speech?.text &&
+      entity.speech?.expiresAtSeconds === speech?.expiresAtSeconds
+    if (alreadyStopped && sameSpeech) return entity
+    changed = true
+    return {
+      ...entity,
+      activeCommand: undefined,
+      commandQueue: [],
+      navigation: { status: 'idle' as const, path: [], pathIndex: 0 },
+      behaviorState: 'idle' as const,
+      speech,
+    }
+  })
+  return changed ? { ...world, entities } : world
+}
+
+const clearDialogueSpeech = (world: WorldState, stage: WorldScenarioStage) => {
+  const participantIds = new Set([
+    ...(stage.dialogue ?? []).map((line) => line.speakerId),
+    ...(stage.branches ?? []).flatMap((branch) => (branch.dialogue ?? []).map((line) => line.speakerId)),
+  ])
+  let changed = false
+  const entities = world.entities.map((entity) => {
+    if (!participantIds.has(entity.id) || entity.speech?.message !== 'scenario-dialogue') return entity
+    changed = true
+    return { ...entity, speech: undefined }
+  })
+  return changed ? { ...world, entities } : world
+}
+
+const completeStage = (
+  world: WorldState,
+  scenario: WorldScenarioRuntime,
+  activeStageIndex: number,
+  event: WorldEvent,
+  branch?: WorldScenarioBranch,
+) => {
+  const activeStage = scenario.stages[activeStageIndex]
+  const nextStageIndex = branch
+    ? branch.nextStageId ? scenario.stages.findIndex((stage) => stage.id === branch.nextStageId) : -1
+    : activeStage.nextStageId
+      ? scenario.stages.findIndex((stage) => stage.id === activeStage.nextStageId)
+      : activeStageIndex + 1
+  const stages = scenario.stages.map((stage, index) => {
+    if (index === activeStageIndex) return { ...stage, status: 'completed' as const, completedAtSeconds: world.elapsedSeconds }
+    if (index === nextStageIndex && stage.status === 'locked') return { ...stage, status: 'active' as const }
+    return stage
+  })
+  const updatedScenario: WorldScenarioRuntime = {
+    ...scenario,
+    stages,
+    activeDialogue: undefined,
+    ...(branch ? { outcomeId: branch.id } : nextStageIndex >= stages.length ? { outcomeId: 'completed' } : {}),
+  }
+  let nextWorld = clearDialogueSpeech(world, activeStage)
+  for (const action of branch?.actions ?? activeStage.actions ?? []) {
+    nextWorld = applyScenarioAction(nextWorld, updatedScenario, action, event)
+  }
+  return { world: nextWorld, scenario: updatedScenario }
+}
+
 export const advanceWorldScenarios = (world: WorldState): WorldState => {
   let nextWorld = world
   let scenariosChanged = false
   const nextScenarios = world.scenarios.map((scenario) => {
     const activeStageIndex = scenario.stages.findIndex((stage) => stage.status === 'active')
     if (activeStageIndex < 0) return scenario
-    const consumedEventIds = new Set(scenario.processedEventIds)
     const activeStage = scenario.stages[activeStageIndex]
-    const event = findLatestMatchingEvent(world.events, consumedEventIds, activeStage.trigger)
-    if (!event) return scenario
+    if (scenario.activeDialogue?.stageId === activeStage.id) {
+      const activeBranch = scenario.activeDialogue.branchId
+        ? activeStage.branches?.find((branch) => branch.id === scenario.activeDialogue?.branchId)
+        : undefined
+      const dialogue = activeBranch?.dialogue ?? activeStage.dialogue ?? []
+      if (dialogue.length === 0) return { ...scenario, activeDialogue: undefined }
+      const currentLineIndex = Math.min(scenario.activeDialogue.lineIndex, dialogue.length - 1)
+      nextWorld = stopDialogueParticipants(nextWorld, scenario, dialogue, currentLineIndex, scenario.activeDialogue.lineEndsAtSeconds)
+      if (world.elapsedSeconds < scenario.activeDialogue.lineEndsAtSeconds) return scenario
+      if (currentLineIndex + 1 < dialogue.length) {
+        scenariosChanged = true
+        const nextLineIndex = currentLineIndex + 1
+        const nextLine = dialogue[nextLineIndex]
+        const updatedScenario = {
+          ...scenario,
+          activeDialogue: {
+            ...scenario.activeDialogue,
+            lineIndex: nextLineIndex,
+            lineEndsAtSeconds: world.elapsedSeconds + Math.max(0.5, nextLine.durationSeconds),
+          },
+        }
+        nextWorld = stopDialogueParticipants(nextWorld, updatedScenario, dialogue, nextLineIndex, updatedScenario.activeDialogue.lineEndsAtSeconds)
+        return updatedScenario
+      }
+      scenariosChanged = true
+      const event = world.events.find((candidate) => candidate.id === scenario.activeDialogue?.eventId) ?? {
+        id: scenario.activeDialogue.eventId,
+        timeSeconds: world.elapsedSeconds,
+        type: activeStage.trigger.eventType,
+        actorId: activeStage.trigger.actorId ?? 'scenario',
+        targetId: activeStage.trigger.targetId,
+        commandType: activeStage.trigger.commandType,
+      }
+      const completed = completeStage(nextWorld, scenario, activeStageIndex, event, activeBranch)
+      nextWorld = completed.world
+      return completed.scenario
+    }
+
+    const consumedEventIds = new Set(scenario.processedEventIds)
+    const transitions = [
+      ...(activeStage.branches ?? []).map((branch) => ({ branch, trigger: branch.trigger })),
+      { branch: undefined, trigger: activeStage.trigger },
+    ]
+    const matched = transitions
+      .map((transition) => ({ ...transition, event: findLatestMatchingEvent(world.events, consumedEventIds, transition.trigger) }))
+      .filter((transition): transition is typeof transition & { event: WorldEvent } => Boolean(transition.event))
+      .sort((left, right) => right.event.timeSeconds - left.event.timeSeconds)[0]
+    if (!matched) return scenario
+    const { event, branch } = matched
 
     scenariosChanged = true
-    const stages = scenario.stages.map((stage, index) => {
-      if (index === activeStageIndex) return { ...stage, status: 'completed' as const, completedAtSeconds: world.elapsedSeconds }
-      if (index === activeStageIndex + 1 && stage.status === 'locked') return { ...stage, status: 'active' as const }
-      return stage
-    })
-    const updatedScenario = {
+    const consumedScenario = {
       ...scenario,
-      stages,
       processedEventIds: Array.from(new Set([
         ...scenario.processedEventIds,
         ...world.events.map((candidate) => candidate.id),
       ])).slice(-500),
     }
-    for (const action of activeStage.actions ?? []) {
-      nextWorld = applyScenarioAction(nextWorld, updatedScenario, action, event)
+    const dialogue = branch?.dialogue ?? activeStage.dialogue
+    if (dialogue?.length) {
+      const firstLine = dialogue[0]
+      const updatedScenario: WorldScenarioRuntime = {
+        ...consumedScenario,
+        activeDialogue: {
+          stageId: activeStage.id,
+          eventId: event.id,
+          ...(branch ? { branchId: branch.id } : {}),
+          lineIndex: 0,
+          lineEndsAtSeconds: world.elapsedSeconds + Math.max(0.5, firstLine.durationSeconds),
+        },
+      }
+      nextWorld = stopDialogueParticipants(nextWorld, updatedScenario, dialogue, 0, updatedScenario.activeDialogue!.lineEndsAtSeconds)
+      return updatedScenario
     }
-    return updatedScenario
+    const completed = completeStage(nextWorld, consumedScenario, activeStageIndex, event, branch)
+    nextWorld = completed.world
+    return completed.scenario
   })
 
-  return scenariosChanged ? { ...nextWorld, scenarios: nextScenarios } : nextWorld
+  const worldChanged = nextWorld !== world
+  return scenariosChanged || worldChanged ? { ...nextWorld, scenarios: nextScenarios } : nextWorld
 }
 
 export const getActiveWorldScenarioStage = (world: WorldState) => {

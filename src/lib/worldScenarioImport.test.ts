@@ -13,6 +13,15 @@ const deterministicIds = () => {
 }
 
 describe('world scenario import', () => {
+  const finishDialogue = (world: ReturnType<typeof createEmptyWorldState>) => {
+    let next = world
+    while (next.scenarios.some((scenario) => scenario.activeDialogue)) {
+      const endsAt = next.scenarios.find((scenario) => scenario.activeDialogue)?.activeDialogue?.lineEndsAtSeconds ?? next.elapsedSeconds
+      next = advanceWorldScenarios({ ...next, elapsedSeconds: endsAt })
+    }
+    return next
+  }
+
   it('starts a self-contained scenario with remapped references', () => {
     const asset = createDefaultWorldScenarios('zh-CN')[0]
     const result = startWorldScenario(asset, deterministicIds())!
@@ -23,11 +32,19 @@ describe('world scenario import', () => {
     expect(result.world.paused).toBe(true)
     expect(result.world.narrative.stories[0].characterIds).toEqual(result.importedEntityIds)
     expect(result.world.scenarios).toHaveLength(1)
+    expect(result.world.entities.every((entity) => entity.storylineId === result.world.scenarios[0].id)).toBe(true)
+    expect(result.world.scenarios[0].castEntityIds).toEqual(result.importedEntityIds)
     expect(result.world.scenarios[0].stages.map((stage) => stage.status)).toEqual(['active', 'locked', 'locked'])
     expect(result.world.scenarios[0].stages[0].trigger.actorId).toBe(result.importedEntityIds[1])
     expect(result.world.scenarios[0].stages[0].trigger.targetId).toBe(result.importedEntityIds[2])
     expect(result.world.entities[1].controller).toBe('player')
     expect(result.world.entities[3].factionId).toBe('neutral')
+    expect(result.world.hiddenTargets).toHaveLength(2)
+    expect(result.world.hiddenTargets.every((target) => target.kind === 'structure')).toBe(true)
+    expect(result.plan.structures).toHaveLength(4)
+    expect(result.world.hiddenTargets.every((target) => (
+      target.kind === 'structure' && result.plan.structures?.some((structure) => structure.id === target.id)
+    ))).toBe(true)
     expect(result.world.entities.flatMap((entity) => entity.commandQueue).some((command) => (
       'target' in command && command.target.kind === 'entity' && result.importedEntityIds.includes(command.target.id)
     ))).toBe(true)
@@ -84,6 +101,10 @@ describe('world scenario import', () => {
       entityId: result.importedEntityIds[3],
       command: { type: 'attack', target: { kind: 'entity', id: result.importedEntityIds[1] } },
     })
+    expect(result.world.scenarios[0].stages[2].branches?.[0]).toMatchObject({
+      id: 'gray-raven-retreat',
+      trigger: { eventType: 'defeated', targetId: result.importedEntityIds[1] },
+    })
     expect(result.plan.bricks).toHaveLength(1 + createDefaultWorldScenarios('zh-CN')[0].plan.bricks.length)
     expect(getBlockingBuildPlanIssues(validateBuildPlan(result.plan))).toEqual([])
   })
@@ -95,18 +116,25 @@ describe('world scenario import', () => {
       ...result.world,
       events: [{ id: 'investigated', timeSeconds: 2, type: 'interaction', actorId: rolandId, targetId: eileenId }],
     })
+    expect(world.scenarios[0].activeDialogue?.lineIndex).toBe(0)
+    world = finishDialogue(world)
     expect(world.scenarios[0].stages.map((stage) => stage.status)).toEqual(['completed', 'active', 'locked'])
     expect(world.narrative.stories.at(-1)?.title).toContain('断箭')
+    expect(world.hiddenTargets).toHaveLength(1)
 
     world = advanceWorldScenarios({
       ...world,
       events: [...world.events, { id: 'confronted', timeSeconds: 4, type: 'interaction', actorId: rolandId, targetId: envoyId }],
     })
+    expect(world.entities.find((entity) => entity.id === envoyId)?.factionId).toBe('neutral')
+    expect(world.entities.find((entity) => entity.id === rolandId)?.speech?.text).toContain('商队')
+    world = finishDialogue(world)
     expect(world.scenarios[0].stages.map((stage) => stage.status)).toEqual(['completed', 'completed', 'active'])
     expect(world.entities.find((entity) => entity.id === envoyId)?.factionId).toBe('red')
     expect(world.entities.find((entity) => entity.id === envoyId)?.commandQueue[0]).toEqual({
       type: 'attack', target: { kind: 'entity', id: rolandId },
     })
+    expect(world.hiddenTargets).toEqual([])
 
     world = advanceWorldScenarios({
       ...world,

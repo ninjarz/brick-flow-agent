@@ -118,16 +118,25 @@ export const createWorldAiSnapshot = (
   bricks: PlacedBrick[],
   structures: BrickStructure[] = [],
 ): WorldAiSnapshot => {
-  const selectedBricks = selectRelevantBricks(world, bricks)
-  const bricksById = new Map(bricks.map((brick) => [brick.id, brick]))
+  const hiddenEntityIds = new Set(world.hiddenTargets.filter((target) => target.kind === 'entity').map((target) => target.id))
+  const hiddenStructureIds = new Set(world.hiddenTargets.filter((target) => target.kind === 'structure').map((target) => target.id))
+  const hiddenBrickIds = new Set([
+    ...world.hiddenTargets.filter((target) => target.kind === 'brick').map((target) => target.id),
+    ...structures.filter((structure) => hiddenStructureIds.has(structure.id)).flatMap((structure) => structure.brickIds),
+  ])
+  const visibleEntities = world.entities.filter((entity) => !hiddenEntityIds.has(entity.id))
+  const visibleBricks = bricks.filter((brick) => !hiddenBrickIds.has(brick.id))
+  const visibleStructures = structures.filter((structure) => !hiddenStructureIds.has(structure.id))
+  const selectedBricks = selectRelevantBricks({ ...world, entities: visibleEntities }, visibleBricks)
+  const bricksById = new Map(visibleBricks.map((brick) => [brick.id, brick]))
   return {
   worldId: world.id,
   elapsedSeconds: Number(world.elapsedSeconds.toFixed(2)),
-  brickCount: bricks.length,
-  brickSnapshotTruncated: selectedBricks.length < bricks.length,
-  entities: world.entities.map((entity) => {
+  brickCount: visibleBricks.length,
+  brickSnapshotTruncated: selectedBricks.length < visibleBricks.length,
+  entities: visibleEntities.map((entity) => {
     const definition = worldEntityDefinitionById.get(entity.definitionId)
-    const nearbyEntities = world.entities.filter((candidate) => (
+    const nearbyEntities = visibleEntities.filter((candidate) => (
       candidate.id !== entity.id
       && candidate.health > 0
       && Math.hypot(candidate.transform.x - entity.transform.x, candidate.transform.z - entity.transform.z)
@@ -186,7 +195,7 @@ export const createWorldAiSnapshot = (
     brickId: brick.brickId,
     position: { x: brick.pose.xStud, y: brick.pose.yStud, z: brick.pose.zStud },
   })),
-  structures: structures.map((structure) => {
+  structures: visibleStructures.map((structure) => {
     const members = structure.brickIds.map((id) => bricksById.get(id)).filter((brick): brick is PlacedBrick => Boolean(brick))
     return {
       id: structure.id,

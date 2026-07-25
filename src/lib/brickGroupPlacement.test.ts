@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createPlanSpatialState, getBrickBounds, makeBrick } from './planUtils'
-import { dropBrickGroupAtPoint } from './brickGroupPlacement'
+import { dropBrickGroupAtPoint, getBrickGroupDragPointerOffset, offsetBrickGroupDragPoint } from './brickGroupPlacement'
 
 const spatialDataFor = (stationaryBricks: ReturnType<typeof makeBrick>[]) => ({
   stationaryBricks,
@@ -39,6 +39,45 @@ describe('dropBrickGroupAtPoint', () => {
       { xStud: 4, yStud: 0, zStud: 2 },
       { xStud: 5, yStud: 0, zStud: 2 },
     ])
+  })
+
+  it('keeps the group still when long-press begins away from the anchor centre', () => {
+    const anchor = makeBrick('brick-2x2', 'red', 2, 0, 3)
+    const companion = makeBrick('brick-1x1', 'blue', 4, 0, 3)
+    const grabPoint = { x: 2.2, z: 4.7 }
+    const pointerOffset = getBrickGroupDragPointerOffset([anchor, companion], anchor.id, grabPoint)
+    const result = dropBrickGroupAtPoint(
+      [anchor, companion],
+      anchor.id,
+      offsetBrickGroupDragPoint(grabPoint, pointerOffset),
+      spatialDataFor([]),
+    )
+
+    expect(result?.map((brick) => brick.pose)).toMatchObject([
+      { xStud: 2, zStud: 3 },
+      { xStud: 4, zStud: 3 },
+    ])
+  })
+
+  it('moves a selection by whole studs while preserving existing sub-grid offsets', () => {
+    const anchor = makeBrick('brick-1x1', 'red', 0.2, 0, 0.3)
+    const companion = makeBrick('brick-1x1', 'blue', 1.2, 0, 0.3)
+    const anchorBounds = getBrickBounds(anchor)!
+    const result = dropBrickGroupAtPoint(
+      [anchor, companion],
+      anchor.id,
+      { x: anchorBounds.minX + 4.43, z: anchorBounds.minZ + 2.68 },
+      spatialDataFor([]),
+    )
+
+    expect(result?.map((brick) => brick.pose)).toMatchObject([
+      { xStud: 4.2, zStud: 2.3 },
+      { xStud: 5.2, zStud: 2.3 },
+    ])
+    expect(result![0].pose.xStud - anchor.pose.xStud).toBeCloseTo(4)
+    expect(result![0].pose.zStud - anchor.pose.zStud).toBeCloseTo(2)
+    expect(result![0].pose.xStud % 1).toBeCloseTo(anchor.pose.xStud % 1)
+    expect(result![0].pose.zStud % 1).toBeCloseTo(anchor.pose.zStud % 1)
   })
 
   it('keeps vertical layers rigid after the lowest brick reaches the ground', () => {
