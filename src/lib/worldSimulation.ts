@@ -490,6 +490,54 @@ const stableDirectionRadians = (entityId: string) => {
   return hash / 0xffffffff * Math.PI * 2
 }
 
+const getContactAttackApproachPoint = (
+  entity: WorldEntity,
+  targetEntity: WorldEntity,
+  entities: WorldEntity[],
+  attackRangeStuds: number,
+): Point => {
+  const contactAttackers = entities
+    .filter((candidate) => {
+      const definition = worldEntityDefinitionById.get(candidate.definitionId)
+      return candidate.health > 0
+        && !definition?.combat.projectileKind
+        && (
+          candidate.id === entity.id
+          || (
+            candidate.activeCommand?.type === 'attack'
+            && candidate.activeCommand.target.kind === 'entity'
+            && candidate.activeCommand.target.id === targetEntity.id
+          )
+        )
+    })
+    .sort((left, right) => left.id.localeCompare(right.id))
+  const actorIndex = Math.max(0, contactAttackers.findIndex((candidate) => candidate.id === entity.id))
+  const averageApproachPoint = contactAttackers.reduce(
+    (point, candidate) => ({
+      x: point.x + candidate.transform.x / contactAttackers.length,
+      z: point.z + candidate.transform.z / contactAttackers.length,
+    }),
+    { x: 0, z: 0 },
+  )
+  const approachDx = averageApproachPoint.x - targetEntity.transform.x
+  const approachDz = averageApproachPoint.z - targetEntity.transform.z
+  const baseAngle = Math.hypot(approachDx, approachDz) > 0.001
+    ? Math.atan2(approachDx, approachDz)
+    : stableDirectionRadians(targetEntity.id)
+  const angleSpacing = contactAttackers.length > 1
+    ? Math.min(Math.PI / 3, Math.PI * 2 / contactAttackers.length)
+    : 0
+  const angle = baseAngle + (actorIndex - (contactAttackers.length - 1) / 2) * angleSpacing
+  const approachRadius = getWorldEntityCollisionRadius(entity)
+    + getWorldEntityCollisionRadius(targetEntity)
+    + Math.max(arrivalDistanceStuds, attackRangeStuds * 0.65)
+  return {
+    x: targetEntity.transform.x + Math.sin(angle) * approachRadius,
+    y: targetEntity.transform.y,
+    z: targetEntity.transform.z + Math.cos(angle) * approachRadius,
+  }
+}
+
 const getWanderDestination = (
   entity: WorldEntity,
   seed: number,
@@ -743,13 +791,15 @@ export const stepWorldSimulation = (
       cooldownRemainingSeconds: Math.max(0, entity.combat.cooldownRemainingSeconds - deltaSeconds),
     },
   }))
-  const narrativeLockedEntityIds = new Set(world.scenarios.flatMap((scenario) => (
-    scenario.activeDialogue
-      ? scenario.castEntityIds ?? scenario.stages
-          .find((stage) => stage.id === scenario.activeDialogue?.stageId)?.dialogue
-          ?.map((line) => line.speakerId) ?? []
-      : []
-  )))
+  const narrativeLockedEntityIds = new Set(world.scenarios.flatMap((scenario) => {
+    if (!scenario.activeDialogue) return []
+    const activeStage = scenario.stages.find((stage) => stage.id === scenario.activeDialogue?.stageId)
+    const activeBranch = scenario.activeDialogue.branchId
+      ? activeStage?.branches?.find((branch) => branch.id === scenario.activeDialogue?.branchId)
+      : undefined
+    const dialogue = activeBranch?.dialogue ?? activeStage?.dialogue ?? []
+    return [...(scenario.castEntityIds ?? []), ...dialogue.map((line) => line.speakerId)]
+  }))
   const targetLookup: WorldTargetLookup = {
     entityIndexById: new Map(entities.map((entity, index) => [entity.id, index])),
     brickById: new Map(bricks.map((brick) => [brick.id, brick])),
@@ -763,8 +813,14 @@ export const stepWorldSimulation = (
     && !(impact.target.kind === 'entity' && hiddenEntityIds.has(impact.target.id))
     && !(impact.target.kind === 'brick' && hiddenBrickIds.has(impact.target.id))
     && !(impact.target.kind === 'structure' && hiddenStructureIds.has(impact.target.id))
-  const pendingImpacts = world.pendingImpacts.filter((impact) => impactIsVisible(impact) && impact.impactAtSeconds > timeSeconds)
-  const dueImpacts = world.pendingImpacts.filter((impact) => impactIsVisible(impact) && impact.impactAtSeconds <= timeSeconds)
+  const impactInterruptsDialogue = (impact: WorldPendingImpact) => narrativeLockedEntityIds.has(impact.actorId)
+    || (impact.target.kind === 'entity' && narrativeLockedEntityIds.has(impact.target.id))
+  const pendingImpacts = world.pendingImpacts.filter((impact) => (
+    impactIsVisible(impact) && !impactInterruptsDialogue(impact) && impact.impactAtSeconds > timeSeconds
+  ))
+  const dueImpacts = world.pendingImpacts.filter((impact) => (
+    impactIsVisible(impact) && !impactInterruptsDialogue(impact) && impact.impactAtSeconds <= timeSeconds
+  ))
 
   const applyEntityDamage = (actorIndex: number, targetIndex: number, damage: number) => {
     const actor = entities[actorIndex]
@@ -909,6 +965,17 @@ export const stepWorldSimulation = (
           commandStarted = true
         }
       }
+    }
+    const activeTarget = activeCommand && 'target' in activeCommand ? activeCommand.target : undefined
+    if (activeTarget?.kind === 'entity' && narrativeLockedEntityIds.has(activeTarget.id)) {
+      entities[index] = {
+        ...entity,
+        activeCommand: undefined,
+        behaviorState: 'idle',
+        navigation: { status: 'idle', path: [], pathIndex: 0 },
+        combat: { ...entity.combat, attackTargetId: undefined },
+      }
+      continue
     }
     entity = { ...entity, activeCommand, commandQueue }
     if (commandStarted && activeCommand) {
@@ -1255,7 +1322,10 @@ export const stepWorldSimulation = (
       continue
     }
 
-    const movement = moveEntityToward(entity, target, targetPoint, bricks, entityOccupancy, deltaSeconds, groundBounds)
+    const movementTargetPoint = isAttack && targetEntity && definition && !definition.combat.projectileKind
+      ? getContactAttackApproachPoint(entity, targetEntity, entities, definition.combat.attackRangeStuds)
+      : targetPoint
+    const movement = moveEntityToward(entity, target, movementTargetPoint, bricks, entityOccupancy, deltaSeconds, groundBounds)
     entity = movement.entity
     if (movement.arrived && !isAttack) {
       if (activeCommand.type === 'follow') {

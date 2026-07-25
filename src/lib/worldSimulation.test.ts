@@ -36,6 +36,56 @@ describe('WorldEntity simulation', () => {
     expect(world.entities[0].behaviorState).toBe('idle')
   })
 
+  it('locks branch speakers and prevents outsiders from interrupting active dialogue', () => {
+    const knightDefinition = worldEntityDefinitionById.get('knight')!
+    const actor = createWorldEntity(knightDefinition, { id: 'dialogue-actor', factionId: 'blue' })
+    const branchSpeaker = createWorldEntity(knightDefinition, { id: 'branch-speaker', factionId: 'red', transform: { x: 2, z: 0 } })
+    const outsider = createWorldEntity(knightDefinition, { id: 'dialogue-outsider', factionId: 'red', transform: { x: 3, z: 0 } })
+    actor.activeCommand = { type: 'attack', target: { kind: 'entity', id: branchSpeaker.id } }
+    branchSpeaker.commandQueue = [{ type: 'attack', target: { kind: 'entity', id: actor.id } }]
+    outsider.activeCommand = { type: 'attack', target: { kind: 'entity', id: actor.id } }
+    const world = stepWorldSimulation({
+      ...createEmptyWorldState('plan'),
+      entities: [actor, branchSpeaker, outsider],
+      scenarios: [{
+        id: 'branch-story',
+        assetId: 'asset',
+        title: 'Branch story',
+        description: 'Branch story',
+        castEntityIds: [actor.id],
+        processedEventIds: [],
+        activeDialogue: {
+          stageId: 'stage',
+          branchId: 'branch',
+          eventId: 'event',
+          lineIndex: 0,
+          lineEndsAtSeconds: 5,
+        },
+        stages: [{
+          id: 'stage',
+          title: 'Stage',
+          description: 'Stage',
+          status: 'active',
+          trigger: { eventType: 'interaction' },
+          branches: [{
+            id: 'branch',
+            title: 'Branch',
+            trigger: { eventType: 'interaction' },
+            dialogue: [{ id: 'branch-line', speakerId: branchSpeaker.id, text: 'Wait.', durationSeconds: 5 }],
+          }],
+        }],
+      }],
+    }, [], 0.1)
+
+    expect(world.entities[0].activeCommand).toBeUndefined()
+    expect(world.entities[1].commandQueue).toEqual([])
+    expect(world.entities[1].behaviorState).toBe('idle')
+    expect(world.entities[2].activeCommand).toBeUndefined()
+    expect(world.entities[0].health).toBe(actor.health)
+    expect(world.entities[1].health).toBe(branchSpeaker.health)
+    expect(world.events.some((event) => event.type === 'attack')).toBe(false)
+  })
+
   it('returns out-of-bounds units to the visible ground grid', () => {
     const actor = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'actor', transform: { x: 100, z: -100 } })
     const world = stepWorldSimulation({ ...createEmptyWorldState('plan'), entities: [actor] }, [], 0.1)
@@ -174,6 +224,54 @@ describe('WorldEntity simulation', () => {
         .map((event) => event.actorId),
     )
     expect(attackingActorIds).toEqual(new Set(attackers.map((attacker) => attacker.id)))
+  })
+
+  it('fans contact attackers into distinct engagement positions around one target', () => {
+    const knightDefinition = worldEntityDefinitionById.get('knight')!
+    const target = {
+      ...createWorldEntity(knightDefinition, {
+        id: 'formation-target',
+        controller: 'player',
+        factionId: 'red',
+        transform: { x: 8, z: 0 },
+      }),
+      health: 10_000,
+      maxHealth: 10_000,
+    }
+    const attackers = [-1.6, 0, 1.6].map((z, index) => {
+      const attacker = createWorldEntity(knightDefinition, {
+        id: `formation-attacker-${index}`,
+        controller: 'player',
+        factionId: 'blue',
+        transform: { x: 0, z },
+      })
+      attacker.activeCommand = { type: 'attack', target: { kind: 'entity', id: target.id } }
+      return attacker
+    })
+    let world = { ...createEmptyWorldState('plan-1'), entities: [...attackers, target] }
+
+    world = stepWorldSimulation(world, [], 0.1)
+    const plannedPositions = world.entities.slice(0, attackers.length)
+      .map((entity) => entity.navigation.plannedTargetPoint)
+    expect(new Set(plannedPositions.map((point) => `${point?.x.toFixed(2)}:${point?.z.toFixed(2)}`)).size).toBe(3)
+
+    for (let step = 0; step < 180; step += 1) world = stepWorldSimulation(world, [], 0.1)
+
+    const attackEvents = world.events.filter((event) => event.type === 'attack' && event.targetId === target.id)
+    expect(new Set(attackEvents.map((event) => event.actorId))).toEqual(new Set(attackers.map((attacker) => attacker.id)))
+    const settledAttackers = world.entities.slice(0, attackers.length)
+    for (let left = 0; left < settledAttackers.length; left += 1) {
+      for (let right = left + 1; right < settledAttackers.length; right += 1) {
+        expect(Math.hypot(
+          settledAttackers[left].transform.x - settledAttackers[right].transform.x,
+          settledAttackers[left].transform.z - settledAttackers[right].transform.z,
+        )).toBeGreaterThanOrEqual(
+          getWorldEntityCollisionRadius(settledAttackers[left])
+          + getWorldEntityCollisionRadius(settledAttackers[right])
+          - 0.021,
+        )
+      }
+    }
   })
 
   it('lets a priest revive a defeated unit after a readable cast time', () => {
