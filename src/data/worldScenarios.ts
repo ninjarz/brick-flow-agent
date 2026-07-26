@@ -139,6 +139,7 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
     narrative: {
       processedEventIds: [],
       memoriesByEntityId: {},
+      directorTurns: [],
       relationshipsByEntityId: {
         [innkeeper.id]: {
           [knight.id]: relationship(knight.id, 28),

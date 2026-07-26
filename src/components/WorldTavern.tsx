@@ -2,18 +2,14 @@ import { Activity, Beer, BookOpen, Bot, CheckCircle2, Circle, Clipboard, Dice5, 
 import { useEffect, useMemo, useState } from 'react'
 import { useI18n } from '../lib/i18n'
 import { formatWorldEvent } from '../lib/worldNarrative'
-import type { WorldScenarioRuntime, WorldState } from '../types/world'
+import type { WorldDirectorTurn, WorldScenarioRuntime, WorldState } from '../types/world'
 import { WorldScenarioEditor } from './WorldScenarioEditor'
 import type { BrickStructure } from '../types/bricks'
 import type { TavernActivityKind, TavernActivityResult } from '../lib/worldTavernActivities'
 import type { TavernDirectorEntry } from '../lib/worldTavernDirector'
 
-type TavernDirectorTurn = {
-  id: string
-  playerText: string
-  entries: TavernDirectorEntry[]
-  status: 'streaming' | 'completed' | 'failed' | 'stopped'
-  error?: string
+type ActiveTavernDirectorTurn = Omit<WorldDirectorTurn, 'status'> & {
+  status: WorldDirectorTurn['status'] | 'streaming'
 }
 
 type WorldTavernProps = {
@@ -39,6 +35,7 @@ type WorldTavernProps = {
     onEntry: (entry: TavernDirectorEntry) => void,
   ) => Promise<void>
   onStopDirector: () => void
+  onCommitDirectorTurn: (turn: WorldDirectorTurn) => void
   aiFeedback?: { tone: 'success' | 'error'; text: string }
   onClose: () => void
 }
@@ -62,6 +59,7 @@ export const WorldTavern = ({
   isDirectorThinking,
   onDirectWorld,
   onStopDirector,
+  onCommitDirectorTurn,
   aiFeedback,
   onClose,
 }: WorldTavernProps) => {
@@ -76,7 +74,7 @@ export const WorldTavern = ({
   const [activityResult, setActivityResult] = useState<TavernActivityResult>()
   const [activityHost, setActivityHost] = useState<'local' | 'ai'>('local')
   const [directorInput, setDirectorInput] = useState('')
-  const [directorTurns, setDirectorTurns] = useState<TavernDirectorTurn[]>([])
+  const [activeDirectorTurn, setActiveDirectorTurn] = useState<ActiveTavernDirectorTurn>()
   useEffect(() => {
     if (world.entities.some((entity) => entity.id === selectedEntityId)) return
     setSelectedEntityId(world.entities[0]?.id ?? '')
@@ -121,25 +119,41 @@ export const WorldTavern = ({
     const text = directorInput.trim()
     if (!text || isDirectorThinking || !llmConnected) return
     const id = `director-turn-${Date.now().toString(36)}`
-    const recentEntries = directorTurns.flatMap((turn) => turn.entries).slice(-12)
-    const newTurn: TavernDirectorTurn = { id, playerText: text, entries: [], status: 'streaming' }
+    const recentEntries = world.narrative.directorTurns.flatMap((turn) => turn.entries).slice(-12)
+    const createdAtSeconds = world.elapsedSeconds
+    const collectedEntries: TavernDirectorEntry[] = []
+    const newTurn: ActiveTavernDirectorTurn = { id, playerText: text, entries: [], createdAtSeconds, status: 'streaming' }
     setDirectorInput('')
-    setDirectorTurns((current) => [...current, newTurn].slice(-12))
+    setActiveDirectorTurn(newTurn)
+    let status: WorldDirectorTurn['status'] = 'completed'
+    let errorMessage: string | undefined
     try {
       await onDirectWorld(text, recentEntries, (entry) => {
-        setDirectorTurns((current) => current.map((turn) => turn.id === id
-          ? { ...turn, entries: [...turn.entries, entry] }
-          : turn))
+        collectedEntries.push(entry)
+        setActiveDirectorTurn((current) => current?.id === id
+          ? { ...current, entries: [...collectedEntries] }
+          : current)
       })
-      setDirectorTurns((current) => current.map((turn) => turn.id === id ? { ...turn, status: 'completed' } : turn))
     } catch (error) {
-      setDirectorTurns((current) => current.map((turn) => turn.id === id ? {
-        ...turn,
-        status: error instanceof Error && /取消|canceled/i.test(error.message) ? 'stopped' : 'failed',
-        error: error instanceof Error ? error.message : (locale === 'zh-CN' ? '导演请求失败' : 'Director request failed'),
-      } : turn))
+      errorMessage = error instanceof Error ? error.message : (locale === 'zh-CN' ? '导演请求失败' : 'Director request failed')
+      status = /取消|canceled/i.test(errorMessage) ? 'stopped' : 'failed'
+    } finally {
+      const completedTurn: WorldDirectorTurn = {
+        id,
+        playerText: text,
+        entries: collectedEntries,
+        createdAtSeconds,
+        status,
+        ...(errorMessage ? { error: errorMessage } : {}),
+      }
+      onCommitDirectorTurn(completedTurn)
+      setActiveDirectorTurn(undefined)
     }
   }
+  const displayedDirectorTurns: ActiveTavernDirectorTurn[] = [
+    ...world.narrative.directorTurns,
+    ...(activeDirectorTurn ? [activeDirectorTurn] : []),
+  ].slice(-4)
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -469,9 +483,9 @@ export const WorldTavern = ({
         </div>
         {llmConnected && (
           <section className="tavern-director" aria-label={locale === 'zh-CN' ? 'AI 剧情导演' : 'AI story director'}>
-            {directorTurns.length > 0 && (
+            {displayedDirectorTurns.length > 0 && (
               <div className="tavern-director-feed" aria-live="polite">
-                {directorTurns.slice(-4).map((turn) => (
+                {displayedDirectorTurns.map((turn) => (
                   <div className="tavern-director-turn" key={turn.id}>
                     <p className="player"><strong>{locale === 'zh-CN' ? '你' : 'You'}</strong>{turn.playerText}</p>
                     {turn.entries.map((entry) => {

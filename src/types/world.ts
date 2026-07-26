@@ -131,11 +131,37 @@ export type WorldRelationship = {
   updatedAtSeconds: number
 }
 
+export type WorldDirectorEvent =
+  | { type: 'narration'; text: string }
+  | { type: 'dialogue'; speakerId: string; text: string }
+  | { type: 'command'; entityId: string; command: WorldEntityCommand }
+  | { type: 'relationship'; fromId: string; toId: string; delta: number; reason: string }
+  | { type: 'choice'; label: string; suggestedInput: string }
+  | { type: 'end'; summary: string }
+
+export type WorldDirectorEntry = WorldDirectorEvent & {
+  id: string
+  status?: 'accepted' | 'rejected'
+  detail?: string
+  before?: number
+  after?: number
+}
+
+export type WorldDirectorTurn = {
+  id: string
+  playerText: string
+  entries: WorldDirectorEntry[]
+  createdAtSeconds: number
+  status: 'completed' | 'stopped' | 'failed'
+  error?: string
+}
+
 export type WorldNarrativeState = {
   processedEventIds: string[]
   memoriesByEntityId: Record<string, WorldMemory[]>
   relationshipsByEntityId: Record<string, Record<string, WorldRelationship>>
   stories: WorldStory[]
+  directorTurns: WorldDirectorTurn[]
 }
 
 export type WorldScenarioTrigger = {

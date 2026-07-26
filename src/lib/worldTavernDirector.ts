@@ -1,23 +1,10 @@
 import type { BrickStructure, PlacedBrick } from '../types/bricks'
-import type { WorldEntityCommand, WorldRelationship, WorldState, WorldTargetRef } from '../types/world'
+import type { WorldDirectorEntry, WorldDirectorEvent, WorldEntityCommand, WorldRelationship, WorldState, WorldTargetRef } from '../types/world'
 import type { WorldAiSnapshot } from './worldAi'
 import { issueWorldEntityCommand } from './worldEntity'
 
-export type TavernDirectorEvent =
-  | { type: 'narration'; text: string }
-  | { type: 'dialogue'; speakerId: string; text: string }
-  | { type: 'command'; entityId: string; command: WorldEntityCommand }
-  | { type: 'relationship'; fromId: string; toId: string; delta: number; reason: string }
-  | { type: 'choice'; label: string; suggestedInput: string }
-  | { type: 'end'; summary: string }
-
-export type TavernDirectorEntry = TavernDirectorEvent & {
-  id: string
-  status?: 'accepted' | 'rejected'
-  detail?: string
-  before?: number
-  after?: number
-}
+export type TavernDirectorEvent = WorldDirectorEvent
+export type TavernDirectorEntry = WorldDirectorEntry
 
 type DirectorLocale = 'zh-CN' | 'en-US'
 

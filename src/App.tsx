@@ -41,7 +41,7 @@ import { addWorldScenario, startWorldScenario } from './lib/worldScenarioImport'
 import { advanceWorldScenarios, getActiveWorldScenarioStage } from './lib/worldScenarioRuntime'
 import { clearWorkspaceDraft, hasIndexedDbWorkspaceDraft, loadWorkspaceDraft, loadWorkspaceDraftFromIndexedDb, saveWorkspaceDraft } from './lib/workspaceDraft'
 import type { BrickStructure, BuildPlan, FinishedAsset, LlmConfig, PlacedBrick } from './types/bricks'
-import type { WorldEntity, WorldEntityCommand, WorldEntityControllerKind, WorldState } from './types/world'
+import type { WorldDirectorTurn, WorldEntity, WorldEntityCommand, WorldEntityControllerKind, WorldState } from './types/world'
 import './App.css'
 
 const BrickScene = lazy(() => import('./components/BrickScene').then((module) => ({ default: module.BrickScene })))
@@ -1680,6 +1680,22 @@ function App() {
     tavernDirectorAbortRef.current?.abort()
   }, [])
 
+  const commitTavernDirectorTurn = useCallback((turn: WorldDirectorTurn) => {
+    const current = worldRef.current
+    const next = {
+      ...current,
+      narrative: {
+        ...current.narrative,
+        directorTurns: [
+          ...current.narrative.directorTurns.filter((candidate) => candidate.id !== turn.id),
+          turn,
+        ].slice(-20),
+      },
+    }
+    worldRef.current = next
+    setWorld(next)
+  }, [])
+
   const getWorldAiContextPreview = useCallback(() => {
     const currentWorld = worldRef.current
     const currentPlan = planRef.current
@@ -1688,11 +1704,15 @@ function App() {
   }, [])
 
   const clearTavernHistory = useCallback(() => {
-    setWorld((current) => ({
-      ...current,
-      events: [],
-      narrative: { processedEventIds: [], memoriesByEntityId: {}, relationshipsByEntityId: {}, stories: [] },
-    }))
+    setWorld((current) => {
+      const next = {
+        ...current,
+        events: [],
+        narrative: { processedEventIds: [], memoriesByEntityId: {}, relationshipsByEntityId: {}, stories: [], directorTurns: [] },
+      }
+      worldRef.current = next
+      return next
+    })
   }, [])
 
   useEffect(() => {
@@ -2566,6 +2586,7 @@ function App() {
             isDirectorThinking={isTavernDirectorThinking}
             onDirectWorld={runTavernDirectorTurn}
             onStopDirector={stopTavernDirector}
+            onCommitDirectorTurn={commitTavernDirectorTurn}
             aiFeedback={worldAiFeedback}
             onClose={() => {
               tavernAiAbortRef.current?.abort()

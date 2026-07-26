@@ -4,6 +4,8 @@ import type {
   WorldEntityControllerKind,
   WorldEntityDefinition,
   WorldEntityTransform,
+  WorldDirectorEntry,
+  WorldDirectorEvent,
   WorldScenarioAction,
   WorldScenarioStage,
   WorldState,
@@ -180,6 +182,7 @@ export const createEmptyWorldState = (planId: string): WorldState => ({
     memoriesByEntityId: {},
     relationshipsByEntityId: {},
     stories: [],
+    directorTurns: [],
   },
 })
 
@@ -356,6 +359,85 @@ const normalizeRelationships = (value: unknown): WorldState['narrative']['relati
     return [observerId, normalizedTargets]
   }))
 }
+
+const cleanStoredText = (value: unknown, maxLength: number) => (
+  typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, maxLength) : ''
+)
+
+const parseStoredDirectorEvent = (value: Record<string, unknown>): WorldDirectorEvent | undefined => {
+  if (value.type === 'narration') {
+    const text = cleanStoredText(value.text, 500)
+    return text ? { type: value.type, text } : undefined
+  }
+  if (value.type === 'dialogue') {
+    const speakerId = cleanStoredText(value.speakerId, 160)
+    const text = cleanStoredText(value.text, 180)
+    return speakerId && text ? { type: value.type, speakerId, text } : undefined
+  }
+  if (value.type === 'command') {
+    const entityId = cleanStoredText(value.entityId, 160)
+    const command = parseStoredCommand(value.command)
+    const directorCommand = command && command.type !== 'patrol'
+      && (!('target' in command) || command.target.kind !== 'waypoint')
+      ? command
+      : undefined
+    return entityId && directorCommand ? { type: value.type, entityId, command: directorCommand } : undefined
+  }
+  if (value.type === 'relationship') {
+    const fromId = cleanStoredText(value.fromId, 160)
+    const toId = cleanStoredText(value.toId, 160)
+    const delta = isFiniteNumber(value.delta) ? Math.max(-10, Math.min(10, Math.round(value.delta))) : 0
+    const reason = cleanStoredText(value.reason, 120)
+    return fromId && toId && fromId !== toId && delta !== 0
+      ? { type: value.type, fromId, toId, delta, reason }
+      : undefined
+  }
+  if (value.type === 'choice') {
+    const label = cleanStoredText(value.label, 48)
+    const suggestedInput = cleanStoredText(value.suggestedInput, 240)
+    return label && suggestedInput ? { type: value.type, label, suggestedInput } : undefined
+  }
+  if (value.type === 'end') {
+    const summary = cleanStoredText(value.summary, 300)
+    return summary ? { type: value.type, summary } : undefined
+  }
+  return undefined
+}
+
+const parseStoredDirectorEntry = (value: unknown): WorldDirectorEntry | undefined => {
+  if (!isRecord(value) || typeof value.id !== 'string') return undefined
+  const event = parseStoredDirectorEvent(value)
+  if (!event) return undefined
+  return {
+    ...event,
+    id: value.id.slice(0, 180),
+    ...(['accepted', 'rejected'].includes(String(value.status)) ? { status: value.status as 'accepted' | 'rejected' } : {}),
+    ...(typeof value.detail === 'string' ? { detail: value.detail.slice(0, 160) } : {}),
+    ...(isFiniteNumber(value.before) ? { before: Math.max(-100, Math.min(100, value.before)) } : {}),
+    ...(isFiniteNumber(value.after) ? { after: Math.max(-100, Math.min(100, value.after)) } : {}),
+  } as WorldDirectorEntry
+}
+
+const parseStoredDirectorTurns = (value: unknown): WorldState['narrative']['directorTurns'] => (
+  Array.isArray(value) ? value.flatMap((turn) => {
+    if (!isRecord(turn) || typeof turn.id !== 'string' || !isFiniteNumber(turn.createdAtSeconds)) return []
+    const playerText = cleanStoredText(turn.playerText, 800)
+    if (!playerText || !['completed', 'stopped', 'failed'].includes(String(turn.status))) return []
+    return [{
+      id: turn.id.slice(0, 180),
+      playerText,
+      entries: Array.isArray(turn.entries)
+        ? turn.entries.flatMap((entry) => {
+            const parsed = parseStoredDirectorEntry(entry)
+            return parsed ? [parsed] : []
+          }).slice(-20)
+        : [],
+      createdAtSeconds: Math.max(0, turn.createdAtSeconds),
+      status: turn.status as 'completed' | 'stopped' | 'failed',
+      ...(typeof turn.error === 'string' ? { error: turn.error.slice(0, 300) } : {}),
+    }]
+  }).slice(-20) : []
+)
 
 export const parseStoredWorldState = (value: unknown, planId: string) => {
   if (!isRecord(value) || value.planId !== planId || !Array.isArray(value.entities)) return undefined
@@ -567,6 +649,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
       memoriesByEntityId: normalizeArrayRecord(narrative.memoriesByEntityId, isStoredMemory),
       relationshipsByEntityId: normalizeRelationships(narrative.relationshipsByEntityId),
       stories: Array.isArray(narrative.stories) ? narrative.stories.filter(isStoredStory).slice(-80) : [],
+      directorTurns: parseStoredDirectorTurns(narrative.directorTurns),
     },
   } satisfies WorldState
 }

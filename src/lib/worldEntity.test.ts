@@ -304,6 +304,41 @@ describe('WorldEntity foundation', () => {
       memoriesByEntityId: { [entity.id]: [] },
       relationshipsByEntityId: { [entity.id]: {} },
       stories: [],
+      directorTurns: [],
     })
+  })
+
+  it('restores bounded director history and filters unsafe entries', () => {
+    const world = createEmptyWorldState('director-history')
+    const knight = worldEntityDefinitionById.get('knight')!
+    const entity = createWorldEntity(knight, { id: 'director-actor', name: '罗兰' })
+    const restored = parseStoredWorldState({
+      ...world,
+      entities: [entity],
+      narrative: {
+        ...world.narrative,
+        directorTurns: [{
+          id: 'turn-1',
+          playerText: '让罗兰停下来。',
+          createdAtSeconds: 12,
+          status: 'completed',
+          entries: [
+            { id: 'entry-1', type: 'dialogue', speakerId: entity.id, text: '先等等。', status: 'accepted' },
+            { id: 'entry-2', type: 'command', entityId: entity.id, command: { type: 'stop' }, status: 'accepted' },
+            { id: 'unsafe', type: 'command', entityId: entity.id, command: { type: 'teleport', x: 999 } },
+          ],
+        }],
+      },
+    }, world.planId)
+    expect(restored?.narrative.directorTurns).toEqual([{
+      id: 'turn-1',
+      playerText: '让罗兰停下来。',
+      createdAtSeconds: 12,
+      status: 'completed',
+      entries: [
+        { id: 'entry-1', type: 'dialogue', speakerId: entity.id, text: '先等等。', status: 'accepted' },
+        { id: 'entry-2', type: 'command', entityId: entity.id, command: { type: 'stop' }, status: 'accepted' },
+      ],
+    }])
   })
 })
