@@ -1,22 +1,14 @@
-import { Activity, Beer, BookOpen, Bot, CheckCircle2, Circle, Clipboard, Dice5, Eye, GlassWater, LockKeyhole, MessageCircle, Pencil, Send, Sparkles, Square, Trash2, Users, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Activity, Beer, BookOpen, Bot, CheckCircle2, Circle, Dice5, GlassWater, LockKeyhole, MessageCircle, Pencil, Sparkles, Trash2, Users, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { useI18n } from '../lib/i18n'
 import { formatWorldEvent } from '../lib/worldNarrative'
-import type { WorldDirectorTurn, WorldScenarioRuntime, WorldState } from '../types/world'
+import type { WorldScenarioRuntime, WorldState } from '../types/world'
 import { WorldScenarioEditor } from './WorldScenarioEditor'
 import type { BrickStructure } from '../types/bricks'
 import type { TavernActivityKind, TavernActivityResult } from '../lib/worldTavernActivities'
-import type { TavernDirectorEntry } from '../lib/worldTavernDirector'
-
-type ActiveTavernDirectorTurn = Omit<WorldDirectorTurn, 'status'> & {
-  status: WorldDirectorTurn['status'] | 'streaming'
-}
 
 type WorldTavernProps = {
   world: WorldState
-  onGenerateStory: (focusEntityId?: string) => void
-  onRunAiTurn: () => void
-  onGetAiContext: () => string
   onClearHistory: () => void
   onUpdateScenario: (scenario: WorldScenarioRuntime) => void
   structures: BrickStructure[]
@@ -25,25 +17,12 @@ type WorldTavernProps = {
   onPlayAiActivity: (activity: TavernActivityKind, focusEntityId?: string) => Promise<TavernActivityResult | undefined>
   onWatchActivity: (result: TavernActivityResult) => void
   llmConfigured: boolean
-  isAiThinking: boolean
   isAiActivityThinking: boolean
-  isDirectorThinking: boolean
-  onDirectWorld: (
-    text: string,
-    recentEntries: TavernDirectorEntry[],
-    onEntry: (entry: TavernDirectorEntry) => void,
-  ) => Promise<void>
-  onStopDirector: () => void
-  onCommitDirectorTurn: (turn: WorldDirectorTurn) => void
-  aiFeedback?: { tone: 'success' | 'error'; text: string }
   onClose: () => void
 }
 
 export const WorldTavern = ({
   world,
-  onGenerateStory,
-  onRunAiTurn,
-  onGetAiContext,
   onClearHistory,
   onUpdateScenario,
   structures,
@@ -52,29 +31,16 @@ export const WorldTavern = ({
   onPlayAiActivity,
   onWatchActivity,
   llmConfigured,
-  isAiThinking,
   isAiActivityThinking,
-  isDirectorThinking,
-  onDirectWorld,
-  onStopDirector,
-  onCommitDirectorTurn,
-  aiFeedback,
   onClose,
 }: WorldTavernProps) => {
   const { locale, t } = useI18n()
   const [selectedEntityId, setSelectedEntityId] = useState(world.entities[0]?.id ?? '')
   const [confirmClear, setConfirmClear] = useState(false)
-  const [aiContext, setAiContext] = useState('')
-  const [contextCopyStatus, setContextCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
   const [chronicleScope, setChronicleScope] = useState<'world' | 'character'>('world')
-  const [storyScope, setStoryScope] = useState<'world' | 'character'>('world')
   const [editingScenarioId, setEditingScenarioId] = useState('')
   const [activityResult, setActivityResult] = useState<TavernActivityResult>()
   const [activityHost, setActivityHost] = useState<'local' | 'ai'>('local')
-  const [directorInput, setDirectorInput] = useState('')
-  const [activeDirectorTurn, setActiveDirectorTurn] = useState<ActiveTavernDirectorTurn>()
-  const directorFeedRef = useRef<HTMLDivElement>(null)
-  const directorInputRef = useRef<HTMLTextAreaElement>(null)
   useEffect(() => {
     if (world.entities.some((entity) => entity.id === selectedEntityId)) return
     setSelectedEntityId(world.entities[0]?.id ?? '')
@@ -83,7 +49,6 @@ export const WorldTavern = ({
   const selectedMemories = world.narrative.memoriesByEntityId[selectedEntityId] ?? []
   const selectedRelationships = Object.values(world.narrative.relationshipsByEntityId[selectedEntityId] ?? {})
     .sort((a, b) => Math.abs(b.affinity) - Math.abs(a.affinity) || b.encounters - a.encounters)
-  const aiEntityCount = world.entities.filter((entity) => entity.controller === 'ai' && entity.health > 0).length
   const hiddenEntityIds = useMemo(() => new Set(world.hiddenTargets.filter((target) => target.kind === 'entity').map((target) => target.id)), [world.hiddenTargets])
   const livingCount = world.entities.filter((entity) => entity.health > 0).length
   const tavernCharacterCount = world.entities.filter((entity) => entity.health > 0 && !hiddenEntityIds.has(entity.id)).length
@@ -93,15 +58,6 @@ export const WorldTavern = ({
   const visibleEvents = chronicleScope === 'character' && selectedEntityId
     ? world.events.filter((event) => event.actorId === selectedEntityId || event.targetId === selectedEntityId)
     : world.events
-  const getStoryCharacterIds = (story: WorldState['narrative']['stories'][number]) => story.characterIds ?? Array.from(new Set(
-    story.eventIds.flatMap((eventId) => {
-      const event = eventsById.get(eventId)
-      return event ? [event.actorId, event.targetId].filter((id): id is string => Boolean(id)) : []
-    }),
-  ))
-  const visibleStories = storyScope === 'character' && selectedEntityId
-    ? world.narrative.stories.filter((story) => getStoryCharacterIds(story).includes(selectedEntityId))
-    : world.narrative.stories
   const formatWorldTime = (seconds: number) => {
     const totalSeconds = Math.max(0, Math.floor(seconds))
     const minutes = Math.floor(totalSeconds / 60)
@@ -115,51 +71,6 @@ export const WorldTavern = ({
       : onPlayActivity(activity, selectedEntityId)
     setActivityResult(result)
   }
-  const submitDirectorInput = async () => {
-    const text = directorInput.trim()
-    if (!text || isDirectorThinking || !llmConfigured) return
-    const id = `director-turn-${Date.now().toString(36)}`
-    const recentEntries = world.narrative.directorTurns.flatMap((turn) => turn.entries).slice(-12)
-    const createdAtSeconds = world.elapsedSeconds
-    const collectedEntries: TavernDirectorEntry[] = []
-    const newTurn: ActiveTavernDirectorTurn = { id, playerText: text, entries: [], createdAtSeconds, status: 'streaming' }
-    setDirectorInput('')
-    setActiveDirectorTurn(newTurn)
-    let status: WorldDirectorTurn['status'] = 'completed'
-    let errorMessage: string | undefined
-    try {
-      await onDirectWorld(text, recentEntries, (entry) => {
-        collectedEntries.push(entry)
-        setActiveDirectorTurn((current) => current?.id === id
-          ? { ...current, entries: [...collectedEntries] }
-          : current)
-      })
-    } catch (error) {
-      errorMessage = error instanceof Error ? error.message : (locale === 'zh-CN' ? '导演请求失败' : 'Director request failed')
-      status = /取消|canceled/i.test(errorMessage) ? 'stopped' : 'failed'
-    } finally {
-      const completedTurn: WorldDirectorTurn = {
-        id,
-        playerText: text,
-        entries: collectedEntries,
-        createdAtSeconds,
-        status,
-        ...(errorMessage ? { error: errorMessage } : {}),
-      }
-      onCommitDirectorTurn(completedTurn)
-      setActiveDirectorTurn(undefined)
-    }
-  }
-  const displayedDirectorTurns: ActiveTavernDirectorTurn[] = [
-    ...world.narrative.directorTurns,
-    ...(activeDirectorTurn ? [activeDirectorTurn] : []),
-  ].slice(-4)
-  const directorEntryCount = displayedDirectorTurns.reduce((total, turn) => total + turn.entries.length, 0)
-  useEffect(() => {
-    const feed = directorFeedRef.current
-    if (feed) feed.scrollTop = feed.scrollHeight
-  }, [directorEntryCount, displayedDirectorTurns.length])
-
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section
@@ -392,164 +303,8 @@ export const WorldTavern = ({
               {visibleEvents.length === 0 && <p className="muted">{t('tavern.noEvents')}</p>}
             </section>
 
-            <section className="tavern-stories">
-              <header>
-                <div>
-                  <h3>{t('tavern.stories')}</h3>
-                  <small>{t('tavern.localStoryHint')}</small>
-                </div>
-                <div className="tavern-story-actions">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAiContext((current) => current ? '' : onGetAiContext())
-                      setContextCopyStatus('idle')
-                    }}
-                  >
-                    <Eye size={15} />
-                    {aiContext ? t('tavern.hideAiContext') : t('tavern.previewAiContext')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onRunAiTurn}
-                    disabled={!llmConfigured || aiEntityCount === 0 || isAiThinking}
-                    title={!llmConfigured ? t('tavern.aiNeedsConfig') : aiEntityCount === 0 ? t('tavern.aiNeedsEntity') : undefined}
-                  >
-                    <Bot size={15} />
-                    {isAiThinking ? t('tavern.aiThinking') : t('tavern.runAiTurn', { count: aiEntityCount })}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onGenerateStory(storyScope === 'character' ? selectedEntityId : undefined)}
-                    disabled={world.entities.length === 0 && world.events.length === 0}
-                  >
-                    <Sparkles size={15} />
-                    {storyScope === 'character' && selectedEntity
-                      ? t('tavern.generateCharacterRumor', { name: selectedEntity.name })
-                      : t('tavern.generateRumor')}
-                  </button>
-                </div>
-              </header>
-              {aiContext && (
-                <section className="tavern-ai-context">
-                  <header>
-                    <div>
-                      <strong>{t('tavern.aiContextTitle')}</strong>
-                      <small>{t('tavern.aiContextHint')}</small>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          await navigator.clipboard.writeText(aiContext)
-                          setContextCopyStatus('copied')
-                        } catch {
-                          setContextCopyStatus('failed')
-                        }
-                      }}
-                    >
-                      <Clipboard size={14} />
-                      {t(`tavern.contextCopy.${contextCopyStatus}`)}
-                    </button>
-                  </header>
-                  <pre>{aiContext}</pre>
-                </section>
-              )}
-              {aiFeedback && <p className={`tavern-ai-feedback ${aiFeedback.tone}`}>{aiFeedback.text}</p>}
-              <div className="tavern-story-filter">
-                <span>{t('tavern.storyScope')}</span>
-                <div className="tavern-scope-toggle">
-                  <button type="button" className={storyScope === 'world' ? 'active' : ''} onClick={() => setStoryScope('world')}>{t('tavern.scope.world')}</button>
-                  <button type="button" className={storyScope === 'character' ? 'active' : ''} onClick={() => setStoryScope('character')} disabled={!selectedEntity}>{t('tavern.scope.character')}</button>
-                </div>
-              </div>
-              {[...visibleStories].reverse().map((story) => {
-                const characterNames = getStoryCharacterIds(story)
-                  .map((id) => world.entities.find((entity) => entity.id === id)?.name)
-                  .filter((name): name is string => Boolean(name))
-                return (
-                <article key={story.id}>
-                  <strong>{story.title}</strong>
-                  <p>{story.body}</p>
-                  <small>
-                    {t('tavern.storyMeta', {
-                      chapter: story.chapterNumber ?? world.narrative.stories.indexOf(story) + 1,
-                      time: formatWorldTime(story.createdAtSeconds),
-                      source: story.source === 'ai' ? t('tavern.sourceAi') : t('tavern.sourceLocal'),
-                    })}
-                    {characterNames.length > 0 ? ` · ${characterNames.join('、')}` : ''}
-                  </small>
-                </article>
-                )
-              })}
-              {visibleStories.length === 0 && <p className="muted">{storyScope === 'character' ? t('tavern.noCharacterStories') : t('tavern.noStories')}</p>}
-            </section>
           </div>
         </div>
-        {llmConfigured && (
-          <section className="tavern-director" aria-label={locale === 'zh-CN' ? 'AI 剧情导演' : 'AI story director'}>
-            {displayedDirectorTurns.length > 0 && (
-              <div ref={directorFeedRef} className="tavern-director-feed" aria-live="polite">
-                {displayedDirectorTurns.map((turn) => (
-                  <div className="tavern-director-turn" key={turn.id}>
-                    <p className="player"><strong>{locale === 'zh-CN' ? '你' : 'You'}</strong>{turn.playerText}</p>
-                    {turn.entries.map((entry) => {
-                      if (entry.type === 'narration') return <p key={entry.id} className="narration">{entry.text}</p>
-                      if (entry.type === 'dialogue') {
-                        const speaker = world.entities.find((entity) => entity.id === entry.speakerId)
-                        return <p key={entry.id} className="dialogue"><strong>{speaker?.name ?? entry.speakerId}</strong>{entry.text}</p>
-                      }
-                      if (entry.type === 'command') {
-                        const actor = world.entities.find((entity) => entity.id === entry.entityId)
-                        const commandTarget = 'target' in entry.command ? entry.command.target : undefined
-                        const target = commandTarget
-                          ? world.entities.find((entity) => entity.id === commandTarget.id)?.name ?? commandTarget.id
-                          : ''
-                        return <p key={entry.id} className={`operation ${entry.status ?? ''}`}><strong>{entry.status === 'rejected' ? '×' : '✓'} {actor?.name ?? entry.entityId}</strong>{entry.command.type}{target ? ` → ${target}` : ''}{entry.detail ? ` · ${entry.detail}` : ''}</p>
-                      }
-                      if (entry.type === 'relationship') {
-                        const from = world.entities.find((entity) => entity.id === entry.fromId)?.name ?? entry.fromId
-                        const to = world.entities.find((entity) => entity.id === entry.toId)?.name ?? entry.toId
-                        return <p key={entry.id} className={`operation ${entry.status ?? ''}`}><strong>{from} → {to}</strong>{entry.before ?? 0} → {entry.after ?? 0} · {entry.reason}</p>
-                      }
-                      if (entry.type === 'choice') return <button key={entry.id} type="button" className="choice" disabled={isDirectorThinking} onClick={() => {
-                        setDirectorInput(entry.suggestedInput)
-                        window.requestAnimationFrame(() => directorInputRef.current?.focus())
-                      }}>{entry.label}</button>
-                      return <p key={entry.id} className="summary">{entry.summary}</p>
-                    })}
-                    {turn.status === 'streaming' && <p className="streaming"><Bot size={12} />{locale === 'zh-CN' ? '剧情正在展开……' : 'The story is unfolding…'}</p>}
-                    {turn.error && <p className="error">{turn.error}</p>}
-                  </div>
-                ))}
-              </div>
-            )}
-            <form onSubmit={(event) => { event.preventDefault(); void submitDirectorInput() }}>
-              <textarea
-                ref={directorInputRef}
-                value={directorInput}
-                onChange={(event) => setDirectorInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
-                  event.preventDefault()
-                  void submitDirectorInput()
-                }}
-                rows={2}
-                maxLength={800}
-                disabled={isDirectorThinking}
-                placeholder={locale === 'zh-CN'
-                  ? '例如：让罗兰先和黑岩使者谈谈，尽量避免战斗。'
-                  : 'For example: Have Roland question the envoy and avoid a fight.'}
-              />
-              {isDirectorThinking ? (
-                <button type="button" className="stop" onClick={onStopDirector}><Square size={15} />{locale === 'zh-CN' ? '停止' : 'Stop'}</button>
-              ) : (
-                <button type="submit" disabled={!directorInput.trim()}><Send size={15} />{locale === 'zh-CN' ? '导演' : 'Direct'}</button>
-              )}
-            </form>
-            <small>{locale === 'zh-CN' ? 'AI 负责理解与对白；移动、战斗和数值变化仍由世界规则校验。' : 'AI handles intent and dialogue; world rules still validate movement, combat, and values.'}</small>
-          </section>
-        )}
       </section>
     </div>
   )

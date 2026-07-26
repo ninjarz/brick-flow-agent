@@ -32,7 +32,7 @@ import { addWorldStory, createLocalTavernStory } from './lib/worldNarrative'
 import { playTavernActivity, type TavernActivityKind, type TavernActivityResult } from './lib/worldTavernActivities'
 import { applyTavernAiResponse, requestTavernAiActivity } from './lib/worldTavernAi'
 import { applyTavernDirectorEvent, buildTavernDirectorPrompt, createTavernDirectorStreamParser, tavernDirectorSystemPrompt, type TavernDirectorEntry } from './lib/worldTavernDirector'
-import { applyWorldAiTurn, buildWorldAiTurnPrompt, createWorldAiSnapshot, formatWorldAiTurnSummary, requestWorldAiTurn, worldAiSystemPrompt } from './lib/worldAi'
+import { applyWorldAiTurn, createWorldAiSnapshot, formatWorldAiTurnSummary, requestWorldAiTurn } from './lib/worldAi'
 import { analyzeBuildStability } from './lib/stabilityAnalysis'
 import { formatLDrawPlan, parseLDrawPlan } from './lib/ldrawPlan'
 import { getEffectiveInventory, loadInventoryOverrides, saveInventoryOverrides } from './lib/userInventory'
@@ -49,6 +49,7 @@ const ObjImportModal = lazy(() => import('./components/ObjImportModal').then((mo
 const StabilityLab = lazy(() => import('./components/StabilityLab').then((module) => ({ default: module.StabilityLab })))
 const WorldEntityEditorPanel = lazy(() => import('./components/WorldEntityEditorPanel').then((module) => ({ default: module.WorldEntityEditorPanel })))
 const WorldTavern = lazy(() => import('./components/WorldTavern').then((module) => ({ default: module.WorldTavern })))
+const WorldStoryDock = lazy(() => import('./components/WorldStoryDock').then((module) => ({ default: module.WorldStoryDock })))
 
 const defaultFinishedAssetI18nKeys = new Map(
   defaultFinishedAssets
@@ -202,6 +203,7 @@ function App() {
   const [isObjImportOpen, setIsObjImportOpen] = useState(false)
   const [isStabilityLabOpen, setIsStabilityLabOpen] = useState(false)
   const [isTavernOpen, setIsTavernOpen] = useState(false)
+  const [isWorldStoryDockOpen, setIsWorldStoryDockOpen] = useState(true)
   const [isWorldRosterOpen, setIsWorldRosterOpen] = useState(false)
   const [isWorldAiThinking, setIsWorldAiThinking] = useState(false)
   const [isTavernAiThinking, setIsTavernAiThinking] = useState(false)
@@ -1696,13 +1698,6 @@ function App() {
     setWorld(next)
   }, [])
 
-  const getWorldAiContextPreview = useCallback(() => {
-    const currentWorld = worldRef.current
-    const currentPlan = planRef.current
-    const snapshot = createWorldAiSnapshot(currentWorld, currentPlan.bricks, currentPlan.structures)
-    return ['# system', worldAiSystemPrompt, '', '# world', buildWorldAiTurnPrompt(snapshot)].join('\n')
-  }, [])
-
   const clearTavernHistory = useCallback(() => {
     setWorld((current) => {
       const next = {
@@ -2297,15 +2292,26 @@ function App() {
                 {world.entities.length > 0 && (
                   <>
                     {visibleWorldEntities.length > 0 && (
-                      <button
-                        type="button"
-                        aria-label={t('top.tavern')}
-                        title={t('top.tavern')}
-                        onClick={() => setIsTavernOpen(true)}
-                      >
-                        <MessageCircle size={14} />
-                        {t('top.tavern')}
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          className={isWorldStoryDockOpen ? 'active' : ''}
+                          aria-pressed={isWorldStoryDockOpen}
+                          onClick={() => setIsWorldStoryDockOpen((current) => !current)}
+                        >
+                          <MessageCircle size={14} />
+                          {locale === 'zh-CN' ? '剧情' : 'Story'}
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={t('top.tavern')}
+                          title={t('top.tavern')}
+                          onClick={() => setIsTavernOpen(true)}
+                        >
+                          <BookOpen size={14} />
+                          {t('top.tavern')}
+                        </button>
+                      </>
                     )}
                     <button
                       type="button"
@@ -2464,6 +2470,23 @@ function App() {
               onDeleteSelected={deleteSelected}
             />
           </Suspense>
+          {isWorldStoryDockOpen && visibleWorldEntities.length > 0 && !placementSession && !worldEntityPlacement && (
+            <Suspense fallback={null}>
+              <WorldStoryDock
+                world={world}
+                llmConfigured={llmConfigComplete}
+                isAiThinking={isWorldAiThinking}
+                isDirectorThinking={isTavernDirectorThinking}
+                aiFeedback={worldAiFeedback}
+                onGenerateStory={() => generateTavernStory()}
+                onRunAiTurn={runWorldAiTurn}
+                onDirectWorld={runTavernDirectorTurn}
+                onStopDirector={stopTavernDirector}
+                onCommitDirectorTurn={commitTavernDirectorTurn}
+                onClose={() => setIsWorldStoryDockOpen(false)}
+              />
+            </Suspense>
+          )}
           <BrickEditorPanel
             plan={plan}
             selectedBrick={selectedBrick}
@@ -2569,9 +2592,6 @@ function App() {
         <Suspense fallback={null}>
           <WorldTavern
             world={world}
-            onGenerateStory={generateTavernStory}
-            onRunAiTurn={runWorldAiTurn}
-            onGetAiContext={getWorldAiContextPreview}
             onClearHistory={clearTavernHistory}
             onUpdateScenario={updateWorldScenario}
             structures={plan.structures ?? []}
@@ -2580,16 +2600,9 @@ function App() {
             onPlayAiActivity={runAiTavernActivity}
             onWatchActivity={watchTavernActivity}
             llmConfigured={llmConfigComplete}
-            isAiThinking={isWorldAiThinking}
             isAiActivityThinking={isTavernAiThinking}
-            isDirectorThinking={isTavernDirectorThinking}
-            onDirectWorld={runTavernDirectorTurn}
-            onStopDirector={stopTavernDirector}
-            onCommitDirectorTurn={commitTavernDirectorTurn}
-            aiFeedback={worldAiFeedback}
             onClose={() => {
               tavernAiAbortRef.current?.abort()
-              tavernDirectorAbortRef.current?.abort()
               setIsTavernOpen(false)
             }}
           />
