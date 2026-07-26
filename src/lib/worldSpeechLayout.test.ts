@@ -63,4 +63,28 @@ describe('world speech bubble layout', () => {
     expect(Math.abs(after[0].offsetY - before[0].offsetY)).toBeLessThan(3)
     expect(Math.abs(after[1].offsetY - before[1].offsetY)).toBeLessThan(3)
   })
+
+  it('does not jump an entire row when overlapping speakers move by sub-pixels', () => {
+    const beforeInputs = [
+      { id: 'a', anchorX: 300, anchorY: 220.2, width: 180, height: 58 },
+      { id: 'b', anchorX: 300.2, anchorY: 220.05, width: 180, height: 58 },
+    ]
+    const afterInputs = [
+      { id: 'a', anchorX: 300, anchorY: 219.82, width: 180, height: 58 },
+      { id: 'b', anchorX: 299.85, anchorY: 219.86, width: 180, height: 58 },
+    ]
+    const before = layoutWorldSpeechBubbles(beforeInputs, { width: 640, height: 420 })
+    const previous = new Map(before.map((item) => [item.id, item]))
+    const after = layoutWorldSpeechBubbles(afterInputs, { width: 640, height: 420 }, previous)
+    const beforeById = new Map(before.map((item, index) => [
+      item.id,
+      { centerY: beforeInputs[index].anchorY + item.offsetY },
+    ]))
+
+    for (let index = 0; index < after.length; index += 1) {
+      const previousPosition = beforeById.get(after[index].id)!
+      const nextCenterY = afterInputs[index].anchorY + after[index].offsetY
+      expect(Math.abs(nextCenterY - previousPosition.centerY)).toBeLessThan(2)
+    }
+  })
 })

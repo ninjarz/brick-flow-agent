@@ -1,7 +1,7 @@
 import { Billboard, Edges, Html, Line, OrbitControls, Text } from '@react-three/drei'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
-import { memo, type CSSProperties, type ReactNode, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, type CSSProperties, type ReactNode, type RefCallback, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { BufferGeometry, DoubleSide, Float32BufferAttribute, Object3D, Vector3, type DirectionalLight, type Group, type InstancedMesh } from 'three'
 import { brickById, colorHex, colorOpacity } from '../data/basicBricks'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
@@ -2057,6 +2057,7 @@ const WorldEntitySpeechLayer = ({ entities }: { entities: WorldEntity[] }) => {
   const displayPositionsRef = useRef(new Map<string, { x: number; y: number; z: number }>())
   const layoutOffsetsRef = useRef(new Map<string, { offsetX: number; offsetY: number; tailOffsetX: number; tailSide: 'top' | 'bottom' }>())
   const targetLayoutOffsetsRef = useRef(new Map<string, { offsetX: number; offsetY: number; tailOffsetX: number; tailSide: 'top' | 'bottom' }>())
+  const bubbleRefCallbacksRef = useRef(new Map<string, RefCallback<HTMLDivElement>>())
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
   const layoutElapsedRef = useRef(speechLayoutIntervalSeconds)
   const layoutDirtyRef = useRef(true)
@@ -2066,6 +2067,29 @@ const WorldEntitySpeechLayer = ({ entities }: { entities: WorldEntity[] }) => {
     () => entities.filter((entity) => Boolean(entity.speech) && entity.health > 0),
     [entities],
   )
+  const getBubbleRef = useCallback((entityId: string) => {
+    const existing = bubbleRefCallbacksRef.current.get(entityId)
+    if (existing) return existing
+    const callback: RefCallback<HTMLDivElement> = (node) => {
+      const previousNode = bubbleRefs.current.get(entityId)
+      if (previousNode && previousNode !== node) resizeObserverRef.current?.unobserve(previousNode)
+      if (node) {
+        bubbleRefs.current.set(entityId, node)
+        resizeObserverRef.current?.observe(node)
+        layoutDirtyRef.current = true
+        return
+      }
+      bubbleRefs.current.delete(entityId)
+      bubbleSizeRefs.current.delete(entityId)
+      displayPositionsRef.current.delete(entityId)
+      layoutOffsetsRef.current.delete(entityId)
+      targetLayoutOffsetsRef.current.delete(entityId)
+      lastStylesRef.current.delete(entityId)
+      bubbleRefCallbacksRef.current.delete(entityId)
+    }
+    bubbleRefCallbacksRef.current.set(entityId, callback)
+    return callback
+  }, [])
 
   useLayoutEffect(() => {
     const observer = new ResizeObserver((entries) => {
@@ -2115,8 +2139,9 @@ const WorldEntitySpeechLayer = ({ entities }: { entities: WorldEntity[] }) => {
       const visible = projectedPoint.z >= -1 && projectedPoint.z <= 1
         && anchorX >= -120 && anchorX <= size.width + 120
         && anchorY >= -120 && anchorY <= size.height + 120
-      const visibility = visible ? 'visible' : 'hidden'
-      const targetOffset = targetLayoutOffsetsRef.current.get(entity.id) ?? {
+      const existingTargetOffset = targetLayoutOffsetsRef.current.get(entity.id)
+      const visibility = visible && existingTargetOffset ? 'visible' : 'hidden'
+      const targetOffset = existingTargetOffset ?? {
         offsetX: 0,
         offsetY: -42,
         tailOffsetX: 0,
@@ -2180,22 +2205,7 @@ const WorldEntitySpeechLayer = ({ entities }: { entities: WorldEntity[] }) => {
           return (
             <div
               key={entity.id}
-              ref={(node) => {
-                const previousNode = bubbleRefs.current.get(entity.id)
-                if (previousNode && previousNode !== node) resizeObserverRef.current?.unobserve(previousNode)
-                if (node) {
-                  bubbleRefs.current.set(entity.id, node)
-                  resizeObserverRef.current?.observe(node)
-                  layoutDirtyRef.current = true
-                } else {
-                  bubbleRefs.current.delete(entity.id)
-                  bubbleSizeRefs.current.delete(entity.id)
-                  displayPositionsRef.current.delete(entity.id)
-                  layoutOffsetsRef.current.delete(entity.id)
-                  targetLayoutOffsetsRef.current.delete(entity.id)
-                  lastStylesRef.current.delete(entity.id)
-                }
-              }}
+              ref={getBubbleRef(entity.id)}
               className="world-entity-speech-bubble"
               data-entity-id={entity.id}
               data-faction={entity.factionId}

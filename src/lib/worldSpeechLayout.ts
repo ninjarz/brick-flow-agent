@@ -21,6 +21,8 @@ type PreviousLayout = ReadonlyMap<string, Pick<WorldSpeechLayoutItem, 'offsetX' 
 const viewportMargin = 10
 const bubbleGap = 9
 const anchorGap = 15
+const slotContinuityTolerance = 2
+const slotReturnHysteresis = 24
 const horizontalSlots = [0, -1, 1, -2, 2]
 
 const clamp = (value: number, minimum: number, maximum: number) => Math.max(minimum, Math.min(maximum, value))
@@ -37,6 +39,12 @@ const overlapArea = (
   right: WorldSpeechLayoutItem['rect'],
 ) => Math.max(0, Math.min(left.right, right.right) - Math.max(left.left, right.left) + bubbleGap)
   * Math.max(0, Math.min(left.bottom, right.bottom) - Math.max(left.top, right.top) + bubbleGap)
+
+const actualOverlapArea = (
+  left: WorldSpeechLayoutItem['rect'],
+  right: WorldSpeechLayoutItem['rect'],
+) => Math.max(0, Math.min(left.right, right.right) - Math.max(left.left, right.left))
+  * Math.max(0, Math.min(left.bottom, right.bottom) - Math.max(left.top, right.top))
 
 export const layoutWorldSpeechBubbles = (
   inputs: WorldSpeechLayoutInput[],
@@ -55,7 +63,17 @@ export const layoutWorldSpeechBubbles = (
     const halfWidth = width / 2
     const halfHeight = height / 2
     const preferredCenterY = input.anchorY - halfHeight - anchorGap
-    const candidates: Array<{ centerX: number; centerY: number; tailSide: 'top' | 'bottom'; rect: WorldSpeechLayoutItem['rect']; score: number }> = []
+    const candidates: Array<{
+      centerX: number
+      centerY: number
+      tailSide: 'top' | 'bottom'
+      rect: WorldSpeechLayoutItem['rect']
+      overlap: number
+      actualOverlap: number
+      preferenceCost: number
+      continuityDistance: number
+      score: number
+    }> = []
     for (const tailSide of ['bottom', 'top'] as const) {
       for (let tier = 0; tier < Math.max(4, inputs.length); tier += 1) {
         for (const slot of horizontalSlots) {
@@ -78,26 +96,50 @@ export const layoutWorldSpeechBubbles = (
             : rect.top >= input.anchorY + 3
           if (!pointsTowardAnchor) continue
           const overlap = placed.reduce((total, item) => total + overlapArea(rect, item.rect), 0)
+          const actualOverlap = placed.reduce((total, item) => total + actualOverlapArea(rect, item.rect), 0)
           const distance = Math.abs(centerX - input.anchorX) + Math.abs(centerY - preferredCenterY) * 0.8
           const sidePenalty = tailSide === 'top' ? 80 : 0
-          const continuityPenalty = previous
-            ? (
-              Math.abs(centerX - input.anchorX - previous.offsetX)
+          const continuityDistance = previous
+            ? Math.abs(centerX - input.anchorX - previous.offsetX)
               + Math.abs(centerY - input.anchorY - previous.offsetY)
               + (tailSide === previous.tailSide ? 0 : 40)
-            ) * 4
-            : 0
+            : Number.POSITIVE_INFINITY
+          const preferenceCost = distance + sidePenalty
           candidates.push({
             centerX,
             centerY,
             tailSide,
             rect,
-            score: overlap * 1_000 + distance + sidePenalty + continuityPenalty,
+            overlap,
+            actualOverlap,
+            preferenceCost,
+            continuityDistance,
+            score: overlap * 1_000 + preferenceCost,
           })
         }
       }
     }
-    const selected = candidates.sort((left, right) => left.score - right.score)[0] ?? {
+    const sortedCandidates = candidates.sort((left, right) => left.score - right.score)
+    const bestCandidate = sortedCandidates[0]
+    const previousCandidate = previous
+      ? candidates
+        .filter((candidate) => candidate.actualOverlap === 0)
+        .sort((left, right) => left.continuityDistance - right.continuityDistance)[0]
+      : undefined
+    const bestClearCandidate = candidates
+      .filter((candidate) => candidate.overlap === 0)
+      .sort((left, right) => left.preferenceCost - right.preferenceCost)[0]
+    // A sub-pixel anchor movement must not force a whole discrete row jump merely
+    // because the preferred 9px gap briefly shrank. Keep the current slot while
+    // the actual bubble rectangles remain disjoint; return toward the speaker
+    // once a clearly better fully-spaced slot becomes available.
+    const keepPreviousSlot = previousCandidate
+      && previousCandidate.continuityDistance <= slotContinuityTolerance
+      && (
+        !bestClearCandidate
+        || previousCandidate.preferenceCost <= bestClearCandidate.preferenceCost + slotReturnHysteresis
+      )
+    const selected = (keepPreviousSlot ? previousCandidate : bestCandidate) ?? {
       centerX: clamp(input.anchorX, viewportMargin + halfWidth, viewport.width - viewportMargin - halfWidth),
       centerY: clamp(preferredCenterY, viewportMargin + halfHeight, viewport.height - viewportMargin - halfHeight),
       tailSide: 'bottom' as const,
