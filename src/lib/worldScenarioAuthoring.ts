@@ -33,6 +33,75 @@ const cloneStage = (stage: WorldScenarioStage): WorldScenarioStage => ({
   })),
 })
 
+export const createWorldScenarioFlow = (
+  scenarios: WorldScenarioRuntime[],
+  entityIds: string[],
+  existingEventIds: string[],
+  locale: 'zh-CN' | 'en-US',
+): WorldScenarioRuntime => {
+  const id = makeUniqueId('story-flow', new Set(scenarios.map((scenario) => scenario.id)))
+  return {
+    id,
+    assetId: 'authored-flow',
+    title: locale === 'zh-CN' ? '未命名剧情流程' : 'Untitled story flow',
+    description: locale === 'zh-CN'
+      ? '一条可独立探索和推进的剧情流程。'
+      : 'An independently explorable story flow.',
+    enabled: false,
+    castEntityIds: entityIds,
+    processedEventIds: existingEventIds.slice(-500),
+    authoringVersion: 2,
+    stages: [{
+      id: 'start',
+      title: locale === 'zh-CN' ? '起始节点' : 'Start node',
+      description: locale === 'zh-CN' ? '设置触发条件和发生的剧情。' : 'Configure its trigger and story outcome.',
+      status: 'active',
+      trigger: { eventType: 'interaction' },
+      nextStageId: null,
+    }],
+  }
+}
+
+export const duplicateWorldScenarioFlow = (
+  scenario: WorldScenarioRuntime,
+  scenarios: WorldScenarioRuntime[],
+  existingEventIds: string[],
+  locale: 'zh-CN' | 'en-US',
+): WorldScenarioRuntime => {
+  const id = makeUniqueId(`${scenario.id}-copy`, new Set(scenarios.map((candidate) => candidate.id)))
+  return {
+    ...scenario,
+    id,
+    assetId: 'authored-flow',
+    title: `${scenario.title}${locale === 'zh-CN' ? '（副本）' : ' (copy)'}`,
+    enabled: false,
+    stages: scenario.stages.map((stage, index) => ({
+      ...cloneStage(stage),
+      status: index === 0 ? 'active' : 'locked',
+      completedAtSeconds: undefined,
+    })),
+    processedEventIds: existingEventIds.slice(-500),
+    activeDialogue: undefined,
+    outcomeId: undefined,
+    authoringVersion: 2,
+  }
+}
+
+export const resetWorldScenarioFlow = (
+  scenario: WorldScenarioRuntime,
+  existingEventIds: string[],
+): WorldScenarioRuntime => ({
+  ...scenario,
+  stages: scenario.stages.map((stage, index) => ({
+    ...cloneStage(stage),
+    status: index === 0 ? 'active' : 'locked',
+    completedAtSeconds: undefined,
+  })),
+  processedEventIds: existingEventIds.slice(-500),
+  activeDialogue: undefined,
+  outcomeId: undefined,
+})
+
 export const getWorldScenarioDefaultNextStageId = (
   scenario: WorldScenarioRuntime,
   stageIndex: number,
@@ -50,8 +119,8 @@ export const addWorldScenarioStage = (
   const stageId = makeUniqueId('stage', existingIds)
   const stage: WorldScenarioStage = {
     id: stageId,
-    title: locale === 'zh-CN' ? '新章节' : 'New stage',
-    description: locale === 'zh-CN' ? '描述玩家需要完成的目标。' : 'Describe the player objective.',
+    title: locale === 'zh-CN' ? '新节点' : 'New node',
+    description: locale === 'zh-CN' ? '描述触发条件满足后发生的剧情。' : 'Describe what happens when its trigger matches.',
     status: scenario.stages.length === 0 ? 'active' : 'locked',
     trigger: { eventType: 'interaction' },
   }

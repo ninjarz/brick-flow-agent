@@ -217,6 +217,47 @@ describe('WorldEntity foundation', () => {
     expect(restored.scenarios[0].stages[1].branches).toBeUndefined()
   })
 
+  it('migrates matching stored director dialogue into a pending conversation fact', () => {
+    const definition = worldEntityDefinitionById.get('knight')!
+    const roland = createWorldEntity(definition, { id: 'roland', name: '罗兰', controller: 'player' })
+    const eileen = createWorldEntity(definition, { id: 'eileen', name: '艾琳' })
+    const stored = {
+      ...createEmptyWorldState('dialogue-plan'),
+      entities: [roland, eileen],
+      scenarios: [{
+        id: 'story',
+        assetId: 'custom',
+        title: 'Story',
+        description: 'Story',
+        processedEventIds: [],
+        stages: [{
+          id: 'talk',
+          title: 'Talk',
+          description: 'Talk',
+          status: 'active' as const,
+          trigger: { eventType: 'interaction' as const, actorId: roland.id, targetId: eileen.id },
+        }],
+      }],
+      narrative: {
+        ...createEmptyWorldState('dialogue-plan').narrative,
+        directorTurns: [{
+          id: 'old-turn',
+          playerText: '和艾琳聊聊。',
+          createdAtSeconds: 12,
+          status: 'completed' as const,
+          entries: [{ id: 'line', type: 'dialogue' as const, speakerId: eileen.id, text: '北路有异动。' }],
+        }],
+      },
+    }
+    const restored = parseStoredWorldState(stored, stored.planId)!
+    expect(restored.events).toContainEqual(expect.objectContaining({
+      type: 'interaction',
+      actorId: roland.id,
+      targetId: eileen.id,
+      timeSeconds: 12,
+    }))
+  })
+
   it('preserves explicitly terminal authored stages while restoring storage', () => {
     const stored = {
       ...createEmptyWorldState('terminal-plan'),

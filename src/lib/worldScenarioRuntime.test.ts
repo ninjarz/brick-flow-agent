@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import type { WorldEvent, WorldScenarioRuntime } from '../types/world'
 import { createEmptyWorldState, createWorldEntity } from './worldEntity'
-import { advanceWorldScenarios } from './worldScenarioRuntime'
+import { advanceWorldScenarios, getActiveWorldScenarioStages } from './worldScenarioRuntime'
 
 const commandEvent = (id: string, actorId: string, targetId: string): WorldEvent => ({
   id,
@@ -15,6 +15,71 @@ const commandEvent = (id: string, actorId: string, targetId: string): WorldEvent
 })
 
 describe('world scenario runtime', () => {
+  it('keeps multiple story flows active and advances them independently', () => {
+    const first: WorldScenarioRuntime = {
+      id: 'first-flow',
+      assetId: 'authored',
+      title: 'First',
+      description: 'First',
+      processedEventIds: [],
+      stages: [{
+        id: 'first-node',
+        title: 'First node',
+        description: 'First node',
+        status: 'active',
+        trigger: { eventType: 'interaction', actorId: 'hero', targetId: 'first-target' },
+      }],
+    }
+    const second: WorldScenarioRuntime = {
+      id: 'second-flow',
+      assetId: 'authored',
+      title: 'Second',
+      description: 'Second',
+      processedEventIds: [],
+      stages: [{
+        id: 'second-node',
+        title: 'Second node',
+        description: 'Second node',
+        status: 'active',
+        trigger: { eventType: 'interaction', actorId: 'hero', targetId: 'second-target' },
+      }],
+    }
+    const world = { ...createEmptyWorldState('parallel'), scenarios: [first, second] }
+    expect(getActiveWorldScenarioStages(world).map(({ scenario }) => scenario.id)).toEqual(['first-flow', 'second-flow'])
+
+    const advanced = advanceWorldScenarios({
+      ...world,
+      events: [{ id: 'second-event', timeSeconds: 1, type: 'interaction', actorId: 'hero', targetId: 'second-target' }],
+    })
+    expect(advanced.scenarios[0].stages[0].status).toBe('active')
+    expect(advanced.scenarios[1].stages[0].status).toBe('completed')
+  })
+
+  it('keeps draft or paused flows from consuming world events', () => {
+    const scenario: WorldScenarioRuntime = {
+      id: 'draft-flow',
+      assetId: 'authored',
+      title: 'Draft',
+      description: 'Draft',
+      enabled: false,
+      processedEventIds: [],
+      stages: [{
+        id: 'start',
+        title: 'Start',
+        description: 'Start',
+        status: 'active',
+        trigger: { eventType: 'interaction', actorId: 'hero', targetId: 'target' },
+      }],
+    }
+    const world = {
+      ...createEmptyWorldState('draft'),
+      scenarios: [scenario],
+      events: [{ id: 'event', timeSeconds: 1, type: 'interaction' as const, actorId: 'hero', targetId: 'target' }],
+    }
+    expect(advanceWorldScenarios(world)).toBe(world)
+    expect(getActiveWorldScenarioStages(world)).toEqual([])
+  })
+
   it('advances one stage once and applies its actions', () => {
     const knight = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'knight', factionId: 'blue' })
     const stranger = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'stranger', factionId: 'neutral' })

@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest'
 import type { WorldScenarioRuntime } from '../types/world'
 import {
   addWorldScenarioStage,
+  createWorldScenarioFlow,
   deleteWorldScenarioStage,
+  duplicateWorldScenarioFlow,
   duplicateWorldScenarioStage,
   getWorldScenarioDefaultNextStageId,
   moveWorldScenarioStage,
+  resetWorldScenarioFlow,
   updateWorldScenarioStageTransition,
 } from './worldScenarioAuthoring'
 
@@ -22,6 +25,37 @@ const makeScenario = (): WorldScenarioRuntime => ({
 })
 
 describe('world scenario authoring', () => {
+  it('creates and duplicates independent parallel flows without consuming old events', () => {
+    const created = createWorldScenarioFlow([makeScenario()], ['hero'], ['old-event'], 'zh-CN')
+    expect(created).toMatchObject({
+      id: 'story-flow',
+      enabled: false,
+      castEntityIds: ['hero'],
+      processedEventIds: ['old-event'],
+    })
+    expect(created.stages[0]).toMatchObject({ title: '起始节点', status: 'active', nextStageId: null })
+
+    const duplicated = duplicateWorldScenarioFlow(makeScenario(), [makeScenario()], ['existing'], 'zh-CN')
+    expect(duplicated.id).toBe('story-copy')
+    expect(duplicated.enabled).toBe(false)
+    expect(duplicated.title).toBe('Story（副本）')
+    expect(duplicated.processedEventIds).toEqual(['existing'])
+    expect(duplicated.stages.map((stage) => stage.status)).toEqual(['active', 'locked'])
+  })
+
+  it('restarts a flow from its first node without replaying historical events', () => {
+    const scenario = makeScenario()
+    scenario.stages[0] = { ...scenario.stages[0], status: 'completed', completedAtSeconds: 8 }
+    scenario.stages[1] = { ...scenario.stages[1], status: 'active' }
+    scenario.processedEventIds = ['old']
+    scenario.outcomeId = 'old-ending'
+    const reset = resetWorldScenarioFlow(scenario, ['old', 'latest'])
+    expect(reset.stages.map((stage) => stage.status)).toEqual(['active', 'locked'])
+    expect(reset.stages[0].completedAtSeconds).toBeUndefined()
+    expect(reset.processedEventIds).toEqual(['old', 'latest'])
+    expect(reset.outcomeId).toBeUndefined()
+  })
+
   it('adds and duplicates stages without sharing identifiers', () => {
     const added = addWorldScenarioStage(makeScenario(), 'en-US')
     expect(added.scenario.stages).toHaveLength(3)

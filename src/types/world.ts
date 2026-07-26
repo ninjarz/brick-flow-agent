@@ -138,7 +138,7 @@ export type WorldRelationship = {
 
 export type WorldDirectorEvent =
   | { type: 'narration'; text: string }
-  | { type: 'dialogue'; speakerId: string; text: string }
+  | { type: 'dialogue'; speakerId: string; listenerId?: string; text: string }
   | { type: 'command'; entityId: string; command: WorldEntityCommand }
   | { type: 'relationship'; fromId: string; toId: string; delta: number; reason: string }
   | { type: 'choice'; label: string; suggestedInput: string }
@@ -224,6 +224,7 @@ export type WorldScenarioRuntime = {
   assetId: string
   title: string
   description: string
+  enabled?: boolean
   castEntityIds?: string[]
   stages: WorldScenarioStage[]
   processedEventIds: string[]

@@ -38,7 +38,7 @@ import { formatLDrawPlan, parseLDrawPlan } from './lib/ldrawPlan'
 import { getEffectiveInventory, loadInventoryOverrides, saveInventoryOverrides } from './lib/userInventory'
 import { importAssetPlanIncrementally } from './lib/incrementalAssetImport'
 import { addWorldScenario, startWorldScenario } from './lib/worldScenarioImport'
-import { advanceWorldScenarios, getActiveWorldScenarioStage } from './lib/worldScenarioRuntime'
+import { advanceWorldScenarios, getActiveWorldScenarioStages } from './lib/worldScenarioRuntime'
 import { clearWorkspaceDraft, hasIndexedDbWorkspaceDraft, loadWorkspaceDraft, loadWorkspaceDraftFromIndexedDb, saveWorkspaceDraft } from './lib/workspaceDraft'
 import type { BrickStructure, BuildPlan, FinishedAsset, LlmConfig, PlacedBrick } from './types/bricks'
 import type { WorldDirectorTurn, WorldEntity, WorldEntityCommand, WorldEntityControllerKind, WorldState } from './types/world'
@@ -426,7 +426,7 @@ function App() {
       ? firstController
       : 'mixed'
   }, [world.entities])
-  const activeWorldScenario = useMemo(() => getActiveWorldScenarioStage(world), [world])
+  const activeWorldScenarios = useMemo(() => getActiveWorldScenarioStages(world), [world])
   const hiddenScenarioEntityIds = useMemo(() => world.hiddenTargets.filter((target) => target.kind === 'entity').map((target) => target.id), [world.hiddenTargets])
   const visibleWorldEntities = useMemo(() => {
     if (showHiddenScenarioObjects) return world.entities
@@ -1440,6 +1440,23 @@ function App() {
     }))
   }, [])
 
+  const addAuthoredWorldScenario = useCallback((scenario: WorldState['scenarios'][number]) => {
+    setWorld((current) => ({
+      ...current,
+      scenarios: [...current.scenarios, scenario],
+    }))
+  }, [])
+
+  const deleteAuthoredWorldScenario = useCallback((scenarioId: string) => {
+    setWorld((current) => ({
+      ...current,
+      scenarios: current.scenarios.filter((scenario) => scenario.id !== scenarioId),
+      entities: current.entities.map((entity) => entity.storylineId === scenarioId
+        ? { ...entity, storylineId: undefined }
+        : entity),
+    }))
+  }, [])
+
   const setWorldTargetVisibility = useCallback((target: WorldState['hiddenTargets'][number], visible: boolean) => {
     const key = `${target.kind}:${target.id}`
     setWorld((current) => ({
@@ -1606,6 +1623,12 @@ function App() {
     const requestWorld = worldRef.current
     const requestPlan = planRef.current
     const snapshot = createWorldAiSnapshot(requestWorld, requestPlan.bricks, requestPlan.structures)
+    const protagonist = requestWorld.scenarios
+      .flatMap((scenario) => scenario.stages)
+      .map((stage) => stage.trigger.actorId)
+      .map((actorId) => requestWorld.entities.find((entity) => entity.id === actorId))
+      .find((entity) => Boolean(entity))
+      ?? requestWorld.entities.find((entity) => entity.controller === 'player')
     let eventCount = 0
     const parser = createTavernDirectorStreamParser((event) => {
       eventCount += 1
@@ -1633,7 +1656,13 @@ function App() {
       await requestLlmTextStream({
         config: llmConfig,
         systemPrompt: tavernDirectorSystemPrompt,
-        userPrompt: buildTavernDirectorPrompt(snapshot, playerText, recentEntries, locale),
+        userPrompt: buildTavernDirectorPrompt(
+          snapshot,
+          playerText,
+          recentEntries,
+          locale,
+          protagonist ? { id: protagonist.id, name: protagonist.name } : undefined,
+        ),
         locale,
         signal: controller.signal,
         temperature: 0.65,
@@ -2320,15 +2349,17 @@ function App() {
                     {locale === 'zh-CN' ? (showHiddenScenarioObjects ? '显影中' : '显影') : (showHiddenScenarioObjects ? 'Revealing' : 'Reveal')}
                   </button>
                 )}
-                {activeWorldScenario && visibleWorldEntities.length > 0 && (
+                {activeWorldScenarios.length > 0 && visibleWorldEntities.length > 0 && (
                   <button
                     type="button"
                     className="world-scenario-objective"
-                    title={activeWorldScenario.stage.description}
+                    title={activeWorldScenarios.map(({ scenario, stage }) => `${scenario.title}：${stage.title} — ${stage.description}`).join('\n')}
                     onClick={() => setIsTavernOpen(true)}
                   >
                     <BookOpen size={14} />
-                    <span>{activeWorldScenario.stage.title}</span>
+                    <span>{activeWorldScenarios.length === 1
+                      ? activeWorldScenarios[0].stage.title
+                      : (locale === 'zh-CN' ? `${activeWorldScenarios.length} 条剧情可探索` : `${activeWorldScenarios.length} story flows`)}</span>
                   </button>
                 )}
               </div>
@@ -2448,6 +2479,7 @@ function App() {
             <Suspense fallback={null}>
               <WorldStoryDock
                 world={world}
+                structures={plan.structures ?? []}
                 llmConfigured={llmConfigComplete}
                 isAiThinking={isWorldAiThinking}
                 isDirectorThinking={isTavernDirectorThinking}
@@ -2571,6 +2603,8 @@ function App() {
             world={world}
             onClearHistory={clearTavernHistory}
             onUpdateScenario={updateWorldScenario}
+            onAddScenario={addAuthoredWorldScenario}
+            onDeleteScenario={deleteAuthoredWorldScenario}
             structures={plan.structures ?? []}
             onSetTargetVisibility={setWorldTargetVisibility}
             onClose={() => {

@@ -197,8 +197,8 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
           id: 'scenario-border-tavern-investigate',
           title: zh ? '询问北路斥候' : 'Question the Northern Scout',
           description: zh
-            ? '选择罗兰，向艾琳下达“交互”命令。对话结束后，断箭指向的旧采石场密门会显现。'
-            : 'Have Roland interact with Eileen. When the dialogue ends, the hidden quarry door indicated by the arrow will be revealed.',
+            ? '让罗兰与艾琳交谈。对话结束后，断箭指向的旧采石场密门会显现。'
+            : 'Have Roland talk with Eileen. When the dialogue ends, the hidden quarry door indicated by the arrow will be revealed.',
           status: 'active',
           trigger: { eventType: 'interaction', actorId: knight.id, targetId: archer.id },
           dialogue: [
@@ -231,8 +231,8 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
           id: 'scenario-border-tavern-confront',
           title: zh ? '对质黑岩使者' : 'Confront the Blackrock Envoy',
           description: zh
-            ? '让罗兰与黑岩使者交互。完整对话后使者才会转为敌对，同时暴露远处伪装成废墟的黑岩前哨。'
-            : 'Have Roland interact with the envoy. Only after the full dialogue does he turn hostile and expose the disguised Blackrock outpost.',
+            ? '让罗兰与黑岩使者交谈。完整对话后使者才会转为敌对，同时暴露远处伪装成废墟的黑岩前哨。'
+            : 'Have Roland talk with the envoy. Only after the full dialogue does he turn hostile and expose the disguised Blackrock outpost.',
           status: 'locked',
           trigger: { eventType: 'interaction', actorId: knight.id, targetId: stranger.id },
           dialogue: [

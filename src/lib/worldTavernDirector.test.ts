@@ -27,6 +27,82 @@ describe('tavern director protocol', () => {
     })).toEqual({ type: 'relationship', fromId: 'a', toId: 'b', delta: 10, reason: 'helped' })
   })
 
+  it('parses dialogue listeners while keeping legacy dialogue compatible', () => {
+    expect(parseTavernDirectorEvent({
+      type: 'dialogue',
+      speakerId: 'eileen',
+      listenerId: 'roland',
+      text: '北路有异动。',
+    })).toEqual({
+      type: 'dialogue',
+      speakerId: 'eileen',
+      listenerId: 'roland',
+      text: '北路有异动。',
+    })
+    expect(parseTavernDirectorEvent({
+      type: 'dialogue',
+      speakerId: 'eileen',
+      text: '北路有异动。',
+    })).toEqual({
+      type: 'dialogue',
+      speakerId: 'eileen',
+      text: '北路有异动。',
+    })
+  })
+
+  it('turns matching story dialogue into one directed scenario conversation fact', () => {
+    const definition = worldEntityDefinitionById.values().next().value!
+    const roland = createWorldEntity(definition, { id: 'roland', name: '罗兰', controller: 'player' })
+    const eileen = createWorldEntity(definition, { id: 'eileen', name: '艾琳' })
+    const world = {
+      ...createEmptyWorldState('plan'),
+      entities: [roland, eileen],
+      scenarios: [{
+        id: 'story',
+        assetId: 'story',
+        title: 'Story',
+        description: 'Story',
+        processedEventIds: [],
+        stages: [{
+          id: 'talk',
+          title: 'Talk',
+          description: 'Talk',
+          status: 'active' as const,
+          trigger: { eventType: 'interaction' as const, actorId: roland.id, targetId: eileen.id },
+        }],
+      }],
+    }
+    const applied = applyTavernDirectorEvent(world, {
+      type: 'dialogue',
+      speakerId: eileen.id,
+      listenerId: roland.id,
+      text: '北路有异动。',
+    }, { bricks: [], structures: [] })
+    expect(applied.status).toBe('accepted')
+    expect(applied.world.events).toHaveLength(1)
+    expect(applied.world.events[0]).toMatchObject({
+      type: 'interaction',
+      actorId: roland.id,
+      targetId: eileen.id,
+      actorName: '罗兰',
+      targetName: '艾琳',
+    })
+
+    const duringScenarioDialogue = applyTavernDirectorEvent({
+      ...applied.world,
+      scenarios: [{
+        ...world.scenarios[0],
+        activeDialogue: { stageId: 'talk', eventId: 'interaction', lineIndex: 0, lineEndsAtSeconds: 2 },
+      }],
+    }, {
+      type: 'dialogue',
+      speakerId: eileen.id,
+      listenerId: roland.id,
+      text: '听我说完。',
+    }, { bricks: [], structures: [] })
+    expect(duringScenarioDialogue.world.events).toHaveLength(1)
+  })
+
   it('executes validated commands and bounded relationship changes', () => {
     const definition = worldEntityDefinitionById.values().next().value!
     const first = createWorldEntity(definition, { id: 'first', name: '罗兰' })

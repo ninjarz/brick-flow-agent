@@ -46,10 +46,13 @@ export const parseTavernDirectorEvent = (value: unknown): TavernDirectorEvent | 
     const text = cleanText(value.text, 500)
     return text ? { type: value.type, text } : undefined
   }
-  if (value.type === 'dialogue' && exactKeys(value, ['type', 'speakerId', 'text'])) {
+  if (value.type === 'dialogue' && exactKeys(value, ['type', 'speakerId', 'listenerId', 'text'])) {
     const speakerId = cleanText(value.speakerId, 160)
+    const listenerId = cleanText(value.listenerId, 160)
     const text = cleanText(value.text, 180)
-    return speakerId && text ? { type: value.type, speakerId, text } : undefined
+    return speakerId && text
+      ? { type: value.type, speakerId, ...(listenerId && listenerId !== speakerId ? { listenerId } : {}), text }
+      : undefined
   }
   if (value.type === 'command' && exactKeys(value, ['type', 'entityId', 'command'])) {
     const entityId = cleanText(value.entityId, 160)
@@ -113,8 +116,12 @@ export const buildTavernDirectorPrompt = (
   playerText: string,
   recentEntries: TavernDirectorEntry[],
   locale: DirectorLocale,
+  protagonist?: { id: string; name: string },
 ) => `${locale === 'zh-CN' ? '玩家对酒馆世界下达了自然语言导演意图' : 'The player gave a natural-language direction to the tavern world'}:
 ${JSON.stringify(playerText)}
+
+Player identity:
+${JSON.stringify(protagonist ?? snapshot.entities.find((entity) => entity.controller === 'player') ?? null)}
 
 World snapshot:
 ${JSON.stringify(snapshot)}
@@ -124,7 +131,7 @@ ${JSON.stringify(recentEntries.slice(-12))}
 
 Emit 2 to 10 of these NDJSON events:
 {"type":"narration","text":"short atmospheric narration"}
-{"type":"dialogue","speakerId":"existing visible living entity id","text":"short spoken line"}
+{"type":"dialogue","speakerId":"existing visible living entity id","listenerId":"existing visible living listener id","text":"short spoken line"}
 {"type":"command","entityId":"existing visible living entity id","command":{"type":"stop|wander"}}
 {"type":"command","entityId":"existing visible living entity id","command":{"type":"move|attack|revive|guard|follow|interact","target":{"kind":"entity|brick|structure","id":"existing visible target id"}}}
 {"type":"relationship","fromId":"existing entity id","toId":"another existing entity id","delta":-10,"reason":"brief reason"}
@@ -133,6 +140,8 @@ Emit 2 to 10 of these NDJSON events:
 
 Rules:
 - Write all visible text in ${locale === 'zh-CN' ? 'Simplified Chinese' : 'English'}.
+- The player-controlled protagonist is the player's identity in the story. Address them by name, not as an unknown "you".
+- Every dialogue event must identify who is listening. A dialogue is itself a completed conversation fact; do not also emit an interact command for the same exchange.
 - Dialogue should come before a command that interrupts the speaker.
 - Commands start actions; never claim that movement, attacks, revival, or interaction already succeeded.
 - Relationship delta must be between -10 and 10 and grounded in dialogue or an existing event.
@@ -140,6 +149,39 @@ Rules:
 - Use at most 3 commands, at most 3 dialogue lines, and finish with exactly one end event.`
 
 const clampAffinity = (value: number) => Math.max(-100, Math.min(100, value))
+
+const resolveDialogueInteraction = (
+  world: WorldState,
+  speakerId: string,
+  listenerId: string | undefined,
+  isAvailable: (id: string) => boolean,
+) => {
+  const activeInteraction = world.scenarios
+    .filter((scenario) => !scenario.activeDialogue)
+    .flatMap((scenario) => scenario.stages)
+    .find((stage) => (
+      stage.status === 'active'
+      && stage.trigger.eventType === 'interaction'
+      && stage.trigger.actorId
+      && stage.trigger.targetId
+      && (
+        (speakerId === stage.trigger.targetId && (!listenerId || listenerId === stage.trigger.actorId))
+        || (speakerId === stage.trigger.actorId && listenerId === stage.trigger.targetId)
+      )
+    ))
+  const expectedActorId = activeInteraction?.trigger.actorId
+  const expectedTargetId = activeInteraction?.trigger.targetId
+
+  if (
+    expectedActorId
+    && expectedTargetId
+    && isAvailable(expectedActorId)
+    && isAvailable(expectedTargetId)
+  ) {
+    return { actorId: expectedActorId, targetId: expectedTargetId }
+  }
+  return undefined
+}
 
 export const applyTavernDirectorEvent = (
   world: WorldState,
@@ -153,10 +195,32 @@ export const applyTavernDirectorEvent = (
   if (event.type === 'dialogue') {
     const speaker = livingVisibleEntity(event.speakerId)
     if (!speaker) return { world, status: 'rejected', detail: 'SPEAKER_NOT_AVAILABLE' }
+    if (event.listenerId && !livingVisibleEntity(event.listenerId)) {
+      return { world, status: 'rejected', detail: 'LISTENER_NOT_AVAILABLE' }
+    }
     const expiresAtSeconds = world.elapsedSeconds + Math.min(14, Math.max(5, event.text.length / 5))
+    const interaction = resolveDialogueInteraction(
+      world,
+      speaker.id,
+      event.listenerId,
+      (id) => Boolean(livingVisibleEntity(id)),
+    )
+    const actor = interaction ? world.entities.find((entity) => entity.id === interaction.actorId) : undefined
+    const target = interaction ? world.entities.find((entity) => entity.id === interaction.targetId) : undefined
     return {
       world: {
         ...world,
+        events: interaction ? [...world.events, {
+          id: `director-dialogue-${world.events.length}-${Math.round(world.elapsedSeconds * 1000)}`,
+          timeSeconds: world.elapsedSeconds,
+          type: 'interaction' as const,
+          actorId: interaction.actorId,
+          actorName: actor?.name,
+          targetId: interaction.targetId,
+          targetName: target?.name,
+          commandType: 'interact' as const,
+          commandSource: 'player' as const,
+        }] : world.events,
         entities: world.entities.map((entity) => entity.id === speaker.id ? {
           ...entity,
           activeCommand: undefined,

@@ -1,6 +1,6 @@
 import { GitBranch, ListTree, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import type { WorldEntity, WorldEntityCommand, WorldEvent, WorldScenarioAction, WorldScenarioRuntime, WorldScenarioStage } from '../types/world'
+import type { WorldEntity, WorldEntityCommand, WorldEvent, WorldScenarioAction, WorldScenarioBranch, WorldScenarioRuntime, WorldScenarioStage } from '../types/world'
 import type { BrickStructure } from '../types/bricks'
 import { validateWorldScenario, type WorldScenarioValidationIssue } from '../lib/worldScenarioValidation'
 import {
@@ -25,6 +25,22 @@ type Props = {
 const triggerTypes: WorldEvent['type'][] = ['interaction', 'command-complete', 'command-issued', 'defeated']
 const commandTypes: WorldEntityCommand['type'][] = ['attack', 'interact', 'follow', 'guard', 'move', 'revive', 'wander', 'stop']
 const factions = ['blue', 'red', 'neutral']
+const triggerLabel = (type: WorldEvent['type'], zh: boolean) => ({
+  interaction: zh ? '交谈完成' : 'Conversation completed',
+  'command-complete': zh ? '命令完成' : 'Command completed',
+  'command-issued': zh ? '命令下达' : 'Command issued',
+  defeated: zh ? '单位被击败' : 'Entity defeated',
+}[type] ?? type)
+const commandLabel = (type: WorldEntityCommand['type'], zh: boolean) => ({
+  attack: zh ? '攻击' : 'Attack',
+  interact: zh ? '交谈' : 'Talk',
+  follow: zh ? '跟随' : 'Follow',
+  guard: zh ? '守卫' : 'Guard',
+  move: zh ? '移动' : 'Move',
+  revive: zh ? '复活' : 'Revive',
+  wander: zh ? '闲逛' : 'Wander',
+  stop: zh ? '停止' : 'Stop',
+}[type] ?? type)
 
 const makeCommand = (type: WorldEntityCommand['type'], targetId?: string): WorldEntityCommand => {
   if (type === 'stop' || type === 'wander') return { type }
@@ -38,6 +54,96 @@ const makeCommand = (type: WorldEntityCommand['type'], targetId?: string): World
 const getCommandTargetId = (command: WorldEntityCommand) => 'target' in command && command.target.kind === 'entity'
   ? command.target.id
   : ''
+
+const ScenarioBranchContentEditor = ({
+  branch,
+  entities,
+  structures,
+  zh,
+  onChange,
+}: {
+  branch: WorldScenarioBranch
+  entities: WorldEntity[]
+  structures: BrickStructure[]
+  zh: boolean
+  onChange: (branch: WorldScenarioBranch) => void
+}) => {
+  const firstEntityId = entities[0]?.id ?? ''
+  const patchAction = (actionIndex: number, action: WorldScenarioAction) => onChange({
+    ...branch,
+    actions: branch.actions?.map((item, index) => index === actionIndex ? action : item),
+  })
+  const addAction = (action: WorldScenarioAction) => onChange({
+    ...branch,
+    actions: [...(branch.actions ?? []), action],
+  })
+  return (
+    <div className="scenario-branch-content">
+      <section>
+        <header><strong>{zh ? '分支对白' : 'Branch dialogue'}</strong><small>{zh ? '命中该分支后按顺序演出。' : 'Played in order when this branch matches.'}</small></header>
+        {(branch.dialogue ?? []).map((line, lineIndex) => (
+          <div className="scenario-dialogue-row" key={line.id}>
+            <span>{lineIndex + 1}</span>
+            <select value={line.speakerId} onChange={(event) => onChange({ ...branch, dialogue: branch.dialogue?.map((item, index) => index === lineIndex ? { ...item, speakerId: event.target.value } : item) })}>
+              {entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}
+            </select>
+            <textarea rows={2} value={line.text} onChange={(event) => onChange({ ...branch, dialogue: branch.dialogue?.map((item, index) => index === lineIndex ? { ...item, text: event.target.value } : item) })} />
+            <label><input type="number" min="0.5" max="30" step="0.5" value={line.durationSeconds} onChange={(event) => onChange({ ...branch, dialogue: branch.dialogue?.map((item, index) => index === lineIndex ? { ...item, durationSeconds: Math.max(0.5, Number(event.target.value) || 0.5) } : item) })} />{zh ? '秒' : 'sec'}</label>
+            <button type="button" className="icon-button" title={zh ? '删除台词' : 'Delete line'} onClick={() => onChange({ ...branch, dialogue: branch.dialogue?.filter((_, index) => index !== lineIndex) })}><Trash2 size={14} /></button>
+          </div>
+        ))}
+        <button type="button" disabled={!firstEntityId} onClick={() => onChange({
+          ...branch,
+          dialogue: [...(branch.dialogue ?? []), {
+            id: `${branch.id}-line-${Date.now()}`,
+            speakerId: branch.trigger.actorId ?? firstEntityId,
+            text: zh ? '输入分支台词……' : 'Enter branch dialogue…',
+            durationSeconds: 4,
+          }],
+        })}><Plus size={13} />{zh ? '添加分支台词' : 'Add branch line'}</button>
+      </section>
+
+      <section>
+        <header><strong>{zh ? '分支行为' : 'Branch actions'}</strong><small>{zh ? '对白结束后执行，只作用于这个分支。' : 'Runs after dialogue for this branch only.'}</small></header>
+        {(branch.actions ?? []).map((action, actionIndex) => (
+          <div className="scenario-action-row" key={`${action.type}-${actionIndex}`}>
+            <strong>{action.type}</strong>
+            {action.type === 'set-faction' && <>
+              <select value={action.entityId} onChange={(event) => patchAction(actionIndex, { ...action, entityId: event.target.value })}>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}</select>
+              <select value={action.factionId} onChange={(event) => patchAction(actionIndex, { ...action, factionId: event.target.value })}>{factions.map((faction) => <option key={faction} value={faction}>{faction}</option>)}</select>
+            </>}
+            {action.type === 'issue-command' && <>
+              <select value={action.entityId} onChange={(event) => patchAction(actionIndex, { ...action, entityId: event.target.value })}>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}</select>
+              <select value={action.command.type} onChange={(event) => patchAction(actionIndex, { ...action, command: makeCommand(event.target.value as WorldEntityCommand['type'], getCommandTargetId(action.command) || firstEntityId) })}>{commandTypes.map((type) => <option key={type} value={type}>{commandLabel(type, zh)}</option>)}</select>
+              {'target' in action.command && <select value={getCommandTargetId(action.command)} onChange={(event) => patchAction(actionIndex, { ...action, command: makeCommand(action.command.type, event.target.value) })}>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}</select>}
+            </>}
+            {action.type === 'set-visibility' && <>
+              <select value={action.target.kind} onChange={(event) => {
+                const kind = event.target.value as 'entity' | 'structure'
+                patchAction(actionIndex, { ...action, target: { kind, id: kind === 'entity' ? firstEntityId : structures[0]?.id ?? '' } })
+              }}><option value="entity">{zh ? '单位' : 'Entity'}</option><option value="structure">{zh ? '建筑' : 'Structure'}</option></select>
+              <select value={action.target.id} onChange={(event) => patchAction(actionIndex, { ...action, target: { ...action.target, id: event.target.value } })}>
+                {(action.target.kind === 'entity' ? entities : structures).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+              <select value={action.visible ? 'show' : 'hide'} onChange={(event) => patchAction(actionIndex, { ...action, visible: event.target.value === 'show' })}><option value="show">{zh ? '显示' : 'Reveal'}</option><option value="hide">{zh ? '隐藏' : 'Hide'}</option></select>
+            </>}
+            {action.type === 'add-story' && <>
+              <input value={action.title} placeholder={zh ? '段落标题' : 'Passage title'} onChange={(event) => patchAction(actionIndex, { ...action, title: event.target.value })} />
+              <textarea rows={2} value={action.body} placeholder={zh ? '段落内容' : 'Passage body'} onChange={(event) => patchAction(actionIndex, { ...action, body: event.target.value })} />
+            </>}
+            <button type="button" className="icon-button" title={zh ? '删除行为' : 'Delete action'} onClick={() => onChange({ ...branch, actions: branch.actions?.filter((_, index) => index !== actionIndex) })}><Trash2 size={14} /></button>
+          </div>
+        ))}
+        <div className="scenario-add-actions">
+          <button type="button" disabled={!firstEntityId} onClick={() => addAction({ type: 'set-faction', entityId: firstEntityId, factionId: 'red' })}><Plus size={13} />{zh ? '阵营变化' : 'Faction'}</button>
+          <button type="button" disabled={!firstEntityId} onClick={() => addAction({ type: 'issue-command', entityId: firstEntityId, command: { type: 'wander' } })}><Plus size={13} />{zh ? '单位命令' : 'Command'}</button>
+          <button type="button" onClick={() => addAction({ type: 'add-story', title: zh ? '分支段落' : 'Branch passage', body: '' })}><Plus size={13} />{zh ? '剧情段落' : 'Passage'}</button>
+          <button type="button" disabled={!firstEntityId} onClick={() => addAction({ type: 'set-visibility', target: { kind: 'entity', id: firstEntityId }, visible: true })}><Plus size={13} />{zh ? '显示/隐藏' : 'Visibility'}</button>
+        </div>
+      </section>
+    </div>
+  )
+}
 
 export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTargets, locale, onChange, onSetTargetVisibility }: Props) => {
   const zh = locale === 'zh-CN'
@@ -67,8 +173,8 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
   return (
     <div className="scenario-editor">
       <div className="scenario-editor-grid">
-        <label>{zh ? '剧情名称' : 'Scenario title'}<input value={scenario.title} onChange={(event) => patchScenario({ title: event.target.value })} /></label>
-        <label>{zh ? '剧情简介' : 'Description'}<input value={scenario.description} onChange={(event) => patchScenario({ description: event.target.value })} /></label>
+        <label>{zh ? '流程名称' : 'Flow title'}<input value={scenario.title} onChange={(event) => patchScenario({ title: event.target.value })} /></label>
+        <label>{zh ? '流程简介' : 'Description'}<input value={scenario.description} onChange={(event) => patchScenario({ description: event.target.value })} /></label>
       </div>
       <div className="scenario-editor-mode" role="group" aria-label={zh ? '剧情编辑模式' : 'Scenario editor mode'}>
         <button type="button" className={editorMode === 'flow' ? 'active' : ''} aria-pressed={editorMode === 'flow'} onClick={() => setEditorMode('flow')}><GitBranch size={14} />{zh ? '流程图' : 'Flowchart'}</button>
@@ -147,12 +253,12 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
         const stageIndex = scenario.stages.findIndex((candidate) => candidate.id === stage.id)
         return (
         <details id={`scenario-stage-${stageIndex}`} key={`${stage.id}-${stageIndex}`} open={editorMode === 'flow' || stage.status === 'active'}>
-          <summary>{stageIndex + 1}. {stage.title} · {zh ? ({ locked: '未解锁', active: '当前阶段', completed: '已完成' }[stage.status]) : stage.status}</summary>
+          <summary>{stageIndex + 1}. {stage.title} · {zh ? ({ locked: '等待进入', active: '等待触发', completed: '已完成' }[stage.status]) : stage.status}</summary>
           <div className="scenario-stage-editor">
             <div className="scenario-editor-grid">
-              <label>{zh ? '阶段名称' : 'Stage title'}<input value={stage.title} onChange={(event) => patchStage(stageIndex, { title: event.target.value })} /></label>
-              <label>{zh ? '玩家目标' : 'Objective'}<input value={stage.description} onChange={(event) => patchStage(stageIndex, { description: event.target.value })} /></label>
-              <label>{zh ? '默认下一阶段' : 'Default next stage'}
+              <label>{zh ? '节点名称' : 'Node title'}<input value={stage.title} onChange={(event) => patchStage(stageIndex, { title: event.target.value })} /></label>
+              <label>{zh ? '节点说明' : 'Node description'}<input value={stage.description} onChange={(event) => patchStage(stageIndex, { description: event.target.value })} /></label>
+              <label>{zh ? '默认下一节点' : 'Default next node'}
                 <select
                   value={stage.nextStageId === null ? '__end__' : stage.nextStageId ?? '__auto__'}
                   onChange={(event) => {
@@ -164,14 +270,14 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
                     })
                   }}
                 >
-                  <option value="__auto__">{zh ? '按流程图顺序继续' : 'Continue in flow order'}</option>
-                  <option value="__end__">{zh ? '在此结束剧情线' : 'End storyline here'}</option>
+                  <option value="__auto__">{zh ? '按流程图顺序推进' : 'Continue in flow order'}</option>
+                  <option value="__end__">{zh ? '在此结束流程' : 'End flow here'}</option>
                   {scenario.stages.filter((candidate) => candidate.id !== stage.id).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.title}</option>)}
                 </select>
               </label>
               <label>{zh ? '触发事件' : 'Trigger event'}
                 <select value={stage.trigger.eventType} onChange={(event) => patchStage(stageIndex, { trigger: { ...stage.trigger, eventType: event.target.value as WorldEvent['type'] } })}>
-                  {triggerTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+                  {triggerTypes.map((type) => <option key={type} value={type}>{triggerLabel(type, zh)}</option>)}
                 </select>
               </label>
               <label>{zh ? '发起者' : 'Actor'}
@@ -205,7 +311,7 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
             </div>
 
             <div className="scenario-editor-section">
-              <header><strong>{zh ? '对话后的行为' : 'Actions after dialogue'}</strong><small>{zh ? '可以改变阵营、下达命令或写入新章节。' : 'Change factions, issue orders, or add a chapter.'}</small></header>
+              <header><strong>{zh ? '触发后的行为' : 'Actions after trigger'}</strong><small>{zh ? '可以改变阵营、下达命令或写入剧情段落。' : 'Change factions, issue orders, or add a story passage.'}</small></header>
               {(stage.actions ?? []).map((action, actionIndex) => (
                 <div className="scenario-action-row" key={`${action.type}-${actionIndex}`}>
                   <strong>{action.type}</strong>
@@ -226,12 +332,12 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
                   </>}
                   {action.type === 'issue-command' && <>
                     <select value={action.entityId} onChange={(event) => patchStage(stageIndex, { actions: stage.actions?.map((item, index) => index === actionIndex ? { ...action, entityId: event.target.value } : item) })}>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}</select>
-                    <select value={action.command.type} onChange={(event) => patchStage(stageIndex, { actions: stage.actions?.map((item, index) => index === actionIndex ? { ...action, command: makeCommand(event.target.value as WorldEntityCommand['type'], getCommandTargetId(action.command) || firstEntityId) } : item) })}>{commandTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select>
+                    <select value={action.command.type} onChange={(event) => patchStage(stageIndex, { actions: stage.actions?.map((item, index) => index === actionIndex ? { ...action, command: makeCommand(event.target.value as WorldEntityCommand['type'], getCommandTargetId(action.command) || firstEntityId) } : item) })}>{commandTypes.map((type) => <option key={type} value={type}>{commandLabel(type, zh)}</option>)}</select>
                     {'target' in action.command && <select value={getCommandTargetId(action.command)} onChange={(event) => patchStage(stageIndex, { actions: stage.actions?.map((item, index) => index === actionIndex ? { ...action, command: makeCommand(action.command.type, event.target.value) } : item) })}>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}</select>}
                   </>}
                   {action.type === 'add-story' && <>
-                    <input value={action.title} placeholder={zh ? '章节标题' : 'Chapter title'} onChange={(event) => patchStage(stageIndex, { actions: stage.actions?.map((item, index) => index === actionIndex ? { ...action, title: event.target.value } : item) })} />
-                    <textarea rows={2} value={action.body} placeholder={zh ? '章节内容' : 'Chapter body'} onChange={(event) => patchStage(stageIndex, { actions: stage.actions?.map((item, index) => index === actionIndex ? { ...action, body: event.target.value } : item) })} />
+                    <input value={action.title} placeholder={zh ? '段落标题' : 'Passage title'} onChange={(event) => patchStage(stageIndex, { actions: stage.actions?.map((item, index) => index === actionIndex ? { ...action, title: event.target.value } : item) })} />
+                    <textarea rows={2} value={action.body} placeholder={zh ? '段落内容' : 'Passage body'} onChange={(event) => patchStage(stageIndex, { actions: stage.actions?.map((item, index) => index === actionIndex ? { ...action, body: event.target.value } : item) })} />
                   </>}
                   <button type="button" className="icon-button" title={zh ? '删除行为' : 'Delete action'} onClick={() => patchStage(stageIndex, { actions: stage.actions?.filter((_, index) => index !== actionIndex) })}><Trash2 size={14} /></button>
                 </div>
@@ -239,28 +345,40 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
               <div className="scenario-add-actions">
                 <button type="button" onClick={() => addAction(stageIndex, { type: 'set-faction', entityId: firstEntityId, factionId: 'red' })}><Plus size={13} />{zh ? '阵营变化' : 'Faction'}</button>
                 <button type="button" onClick={() => addAction(stageIndex, { type: 'issue-command', entityId: firstEntityId, command: { type: 'wander' } })}><Plus size={13} />{zh ? '单位命令' : 'Command'}</button>
-                <button type="button" onClick={() => addAction(stageIndex, { type: 'add-story', title: zh ? '新章节' : 'New chapter', body: '' })}><Plus size={13} />{zh ? '故事章节' : 'Chapter'}</button>
+                <button type="button" onClick={() => addAction(stageIndex, { type: 'add-story', title: zh ? '新段落' : 'New passage', body: '' })}><Plus size={13} />{zh ? '剧情段落' : 'Passage'}</button>
                 <button type="button" disabled={!firstEntityId} onClick={() => addAction(stageIndex, { type: 'set-visibility', target: { kind: 'entity', id: firstEntityId }, visible: true })}><Plus size={13} />{zh ? '显示/隐藏' : 'Visibility'}</button>
               </div>
             </div>
 
             <div className="scenario-editor-section">
-              <header><strong>{zh ? '分支结果' : 'Branch outcomes'}</strong><small>{zh ? '分支命中后会替代上面的默认结果；不选择下一阶段表示在此结局。' : 'A matched branch replaces the default result. No next stage means the storyline ends here.'}</small></header>
+              <header><strong>{zh ? '条件分支' : 'Conditional branches'}</strong><small>{zh ? '分支触发后走向指定节点；不选择下一节点表示结束这条流程。' : 'A matched branch moves to its target node. No target ends this flow.'}</small></header>
               {(stage.branches ?? []).map((branch, branchIndex) => (
                 <div className="scenario-branch-card" key={branch.id}>
                   <input value={branch.title} aria-label={zh ? '分支名称' : 'Branch name'} onChange={(event) => patchStage(stageIndex, { branches: stage.branches?.map((item, index) => index === branchIndex ? { ...item, title: event.target.value } : item) })} />
-                  <select value={branch.trigger.eventType} aria-label={zh ? '分支触发事件' : 'Branch trigger'} onChange={(event) => patchStage(stageIndex, { branches: stage.branches?.map((item, index) => index === branchIndex ? { ...item, trigger: { ...item.trigger, eventType: event.target.value as WorldEvent['type'] } } : item) })}>{triggerTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select>
+                  <select value={branch.trigger.eventType} aria-label={zh ? '分支触发事件' : 'Branch trigger'} onChange={(event) => patchStage(stageIndex, { branches: stage.branches?.map((item, index) => index === branchIndex ? { ...item, trigger: { ...item.trigger, eventType: event.target.value as WorldEvent['type'] } } : item) })}>{triggerTypes.map((type) => <option key={type} value={type}>{triggerLabel(type, zh)}</option>)}</select>
                   <select value={branch.trigger.actorId ?? ''} aria-label={zh ? '分支发起者' : 'Branch actor'} onChange={(event) => patchStage(stageIndex, { branches: stage.branches?.map((item, index) => index === branchIndex ? { ...item, trigger: { ...item.trigger, actorId: event.target.value || undefined } } : item) })}>
                     <option value="">{zh ? '任意发起者' : 'Any actor'}</option>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}
                   </select>
                   <select value={branch.trigger.targetId ?? ''} aria-label={zh ? '分支目标' : 'Branch target'} onChange={(event) => patchStage(stageIndex, { branches: stage.branches?.map((item, index) => index === branchIndex ? { ...item, trigger: { ...item.trigger, targetId: event.target.value || undefined } } : item) })}>
                     <option value="">{zh ? '任意目标' : 'Any target'}</option>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}
                   </select>
-                  <select value={branch.nextStageId ?? ''} aria-label={zh ? '分支下一阶段' : 'Branch next stage'} onChange={(event) => patchStage(stageIndex, { branches: stage.branches?.map((item, index) => index === branchIndex ? { ...item, nextStageId: event.target.value || undefined } : item) })}>
-                    <option value="">{zh ? '结束剧情线' : 'End storyline'}</option>{scenario.stages.filter((candidate) => candidate.id !== stage.id).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.title}</option>)}
+                  <select value={branch.nextStageId ?? ''} aria-label={zh ? '分支下一节点' : 'Branch next node'} onChange={(event) => patchStage(stageIndex, { branches: stage.branches?.map((item, index) => index === branchIndex ? { ...item, nextStageId: event.target.value || undefined } : item) })}>
+                    <option value="">{zh ? '结束这条流程' : 'End this flow'}</option>{scenario.stages.filter((candidate) => candidate.id !== stage.id).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.title}</option>)}
                   </select>
                   <small>{zh ? `后续行为 ${branch.actions?.length ?? 0} 个 · 台词 ${branch.dialogue?.length ?? 0} 句` : `${branch.actions?.length ?? 0} actions · ${branch.dialogue?.length ?? 0} lines`}</small>
                   <button type="button" className="icon-button" title={zh ? '删除分支' : 'Delete branch'} onClick={() => patchStage(stageIndex, { branches: stage.branches?.filter((_, index) => index !== branchIndex) })}><Trash2 size={14} /></button>
+                  <details className="scenario-branch-content-toggle">
+                    <summary>{zh ? '编辑分支对白与行为' : 'Edit branch dialogue and actions'}</summary>
+                    <ScenarioBranchContentEditor
+                      branch={branch}
+                      entities={entities}
+                      structures={structures}
+                      zh={zh}
+                      onChange={(updatedBranch) => patchStage(stageIndex, {
+                        branches: stage.branches?.map((item, index) => index === branchIndex ? updatedBranch : item),
+                      })}
+                    />
+                  </details>
                 </div>
               ))}
               <button type="button" onClick={() => patchStage(stageIndex, { branches: [...(stage.branches ?? []), { id: `branch-${Date.now()}`, title: zh ? '新分支' : 'New branch', trigger: { eventType: 'interaction' }, actions: [] }] })}><Plus size={14} />{zh ? '添加分支' : 'Add branch'}</button>

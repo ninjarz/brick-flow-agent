@@ -111,7 +111,7 @@ const commandName = (type: WorldEvent['commandType'], locale: 'zh-CN' | 'en-US')
     revive: '复活',
     guard: '守卫',
     follow: '跟随',
-    interact: '交互',
+    interact: '交谈',
     patrol: '巡逻',
   } as const)[type ?? 'move'] ?? '行动'
 }
@@ -145,7 +145,7 @@ export const formatWorldEvent = (event: WorldEvent, locale: 'zh-CN' | 'en-US') =
   if (event.type === 'revive') return `${actor}复活了${target}，恢复 ${event.amount ?? 0} 点生命。`
   if (event.type === 'brick-hit') return `${actor}击中了砖块${target}，但建筑没有受损。`
   if (event.type === 'structure-hit') return `${actor}攻击了结构${target}，结构依然完好。`
-  if (event.type === 'interaction') return `${actor}与${target}进行了互动。`
+  if (event.type === 'interaction') return `${actor}与${target}进行了交谈。`
   return `${actor}完成了与${target}有关的命令。`
 }
 

@@ -20,6 +20,12 @@ const nodeHeight = 106
 const nodeGap = 70
 const canvasPadding = 24
 const nodeTop = 42
+const triggerLabel = (type: string, zh: boolean) => ({
+  interaction: zh ? '交谈完成' : 'Conversation completed',
+  'command-complete': zh ? '命令完成' : 'Command completed',
+  'command-issued': zh ? '命令下达' : 'Command issued',
+  defeated: zh ? '单位被击败' : 'Entity defeated',
+}[type] ?? type)
 
 export const WorldScenarioFlowEditor = ({
   scenario,
@@ -63,14 +69,14 @@ export const WorldScenarioFlowEditor = ({
       <header>
         <div>
           <strong><GitBranch size={15} />{zh ? '剧情流程图' : 'Scenario flowchart'}</strong>
-          <small>{zh ? '选择节点编辑详情；实线是默认进度，紫线是分支结果。' : 'Select a node to edit it. Solid lines are defaults; purple lines are branches.'}</small>
+          <small>{zh ? '每个节点独立判定触发；实线是默认推进，紫线是条件分支。' : 'Each node evaluates its trigger. Solid lines advance by default; purple lines are conditional branches.'}</small>
         </div>
         <div className="scenario-flow-actions">
-          <button type="button" title={zh ? '向前移动章节' : 'Move stage left'} disabled={selectedIndex <= 0} onClick={() => onMoveStage(-1)}><ArrowLeft size={13} /></button>
-          <button type="button" title={zh ? '向后移动章节' : 'Move stage right'} disabled={selectedIndex >= scenario.stages.length - 1} onClick={() => onMoveStage(1)}><ArrowRight size={13} /></button>
+          <button type="button" title={zh ? '向前移动节点' : 'Move node left'} disabled={selectedIndex <= 0} onClick={() => onMoveStage(-1)}><ArrowLeft size={13} /></button>
+          <button type="button" title={zh ? '向后移动节点' : 'Move node right'} disabled={selectedIndex >= scenario.stages.length - 1} onClick={() => onMoveStage(1)}><ArrowRight size={13} /></button>
           <button type="button" onClick={onDuplicateStage} disabled={!selectedStageId}><Copy size={13} />{zh ? '复制' : 'Duplicate'}</button>
           <button type="button" className="danger" onClick={onDeleteStage} disabled={scenario.stages.length <= 1}><Trash2 size={13} />{zh ? '删除' : 'Delete'}</button>
-          <button type="button" onClick={onAddStage}><Plus size={13} />{zh ? '新章节' : 'New stage'}</button>
+          <button type="button" onClick={onAddStage}><Plus size={13} />{zh ? '新节点' : 'New node'}</button>
         </div>
       </header>
       <div className="scenario-flow-viewport">
@@ -127,7 +133,7 @@ export const WorldScenarioFlowEditor = ({
                 <span>{stageIndex + 1}</span>
                 <strong>{stage.title}</strong>
                 <small>{stage.description}</small>
-                <em>{stage.trigger.eventType} · {stage.dialogue?.length ?? 0} {zh ? '句台词' : 'lines'} · {stage.branches?.length ?? 0} {zh ? '个分支' : 'branches'}</em>
+                <em>{triggerLabel(stage.trigger.eventType, zh)} · {stage.dialogue?.length ?? 0} {zh ? '句台词' : 'lines'} · {stage.branches?.length ?? 0} {zh ? '个分支' : 'branches'}</em>
                 {stageIssues.length > 0 && <i>{stageIssues.length}</i>}
               </button>
             )
@@ -140,7 +146,7 @@ export const WorldScenarioFlowEditor = ({
                 key={`${edge.id}:terminal`}
                 style={{ left: source.x + 12, top: nodeTop + nodeHeight + 24 + edge.branchIndex * 28 }}
               >
-                {edge.label} → {zh ? '结局' : 'End'}
+                {edge.label} → {zh ? '结束流程' : 'End flow'}
               </span>
             )
           })}

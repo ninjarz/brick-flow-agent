@@ -1,5 +1,6 @@
 import { BookOpen, Bot, ChevronDown, Dice5, GlassWater, MessageCircle, Send, Sparkles, Square, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { resizeBottomDockHeight } from '../lib/bottomDockResize'
 import { useI18n } from '../lib/i18n'
 import {
   buildWorldNarrativeFeed,
@@ -8,10 +9,12 @@ import {
 } from '../lib/worldNarrativeFeed'
 import type { TavernDirectorEntry } from '../lib/worldTavernDirector'
 import type { TavernActivityKind, TavernActivityResult } from '../lib/worldTavernActivities'
+import type { BrickStructure } from '../types/bricks'
 import type { WorldDirectorTurn, WorldState } from '../types/world'
 
 type WorldStoryDockProps = {
   world: WorldState
+  structures: BrickStructure[]
   llmConfigured: boolean
   isAiThinking: boolean
   isDirectorThinking: boolean
@@ -42,32 +45,74 @@ const storyActivityOptions: Array<{
   { kind: 'rumor', icon: MessageCircle, zh: '听传闻', en: 'Hear a rumor' },
 ]
 
+const minimumStoryPanelHeight = 220
+const initialStoryPanelHeight = () => Math.min(520, Math.max(minimumStoryPanelHeight, window.innerHeight - 24))
+
+type NarrativeReference = {
+  name: string
+  details: string
+}
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+const AnnotatedText = ({
+  text,
+  references,
+}: {
+  text: string
+  references: NarrativeReference[]
+}) => {
+  if (references.length === 0) return text
+  const referenceByName = new Map(references.map((reference) => [reference.name, reference]))
+  const pattern = new RegExp(`(${references.map((reference) => escapeRegExp(reference.name)).join('|')})`, 'g')
+  return text.split(pattern).map((part, index): ReactNode => {
+    const reference = referenceByName.get(part)
+    return reference
+      ? <span className="narrative-reference" title={reference.details} tabIndex={0} key={`${part}-${index}`}>{part}</span>
+      : part
+  })
+}
+
 const FeedBlock = ({
   block,
   world,
+  structures,
+  references,
+  locale,
   disabled,
   onChoose,
 }: {
   block: WorldNarrativeFeedBlock
   world: WorldState
+  structures: BrickStructure[]
+  references: NarrativeReference[]
+  locale: 'zh-CN' | 'en-US'
   disabled: boolean
   onChoose: (input: string) => void
 }) => {
-  if (block.type === 'narration') return <p className="narration">{block.text}</p>
+  if (block.type === 'narration') return <p className="narration"><AnnotatedText text={block.text} references={references} /></p>
   if (block.type === 'dialogue') {
     const speaker = world.entities.find((entity) => entity.id === block.speakerId)
-    return <p className="dialogue"><strong>{speaker?.name ?? block.speakerId}</strong><span>“{block.text}”</span></p>
+    const speakerName = speaker?.name ?? block.speakerId
+    return <p className="dialogue"><strong><AnnotatedText text={speakerName} references={references} /></strong><span>“<AnnotatedText text={block.text} references={references} />”</span></p>
   }
   if (block.type === 'command') {
     const actor = world.entities.find((entity) => entity.id === block.entityId)
     const targetRef = 'target' in block.command ? block.command.target : undefined
-    const target = targetRef ? world.entities.find((entity) => entity.id === targetRef.id)?.name ?? targetRef.id : ''
-    return <p className={`stage-direction ${block.status ?? ''}`}>〔{actor?.name ?? block.entityId} · {block.command.type}{target ? ` → ${target}` : ''}{block.detail ? ` · ${block.detail}` : ''}〕</p>
+    const target = targetRef
+      ? world.entities.find((entity) => entity.id === targetRef.id)?.name
+        ?? structures.find((structure) => structure.id === targetRef.id)?.name
+        ?? targetRef.id
+      : ''
+    const commandLabel = block.command.type === 'interact'
+      ? (locale === 'zh-CN' ? '交谈' : 'talk')
+      : block.command.type
+    return <p className={`stage-direction ${block.status ?? ''}`}>〔<AnnotatedText text={actor?.name ?? block.entityId} references={references} /> · {commandLabel}{target ? <> → <AnnotatedText text={target} references={references} /></> : ''}{block.detail ? ` · ${block.detail}` : ''}〕</p>
   }
   if (block.type === 'relationship') {
     const from = world.entities.find((entity) => entity.id === block.fromId)?.name ?? block.fromId
     const to = world.entities.find((entity) => entity.id === block.toId)?.name ?? block.toId
-    return <p className={`stage-direction ${block.status ?? ''}`}>〔{from}与{to}的关系：{block.before ?? 0} → {block.after ?? 0} · {block.reason}〕</p>
+    return <p className={`stage-direction ${block.status ?? ''}`}>〔<AnnotatedText text={from} references={references} />与<AnnotatedText text={to} references={references} />的关系：{block.before ?? 0} → {block.after ?? 0} · <AnnotatedText text={block.reason} references={references} />〕</p>
   }
   if (block.type === 'choice') {
     return <button type="button" className="choice" disabled={disabled} onClick={() => onChoose(block.suggestedInput)}>{block.label}</button>
@@ -77,6 +122,7 @@ const FeedBlock = ({
 
 export const WorldStoryDock = ({
   world,
+  structures,
   llmConfigured,
   isAiThinking,
   isDirectorThinking,
@@ -98,12 +144,52 @@ export const WorldStoryDock = ({
   const [focusEntityId, setFocusEntityId] = useState(world.entities.find((entity) => entity.health > 0)?.id ?? '')
   const [input, setInput] = useState('')
   const [activeTurn, setActiveTurn] = useState<ActiveWorldDirectorTurn>()
+  const [panelHeight, setPanelHeight] = useState(initialStoryPanelHeight)
+  const [isResizing, setIsResizing] = useState(false)
+  const panelRef = useRef<HTMLElement>(null)
+  const resizeCleanupRef = useRef<() => void>()
   const feedRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const shouldAutoScrollRef = useRef(true)
   const feed = useMemo(() => buildWorldNarrativeFeed(world, activeTurn).slice(-40), [activeTurn, world])
+  const protagonist = useMemo(() => (
+    world.scenarios
+      .flatMap((scenario) => scenario.stages)
+      .map((stage) => stage.trigger.actorId)
+      .map((actorId) => world.entities.find((entity) => entity.id === actorId && entity.health > 0))
+      .find((entity) => Boolean(entity))
+      ?? world.entities.find((entity) => entity.controller === 'player' && entity.health > 0)
+      ?? world.entities.find((entity) => entity.health > 0)
+  ), [world.entities, world.scenarios])
+  const references = useMemo(() => {
+    const hidden = new Set(world.hiddenTargets.map((target) => `${target.kind}:${target.id}`))
+    return [
+      ...world.entities
+        .filter((entity) => entity.name && !hidden.has(`entity:${entity.id}`))
+        .map((entity): NarrativeReference => ({
+          name: entity.name,
+          details: locale === 'zh-CN'
+            ? `${entity.description}\n阵营：${entity.factionId} · 生命：${entity.health}/${entity.maxHealth}`
+            : `${entity.description}\nFaction: ${entity.factionId} · Health: ${entity.health}/${entity.maxHealth}`,
+        })),
+      ...structures
+        .filter((structure) => structure.name && !hidden.has(`structure:${structure.id}`))
+        .map((structure): NarrativeReference => ({
+          name: structure.name,
+          details: locale === 'zh-CN'
+            ? `${structure.description}\n${structure.brickIds.length} 个零件`
+            : `${structure.description}\n${structure.brickIds.length} bricks`,
+        })),
+    ].sort((a, b) => b.name.length - a.name.length)
+  }, [locale, structures, world.entities, world.hiddenTargets])
   const feedVersion = feed.reduce((total, item) => total + item.blocks.length, 0)
   const availableEntities = world.entities.filter((entity) => entity.health > 0 && !world.hiddenTargets.some((target) => target.kind === 'entity' && target.id === entity.id))
+  const getResizeViewport = () => {
+    const bounds = panelRef.current?.parentElement?.getBoundingClientRect()
+    return bounds
+      ? { width: bounds.width, height: bounds.height }
+      : { width: window.innerWidth, height: window.innerHeight }
+  }
 
   useEffect(() => {
     if (availableEntities.some((entity) => entity.id === focusEntityId)) return
@@ -114,6 +200,52 @@ export const WorldStoryDock = ({
     const container = feedRef.current
     if (container && shouldAutoScrollRef.current) container.scrollTop = container.scrollHeight
   }, [feed.length, feedVersion])
+
+  useEffect(() => {
+    const parent = panelRef.current?.parentElement
+    if (!parent) return
+    const clampToViewport = () => {
+      const bounds = parent.getBoundingClientRect()
+      setPanelHeight((current) => Math.min(current, Math.max(0, bounds.height - 24)))
+    }
+    const observer = new ResizeObserver(clampToViewport)
+    observer.observe(parent)
+    clampToViewport()
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => () => resizeCleanupRef.current?.(), [])
+
+  const beginResize = (event: ReactPointerEvent) => {
+    event.preventDefault()
+    const session = {
+      startY: event.clientY,
+      initialHeight: panelHeight,
+    }
+    const handlePointerMove = (event: PointerEvent) => {
+      setPanelHeight(resizeBottomDockHeight({
+        initialHeight: session.initialHeight,
+        deltaY: event.clientY - session.startY,
+        viewportHeight: getResizeViewport().height,
+        minimumHeight: minimumStoryPanelHeight,
+      }))
+    }
+    const finishResize = () => {
+      resizeCleanupRef.current?.()
+      resizeCleanupRef.current = undefined
+      setIsResizing(false)
+    }
+    resizeCleanupRef.current?.()
+    resizeCleanupRef.current = () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', finishResize)
+      window.removeEventListener('pointercancel', finishResize)
+    }
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', finishResize)
+    window.addEventListener('pointercancel', finishResize)
+    setIsResizing(true)
+  }
 
   const chooseInput = (value: string) => {
     setInput(value)
@@ -156,7 +288,19 @@ export const WorldStoryDock = ({
   }
 
   return (
-    <section className={`world-story-dock${collapsed ? ' collapsed' : ''}`} aria-label={locale === 'zh-CN' ? '剧情对话' : 'Story dialogue'}>
+    <section
+      ref={panelRef}
+      className={`world-story-dock${collapsed ? ' collapsed' : ''}${isResizing ? ' resizing' : ''}`}
+      aria-label={locale === 'zh-CN' ? '剧情对话' : 'Story dialogue'}
+      style={collapsed ? undefined : { height: panelHeight, maxHeight: 'none' }}
+    >
+      {!collapsed && (
+        <div
+          className="world-story-resize-handle top"
+          aria-hidden="true"
+          onPointerDown={beginResize}
+        />
+      )}
       <header>
         <div>
           <BookOpen size={14} />
@@ -181,11 +325,18 @@ export const WorldStoryDock = ({
               shouldAutoScrollRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 48
             }}
           >
+            {protagonist && (
+              <aside className="world-story-identity">
+                {locale === 'zh-CN' ? '你将扮演 ' : 'You are '}
+                <AnnotatedText text={protagonist.name} references={references} />
+                {locale === 'zh-CN' ? `。${protagonist.description}` : `. ${protagonist.description}`}
+              </aside>
+            )}
             {feed.map((item) => (
               <article className={`narrative-passage ${item.kind}`} key={item.id}>
-                {item.playerText && <p className="player"><strong>{locale === 'zh-CN' ? '你' : 'You'}</strong>{item.playerText}</p>}
+                {item.playerText && <p className="player"><strong>{locale === 'zh-CN' ? `你（${protagonist?.name ?? '玩家'}）` : `You (${protagonist?.name ?? 'Player'})`}</strong><AnnotatedText text={item.playerText} references={references} /></p>}
                 {item.blocks.map((block) => (
-                  <FeedBlock key={block.id} block={block} world={world} disabled={isDirectorThinking} onChoose={chooseInput} />
+                  <FeedBlock key={block.id} block={block} world={world} structures={structures} references={references} locale={locale} disabled={isDirectorThinking} onChoose={chooseInput} />
                 ))}
                 {item.status === 'streaming' && <p className="streaming"><Bot size={12} />{locale === 'zh-CN' ? '场景正在演绎……' : 'The scene is unfolding…'}</p>}
                 {item.error && <p className="error">{item.error}</p>}

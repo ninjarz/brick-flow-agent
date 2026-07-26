@@ -198,6 +198,7 @@ export const advanceWorldScenarios = (world: WorldState): WorldState => {
   let nextWorld = world
   let scenariosChanged = false
   const nextScenarios = world.scenarios.map((scenario) => {
+    if (scenario.enabled === false) return scenario
     const activeStageIndex = scenario.stages.findIndex((stage) => stage.status === 'active')
     if (activeStageIndex < 0) return scenario
     const activeStage = scenario.stages[activeStageIndex]
@@ -285,9 +286,11 @@ export const advanceWorldScenarios = (world: WorldState): WorldState => {
 }
 
 export const getActiveWorldScenarioStage = (world: WorldState) => {
-  for (const scenario of world.scenarios) {
-    const stage = scenario.stages.find((candidate) => candidate.status === 'active')
-    if (stage) return { scenario, stage }
-  }
-  return undefined
+  return getActiveWorldScenarioStages(world)[0]
 }
+
+export const getActiveWorldScenarioStages = (world: WorldState) => world.scenarios.flatMap((scenario) => {
+  if (scenario.enabled === false) return []
+  const stage = scenario.stages.find((candidate) => candidate.status === 'active')
+  return stage ? [{ scenario, stage }] : []
+})

@@ -22,7 +22,6 @@ const upgradeGrayRavenScenarioStages = (
   title: string,
   authoringVersion: number,
 ) => {
-  if (authoringVersion >= 2) return stages
   const investigate = stages.find((stage) => stage.id.endsWith('investigate'))
   const confront = stages.find((stage) => stage.id.endsWith('confront'))
   const rolandId = investigate?.trigger.actorId ?? confront?.trigger.actorId
@@ -73,7 +72,13 @@ const upgradeGrayRavenScenarioStages = (
         }],
       }
     : stage)
-  return upgraded
+  return upgraded.map((stage) => ({
+    ...stage,
+    description: stage.description
+      .replace(/向(.+?)下达[“"]交互[”"]命令/g, '与$1交谈')
+      .replace(/与(.+?)交互/g, '与$1交谈')
+      .replace(/\binteract with\b/gi, 'talk with'),
+  }))
 }
 
 const makeUniqueName = (baseName: string, existingNames: Iterable<string>) => {
@@ -377,8 +382,11 @@ const parseStoredDirectorEvent = (value: Record<string, unknown>): WorldDirector
   }
   if (value.type === 'dialogue') {
     const speakerId = cleanStoredText(value.speakerId, 160)
+    const listenerId = cleanStoredText(value.listenerId, 160)
     const text = cleanStoredText(value.text, 180)
-    return speakerId && text ? { type: value.type, speakerId, text } : undefined
+    return speakerId && text
+      ? { type: value.type, speakerId, ...(listenerId && listenerId !== speakerId ? { listenerId } : {}), text }
+      : undefined
   }
   if (value.type === 'command') {
     const entityId = cleanStoredText(value.entityId, 160)
@@ -610,6 +618,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
           assetId: scenario.assetId,
           title: scenario.title,
           description: scenario.description,
+          ...(typeof scenario.enabled === 'boolean' ? { enabled: scenario.enabled } : {}),
           ...(castEntityIds.length ? { castEntityIds } : {}),
           stages: upgradedStages,
           processedEventIds: Array.isArray(scenario.processedEventIds)
@@ -633,6 +642,46 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
     const memberships = storylineMemberships.get(entity.id) ?? []
     return memberships.length === 1 ? { ...entity, storylineId: memberships[0] } : entity
   })
+  const directorTurns = parseStoredDirectorTurns(narrative.directorTurns)
+  const migratedEvents = [...events]
+  const entityById = new Map(restoredEntities.map((entity) => [entity.id, entity]))
+  for (const scenario of scenarios) {
+    if (scenario.activeDialogue) continue
+    const activeStage = scenario.stages.find((stage) => (
+      stage.status === 'active'
+      && stage.trigger.eventType === 'interaction'
+      && stage.trigger.actorId
+      && stage.trigger.targetId
+    ))
+    if (!activeStage?.trigger.actorId || !activeStage.trigger.targetId) continue
+    const { actorId, targetId } = activeStage.trigger
+    if (migratedEvents.some((event) => event.type === 'interaction' && event.actorId === actorId && event.targetId === targetId)) continue
+    const stageOpenedAtSeconds = Math.max(0, ...scenario.stages
+      .filter((stage) => stage.status === 'completed')
+      .map((stage) => stage.completedAtSeconds ?? 0))
+    const matchingTurn = [...directorTurns].reverse().find((turn) => (
+      turn.createdAtSeconds >= stageOpenedAtSeconds
+      && [...turn.entries].reverse().some((entry) => (
+        entry.type === 'dialogue'
+        && (
+          (entry.speakerId === targetId && (!entry.listenerId || entry.listenerId === actorId))
+          || (entry.speakerId === actorId && entry.listenerId === targetId)
+        )
+      ))
+    ))
+    if (!matchingTurn) continue
+    migratedEvents.push({
+      id: `migrated-director-dialogue-${scenario.id}-${activeStage.id}`,
+      timeSeconds: matchingTurn.createdAtSeconds,
+      type: 'interaction',
+      actorId,
+      actorName: entityById.get(actorId)?.name,
+      targetId,
+      targetName: entityById.get(targetId)?.name,
+      commandType: 'interact',
+      commandSource: 'player',
+    })
+  }
 
   return {
     id: typeof value.id === 'string' && value.id.trim() ? value.id.trim() : `world-${planId}`,
@@ -641,7 +690,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
     elapsedSeconds: isFiniteNumber(value.elapsedSeconds) ? Math.max(0, value.elapsedSeconds) : 0,
     paused: typeof value.paused === 'boolean' ? value.paused : false,
     entities: restoredEntities,
-    events,
+    events: migratedEvents,
     pendingImpacts,
     scenarios,
     hiddenTargets: Array.isArray(value.hiddenTargets) ? value.hiddenTargets.flatMap((target) => {
@@ -655,7 +704,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
       memoriesByEntityId: normalizeArrayRecord(narrative.memoriesByEntityId, isStoredMemory),
       relationshipsByEntityId: normalizeRelationships(narrative.relationshipsByEntityId),
       stories: Array.isArray(narrative.stories) ? narrative.stories.filter(isStoredStory).slice(-80) : [],
-      directorTurns: parseStoredDirectorTurns(narrative.directorTurns),
+      directorTurns,
     },
   } satisfies WorldState
 }
