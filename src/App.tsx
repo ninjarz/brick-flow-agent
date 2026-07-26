@@ -10,7 +10,7 @@ import { worldEntityDefinitionById } from './data/worldEntityDefinitions'
 import { createDefaultWorldScenarios } from './data/worldScenarios'
 import { dropBrickGroupAtPoint, findNearestOpenBrickGroupAround, getBrickGroupDragPointerOffset, offsetBrickGroupDragPoint, rotationRepositionSearchRadiusStuds, type HorizontalDropPoint, type StationaryPlanSpatialData } from './lib/brickGroupPlacement'
 import { generateBuildPlan } from './lib/localGenerator'
-import { buildLlmUserPrompt, generateLlmBuildPlan, isLlmConfigComplete, llmSystemPrompt, resetLlmThinkingCompatibility, testLlmConnection } from './lib/llmGenerator'
+import { buildLlmUserPrompt, generateLlmBuildPlan, isLlmConfigComplete, llmSystemPrompt, requestLlmTextStream, resetLlmThinkingCompatibility, testLlmConnection } from './lib/llmGenerator'
 import { loadLlmConfig, saveLlmConfig } from './lib/llmConfig'
 import { defaultFinishedAssets, hasIndexedDbFinishedAssets, isDefaultFinishedAsset, loadAllDefaultFinishedAssets, loadFinishedAssets, loadFinishedAssetsFromIndexedDb, mergeWithDefaultAssets, saveFinishedAssets } from './lib/finishedAssets'
 import { formatBuildManualHtml, formatBuildManualMarkdown, serializeBuildManual } from './lib/manualSerializer'
@@ -31,6 +31,7 @@ import { advanceWorldFixedStepClock, createWorldFixedStepClock } from './lib/wor
 import { addWorldStory, createLocalTavernStory } from './lib/worldNarrative'
 import { playTavernActivity, type TavernActivityKind, type TavernActivityResult } from './lib/worldTavernActivities'
 import { applyTavernAiResponse, requestTavernAiActivity } from './lib/worldTavernAi'
+import { applyTavernDirectorEvent, buildTavernDirectorPrompt, createTavernDirectorStreamParser, tavernDirectorSystemPrompt, type TavernDirectorEntry } from './lib/worldTavernDirector'
 import { applyWorldAiTurn, buildWorldAiTurnPrompt, createWorldAiSnapshot, formatWorldAiTurnSummary, requestWorldAiTurn, worldAiSystemPrompt } from './lib/worldAi'
 import { analyzeBuildStability } from './lib/stabilityAnalysis'
 import { formatLDrawPlan, parseLDrawPlan } from './lib/ldrawPlan'
@@ -204,9 +205,11 @@ function App() {
   const [isWorldRosterOpen, setIsWorldRosterOpen] = useState(false)
   const [isWorldAiThinking, setIsWorldAiThinking] = useState(false)
   const [isTavernAiThinking, setIsTavernAiThinking] = useState(false)
+  const [isTavernDirectorThinking, setIsTavernDirectorThinking] = useState(false)
   const [worldAiFeedback, setWorldAiFeedback] = useState<{ tone: 'success' | 'error'; text: string }>()
   const worldAiAbortRef = useRef<AbortController>()
   const tavernAiAbortRef = useRef<AbortController>()
+  const tavernDirectorAbortRef = useRef<AbortController>()
   const [isManualOpen, setIsManualOpen] = useState(false)
   const [manualPlan, setManualPlan] = useState<BuildPlan>()
   const [manualStepIndex, setManualStepIndex] = useState(0)
@@ -1614,6 +1617,69 @@ function App() {
     }
   }, [isWorldAiThinking, llmConfig, llmConfigComplete, locale, t])
 
+  const runTavernDirectorTurn = useCallback(async (
+    playerText: string,
+    recentEntries: TavernDirectorEntry[],
+    onEntry: (entry: TavernDirectorEntry) => void,
+  ) => {
+    if (!llmConfigComplete || isTavernDirectorThinking) return
+    tavernDirectorAbortRef.current?.abort()
+    const controller = new AbortController()
+    tavernDirectorAbortRef.current = controller
+    setIsTavernDirectorThinking(true)
+    const requestWorld = worldRef.current
+    const requestPlan = planRef.current
+    const snapshot = createWorldAiSnapshot(requestWorld, requestPlan.bricks, requestPlan.structures)
+    let eventCount = 0
+    const parser = createTavernDirectorStreamParser((event) => {
+      eventCount += 1
+      const currentWorld = worldRef.current
+      const currentPlan = planRef.current
+      const applied = applyTavernDirectorEvent(currentWorld, event, {
+        bricks: currentPlan.bricks,
+        structures: currentPlan.structures ?? [],
+      })
+      if (applied.world !== currentWorld) {
+        const nextWorld = advanceWorldScenarios(applied.world)
+        worldRef.current = nextWorld
+        setWorld(nextWorld)
+      }
+      onEntry({
+        ...event,
+        id: `director-entry-${Date.now().toString(36)}-${eventCount}`,
+        status: applied.status,
+        detail: applied.detail,
+        before: applied.before,
+        after: applied.after,
+      })
+    })
+    try {
+      await requestLlmTextStream({
+        config: llmConfig,
+        systemPrompt: tavernDirectorSystemPrompt,
+        userPrompt: buildTavernDirectorPrompt(snapshot, playerText, recentEntries, locale),
+        locale,
+        signal: controller.signal,
+        temperature: 0.65,
+        maxTokens: 2_400,
+        onDelta: (delta) => parser.push(delta),
+      })
+      parser.finish()
+      if (eventCount === 0) {
+        throw new Error(locale === 'zh-CN' ? 'AI 没有返回可执行的剧情事件。' : 'The AI returned no usable story events.')
+      }
+    } finally {
+      if (tavernDirectorAbortRef.current === controller) {
+        tavernDirectorAbortRef.current = undefined
+        setIsTavernDirectorThinking(false)
+      }
+    }
+  }, [isTavernDirectorThinking, llmConfig, llmConfigComplete, locale])
+
+  const stopTavernDirector = useCallback(() => {
+    tavernDirectorAbortRef.current?.abort()
+  }, [])
+
   const getWorldAiContextPreview = useCallback(() => {
     const currentWorld = worldRef.current
     const currentPlan = planRef.current
@@ -2494,11 +2560,16 @@ function App() {
             onPlayAiActivity={runAiTavernActivity}
             onWatchActivity={watchTavernActivity}
             llmConfigured={llmConfigComplete}
+            llmConnected={llmEngineStatus === 'connected'}
             isAiThinking={isWorldAiThinking}
             isAiActivityThinking={isTavernAiThinking}
+            isDirectorThinking={isTavernDirectorThinking}
+            onDirectWorld={runTavernDirectorTurn}
+            onStopDirector={stopTavernDirector}
             aiFeedback={worldAiFeedback}
             onClose={() => {
               tavernAiAbortRef.current?.abort()
+              tavernDirectorAbortRef.current?.abort()
               setIsTavernOpen(false)
             }}
           />

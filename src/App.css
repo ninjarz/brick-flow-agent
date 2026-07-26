@@ -3005,6 +3005,120 @@ button:disabled {
   box-shadow: 0 24px 70px rgba(41, 27, 13, 0.28);
 }
 
+.tavern-director {
+  display: grid;
+  gap: 7px;
+  padding: 10px 14px 12px;
+  border-top: 1px solid #d6c4a2;
+  background: linear-gradient(180deg, #fffdf8, #fff7e6);
+}
+
+.tavern-director-feed {
+  max-height: 210px;
+  display: grid;
+  gap: 8px;
+  overflow-y: auto;
+  padding: 3px 5px 3px 0;
+}
+
+.tavern-director-turn {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 7px;
+  align-items: center;
+}
+
+.tavern-director-turn p {
+  min-width: 0;
+  margin: 0;
+  padding: 5px 8px;
+  border-radius: 8px;
+  color: #4f3e2c;
+  background: #f7efe2;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.tavern-director-turn p strong {
+  margin-right: 6px;
+}
+
+.tavern-director-turn p.player {
+  flex-basis: 100%;
+  color: #1e3a5f;
+  background: #eaf3ff;
+}
+
+.tavern-director-turn p.narration {
+  flex-basis: 100%;
+  color: #6f573a;
+  font-style: italic;
+  background: transparent;
+}
+
+.tavern-director-turn p.dialogue {
+  border: 1px solid #ead9ba;
+  background: #fff;
+}
+
+.tavern-director-turn p.dialogue strong { color: #8a4b16; }
+.tavern-director-turn p.operation { color: #166534; background: #ecfdf3; }
+.tavern-director-turn p.operation.rejected,
+.tavern-director-turn p.error { color: #b42318; background: #fff1f2; }
+.tavern-director-turn p.summary { flex-basis: 100%; color: #6d28d9; background: #f5f3ff; }
+.tavern-director-turn p.streaming { display: inline-flex; align-items: center; gap: 5px; color: #7c3f12; }
+
+.tavern-director-turn button.choice {
+  min-height: 27px;
+  padding: 0 9px;
+  border-color: #c4b5fd;
+  border-radius: 999px;
+  color: #6d28d9;
+  background: #f5f3ff;
+  font-size: 10px;
+}
+
+.tavern-director form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.tavern-director textarea {
+  min-height: 52px;
+  max-height: 110px;
+  resize: vertical;
+  padding: 9px 11px;
+  border: 1px solid #cbb894;
+  border-radius: 9px;
+  color: #30261b;
+  background: #fff;
+  font: inherit;
+  line-height: 1.45;
+}
+
+.tavern-director form > button {
+  min-width: 92px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-color: #7c3f12;
+  color: #fff;
+  background: #7c3f12;
+}
+
+.tavern-director form > button.stop {
+  border-color: #b42318;
+  background: #b42318;
+}
+
+.tavern-director > small {
+  color: #8a6b43;
+  font-size: 9px;
+}
+
 .tavern-modal > header {
   display: flex;
   align-items: flex-start;
@@ -4022,6 +4136,8 @@ button:disabled {
   .tavern-quest > ol { grid-template-columns: 1fr; }
   .tavern-content > .tavern-quick-play { grid-column: auto; }
   .tavern-quick-actions { grid-template-columns: 1fr; }
+  .tavern-director form { grid-template-columns: 1fr; }
+  .tavern-director form > button { min-height: 34px; }
   .scenario-editor-grid { grid-template-columns: 1fr; }
   .scenario-dialogue-row,
   .scenario-action-row,

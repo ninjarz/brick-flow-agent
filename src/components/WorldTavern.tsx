@@ -1,4 +1,4 @@
-import { Activity, Beer, BookOpen, Bot, CheckCircle2, Circle, Clipboard, Dice5, Eye, GlassWater, LockKeyhole, MessageCircle, Pencil, Sparkles, Trash2, Users, X } from 'lucide-react'
+import { Activity, Beer, BookOpen, Bot, CheckCircle2, Circle, Clipboard, Dice5, Eye, GlassWater, LockKeyhole, MessageCircle, Pencil, Send, Sparkles, Square, Trash2, Users, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useI18n } from '../lib/i18n'
 import { formatWorldEvent } from '../lib/worldNarrative'
@@ -6,6 +6,15 @@ import type { WorldScenarioRuntime, WorldState } from '../types/world'
 import { WorldScenarioEditor } from './WorldScenarioEditor'
 import type { BrickStructure } from '../types/bricks'
 import type { TavernActivityKind, TavernActivityResult } from '../lib/worldTavernActivities'
+import type { TavernDirectorEntry } from '../lib/worldTavernDirector'
+
+type TavernDirectorTurn = {
+  id: string
+  playerText: string
+  entries: TavernDirectorEntry[]
+  status: 'streaming' | 'completed' | 'failed' | 'stopped'
+  error?: string
+}
 
 type WorldTavernProps = {
   world: WorldState
@@ -20,8 +29,16 @@ type WorldTavernProps = {
   onPlayAiActivity: (activity: TavernActivityKind, focusEntityId?: string) => Promise<TavernActivityResult | undefined>
   onWatchActivity: (result: TavernActivityResult) => void
   llmConfigured: boolean
+  llmConnected: boolean
   isAiThinking: boolean
   isAiActivityThinking: boolean
+  isDirectorThinking: boolean
+  onDirectWorld: (
+    text: string,
+    recentEntries: TavernDirectorEntry[],
+    onEntry: (entry: TavernDirectorEntry) => void,
+  ) => Promise<void>
+  onStopDirector: () => void
   aiFeedback?: { tone: 'success' | 'error'; text: string }
   onClose: () => void
 }
@@ -39,8 +56,12 @@ export const WorldTavern = ({
   onPlayAiActivity,
   onWatchActivity,
   llmConfigured,
+  llmConnected,
   isAiThinking,
   isAiActivityThinking,
+  isDirectorThinking,
+  onDirectWorld,
+  onStopDirector,
   aiFeedback,
   onClose,
 }: WorldTavernProps) => {
@@ -54,6 +75,8 @@ export const WorldTavern = ({
   const [editingScenarioId, setEditingScenarioId] = useState('')
   const [activityResult, setActivityResult] = useState<TavernActivityResult>()
   const [activityHost, setActivityHost] = useState<'local' | 'ai'>('local')
+  const [directorInput, setDirectorInput] = useState('')
+  const [directorTurns, setDirectorTurns] = useState<TavernDirectorTurn[]>([])
   useEffect(() => {
     if (world.entities.some((entity) => entity.id === selectedEntityId)) return
     setSelectedEntityId(world.entities[0]?.id ?? '')
@@ -93,6 +116,29 @@ export const WorldTavern = ({
       ? await onPlayAiActivity(activity, selectedEntityId)
       : onPlayActivity(activity, selectedEntityId)
     setActivityResult(result)
+  }
+  const submitDirectorInput = async () => {
+    const text = directorInput.trim()
+    if (!text || isDirectorThinking || !llmConnected) return
+    const id = `director-turn-${Date.now().toString(36)}`
+    const recentEntries = directorTurns.flatMap((turn) => turn.entries).slice(-12)
+    const newTurn: TavernDirectorTurn = { id, playerText: text, entries: [], status: 'streaming' }
+    setDirectorInput('')
+    setDirectorTurns((current) => [...current, newTurn].slice(-12))
+    try {
+      await onDirectWorld(text, recentEntries, (entry) => {
+        setDirectorTurns((current) => current.map((turn) => turn.id === id
+          ? { ...turn, entries: [...turn.entries, entry] }
+          : turn))
+      })
+      setDirectorTurns((current) => current.map((turn) => turn.id === id ? { ...turn, status: 'completed' } : turn))
+    } catch (error) {
+      setDirectorTurns((current) => current.map((turn) => turn.id === id ? {
+        ...turn,
+        status: error instanceof Error && /取消|canceled/i.test(error.message) ? 'stopped' : 'failed',
+        error: error instanceof Error ? error.message : (locale === 'zh-CN' ? '导演请求失败' : 'Director request failed'),
+      } : turn))
+    }
   }
 
   return (
@@ -421,6 +467,66 @@ export const WorldTavern = ({
             </section>
           </div>
         </div>
+        {llmConnected && (
+          <section className="tavern-director" aria-label={locale === 'zh-CN' ? 'AI 剧情导演' : 'AI story director'}>
+            {directorTurns.length > 0 && (
+              <div className="tavern-director-feed" aria-live="polite">
+                {directorTurns.slice(-4).map((turn) => (
+                  <div className="tavern-director-turn" key={turn.id}>
+                    <p className="player"><strong>{locale === 'zh-CN' ? '你' : 'You'}</strong>{turn.playerText}</p>
+                    {turn.entries.map((entry) => {
+                      if (entry.type === 'narration') return <p key={entry.id} className="narration">{entry.text}</p>
+                      if (entry.type === 'dialogue') {
+                        const speaker = world.entities.find((entity) => entity.id === entry.speakerId)
+                        return <p key={entry.id} className="dialogue"><strong>{speaker?.name ?? entry.speakerId}</strong>{entry.text}</p>
+                      }
+                      if (entry.type === 'command') {
+                        const actor = world.entities.find((entity) => entity.id === entry.entityId)
+                        const commandTarget = 'target' in entry.command ? entry.command.target : undefined
+                        const target = commandTarget
+                          ? world.entities.find((entity) => entity.id === commandTarget.id)?.name ?? commandTarget.id
+                          : ''
+                        return <p key={entry.id} className={`operation ${entry.status ?? ''}`}><strong>{entry.status === 'rejected' ? '×' : '✓'} {actor?.name ?? entry.entityId}</strong>{entry.command.type}{target ? ` → ${target}` : ''}{entry.detail ? ` · ${entry.detail}` : ''}</p>
+                      }
+                      if (entry.type === 'relationship') {
+                        const from = world.entities.find((entity) => entity.id === entry.fromId)?.name ?? entry.fromId
+                        const to = world.entities.find((entity) => entity.id === entry.toId)?.name ?? entry.toId
+                        return <p key={entry.id} className={`operation ${entry.status ?? ''}`}><strong>{from} → {to}</strong>{entry.before ?? 0} → {entry.after ?? 0} · {entry.reason}</p>
+                      }
+                      if (entry.type === 'choice') return <button key={entry.id} type="button" className="choice" disabled={isDirectorThinking} onClick={() => setDirectorInput(entry.suggestedInput)}>{entry.label}</button>
+                      return <p key={entry.id} className="summary">{entry.summary}</p>
+                    })}
+                    {turn.status === 'streaming' && <p className="streaming"><Bot size={12} />{locale === 'zh-CN' ? '剧情正在展开……' : 'The story is unfolding…'}</p>}
+                    {turn.error && <p className="error">{turn.error}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+            <form onSubmit={(event) => { event.preventDefault(); void submitDirectorInput() }}>
+              <textarea
+                value={directorInput}
+                onChange={(event) => setDirectorInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
+                  event.preventDefault()
+                  void submitDirectorInput()
+                }}
+                rows={2}
+                maxLength={800}
+                disabled={isDirectorThinking}
+                placeholder={locale === 'zh-CN'
+                  ? '例如：让罗兰先和黑岩使者谈谈，尽量避免战斗。'
+                  : 'For example: Have Roland question the envoy and avoid a fight.'}
+              />
+              {isDirectorThinking ? (
+                <button type="button" className="stop" onClick={onStopDirector}><Square size={15} />{locale === 'zh-CN' ? '停止' : 'Stop'}</button>
+              ) : (
+                <button type="submit" disabled={!directorInput.trim()}><Send size={15} />{locale === 'zh-CN' ? '导演' : 'Direct'}</button>
+              )}
+            </form>
+            <small>{locale === 'zh-CN' ? 'AI 负责理解与对白；移动、战斗和数值变化仍由世界规则校验。' : 'AI handles intent and dialogue; world rules still validate movement, combat, and values.'}</small>
+          </section>
+        )}
       </section>
     </div>
   )
