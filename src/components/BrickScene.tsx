@@ -2039,23 +2039,22 @@ const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementAct
 
 const speechBubbleStyle = {
   pointerEvents: 'none',
+  visibility: 'hidden',
   '--speech-tail-x': '0px',
 } as CSSProperties
 
 const speechLayoutIntervalSeconds = 1 / 20
-const speechLayoutAnchorThresholdPixels = 1.5
 
 const WorldEntitySpeechLayer = ({ entities }: { entities: WorldEntity[] }) => {
   const { t } = useI18n()
-  const anchorRefs = useRef(new Map<string, Group>())
   const bubbleRefs = useRef(new Map<string, HTMLDivElement>())
   const bubbleSizeRefs = useRef(new Map<string, { width: number; height: number }>())
+  const displayPositionsRef = useRef(new Map<string, { x: number; y: number; z: number }>())
+  const layoutOffsetsRef = useRef(new Map<string, { offsetX: number; offsetY: number; tailOffsetX: number; tailSide: 'top' | 'bottom' }>())
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
   const layoutElapsedRef = useRef(speechLayoutIntervalSeconds)
   const layoutDirtyRef = useRef(true)
-  const lastViewportRef = useRef({ width: 0, height: 0 })
-  const lastAnchorsRef = useRef(new Map<string, { x: number; y: number; visible: boolean }>())
-  const lastStylesRef = useRef(new Map<string, { transform: string; tailOffsetX: string; tailSide: string }>())
+  const lastStylesRef = useRef(new Map<string, { transform: string; visibility: string; tailOffsetX: string; tailSide: string }>())
   const projectedPoint = useMemo(() => new Vector3(), [])
   const speakingEntities = useMemo(
     () => entities.filter((entity) => Boolean(entity.speech) && entity.health > 0),
@@ -2085,22 +2084,25 @@ const WorldEntitySpeechLayer = ({ entities }: { entities: WorldEntity[] }) => {
 
   useFrame(({ camera, size }, deltaSeconds) => {
     layoutElapsedRef.current += Math.min(deltaSeconds, 0.05)
-    const shouldCheckLayout = layoutElapsedRef.current >= speechLayoutIntervalSeconds
-    const viewportChanged = lastViewportRef.current.width !== size.width || lastViewportRef.current.height !== size.height
-    let layoutChanged = layoutDirtyRef.current || viewportChanged || lastAnchorsRef.current.size !== speakingEntities.length
+    const shouldLayout = layoutDirtyRef.current || layoutElapsedRef.current >= speechLayoutIntervalSeconds
     const inputs = speakingEntities.flatMap((entity) => {
-      const anchor = anchorRefs.current.get(entity.id)
       const bubble = bubbleRefs.current.get(entity.id)
       const definition = worldEntityDefinitionById.get(entity.definitionId)
-      if (!anchor || !bubble || !definition) return []
+      if (!bubble || !definition) return []
+      const position = displayPositionsRef.current.get(entity.id) ?? {
+        x: entity.transform.x,
+        y: entity.transform.y,
+        z: entity.transform.z,
+      }
+      displayPositionsRef.current.set(entity.id, position)
       const interpolation = 1 - Math.exp(-Math.min(deltaSeconds, 0.05) * 18)
-      anchor.position.x += (entity.transform.x - anchor.position.x) * interpolation
-      anchor.position.y += (entity.transform.y - anchor.position.y) * interpolation
-      anchor.position.z += (entity.transform.z - anchor.position.z) * interpolation
+      position.x += (entity.transform.x - position.x) * interpolation
+      position.y += (entity.transform.y - position.y) * interpolation
+      position.z += (entity.transform.z - position.z) * interpolation
       projectedPoint.set(
-        anchor.position.x,
-        anchor.position.y + definition.visual.heightStuds + 0.85,
-        anchor.position.z,
+        position.x,
+        position.y + definition.visual.heightStuds + 0.85,
+        position.z,
       ).project(camera)
       const anchorX = (projectedPoint.x + 1) * size.width / 2
       const anchorY = (1 - projectedPoint.y) * size.height / 2
@@ -2108,17 +2110,23 @@ const WorldEntitySpeechLayer = ({ entities }: { entities: WorldEntity[] }) => {
         && anchorX >= -120 && anchorX <= size.width + 120
         && anchorY >= -120 && anchorY <= size.height + 120
       const visibility = visible ? 'visible' : 'hidden'
-      if (bubble.style.visibility !== visibility) bubble.style.visibility = visibility
-      if (!shouldCheckLayout) return []
-      const previousAnchor = lastAnchorsRef.current.get(entity.id)
-      if (!previousAnchor
-        || previousAnchor.visible !== visible
-        || Math.abs(previousAnchor.x - anchorX) >= speechLayoutAnchorThresholdPixels
-        || Math.abs(previousAnchor.y - anchorY) >= speechLayoutAnchorThresholdPixels) {
-        layoutChanged = true
+      const offset = layoutOffsetsRef.current.get(entity.id) ?? {
+        offsetX: 0,
+        offsetY: -42,
+        tailOffsetX: 0,
+        tailSide: 'bottom' as const,
       }
-      lastAnchorsRef.current.set(entity.id, { x: anchorX, y: anchorY, visible })
-      if (!visible) return []
+      const transform = `translate3d(${(anchorX + offset.offsetX).toFixed(1)}px, ${(anchorY + offset.offsetY).toFixed(1)}px, 0) translate(-50%, -50%)`
+      const previousStyle = lastStylesRef.current.get(entity.id)
+      if (previousStyle?.transform !== transform) bubble.style.transform = transform
+      if (previousStyle?.visibility !== visibility) bubble.style.visibility = visibility
+      lastStylesRef.current.set(entity.id, {
+        transform,
+        visibility,
+        tailOffsetX: previousStyle?.tailOffsetX ?? '0px',
+        tailSide: previousStyle?.tailSide ?? 'bottom',
+      })
+      if (!shouldLayout || !visible) return []
       const sizeCache = bubbleSizeRefs.current.get(entity.id)
       return [{
         id: entity.id,
@@ -2128,76 +2136,71 @@ const WorldEntitySpeechLayer = ({ entities }: { entities: WorldEntity[] }) => {
         height: sizeCache?.height || 58,
       }]
     })
-    if (!shouldCheckLayout) return
+    if (!shouldLayout) return
     layoutElapsedRef.current = 0
     layoutDirtyRef.current = false
-    lastViewportRef.current = { width: size.width, height: size.height }
-    for (const id of lastAnchorsRef.current.keys()) {
-      if (!speakingEntities.some((entity) => entity.id === id)) lastAnchorsRef.current.delete(id)
+    const activeIds = new Set(speakingEntities.map((entity) => entity.id))
+    for (const id of displayPositionsRef.current.keys()) {
+      if (!activeIds.has(id)) displayPositionsRef.current.delete(id)
     }
-    if (!layoutChanged) return
     const layout = layoutWorldSpeechBubbles(inputs, size)
     for (const item of layout) {
       const bubble = bubbleRefs.current.get(item.id)
       if (!bubble) continue
-      const transform = `translate3d(${item.offsetX.toFixed(1)}px, ${item.offsetY.toFixed(1)}px, 0)`
+      layoutOffsetsRef.current.set(item.id, item)
       const tailOffsetX = `${item.tailOffsetX.toFixed(1)}px`
       const previousStyle = lastStylesRef.current.get(item.id)
-      if (previousStyle?.transform !== transform) bubble.style.transform = transform
       if (previousStyle?.tailOffsetX !== tailOffsetX) bubble.style.setProperty('--speech-tail-x', tailOffsetX)
       if (previousStyle?.tailSide !== item.tailSide) bubble.dataset.tailSide = item.tailSide
-      lastStylesRef.current.set(item.id, { transform, tailOffsetX, tailSide: item.tailSide })
+      lastStylesRef.current.set(item.id, {
+        transform: previousStyle?.transform ?? '',
+        visibility: previousStyle?.visibility ?? 'visible',
+        tailOffsetX,
+        tailSide: item.tailSide,
+      })
     }
   })
 
   return (
-    <group>
-      {speakingEntities.map((entity) => {
-        const definition = worldEntityDefinitionById.get(entity.definitionId)
-        if (!definition || !entity.speech) return null
-        const speechText = entity.speech.text
-          ?? t(`worldEntity.speech.${entity.speech.message}`, { target: entity.speech.targetName ?? entity.name })
-        return (
-          <group
-            key={entity.id}
-            ref={(node) => {
-              if (node) anchorRefs.current.set(entity.id, node)
-              else anchorRefs.current.delete(entity.id)
-            }}
-            position={[entity.transform.x, entity.transform.y, entity.transform.z]}
-          >
-            <Html position={[0, definition.visual.heightStuds + 0.85, 0]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
-              <div
-                ref={(node) => {
-                  const previousNode = bubbleRefs.current.get(entity.id)
-                  if (previousNode && previousNode !== node) resizeObserverRef.current?.unobserve(previousNode)
-                  if (node) {
-                    bubbleRefs.current.set(entity.id, node)
-                    resizeObserverRef.current?.observe(node)
-                    layoutDirtyRef.current = true
-                  } else {
-                    bubbleRefs.current.delete(entity.id)
-                    bubbleSizeRefs.current.delete(entity.id)
-                    lastAnchorsRef.current.delete(entity.id)
-                    lastStylesRef.current.delete(entity.id)
-                  }
-                }}
-                className="world-entity-speech-bubble"
-                data-entity-id={entity.id}
-                data-faction={entity.factionId}
-                data-tail-side="bottom"
-                role="status"
-                aria-label={`${entity.name}: ${speechText}`}
-                style={speechBubbleStyle}
-              >
-                <strong className="world-entity-speech-speaker">{entity.name}</strong>
-                <span>{speechText}</span>
-              </div>
-            </Html>
-          </group>
-        )
-      })}
-    </group>
+    <Html fullscreen zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
+      <div className="world-entity-speech-overlay" aria-live="polite">
+        {speakingEntities.map((entity) => {
+          if (!entity.speech) return null
+          const speechText = entity.speech.text
+            ?? t(`worldEntity.speech.${entity.speech.message}`, { target: entity.speech.targetName ?? entity.name })
+          return (
+            <div
+              key={entity.id}
+              ref={(node) => {
+                const previousNode = bubbleRefs.current.get(entity.id)
+                if (previousNode && previousNode !== node) resizeObserverRef.current?.unobserve(previousNode)
+                if (node) {
+                  bubbleRefs.current.set(entity.id, node)
+                  resizeObserverRef.current?.observe(node)
+                  layoutDirtyRef.current = true
+                } else {
+                  bubbleRefs.current.delete(entity.id)
+                  bubbleSizeRefs.current.delete(entity.id)
+                  displayPositionsRef.current.delete(entity.id)
+                  layoutOffsetsRef.current.delete(entity.id)
+                  lastStylesRef.current.delete(entity.id)
+                }
+              }}
+              className="world-entity-speech-bubble"
+              data-entity-id={entity.id}
+              data-faction={entity.factionId}
+              data-tail-side="bottom"
+              role="status"
+              aria-label={`${entity.name}: ${speechText}`}
+              style={speechBubbleStyle}
+            >
+              <strong className="world-entity-speech-speaker">{entity.name}</strong>
+              <span>{speechText}</span>
+            </div>
+          )
+        })}
+      </div>
+    </Html>
   )
 }
 
