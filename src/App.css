@@ -3441,6 +3441,16 @@ button:disabled {
   white-space: nowrap;
 }
 
+.tavern-close-button.confirm {
+  width: auto;
+  gap: 5px;
+  padding: 0 9px;
+  border-color: #fca5a5;
+  background: #fef2f2;
+  color: #b42318;
+  white-space: nowrap;
+}
+
 .tavern-layout {
   min-height: 0;
   display: grid;
@@ -3704,6 +3714,12 @@ button:disabled {
   background: #fef2f2;
 }
 
+.tavern-quest-actions > button.active {
+  border-color: #60a5fa;
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+
 .tavern-quest > ol {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-top: 10px;
@@ -3750,6 +3766,76 @@ button:disabled {
   color: #6d28d9;
   font-size: 11px;
   font-weight: 800;
+}
+
+.scenario-edit-session-bar {
+  position: sticky;
+  top: -14px;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 10px -1px 0;
+  padding: 8px 9px;
+  border: 1px solid #93c5fd;
+  border-radius: 9px;
+  background: rgba(239, 246, 255, 0.97);
+  box-shadow: 0 7px 18px rgba(30, 64, 175, 0.1);
+  backdrop-filter: blur(8px);
+}
+
+.scenario-edit-session-bar > div {
+  min-width: 0;
+  display: grid;
+  flex: 1;
+  gap: 2px;
+}
+
+.scenario-edit-session-bar > div strong {
+  color: #1e3a8a;
+  font-size: 11px;
+}
+
+.scenario-edit-session-bar > div small {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scenario-edit-session-bar > span {
+  flex: none;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.scenario-edit-session-bar > span.dirty {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.scenario-edit-session-bar > button {
+  flex: none;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  font-size: 10px;
+}
+
+.scenario-edit-session-bar > button.primary {
+  width: auto;
+  min-height: 28px;
+  margin: 0;
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #fff;
 }
 
 .scenario-editor {
@@ -4321,6 +4407,8 @@ button:disabled {
   }
   .tavern-content { grid-template-columns: 1fr; }
   .tavern-content > .tavern-quest { grid-column: auto; }
+  .scenario-edit-session-bar { flex-wrap: wrap; }
+  .scenario-edit-session-bar > div { flex-basis: 100%; }
   .tavern-quest > ol { grid-template-columns: 1fr; }
   .scenario-editor-grid { grid-template-columns: 1fr; }
   .scenario-dialogue-row,
