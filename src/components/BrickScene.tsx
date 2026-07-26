@@ -2044,6 +2044,11 @@ const speechBubbleStyle = {
 } as CSSProperties
 
 const speechLayoutIntervalSeconds = 1 / 20
+const calculateSpeechOverlayPosition = (
+  _object: Object3D,
+  _camera: unknown,
+  size: { width: number; height: number },
+) => [size.width / 2, size.height / 2] as [number, number]
 
 const WorldEntitySpeechLayer = ({ entities }: { entities: WorldEntity[] }) => {
   const { t } = useI18n()
@@ -2051,6 +2056,7 @@ const WorldEntitySpeechLayer = ({ entities }: { entities: WorldEntity[] }) => {
   const bubbleSizeRefs = useRef(new Map<string, { width: number; height: number }>())
   const displayPositionsRef = useRef(new Map<string, { x: number; y: number; z: number }>())
   const layoutOffsetsRef = useRef(new Map<string, { offsetX: number; offsetY: number; tailOffsetX: number; tailSide: 'top' | 'bottom' }>())
+  const targetLayoutOffsetsRef = useRef(new Map<string, { offsetX: number; offsetY: number; tailOffsetX: number; tailSide: 'top' | 'bottom' }>())
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
   const layoutElapsedRef = useRef(speechLayoutIntervalSeconds)
   const layoutDirtyRef = useRef(true)
@@ -2110,21 +2116,31 @@ const WorldEntitySpeechLayer = ({ entities }: { entities: WorldEntity[] }) => {
         && anchorX >= -120 && anchorX <= size.width + 120
         && anchorY >= -120 && anchorY <= size.height + 120
       const visibility = visible ? 'visible' : 'hidden'
-      const offset = layoutOffsetsRef.current.get(entity.id) ?? {
+      const targetOffset = targetLayoutOffsetsRef.current.get(entity.id) ?? {
         offsetX: 0,
         offsetY: -42,
         tailOffsetX: 0,
         tailSide: 'bottom' as const,
       }
+      const offset = layoutOffsetsRef.current.get(entity.id) ?? { ...targetOffset }
+      layoutOffsetsRef.current.set(entity.id, offset)
+      const layoutInterpolation = 1 - Math.exp(-Math.min(deltaSeconds, 0.05) * 14)
+      offset.offsetX += (targetOffset.offsetX - offset.offsetX) * layoutInterpolation
+      offset.offsetY += (targetOffset.offsetY - offset.offsetY) * layoutInterpolation
+      offset.tailOffsetX += (targetOffset.tailOffsetX - offset.tailOffsetX) * layoutInterpolation
+      offset.tailSide = targetOffset.tailSide
       const transform = `translate3d(${(anchorX + offset.offsetX).toFixed(1)}px, ${(anchorY + offset.offsetY).toFixed(1)}px, 0) translate(-50%, -50%)`
+      const tailOffsetX = `${offset.tailOffsetX.toFixed(1)}px`
       const previousStyle = lastStylesRef.current.get(entity.id)
       if (previousStyle?.transform !== transform) bubble.style.transform = transform
       if (previousStyle?.visibility !== visibility) bubble.style.visibility = visibility
+      if (previousStyle?.tailOffsetX !== tailOffsetX) bubble.style.setProperty('--speech-tail-x', tailOffsetX)
+      if (previousStyle?.tailSide !== offset.tailSide) bubble.dataset.tailSide = offset.tailSide
       lastStylesRef.current.set(entity.id, {
         transform,
         visibility,
-        tailOffsetX: previousStyle?.tailOffsetX ?? '0px',
-        tailSide: previousStyle?.tailSide ?? 'bottom',
+        tailOffsetX,
+        tailSide: offset.tailSide,
       })
       if (!shouldLayout || !visible) return []
       const sizeCache = bubbleSizeRefs.current.get(entity.id)
@@ -2143,26 +2159,19 @@ const WorldEntitySpeechLayer = ({ entities }: { entities: WorldEntity[] }) => {
     for (const id of displayPositionsRef.current.keys()) {
       if (!activeIds.has(id)) displayPositionsRef.current.delete(id)
     }
-    const layout = layoutWorldSpeechBubbles(inputs, size)
+    const layout = layoutWorldSpeechBubbles(inputs, size, targetLayoutOffsetsRef.current)
     for (const item of layout) {
-      const bubble = bubbleRefs.current.get(item.id)
-      if (!bubble) continue
-      layoutOffsetsRef.current.set(item.id, item)
-      const tailOffsetX = `${item.tailOffsetX.toFixed(1)}px`
-      const previousStyle = lastStylesRef.current.get(item.id)
-      if (previousStyle?.tailOffsetX !== tailOffsetX) bubble.style.setProperty('--speech-tail-x', tailOffsetX)
-      if (previousStyle?.tailSide !== item.tailSide) bubble.dataset.tailSide = item.tailSide
-      lastStylesRef.current.set(item.id, {
-        transform: previousStyle?.transform ?? '',
-        visibility: previousStyle?.visibility ?? 'visible',
-        tailOffsetX,
-        tailSide: item.tailSide,
-      })
+      targetLayoutOffsetsRef.current.set(item.id, item)
     }
   })
 
   return (
-    <Html fullscreen zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
+    <Html
+      fullscreen
+      calculatePosition={calculateSpeechOverlayPosition}
+      zIndexRange={[10, 0]}
+      style={{ pointerEvents: 'none' }}
+    >
       <div className="world-entity-speech-overlay" aria-live="polite">
         {speakingEntities.map((entity) => {
           if (!entity.speech) return null
@@ -2183,6 +2192,7 @@ const WorldEntitySpeechLayer = ({ entities }: { entities: WorldEntity[] }) => {
                   bubbleSizeRefs.current.delete(entity.id)
                   displayPositionsRef.current.delete(entity.id)
                   layoutOffsetsRef.current.delete(entity.id)
+                  targetLayoutOffsetsRef.current.delete(entity.id)
                   lastStylesRef.current.delete(entity.id)
                 }
               }}

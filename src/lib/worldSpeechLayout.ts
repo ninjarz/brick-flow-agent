@@ -16,6 +16,7 @@ export type WorldSpeechLayoutItem = {
 }
 
 type Viewport = { width: number; height: number }
+type PreviousLayout = ReadonlyMap<string, Pick<WorldSpeechLayoutItem, 'offsetX' | 'offsetY' | 'tailSide'>>
 
 const viewportMargin = 10
 const bubbleGap = 9
@@ -40,13 +41,15 @@ const overlapArea = (
 export const layoutWorldSpeechBubbles = (
   inputs: WorldSpeechLayoutInput[],
   viewport: Viewport,
+  previousLayout?: PreviousLayout,
 ): WorldSpeechLayoutItem[] => {
   const placed: WorldSpeechLayoutItem[] = []
-  const orderedInputs = [...inputs].sort((left, right) => (
-    right.anchorY - left.anchorY || left.id.localeCompare(right.id)
-  ))
+  // Keep placement priority stable while characters move. Sorting by screen Y made
+  // nearby speakers continuously exchange slots whenever their anchors crossed.
+  const orderedInputs = [...inputs].sort((left, right) => left.id.localeCompare(right.id))
 
   for (const input of orderedInputs) {
+    const previous = previousLayout?.get(input.id)
     const width = Math.max(80, Math.min(input.width, Math.max(80, viewport.width - viewportMargin * 2)))
     const height = Math.max(34, Math.min(input.height, Math.max(34, viewport.height - viewportMargin * 2)))
     const halfWidth = width / 2
@@ -77,7 +80,20 @@ export const layoutWorldSpeechBubbles = (
           const overlap = placed.reduce((total, item) => total + overlapArea(rect, item.rect), 0)
           const distance = Math.abs(centerX - input.anchorX) + Math.abs(centerY - preferredCenterY) * 0.8
           const sidePenalty = tailSide === 'top' ? 80 : 0
-          candidates.push({ centerX, centerY, tailSide, rect, score: overlap * 1_000 + distance + sidePenalty })
+          const continuityPenalty = previous
+            ? (
+              Math.abs(centerX - input.anchorX - previous.offsetX)
+              + Math.abs(centerY - input.anchorY - previous.offsetY)
+              + (tailSide === previous.tailSide ? 0 : 40)
+            ) * 4
+            : 0
+          candidates.push({
+            centerX,
+            centerY,
+            tailSide,
+            rect,
+            score: overlap * 1_000 + distance + sidePenalty + continuityPenalty,
+          })
         }
       }
     }

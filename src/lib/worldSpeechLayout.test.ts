@@ -47,4 +47,20 @@ describe('world speech bubble layout', () => {
     expect(layoutWorldSpeechBubbles(inputs, { width: 500, height: 300 }))
       .toEqual(layoutWorldSpeechBubbles([...inputs].reverse(), { width: 500, height: 300 }))
   })
+
+  it('does not exchange avoidance slots when nearby speakers cross vertically', () => {
+    const before = layoutWorldSpeechBubbles([
+      { id: 'a', anchorX: 200, anchorY: 160, width: 160, height: 50 },
+      { id: 'b', anchorX: 202, anchorY: 161, width: 160, height: 50 },
+    ], { width: 500, height: 300 })
+    const previous = new Map(before.map((item) => [item.id, item]))
+    const after = layoutWorldSpeechBubbles([
+      { id: 'a', anchorX: 200, anchorY: 162, width: 160, height: 50 },
+      { id: 'b', anchorX: 202, anchorY: 159, width: 160, height: 50 },
+    ], { width: 500, height: 300 }, previous)
+
+    expect(after.map((item) => item.id)).toEqual(before.map((item) => item.id))
+    expect(Math.abs(after[0].offsetY - before[0].offsetY)).toBeLessThan(3)
+    expect(Math.abs(after[1].offsetY - before[1].offsetY)).toBeLessThan(3)
+  })
 })
