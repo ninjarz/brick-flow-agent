@@ -1,5 +1,5 @@
 import { Activity, Beer, BookOpen, Bot, CheckCircle2, Circle, Clipboard, Dice5, Eye, GlassWater, LockKeyhole, MessageCircle, Pencil, Send, Sparkles, Square, Trash2, Users, X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../lib/i18n'
 import { formatWorldEvent } from '../lib/worldNarrative'
 import type { WorldDirectorTurn, WorldScenarioRuntime, WorldState } from '../types/world'
@@ -25,7 +25,6 @@ type WorldTavernProps = {
   onPlayAiActivity: (activity: TavernActivityKind, focusEntityId?: string) => Promise<TavernActivityResult | undefined>
   onWatchActivity: (result: TavernActivityResult) => void
   llmConfigured: boolean
-  llmConnected: boolean
   isAiThinking: boolean
   isAiActivityThinking: boolean
   isDirectorThinking: boolean
@@ -53,7 +52,6 @@ export const WorldTavern = ({
   onPlayAiActivity,
   onWatchActivity,
   llmConfigured,
-  llmConnected,
   isAiThinking,
   isAiActivityThinking,
   isDirectorThinking,
@@ -75,6 +73,8 @@ export const WorldTavern = ({
   const [activityHost, setActivityHost] = useState<'local' | 'ai'>('local')
   const [directorInput, setDirectorInput] = useState('')
   const [activeDirectorTurn, setActiveDirectorTurn] = useState<ActiveTavernDirectorTurn>()
+  const directorFeedRef = useRef<HTMLDivElement>(null)
+  const directorInputRef = useRef<HTMLTextAreaElement>(null)
   useEffect(() => {
     if (world.entities.some((entity) => entity.id === selectedEntityId)) return
     setSelectedEntityId(world.entities[0]?.id ?? '')
@@ -117,7 +117,7 @@ export const WorldTavern = ({
   }
   const submitDirectorInput = async () => {
     const text = directorInput.trim()
-    if (!text || isDirectorThinking || !llmConnected) return
+    if (!text || isDirectorThinking || !llmConfigured) return
     const id = `director-turn-${Date.now().toString(36)}`
     const recentEntries = world.narrative.directorTurns.flatMap((turn) => turn.entries).slice(-12)
     const createdAtSeconds = world.elapsedSeconds
@@ -154,6 +154,11 @@ export const WorldTavern = ({
     ...world.narrative.directorTurns,
     ...(activeDirectorTurn ? [activeDirectorTurn] : []),
   ].slice(-4)
+  const directorEntryCount = displayedDirectorTurns.reduce((total, turn) => total + turn.entries.length, 0)
+  useEffect(() => {
+    const feed = directorFeedRef.current
+    if (feed) feed.scrollTop = feed.scrollHeight
+  }, [directorEntryCount, displayedDirectorTurns.length])
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -481,10 +486,10 @@ export const WorldTavern = ({
             </section>
           </div>
         </div>
-        {llmConnected && (
+        {llmConfigured && (
           <section className="tavern-director" aria-label={locale === 'zh-CN' ? 'AI 剧情导演' : 'AI story director'}>
             {displayedDirectorTurns.length > 0 && (
-              <div className="tavern-director-feed" aria-live="polite">
+              <div ref={directorFeedRef} className="tavern-director-feed" aria-live="polite">
                 {displayedDirectorTurns.map((turn) => (
                   <div className="tavern-director-turn" key={turn.id}>
                     <p className="player"><strong>{locale === 'zh-CN' ? '你' : 'You'}</strong>{turn.playerText}</p>
@@ -507,7 +512,10 @@ export const WorldTavern = ({
                         const to = world.entities.find((entity) => entity.id === entry.toId)?.name ?? entry.toId
                         return <p key={entry.id} className={`operation ${entry.status ?? ''}`}><strong>{from} → {to}</strong>{entry.before ?? 0} → {entry.after ?? 0} · {entry.reason}</p>
                       }
-                      if (entry.type === 'choice') return <button key={entry.id} type="button" className="choice" disabled={isDirectorThinking} onClick={() => setDirectorInput(entry.suggestedInput)}>{entry.label}</button>
+                      if (entry.type === 'choice') return <button key={entry.id} type="button" className="choice" disabled={isDirectorThinking} onClick={() => {
+                        setDirectorInput(entry.suggestedInput)
+                        window.requestAnimationFrame(() => directorInputRef.current?.focus())
+                      }}>{entry.label}</button>
                       return <p key={entry.id} className="summary">{entry.summary}</p>
                     })}
                     {turn.status === 'streaming' && <p className="streaming"><Bot size={12} />{locale === 'zh-CN' ? '剧情正在展开……' : 'The story is unfolding…'}</p>}
@@ -518,6 +526,7 @@ export const WorldTavern = ({
             )}
             <form onSubmit={(event) => { event.preventDefault(); void submitDirectorInput() }}>
               <textarea
+                ref={directorInputRef}
                 value={directorInput}
                 onChange={(event) => setDirectorInput(event.target.value)}
                 onKeyDown={(event) => {

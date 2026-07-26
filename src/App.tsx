@@ -2580,7 +2580,6 @@ function App() {
             onPlayAiActivity={runAiTavernActivity}
             onWatchActivity={watchTavernActivity}
             llmConfigured={llmConfigComplete}
-            llmConnected={llmEngineStatus === 'connected'}
             isAiThinking={isWorldAiThinking}
             isAiActivityThinking={isTavernAiThinking}
             isDirectorThinking={isTavernDirectorThinking}
