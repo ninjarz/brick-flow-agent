@@ -283,8 +283,8 @@ button.status-pill:hover {
   z-index: 7;
   bottom: 12px;
   left: 50%;
-  width: min(720px, calc(100% - 24px));
-  max-height: min(390px, 48%);
+  width: min(760px, calc(100% - 24px));
+  max-height: min(520px, 62%);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
@@ -318,6 +318,17 @@ button.status-pill:hover {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.world-story-dock > header > div {
+  color: #5b3518;
+  font-size: 11px;
+}
+
+.world-story-dock > header > div small {
+  color: #9a7b55;
+  font-size: 9px;
+  font-weight: 700;
 }
 
 .world-story-dock > header button {
@@ -361,15 +372,177 @@ button.status-pill:hover {
   min-height: 54px;
   display: grid;
   align-content: start;
-  gap: 8px;
+  gap: 4px;
   overflow-y: auto;
-  padding: 2px 4px 2px 0;
+  padding: 8px 14px 14px;
+  scroll-behavior: smooth;
+  background:
+    linear-gradient(90deg, transparent 0, rgba(120, 83, 41, 0.08) 9%, transparent 20%),
+    #fffdf8;
+}
+
+.narrative-passage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 7px;
+  align-items: center;
+}
+
+.narrative-passage + .narrative-passage {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(214, 196, 162, 0.55);
+}
+
+.narrative-passage p {
+  margin: 0;
+  color: #493a2a;
+  font-family: ui-serif, "Songti SC", "STSong", Georgia, serif;
+  font-size: 12px;
+  line-height: 1.72;
+}
+
+.narrative-passage p.narration {
+  flex-basis: 100%;
+  text-indent: 2em;
+}
+
+.narrative-passage p.dialogue {
+  flex-basis: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 7px;
+  padding-left: 1em;
+}
+
+.narrative-passage p.dialogue strong {
+  color: #8a4b16;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.narrative-passage p.player {
+  flex-basis: 100%;
+  padding: 5px 8px;
+  border-left: 3px solid #60a5fa;
+  color: #1e3a5f;
+  background: #eff6ff;
+  font-family: inherit;
+}
+
+.narrative-passage p.player strong { margin-right: 7px; }
+.narrative-passage p.stage-direction {
+  flex-basis: 100%;
+  color: #65715f;
+  font-family: inherit;
+  font-size: 9px;
+}
+.narrative-passage p.stage-direction.rejected,
+.narrative-passage p.error { color: #b42318; }
+.narrative-passage p.summary { color: #6d28d9; font-family: inherit; }
+.narrative-passage p.streaming {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #9a641f;
+  font-family: inherit;
+  font-size: 9px;
+}
+.narrative-passage button.choice {
+  min-height: 27px;
+  padding: 0 9px;
+  border-color: #c4b5fd;
+  border-radius: 999px;
+  color: #6d28d9;
+  background: #f5f3ff;
+  font-size: 10px;
 }
 
 .world-story-director form {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 7px;
+}
+
+.world-story-composer {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 7px;
+  align-items: stretch;
+}
+
+.world-story-composer > button {
+  min-width: 88px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border-color: #d6c4a2;
+  color: #785f42;
+  background: #fffaf0;
+}
+
+.world-story-composer > button.active {
+  border-color: #b7791f;
+  color: #fff;
+  background: #8a4b16;
+}
+
+.world-story-composer .world-story-config-hint {
+  display: grid;
+  place-items: center;
+}
+
+.world-story-tools {
+  display: grid;
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid #ead7b4;
+  border-radius: 9px;
+  background: #fff8e8;
+}
+
+.world-story-tool-settings,
+.world-story-tool-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.world-story-tool-settings { justify-content: space-between; }
+
+.world-story-tool-settings select {
+  min-width: 130px;
+  min-height: 28px;
+  padding: 0 7px;
+  border: 1px solid #d6c4a2;
+  border-radius: 7px;
+  color: #5b3518;
+  background: #fff;
+  font: inherit;
+  font-size: 10px;
+}
+
+.world-story-tool-actions button {
+  min-height: 27px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  border-color: #dec79c;
+  color: #73451d;
+  background: #fff;
+  font-size: 9px;
+}
+
+.world-story-tool-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  color: #785f42;
+  font-size: 9px;
 }
 
 .world-story-director textarea {
@@ -386,8 +559,7 @@ button.status-pill:hover {
   line-height: 1.45;
 }
 
-.world-story-director form > button,
-.world-story-actions button {
+.world-story-director form > button {
   min-width: 82px;
   display: inline-flex;
   align-items: center;
@@ -417,46 +589,6 @@ button.status-pill:hover {
   border-radius: 8px;
   background: #fff7e6;
 }
-
-.world-story-list {
-  min-height: 0;
-  display: grid;
-  align-content: start;
-  gap: 7px;
-  overflow-y: auto;
-  padding: 8px;
-}
-
-.world-story-actions {
-  position: sticky;
-  z-index: 1;
-  top: -8px;
-  display: flex;
-  justify-content: flex-end;
-  gap: 6px;
-  padding: 0 0 6px;
-  background: rgba(255, 253, 248, 0.96);
-}
-
-.world-story-actions button {
-  min-height: 28px;
-  min-width: 0;
-  padding: 0 8px;
-  font-size: 10px;
-}
-
-.world-story-list article {
-  display: grid;
-  gap: 4px;
-  padding: 8px 9px;
-  border: 1px solid #eadfc9;
-  border-radius: 8px;
-  background: #fff;
-}
-
-.world-story-list article strong { color: #4a3622; font-size: 11px; }
-.world-story-list article p { margin: 0; color: #66513a; font-size: 10px; line-height: 1.5; white-space: pre-line; }
-.world-story-list article small { color: #9a7b55; font-size: 9px; }
 
 .world-simulation-toolbar .world-authoring-reveal {
   border-color: rgba(124, 58, 237, 0.3);
@@ -3200,120 +3332,6 @@ button:disabled {
   box-shadow: 0 24px 70px rgba(41, 27, 13, 0.28);
 }
 
-.tavern-director {
-  display: grid;
-  gap: 7px;
-  padding: 10px 14px 12px;
-  border-top: 1px solid #d6c4a2;
-  background: linear-gradient(180deg, #fffdf8, #fff7e6);
-}
-
-.tavern-director-feed {
-  max-height: 210px;
-  display: grid;
-  gap: 8px;
-  overflow-y: auto;
-  padding: 3px 5px 3px 0;
-}
-
-.tavern-director-turn {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px 7px;
-  align-items: center;
-}
-
-.tavern-director-turn p {
-  min-width: 0;
-  margin: 0;
-  padding: 5px 8px;
-  border-radius: 8px;
-  color: #4f3e2c;
-  background: #f7efe2;
-  font-size: 10px;
-  line-height: 1.45;
-}
-
-.tavern-director-turn p strong {
-  margin-right: 6px;
-}
-
-.tavern-director-turn p.player {
-  flex-basis: 100%;
-  color: #1e3a5f;
-  background: #eaf3ff;
-}
-
-.tavern-director-turn p.narration {
-  flex-basis: 100%;
-  color: #6f573a;
-  font-style: italic;
-  background: transparent;
-}
-
-.tavern-director-turn p.dialogue {
-  border: 1px solid #ead9ba;
-  background: #fff;
-}
-
-.tavern-director-turn p.dialogue strong { color: #8a4b16; }
-.tavern-director-turn p.operation { color: #166534; background: #ecfdf3; }
-.tavern-director-turn p.operation.rejected,
-.tavern-director-turn p.error { color: #b42318; background: #fff1f2; }
-.tavern-director-turn p.summary { flex-basis: 100%; color: #6d28d9; background: #f5f3ff; }
-.tavern-director-turn p.streaming { display: inline-flex; align-items: center; gap: 5px; color: #7c3f12; }
-
-.tavern-director-turn button.choice {
-  min-height: 27px;
-  padding: 0 9px;
-  border-color: #c4b5fd;
-  border-radius: 999px;
-  color: #6d28d9;
-  background: #f5f3ff;
-  font-size: 10px;
-}
-
-.tavern-director form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: stretch;
-}
-
-.tavern-director textarea {
-  min-height: 52px;
-  max-height: 110px;
-  resize: vertical;
-  padding: 9px 11px;
-  border: 1px solid #cbb894;
-  border-radius: 9px;
-  color: #30261b;
-  background: #fff;
-  font: inherit;
-  line-height: 1.45;
-}
-
-.tavern-director form > button {
-  min-width: 92px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border-color: #7c3f12;
-  color: #fff;
-  background: #7c3f12;
-}
-
-.tavern-director form > button.stop {
-  border-color: #b42318;
-  background: #b42318;
-}
-
-.tavern-director > small {
-  color: #8a6b43;
-  font-size: 9px;
-}
-
 .tavern-modal > header {
   display: flex;
   align-items: flex-start;
@@ -3461,39 +3479,6 @@ button:disabled {
   background: linear-gradient(135deg, #fffaf0, #fffdf8);
 }
 
-.tavern-content > .tavern-quick-play {
-  grid-column: 1 / -1;
-  background: linear-gradient(135deg, #fff8e8, #fffdf7);
-  border-color: #e8c98d;
-}
-
-.tavern-quick-play > header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.tavern-quick-play > header h3,
-.tavern-quick-play > header small { margin: 0; }
-.tavern-quick-play > header small { color: #8a6b43; }
-.tavern-quick-meta {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.tavern-quick-meta > span {
-  flex: none;
-  padding: 5px 9px;
-  border-radius: 999px;
-  background: #fff;
-  color: #92400e;
-  font-size: 10px;
-  font-weight: 800;
-}
-
 .tavern-host-toggle {
   display: flex;
   padding: 2px;
@@ -3518,103 +3503,6 @@ button:disabled {
 .tavern-host-toggle button.active {
   background: #713f12;
   color: #fff8e8;
-}
-
-.tavern-quick-actions {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 11px;
-}
-
-.tavern-quick-actions > button {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-  padding: 10px 12px;
-  border: 1px solid #ead7b4;
-  border-radius: 11px;
-  background: #fff;
-  color: #73451d;
-  text-align: left;
-}
-
-.tavern-quick-actions > button:hover:not(:disabled) {
-  border-color: #c78a35;
-  background: #fffaf0;
-  transform: translateY(-1px);
-}
-
-.tavern-quick-actions > button > span { display: grid; min-width: 0; }
-.tavern-quick-actions strong { font-size: 12px; }
-.tavern-quick-actions small {
-  overflow: hidden;
-  color: #8b7355;
-  font-size: 9px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tavern-quick-loading {
-  min-height: 55px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 10px;
-  border: 1px dashed #d6b878;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.72);
-  color: #785f42;
-  font-size: 10px;
-  font-weight: 800;
-}
-
-.tavern-quick-result {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 10px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: #5b3518;
-  color: #fff8e8;
-}
-
-.tavern-quick-result div { min-width: 0; }
-.tavern-quick-result strong { font-size: 11px; }
-.tavern-quick-result strong small {
-  margin-left: 7px;
-  padding: 2px 5px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.15);
-  color: #fce7c2;
-  font-size: 8px;
-}
-.tavern-quick-result p {
-  margin: 2px 0 0;
-  overflow: hidden;
-  font-size: 10px;
-  line-height: 1.45;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.tavern-quick-result p em {
-  color: #fcd34d;
-  font-style: normal;
-}
-.tavern-quick-result-actions {
-  flex: none;
-  display: flex;
-  gap: 5px;
-}
-.tavern-quick-result button {
-  flex: none;
-  border-color: #f5d79f;
-  background: #fff8e8;
-  color: #713f12;
 }
 
 .tavern-quest > header {
@@ -4161,8 +4049,7 @@ button:disabled {
   opacity: 0.65;
 }
 
-.tavern-section-header,
-.tavern-story-filter {
+.tavern-section-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -4202,39 +4089,6 @@ button:disabled {
   font-variant-numeric: tabular-nums;
 }
 
-.tavern-stories {
-  grid-column: 1 / -1;
-}
-
-.tavern-stories > header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
-.tavern-stories > header small {
-  color: #7c6a55;
-  font-size: 10px;
-}
-
-.tavern-stories > header button {
-  min-height: 34px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-}
-
-.tavern-story-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
 .tavern-ai-feedback {
   margin: 0;
   padding: 8px 10px;
@@ -4250,80 +4104,14 @@ button:disabled {
   color: #b42318;
 }
 
-.tavern-ai-context {
-  display: grid;
-  gap: 8px;
-  padding: 10px;
-  border: 1px solid #bfdbfe;
-  border-radius: 10px;
-  background: #eff6ff;
-}
-
-.tavern-ai-context > header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.tavern-ai-context > header div,
-.tavern-ai-context > header strong,
-.tavern-ai-context > header small {
-  display: block;
-}
-
-.tavern-ai-context > header small {
-  margin-top: 2px;
-  color: #64748b;
-}
-
-.tavern-ai-context pre {
-  max-height: 260px;
-  margin: 0;
-  padding: 9px;
-  overflow: auto;
-  border-radius: 8px;
-  background: #0f172a;
-  color: #dbeafe;
-  font-size: 10px;
-  line-height: 1.45;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.tavern-story-filter {
-  margin: 4px 0 8px;
-  color: #7c6a55;
-  font-size: 10px;
-}
-
-.tavern-stories article {
-  margin-top: 9px;
-  padding: 10px;
-  border-left: 3px solid #d97706;
-  border-radius: 7px;
-  background: #fffbeb;
-}
-
-.tavern-stories article p {
-  margin: 6px 0;
-  color: #574938;
-  font-size: 12px;
-  line-height: 1.65;
-  white-space: pre-line;
-}
-
-.tavern-stories article small {
-  color: #9a7b55;
-  font-size: 9px;
-}
-
 @media (max-width: 760px) {
   .world-story-dock {
     bottom: 8px;
     width: calc(100% - 16px);
     max-height: 58%;
   }
+  .world-story-composer { grid-template-columns: 1fr; }
+  .world-story-composer > button { min-height: 30px; }
   .world-story-director form { grid-template-columns: 1fr; }
   .world-story-director form > button { min-height: 32px; }
   .tavern-layout { grid-template-columns: 1fr; }
@@ -4333,13 +4121,8 @@ button:disabled {
     border-bottom: 1px solid #eadfc9;
   }
   .tavern-content { grid-template-columns: 1fr; }
-  .tavern-stories { grid-column: auto; }
   .tavern-content > .tavern-quest { grid-column: auto; }
   .tavern-quest > ol { grid-template-columns: 1fr; }
-  .tavern-content > .tavern-quick-play { grid-column: auto; }
-  .tavern-quick-actions { grid-template-columns: 1fr; }
-  .tavern-director form { grid-template-columns: 1fr; }
-  .tavern-director form > button { min-height: 34px; }
   .scenario-editor-grid { grid-template-columns: 1fr; }
   .scenario-dialogue-row,
   .scenario-action-row,

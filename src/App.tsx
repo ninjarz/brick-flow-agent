@@ -29,7 +29,7 @@ import { isWorldEntityGroundPointBlockedByBricks, stepWorldSimulation, worldSimu
 import { findNearestAvailableWorldEntityPoint } from './lib/worldEntityCollision'
 import { advanceWorldFixedStepClock, createWorldFixedStepClock } from './lib/worldClock'
 import { addWorldStory, createLocalTavernStory } from './lib/worldNarrative'
-import { playTavernActivity, type TavernActivityKind, type TavernActivityResult } from './lib/worldTavernActivities'
+import { playTavernActivity, type TavernActivityKind } from './lib/worldTavernActivities'
 import { applyTavernAiResponse, requestTavernAiActivity } from './lib/worldTavernAi'
 import { applyTavernDirectorEvent, buildTavernDirectorPrompt, createTavernDirectorStreamParser, tavernDirectorSystemPrompt, type TavernDirectorEntry } from './lib/worldTavernDirector'
 import { applyWorldAiTurn, createWorldAiSnapshot, formatWorldAiTurnSummary, requestWorldAiTurn } from './lib/worldAi'
@@ -1552,32 +1552,6 @@ function App() {
     }
   }, [isTavernAiThinking, llmConfig, llmConfigComplete, locale])
 
-  const watchTavernActivity = useCallback((result: TavernActivityResult) => {
-    const speechByEntityId = new Map(result.world.entities.flatMap((entity) => (
-      entity.speech && result.participantIds.includes(entity.id) ? [[entity.id, entity.speech] as const] : []
-    )))
-    setWorld((current) => {
-      const expiresAtSeconds = current.elapsedSeconds + 9
-      const next = {
-        ...current,
-        entities: current.entities.map((entity) => {
-          const speech = speechByEntityId.get(entity.id)
-          return speech ? {
-            ...entity,
-            activeCommand: undefined,
-            commandQueue: [],
-            behaviorState: 'idle' as const,
-            navigation: { status: 'idle' as const, path: [], pathIndex: 0 },
-            speech: { ...speech, expiresAtSeconds },
-            autonomy: { ...entity.autonomy, nextDecisionAtSeconds: expiresAtSeconds },
-          } : entity
-        }),
-      }
-      worldRef.current = next
-      return next
-    })
-  }, [])
-
   const runWorldAiTurn = useCallback(async () => {
     if (!llmConfigComplete || isWorldAiThinking) return
     worldAiAbortRef.current?.abort()
@@ -2477,9 +2451,12 @@ function App() {
                 llmConfigured={llmConfigComplete}
                 isAiThinking={isWorldAiThinking}
                 isDirectorThinking={isTavernDirectorThinking}
+                isAiActivityThinking={isTavernAiThinking}
                 aiFeedback={worldAiFeedback}
                 onGenerateStory={() => generateTavernStory()}
                 onRunAiTurn={runWorldAiTurn}
+                onPlayActivity={runTavernActivity}
+                onPlayAiActivity={runAiTavernActivity}
                 onDirectWorld={runTavernDirectorTurn}
                 onStopDirector={stopTavernDirector}
                 onCommitDirectorTurn={commitTavernDirectorTurn}
@@ -2596,11 +2573,6 @@ function App() {
             onUpdateScenario={updateWorldScenario}
             structures={plan.structures ?? []}
             onSetTargetVisibility={setWorldTargetVisibility}
-            onPlayActivity={runTavernActivity}
-            onPlayAiActivity={runAiTavernActivity}
-            onWatchActivity={watchTavernActivity}
-            llmConfigured={llmConfigComplete}
-            isAiActivityThinking={isTavernAiThinking}
             onClose={() => {
               tavernAiAbortRef.current?.abort()
               setIsTavernOpen(false)
