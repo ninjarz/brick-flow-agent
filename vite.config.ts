@@ -54,29 +54,38 @@ const handleLlmProxyRequest = async (
         body: JSON.stringify(body.payload),
         signal: controller.signal,
       })
+      if (!upstream.ok) {
+        const text = await upstream.text()
+        response.statusCode = 502
+        response.setHeader('Content-Type', 'application/json')
+        response.end(
+          JSON.stringify({
+            error: 'Upstream LLM request failed',
+            endpoint,
+            upstreamStatus: upstream.status,
+            upstreamBody: text.slice(0, 500),
+          }),
+        )
+        return
+      }
+
+      response.statusCode = upstream.status
+      response.setHeader('Content-Type', upstream.headers.get('content-type') ?? 'application/json')
+      response.setHeader('Cache-Control', 'no-cache, no-transform')
+      if (!upstream.body) {
+        response.end(await upstream.text())
+        return
+      }
+      const reader = upstream.body.getReader()
+      while (true) {
+        const chunk = await reader.read()
+        if (chunk.done) break
+        response.write(Buffer.from(chunk.value))
+      }
+      response.end()
     } finally {
       clearTimeout(timeout)
     }
-
-    const text = await upstream.text()
-
-    if (!upstream.ok) {
-      response.statusCode = 502
-      response.setHeader('Content-Type', 'application/json')
-      response.end(
-        JSON.stringify({
-          error: 'Upstream LLM request failed',
-          endpoint,
-          upstreamStatus: upstream.status,
-          upstreamBody: text.slice(0, 500),
-        }),
-      )
-      return
-    }
-
-    response.statusCode = upstream.status
-    response.setHeader('Content-Type', upstream.headers.get('content-type') ?? 'application/json')
-    response.end(text)
   } catch (error) {
     const isTimeout = error instanceof Error && error.name === 'AbortError'
     response.statusCode = isTimeout ? 504 : 500

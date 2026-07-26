@@ -49,6 +49,10 @@ export type LlmJsonRequestInput = {
   maxTokens?: number
 }
 
+export type LlmStreamRequestInput = LlmJsonRequestInput & {
+  onDelta: (text: string) => void
+}
+
 const clientRequestTimeoutMs = 240_000
 const configTestTimeoutMs = 15_000
 const configTestMaxTokens = 128
@@ -649,6 +653,99 @@ export const requestLlmJsonContent = async ({
   const content = extractMessageContent(payload)
   if (!content) throw new Error(formatEmptyContentError(payload, llmText[locale].responseContext, locale))
   return content
+}
+
+const readLlmEventStream = async (response: Response, onDelta: (text: string) => void) => {
+  if (!response.body) return ''
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let transportBuffer = ''
+  let content = ''
+  const emitPayload = (payloadText: string) => {
+    const trimmed = payloadText.trim()
+    if (!trimmed || trimmed === '[DONE]') return
+    try {
+      const delta = extractMessageContent(JSON.parse(trimmed) as unknown)
+      if (!delta) return
+      content += delta
+      onDelta(delta)
+    } catch {
+      content += payloadText
+      onDelta(payloadText)
+    }
+  }
+
+  while (true) {
+    const chunk = await reader.read()
+    transportBuffer += decoder.decode(chunk.value, { stream: !chunk.done })
+    const records = transportBuffer.split(/\r?\n\r?\n/)
+    transportBuffer = records.pop() ?? ''
+    for (const record of records) {
+      const dataLines = record.split(/\r?\n/)
+        .filter((line) => line.startsWith('data:'))
+        .map((line) => line.slice(5).trimStart())
+      if (dataLines.length > 0) emitPayload(dataLines.join('\n'))
+      else if (record.trim()) emitPayload(record)
+    }
+    if (chunk.done) break
+  }
+  if (transportBuffer.trim()) {
+    const data = transportBuffer.startsWith('data:')
+      ? transportBuffer.split(/\r?\n/).map((line) => line.replace(/^data:\s?/, '')).join('\n')
+      : transportBuffer
+    emitPayload(data)
+  }
+  return content
+}
+
+export const requestLlmTextStream = async ({
+  config,
+  systemPrompt,
+  userPrompt,
+  signal,
+  locale = 'zh-CN',
+  temperature = 0.5,
+  maxTokens = 4_096,
+  onDelta,
+}: LlmStreamRequestInput) => {
+  if (!isLlmConfigComplete(config)) throw new Error(llmText[locale].incompleteConfig)
+  const controller = new AbortController()
+  const abortFromCaller = () => controller.abort()
+  signal?.addEventListener('abort', abortFromCaller)
+  const timeout = window.setTimeout(() => controller.abort(), clientRequestTimeoutMs)
+  try {
+    const response = await requestLlmChatWithCompatibility(config, applyThinkingMode({
+      model: config.modelName.trim(),
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature,
+      max_tokens: maxTokens,
+      stream: true,
+    }, config.enableThinking), controller.signal)
+    if (!response.ok) throw new Error(await formatRequestError(response, config.requestMode, locale))
+    const contentType = response.headers.get('content-type')?.toLowerCase() ?? ''
+    if (!contentType.includes('text/event-stream') && contentType.includes('application/json')) {
+      const payload = await response.json() as unknown
+      const content = extractMessageContent(payload)
+      if (!content) throw new Error(formatEmptyContentError(payload, llmText[locale].responseContext, locale))
+      onDelta(content)
+      return content
+    }
+    const content = await readLlmEventStream(response, onDelta)
+    if (!content.trim()) throw new Error(llmText[locale].emptyGenerationResponse)
+    return content
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      if (signal?.aborted) throw new Error(llmText[locale].generationCanceled)
+      throw new Error(llmText[locale].generationTimeout)
+    }
+    throw formatFetchError(error, config.requestMode, locale)
+  } finally {
+    signal?.removeEventListener('abort', abortFromCaller)
+    window.clearTimeout(timeout)
+  }
 }
 
 export const generateLlmBuildPlan = async ({ prompt, imageName, imageDataUrl, inventoryOverrides, config, signal, locale = 'zh-CN', repairFeedback, previousPlan }: LlmGenerateInput): Promise<BuildPlan> => {
