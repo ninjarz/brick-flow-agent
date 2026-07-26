@@ -1,6 +1,6 @@
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import type { BuildPlan } from '../types/bricks'
-import type { WorldEntity, WorldEntityCommand, WorldRelationship, WorldScenarioAction, WorldScenarioStage, WorldState, WorldTargetRef } from '../types/world'
+import type { WorldEntity, WorldEntityCommand, WorldRelationship, WorldScenarioAction, WorldScenarioStage, WorldState, WorldStoryBlock, WorldTargetRef } from '../types/world'
 import type { WorldScenarioAsset, WorldScenarioLoadResult } from '../types/worldScenario'
 import { importAssetPlanIncrementally } from './incrementalAssetImport'
 import { createId } from './planUtils'
@@ -140,7 +140,12 @@ const remapScenarioWorld = (
     characterIds: story.characterIds
       ?.map((id) => entityIdMap[id])
       .filter((id): id is string => Boolean(id) && importedEntityIdSet.has(id)),
-    chapterNumber: currentWorld.narrative.stories.length + (story.chapterNumber ?? 1),
+    blocks: story.blocks?.reduce<WorldStoryBlock[]>((blocks, block) => {
+      if (block.type === 'narration') return [...blocks, block]
+      const speakerId = entityIdMap[block.speakerId]
+      return speakerId ? [...blocks, { ...block, speakerId }] : blocks
+    }, []),
+    chapterNumber: undefined,
   }))
   const relationshipsByEntityId = { ...currentWorld.narrative.relationshipsByEntityId }
   for (const [sourceId, relationships] of Object.entries(asset.world.narrative.relationshipsByEntityId)) {

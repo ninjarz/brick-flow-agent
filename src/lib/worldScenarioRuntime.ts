@@ -1,5 +1,6 @@
 import type { WorldEvent, WorldScenarioAction, WorldScenarioBranch, WorldScenarioDialogueLine, WorldScenarioRuntime, WorldScenarioStage, WorldScenarioTrigger, WorldState } from '../types/world'
 import { issueWorldEntityCommand } from './worldEntity'
+import { makeScenarioDialogueStoryId } from './worldNarrativeFeed'
 
 const eventMatchesTrigger = (event: WorldEvent, trigger: WorldScenarioTrigger) => (
   event.type === trigger.eventType &&
@@ -80,7 +81,6 @@ const applyScenarioAction = (
         createdAtSeconds: world.elapsedSeconds,
         eventIds: [event.id],
         characterIds: action.characterIds,
-        chapterNumber: world.narrative.stories.length + 1,
         source: 'local',
       }],
     },
@@ -131,6 +131,36 @@ const clearDialogueSpeech = (world: WorldState, stage: WorldScenarioStage) => {
   return changed ? { ...world, entities } : world
 }
 
+const persistScenarioDialogue = (
+  world: WorldState,
+  scenario: WorldScenarioRuntime,
+  stage: WorldScenarioStage,
+  event: WorldEvent,
+  branch?: WorldScenarioBranch,
+) => {
+  const dialogue = branch?.dialogue ?? stage.dialogue ?? []
+  if (dialogue.length === 0) return world
+  const storyId = makeScenarioDialogueStoryId(scenario.id, stage.id, event.id, branch?.id)
+  if (world.narrative.stories.some((story) => story.id === storyId)) return world
+  const entityNameById = new Map(world.entities.map((entity) => [entity.id, entity.name]))
+  return {
+    ...world,
+    narrative: {
+      ...world.narrative,
+      stories: [...world.narrative.stories, {
+        id: storyId,
+        title: branch?.title ?? stage.title,
+        body: dialogue.map((line) => `${entityNameById.get(line.speakerId) ?? line.speakerId}：“${line.text}”`).join('\n'),
+        blocks: dialogue.map((line) => ({ type: 'dialogue' as const, speakerId: line.speakerId, text: line.text })),
+        createdAtSeconds: world.elapsedSeconds,
+        eventIds: [event.id],
+        characterIds: Array.from(new Set(dialogue.map((line) => line.speakerId))),
+        source: 'local' as const,
+      }].slice(-40),
+    },
+  }
+}
+
 const completeStage = (
   world: WorldState,
   scenario: WorldScenarioRuntime,
@@ -157,7 +187,7 @@ const completeStage = (
     activeDialogue: undefined,
     ...(branch ? { outcomeId: branch.id } : nextStageIndex < 0 || nextStageIndex >= stages.length ? { outcomeId: 'completed' } : {}),
   }
-  let nextWorld = clearDialogueSpeech(world, activeStage)
+  let nextWorld = persistScenarioDialogue(clearDialogueSpeech(world, activeStage), scenario, activeStage, event, branch)
   for (const action of branch?.actions ?? activeStage.actions ?? []) {
     nextWorld = applyScenarioAction(nextWorld, updatedScenario, action, event)
   }

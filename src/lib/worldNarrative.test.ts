@@ -48,7 +48,7 @@ describe('world narrative', () => {
     expect(next.narrative.stories).toContainEqual(story)
   })
 
-  it('creates a focused next chapter from fresh events instead of repeating covered ones', () => {
+  it('creates a focused continuation from fresh events without chapter framing', () => {
     const knight = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'knight', name: '亚瑟' })
     const archer = createWorldEntity(worldEntityDefinitionById.get('archer')!, { id: 'archer', name: '罗宾' })
     const oldEvent: WorldEvent = {
@@ -77,15 +77,15 @@ describe('world narrative', () => {
 
     const story = createLocalTavernStory(world, 'zh-CN', knight.id)
 
-    expect(story.title).toContain('第 2 章')
-    expect(story.title).toContain('重燃的生命')
+    expect(story.title).toBe('重燃的生命')
     expect(story.eventIds).toEqual([freshEvent.id])
     expect(story.characterIds).toEqual(expect.arrayContaining([knight.id, archer.id]))
     expect(story.body).toContain('亚瑟')
-    expect(story.body).toContain('第一章')
+    expect(story.body).not.toContain('第一章')
+    expect(story.chapterNumber).toBeUndefined()
   })
 
-  it('enriches AI stories with chapter and participant metadata', () => {
+  it('enriches AI stories with participant metadata without adding chapters', () => {
     const knight = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'knight' })
     const archer = createWorldEntity(worldEntityDefinitionById.get('archer')!, { id: 'archer' })
     const event: WorldEvent = {
@@ -98,10 +98,8 @@ describe('world narrative', () => {
       eventIds: [event.id], source: 'ai',
     })
 
-    expect(next.narrative.stories[0]).toMatchObject({
-      chapterNumber: 1,
-      characterIds: [knight.id, archer.id],
-    })
+    expect(next.narrative.stories[0].characterIds).toEqual([knight.id, archer.id])
+    expect(next.narrative.stories[0].chapterNumber).toBeUndefined()
   })
 
   it('explains who issued a high-level order without exposing coordinates', () => {

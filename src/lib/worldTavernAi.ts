@@ -156,6 +156,11 @@ export const applyTavernAiResponse = (
         ...story,
         title,
         body,
+        blocks: [
+          { type: 'narration' as const, text: base.body },
+          ...(response.narration ? [{ type: 'narration' as const, text: response.narration }] : []),
+          ...response.lines.map((line) => ({ type: 'dialogue' as const, speakerId: line.speakerId, text: line.text })),
+        ],
         source: 'ai',
       } : story),
     },

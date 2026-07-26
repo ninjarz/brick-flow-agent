@@ -131,6 +131,10 @@ describe('world scenario runtime', () => {
 
     world = advanceWorldScenarios({ ...world, elapsedSeconds: 17 })
     expect(world.scenarios[0].stages[0].status).toBe('completed')
+    expect(world.narrative.stories.at(-1)?.blocks).toEqual([
+      { type: 'dialogue', speakerId: knight.id, text: 'Explain yourself.' },
+      { type: 'dialogue', speakerId: stranger.id, text: 'Then fight me.' },
+    ])
     expect(world.entities[1].factionId).toBe('red')
     expect(world.entities[1].commandQueue[0]?.type).toBe('attack')
   })

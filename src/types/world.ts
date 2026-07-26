@@ -116,12 +116,17 @@ export type WorldStory = {
   id: string
   title: string
   body: string
+  blocks?: WorldStoryBlock[]
   createdAtSeconds: number
   eventIds: string[]
   characterIds?: string[]
   chapterNumber?: number
   source: 'local' | 'ai'
 }
+
+export type WorldStoryBlock =
+  | { type: 'narration'; text: string }
+  | { type: 'dialogue'; speakerId: string; text: string }
 
 export type WorldRelationship = {
   targetEntityId: string

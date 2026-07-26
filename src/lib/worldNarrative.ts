@@ -164,23 +164,22 @@ export const createLocalTavernStory = (
   const livingNames = world.entities.filter((entity) => entity.health > 0).map((entity) => entity.name)
   const defeatedNames = world.entities.filter((entity) => entity.health <= 0).map((entity) => entity.name)
   const latestEvent = recentEvents.at(-1)
-  const chapterNumber = world.narrative.stories.length + 1
   const eventTitle = locale === 'zh-CN'
     ? latestEvent?.type === 'revive' ? '重燃的生命'
       : latestEvent?.type === 'defeated' ? '倒下的旗帜'
         : latestEvent?.type === 'attack' || latestEvent?.type === 'damage' ? '剑影下的传闻'
           : latestEvent?.type === 'interaction' ? '炉火边的低语'
             : latestEvent?.type === 'command-issued' ? '新的委托'
-              : focusEntity ? `${focusEntity.name}的新篇章`
+              : focusEntity ? `${focusEntity.name}的新动向`
                 : recentEvents.length > 0 ? '酒馆里的最新传闻' : '平静世界的开场'
     : latestEvent?.type === 'revive' ? 'Life Rekindled'
       : latestEvent?.type === 'defeated' ? 'A Fallen Banner'
         : latestEvent?.type === 'attack' || latestEvent?.type === 'damage' ? 'Rumors beneath the Blades'
           : latestEvent?.type === 'interaction' ? 'Whispers by the Hearth'
             : latestEvent?.type === 'command-issued' ? 'A New Commission'
-              : focusEntity ? `A New Chapter for ${focusEntity.name}`
+              : focusEntity ? `News of ${focusEntity.name}`
                 : recentEvents.length > 0 ? 'The Latest Tavern Rumor' : 'A Quiet Beginning'
-  const title = locale === 'zh-CN' ? `第 ${chapterNumber} 章 · ${eventTitle}` : `Chapter ${chapterNumber} · ${eventTitle}`
+  const title = eventTitle
   const eventLines = recentEvents.map((event) => formatWorldEvent(event, locale))
   const focusRelationships = focusEntity
     ? Object.values(world.narrative.relationshipsByEntityId[focusEntity.id] ?? {})
@@ -190,10 +189,8 @@ export const createLocalTavernStory = (
   const relationshipTarget = strongestRelationship
     ? world.entities.find((entity) => entity.id === strongestRelationship.targetEntityId)
     : undefined
-  const previousStory = world.narrative.stories.at(-1)
   const body = locale === 'zh-CN'
     ? [
-        previousStory ? `上回说到《${previousStory.title}》，新的传闻又沿着酒杯传开。` : undefined,
         focusEntity
           ? `${focusEntity.name}目前${focusEntity.health > 0 ? `仍然活跃，生命为 ${focusEntity.health}/${focusEntity.maxHealth}` : '已经倒下'}。`
           : livingNames.length > 0 ? `今晚，人们仍在谈论${livingNames.join('、')}。` : '今晚的酒馆格外安静。',
@@ -204,7 +201,6 @@ export const createLocalTavernStory = (
         defeatedNames.length > 0 ? `${defeatedNames.join('、')}的命运已经成为新的谈资。` : '没有人知道明天会发生什么。',
       ].filter(Boolean).join('\n')
     : [
-        previousStory ? `After “${previousStory.title},” a new rumor travels from mug to mug.` : undefined,
         focusEntity
           ? `${focusEntity.name} is ${focusEntity.health > 0 ? `still active at ${focusEntity.health}/${focusEntity.maxHealth} health` : 'among the fallen'}.`
           : livingNames.length > 0 ? `Tonight, the tavern still speaks of ${livingNames.join(', ')}.` : 'The tavern is unusually quiet tonight.',
@@ -221,11 +217,11 @@ export const createLocalTavernStory = (
     id: `story-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
     title,
     body,
+    blocks: body.split('\n').filter(Boolean).map((text) => ({ type: 'narration' as const, text })),
     createdAtSeconds: world.elapsedSeconds,
     eventIds: recentEvents.map((event) => event.id),
     characterIds: Array.from(new Set([...(focusEntity ? [focusEntity.id] : []), ...eventCharacterIds]))
       .filter((id) => world.entities.some((entity) => entity.id === id)),
-    chapterNumber,
     source: 'local',
   }
 }
@@ -238,7 +234,6 @@ export const addWorldStory = (world: WorldState, story: WorldStory): WorldState 
   })
   const enrichedStory: WorldStory = {
     ...story,
-    chapterNumber: story.chapterNumber ?? world.narrative.stories.length + 1,
     characterIds: Array.from(new Set(story.characterIds ?? inferredCharacterIds))
       .filter((id) => world.entities.some((entity) => entity.id === id)),
   }

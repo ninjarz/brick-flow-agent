@@ -10,7 +10,7 @@ const makeWorld = () => {
 }
 
 describe('playTavernActivity', () => {
-  it('plays dice, adds a chapter, and pauses participants for their bubbles', () => {
+  it('plays dice, adds a narrative passage, and pauses participants for their bubbles', () => {
     const world = makeWorld()
     const rolls = [0, 0.1, 0.8]
     const result = playTavernActivity(world, 'dice', 'zh-CN', world.entities[0].id, () => rolls.shift() ?? 0)
@@ -18,6 +18,7 @@ describe('playTavernActivity', () => {
     expect(result?.body).toContain('17 点')
     expect(result?.world.narrative.stories).toHaveLength(1)
     expect(result?.world.narrative.stories[0].characterIds).toEqual(world.entities.map((entity) => entity.id))
+    expect(result?.world.narrative.stories[0].blocks?.filter((block) => block.type === 'dialogue')).toHaveLength(2)
     expect(result?.world.entities.every((entity) => entity.speech?.message === 'scenario-dialogue')).toBe(true)
     expect(result?.world.entities.every((entity) => entity.autonomy.nextDecisionAtSeconds >= 19)).toBe(true)
   })

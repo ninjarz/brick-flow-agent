@@ -94,7 +94,7 @@ describe('world scenario import', () => {
     expect(new Set(result.world.entities.map((entity) => entity.id)).size).toBe(5)
     expect(new Set(result.world.entities.map((entity) => entity.name)).size).toBe(5)
     expect(result.world.narrative.stories.map((story) => story.id)).toContain('existing-story')
-    expect(result.world.narrative.stories.at(-1)?.chapterNumber).toBe(2)
+    expect(result.world.narrative.stories.at(-1)?.chapterNumber).toBeUndefined()
     expect(result.world.scenarios).toHaveLength(1)
     expect(result.world.scenarios[0].stages[1].actions).toContainEqual({
       type: 'issue-command',

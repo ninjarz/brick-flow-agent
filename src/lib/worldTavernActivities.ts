@@ -1,5 +1,5 @@
 import { addWorldStory } from './worldNarrative'
-import type { WorldEntity, WorldState, WorldStory } from '../types/world'
+import type { WorldEntity, WorldState, WorldStory, WorldStoryBlock } from '../types/world'
 
 export type TavernActivityKind = 'toast' | 'dice' | 'rumor'
 
@@ -50,10 +50,17 @@ const addSpeech = (entity: WorldEntity, text: string, expiresAtSeconds: number):
   },
 })
 
-const makeStory = (world: WorldState, title: string, body: string, characterIds: string[]): WorldStory => ({
+const makeStory = (
+  world: WorldState,
+  title: string,
+  body: string,
+  characterIds: string[],
+  blocks: WorldStoryBlock[],
+): WorldStory => ({
   id: makeId('story-tavern'),
   title,
   body,
+  blocks,
   createdAtSeconds: world.elapsedSeconds,
   eventIds: [],
   characterIds,
@@ -122,7 +129,10 @@ export const playTavernActivity = (
       return speech ? addSpeech(entity, speech, expiresAtSeconds) : entity
     }),
   }
-  const story = makeStory(withSpeech, title, body, characterIds)
+  const story = makeStory(withSpeech, title, body, characterIds, [
+    { type: 'narration', text: body },
+    ...Array.from(speechById, ([speakerId, text]) => ({ type: 'dialogue' as const, speakerId, text })),
+  ])
   return {
     world: addWorldStory(withSpeech, story),
     title,
