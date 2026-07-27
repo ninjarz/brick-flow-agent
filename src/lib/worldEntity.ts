@@ -248,6 +248,10 @@ const parseStoredCommand = (value: unknown): WorldEntityCommand | undefined => {
   if (value.type === 'attack' && !['entity', 'brick', 'structure'].includes(target.kind)) return undefined
   if (value.type === 'revive' && target.kind !== 'entity') return undefined
   if (value.type === 'follow' && target.kind !== 'entity') return undefined
+  if (value.type === 'interact') {
+    const speechText = typeof value.speechText === 'string' ? value.speechText.trim().slice(0, 180) : ''
+    return { type: value.type, target, ...(speechText ? { speechText } : {}) }
+  }
   return { type: value.type, target } as WorldEntityCommand
 }
 

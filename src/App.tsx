@@ -2514,6 +2514,7 @@ function App() {
                 onDirectWorld={runTavernDirectorTurn}
                 onStopDirector={stopTavernDirector}
                 onCommitDirectorTurn={commitTavernDirectorTurn}
+                onSelectEntity={selectWorldEntity}
                 onClose={() => setIsWorldStoryDockOpen(false)}
               />
             </Suspense>

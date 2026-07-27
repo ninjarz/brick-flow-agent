@@ -1277,14 +1277,24 @@ export const stepWorldSimulation = (
       events.push(makeEvent(timeSeconds, 'interaction', entity.id, target.id))
       const listenerIndex = targetLookup.entityIndexById.get(target.id)
       const listener = listenerIndex === undefined ? undefined : entities[listenerIndex]
+      const scriptedSpeech = activeCommand.type === 'interact' ? activeCommand.speechText?.trim() : undefined
+      const speechDurationSeconds = scriptedSpeech
+        ? Math.min(14, Math.max(5, scriptedSpeech.length / 5))
+        : conversationSpeechDurationSeconds
       entities[index] = {
         ...entity,
-        activeCommand: { type: 'wander', seed: Math.floor(timeSeconds * 10) + 1 },
+        activeCommand: scriptedSpeech ? undefined : { type: 'wander', seed: Math.floor(timeSeconds * 10) + 1 },
         behaviorState: 'idle',
-        speech: listener ? createConversationSpeech(entity, listener, timeSeconds) : entity.speech,
+        speech: scriptedSpeech
+          ? {
+              message: 'scenario-dialogue',
+              text: scriptedSpeech,
+              expiresAtSeconds: timeSeconds + speechDurationSeconds,
+            }
+          : listener ? createConversationSpeech(entity, listener, timeSeconds) : entity.speech,
         navigation: { status: 'idle', path: [], pathIndex: 0 },
       }
-      if (listener && listener.health > 0) {
+      if (!scriptedSpeech && listener && listener.health > 0) {
         entities[listenerIndex!] = {
           ...listener,
           speech: createConversationSpeech(listener, entity, timeSeconds, true),

@@ -2,6 +2,7 @@ import type { BrickStructure, PlacedBrick } from '../types/bricks'
 import type { WorldDirectorEntry, WorldDirectorEvent, WorldEntityCommand, WorldRelationship, WorldState, WorldTargetRef } from '../types/world'
 import type { WorldAiSnapshot } from './worldAi'
 import { issueWorldEntityCommand } from './worldEntity'
+import { getWorldEntityCollisionRadius } from './worldEntityCollision'
 
 export type TavernDirectorEvent = WorldDirectorEvent
 export type TavernDirectorEntry = WorldDirectorEntry
@@ -240,8 +241,24 @@ export const applyTavernDirectorEvent = (
   if (event.type === 'dialogue') {
     const speaker = livingVisibleEntity(event.speakerId)
     if (!speaker) return { world, status: 'rejected', detail: 'SPEAKER_NOT_AVAILABLE' }
-    if (event.listenerId && !livingVisibleEntity(event.listenerId)) {
+    const listener = event.listenerId ? livingVisibleEntity(event.listenerId) : undefined
+    if (event.listenerId && !listener) {
       return { world, status: 'rejected', detail: 'LISTENER_NOT_AVAILABLE' }
+    }
+    const listenerDistance = listener
+      ? Math.hypot(
+          speaker.transform.x - listener.transform.x,
+          speaker.transform.z - listener.transform.z,
+        ) - getWorldEntityCollisionRadius(speaker) - getWorldEntityCollisionRadius(listener)
+      : 0
+    if (listener && listenerDistance > 0.35) {
+      const queued = issueWorldEntityCommand(world, speaker.id, {
+        type: 'interact',
+        target: { kind: 'entity', id: listener.id },
+        speechText: event.text,
+      }, (target) => target.kind === 'entity' && Boolean(livingVisibleEntity(target.id)), 'append')
+      if (queued.ok === false) return { world, status: 'rejected', detail: queued.issue }
+      return { world: queued.world, status: 'accepted', detail: 'WAITING_FOR_PROXIMITY' }
     }
     const expiresAtSeconds = world.elapsedSeconds + Math.min(14, Math.max(5, event.text.length / 5))
     const interaction = resolveDialogueInteraction(
@@ -268,10 +285,6 @@ export const applyTavernDirectorEvent = (
         }] : world.events,
         entities: world.entities.map((entity) => entity.id === speaker.id ? {
           ...entity,
-          activeCommand: undefined,
-          commandQueue: [],
-          behaviorState: 'idle' as const,
-          navigation: { status: 'idle' as const, path: [], pathIndex: 0 },
           speech: { message: 'scenario-dialogue' as const, text: event.text, expiresAtSeconds },
           autonomy: { ...entity.autonomy, nextDecisionAtSeconds: expiresAtSeconds },
         } : entity),

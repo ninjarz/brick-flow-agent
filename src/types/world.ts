@@ -18,7 +18,7 @@ export type WorldEntityCommand =
   | { type: 'revive'; target: WorldTargetRef & { kind: 'entity' } }
   | { type: 'guard'; target: WorldTargetRef }
   | { type: 'follow'; target: WorldTargetRef & { kind: 'entity' } }
-  | { type: 'interact'; target: WorldTargetRef }
+  | { type: 'interact'; target: WorldTargetRef; speechText?: string }
   | { type: 'patrol'; waypointIds: string[] }
 
 export type WorldEntityTransform = {

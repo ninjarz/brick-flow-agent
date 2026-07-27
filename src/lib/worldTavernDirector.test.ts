@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createEmptyWorldState, createWorldEntity } from './worldEntity'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { applyTavernDirectorEvent, createTavernDirectorStreamParser, parseTavernDirectorEvent, parseTavernDirectorStreamPreview } from './worldTavernDirector'
+import { stepWorldSimulation } from './worldSimulation'
 
 describe('tavern director protocol', () => {
   it('parses complete NDJSON events across arbitrary chunks', () => {
@@ -154,5 +155,53 @@ describe('tavern director protocol', () => {
     expect(related.before).toBe(0)
     expect(related.after).toBe(10)
     expect(related.world.narrative.relationshipsByEntityId[first.id][second.id].affinity).toBe(10)
+  })
+
+  it('keeps a move command and delays distant dialogue until the speaker arrives', () => {
+    const definition = worldEntityDefinitionById.get('knight')!
+    const speaker = createWorldEntity(definition, {
+      id: 'speaker',
+      name: '罗兰',
+      controller: 'player',
+      transform: { x: 0, z: 0 },
+    })
+    const listener = createWorldEntity(definition, {
+      id: 'listener',
+      name: '黑岩使者',
+      controller: 'player',
+      transform: { x: 8, z: 0 },
+    })
+    let world = { ...createEmptyWorldState('plan'), entities: [speaker, listener] }
+    const moved = applyTavernDirectorEvent(world, {
+      type: 'command',
+      entityId: speaker.id,
+      command: { type: 'move', target: { kind: 'entity', id: listener.id } },
+    }, { bricks: [], structures: [] })
+    const queuedDialogue = applyTavernDirectorEvent(moved.world, {
+      type: 'dialogue',
+      speakerId: speaker.id,
+      listenerId: listener.id,
+      text: '阁下可是远道而来？',
+    }, { bricks: [], structures: [] })
+
+    expect(queuedDialogue.detail).toBe('WAITING_FOR_PROXIMITY')
+    expect(queuedDialogue.world.entities[0].commandQueue).toEqual([
+      { type: 'move', target: { kind: 'entity', id: listener.id } },
+      {
+        type: 'interact',
+        target: { kind: 'entity', id: listener.id },
+        speechText: '阁下可是远道而来？',
+      },
+    ])
+    expect(queuedDialogue.world.events.some((event) => event.type === 'interaction')).toBe(false)
+
+    world = queuedDialogue.world
+    for (let step = 0; step < 120 && !world.events.some((event) => event.type === 'interaction'); step += 1) {
+      world = stepWorldSimulation(world, [], 0.1)
+    }
+
+    expect(world.entities[0].transform.x).toBeGreaterThan(0)
+    expect(world.events.some((event) => event.type === 'interaction')).toBe(true)
+    expect(world.entities[0].speech?.text).toBe('阁下可是远道而来？')
   })
 })

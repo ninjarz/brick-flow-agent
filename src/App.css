@@ -467,12 +467,20 @@ button.status-pill:hover {
 }
 
 .narrative-reference {
+  display: inline;
+  padding: 0;
+  border: 0;
   border-bottom: 1px dotted currentColor;
+  border-radius: 2px;
+  background: transparent;
   color: #8a4b16;
+  font: inherit;
   font-weight: 700;
   cursor: help;
   outline: none;
 }
+
+.narrative-reference.entity { cursor: pointer; }
 
 .narrative-reference:hover,
 .narrative-reference:focus-visible {
@@ -519,6 +527,22 @@ button.status-pill:hover {
   color: #8a4b16;
   font-family: inherit;
   white-space: nowrap;
+}
+
+.narrative-passage p.dialogue.queued {
+  opacity: 0.76;
+}
+
+.narrative-passage p.dialogue.queued em {
+  margin-right: 5px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: #e0f2fe;
+  color: #0369a1;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 800;
 }
 
 .narrative-passage p.player {

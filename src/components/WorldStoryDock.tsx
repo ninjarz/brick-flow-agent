@@ -33,6 +33,7 @@ type WorldStoryDockProps = {
   ) => Promise<void>
   onStopDirector: () => void
   onCommitDirectorTurn: (turn: WorldDirectorTurn) => void
+  onSelectEntity: (entityId: string) => void
   onClose: () => void
 }
 
@@ -55,6 +56,7 @@ const initialStoryPanelWidth = () => Math.min(760, Math.max(0, window.innerWidth
 type NarrativeReference = {
   name: string
   details: string
+  entityId?: string
 }
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -62,20 +64,35 @@ const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\
 const AnnotatedText = ({
   text,
   references,
+  onSelectEntity,
 }: {
   text: string
   references: NarrativeReference[]
+  onSelectEntity?: (entityId: string) => void
 }) => {
   if (references.length === 0) return text
   const referenceByName = new Map(references.map((reference) => [reference.name, reference]))
   const pattern = new RegExp(`(${references.map((reference) => escapeRegExp(reference.name)).join('|')})`, 'g')
   return text.split(pattern).map((part, index): ReactNode => {
     const reference = referenceByName.get(part)
-    return reference
-      ? <span className="narrative-reference" title={reference.details} tabIndex={0} key={`${part}-${index}`}>{part}</span>
-      : part
+    if (!reference) return part
+    return reference.entityId && onSelectEntity
+      ? (
+          <button
+            type="button"
+            className="narrative-reference entity"
+            title={`${reference.details}\n${localeSelectionHint}`}
+            onClick={() => onSelectEntity(reference.entityId!)}
+            key={`${part}-${index}`}
+          >
+            {part}
+          </button>
+        )
+      : <span className="narrative-reference" title={reference.details} tabIndex={0} key={`${part}-${index}`}>{part}</span>
   })
 }
+
+const localeSelectionHint = '点击选中角色 / Click to select'
 
 const FeedBlock = ({
   block,
@@ -85,6 +102,7 @@ const FeedBlock = ({
   locale,
   disabled,
   onChoose,
+  onSelectEntity,
 }: {
   block: WorldNarrativeFeedBlock
   world: WorldState
@@ -93,12 +111,14 @@ const FeedBlock = ({
   locale: 'zh-CN' | 'en-US'
   disabled: boolean
   onChoose: (input: string) => void
+  onSelectEntity: (entityId: string) => void
 }) => {
-  if (block.type === 'narration') return <p className="narration"><AnnotatedText text={block.text} references={references} /></p>
+  if (block.type === 'narration') return <p className="narration"><AnnotatedText text={block.text} references={references} onSelectEntity={onSelectEntity} /></p>
   if (block.type === 'dialogue') {
     const speaker = world.entities.find((entity) => entity.id === block.speakerId)
     const speakerName = speaker?.name ?? block.speakerId
-    return <p className="dialogue"><strong><AnnotatedText text={speakerName} references={references} /></strong><span>“<AnnotatedText text={block.text} references={references} />”</span></p>
+    const waitingForProximity = 'detail' in block && block.detail === 'WAITING_FOR_PROXIMITY'
+    return <p className={`dialogue${waitingForProximity ? ' queued' : ''}`}><strong><AnnotatedText text={speakerName} references={references} onSelectEntity={onSelectEntity} /></strong><span>{waitingForProximity && <em>{locale === 'zh-CN' ? '接近后' : 'on arrival'}</em>}“<AnnotatedText text={block.text} references={references} onSelectEntity={onSelectEntity} />”</span></p>
   }
   if (block.type === 'command') {
     const actor = world.entities.find((entity) => entity.id === block.entityId)
@@ -111,12 +131,12 @@ const FeedBlock = ({
     const commandLabel = block.command.type === 'interact'
       ? (locale === 'zh-CN' ? '交谈' : 'talk')
       : block.command.type
-    return <p className={`stage-direction ${block.status ?? ''}`}>〔<AnnotatedText text={actor?.name ?? block.entityId} references={references} /> · {commandLabel}{target ? <> → <AnnotatedText text={target} references={references} /></> : ''}{block.detail ? ` · ${block.detail}` : ''}〕</p>
+    return <p className={`stage-direction ${block.status ?? ''}`}>〔<AnnotatedText text={actor?.name ?? block.entityId} references={references} onSelectEntity={onSelectEntity} /> · {commandLabel}{target ? <> → <AnnotatedText text={target} references={references} onSelectEntity={onSelectEntity} /></> : ''}{block.detail ? ` · ${block.detail}` : ''}〕</p>
   }
   if (block.type === 'relationship') {
     const from = world.entities.find((entity) => entity.id === block.fromId)?.name ?? block.fromId
     const to = world.entities.find((entity) => entity.id === block.toId)?.name ?? block.toId
-    return <p className={`stage-direction ${block.status ?? ''}`}>〔<AnnotatedText text={from} references={references} />与<AnnotatedText text={to} references={references} />的关系：{block.before ?? 0} → {block.after ?? 0} · <AnnotatedText text={block.reason} references={references} />〕</p>
+    return <p className={`stage-direction ${block.status ?? ''}`}>〔<AnnotatedText text={from} references={references} onSelectEntity={onSelectEntity} />与<AnnotatedText text={to} references={references} onSelectEntity={onSelectEntity} />的关系：{block.before ?? 0} → {block.after ?? 0} · <AnnotatedText text={block.reason} references={references} onSelectEntity={onSelectEntity} />〕</p>
   }
   if (block.type === 'choice') {
     return <button type="button" className="choice" disabled={disabled} onClick={() => onChoose(block.suggestedInput)}>{block.label}</button>
@@ -168,6 +188,7 @@ export const WorldStoryDock = ({
   onDirectWorld,
   onStopDirector,
   onCommitDirectorTurn,
+  onSelectEntity,
   onClose,
 }: WorldStoryDockProps) => {
   const { locale, t } = useI18n()
@@ -202,6 +223,7 @@ export const WorldStoryDock = ({
         .filter((entity) => entity.name && !hidden.has(`entity:${entity.id}`))
         .map((entity): NarrativeReference => ({
           name: entity.name,
+          entityId: entity.id,
           details: locale === 'zh-CN'
             ? `${entity.description}\n阵营：${entity.factionId} · 生命：${entity.health}/${entity.maxHealth}`
             : `${entity.description}\nFaction: ${entity.factionId} · Health: ${entity.health}/${entity.maxHealth}`,
@@ -443,18 +465,18 @@ export const WorldStoryDock = ({
             {protagonist && (
               <aside className="world-story-identity">
                 {locale === 'zh-CN' ? '你将扮演 ' : 'You are '}
-                <AnnotatedText text={protagonist.name} references={references} />
+                <AnnotatedText text={protagonist.name} references={references} onSelectEntity={onSelectEntity} />
                 {locale === 'zh-CN' ? `。${protagonist.description}` : `. ${protagonist.description}`}
               </aside>
             )}
             {feed.map((item) => (
               <article className={`narrative-passage ${item.kind}`} key={item.id}>
-                {item.playerText && <p className="player"><strong>{locale === 'zh-CN' ? `你（${protagonist?.name ?? '玩家'}）` : `You (${protagonist?.name ?? 'Player'})`}</strong><AnnotatedText text={item.playerText} references={references} /></p>}
+                {item.playerText && <p className="player"><strong>{locale === 'zh-CN' ? `你（${protagonist?.name ?? '玩家'}）` : `You (${protagonist?.name ?? 'Player'})`}</strong><AnnotatedText text={item.playerText} references={references} onSelectEntity={onSelectEntity} /></p>}
                 {item.reasoning && (
                   <ReasoningPanel text={item.reasoning} streaming={item.status === 'streaming'} locale={locale} />
                 )}
                 {item.blocks.map((block) => (
-                  <FeedBlock key={block.id} block={block} world={world} structures={structures} references={references} locale={locale} disabled={isDirectorThinking} onChoose={chooseInput} />
+                  <FeedBlock key={block.id} block={block} world={world} structures={structures} references={references} locale={locale} disabled={isDirectorThinking} onChoose={chooseInput} onSelectEntity={onSelectEntity} />
                 ))}
                 {item.streamPreview && (
                   <p className={`world-story-stream-preview ${item.streamPreview.type}`}>
