@@ -31,7 +31,7 @@ import { advanceWorldFixedStepClock, createWorldFixedStepClock } from './lib/wor
 import { addWorldStory, createLocalTavernStory } from './lib/worldNarrative'
 import { playTavernActivity, type TavernActivityKind } from './lib/worldTavernActivities'
 import { applyTavernAiResponse, requestTavernAiActivity } from './lib/worldTavernAi'
-import { applyTavernDirectorEvent, buildTavernDirectorPrompt, createTavernDirectorStreamParser, tavernDirectorSystemPrompt, type TavernDirectorEntry } from './lib/worldTavernDirector'
+import { applyTavernDirectorEvent, buildTavernDirectorPrompt, createTavernDirectorStreamParser, tavernDirectorSystemPrompt, type TavernDirectorEntry, type TavernDirectorStreamPreview } from './lib/worldTavernDirector'
 import { applyWorldAiTurn, createWorldAiSnapshot, formatWorldAiTurnSummary, requestWorldAiTurn } from './lib/worldAi'
 import { analyzeBuildStability } from './lib/stabilityAnalysis'
 import { formatLDrawPlan, parseLDrawPlan } from './lib/ldrawPlan'
@@ -1614,6 +1614,7 @@ function App() {
     playerText: string,
     recentEntries: TavernDirectorEntry[],
     onEntry: (entry: TavernDirectorEntry) => void,
+    onProgress: (progress: { reasoningDelta?: string; preview?: TavernDirectorStreamPreview }) => void,
   ) => {
     if (!llmConfigComplete || isTavernDirectorThinking) return
     tavernDirectorAbortRef.current?.abort()
@@ -1630,29 +1631,48 @@ function App() {
       .find((entity) => Boolean(entity))
       ?? requestWorld.entities.find((entity) => entity.controller === 'player')
     let eventCount = 0
-    const parser = createTavernDirectorStreamParser((event) => {
-      eventCount += 1
-      const currentWorld = worldRef.current
-      const currentPlan = planRef.current
-      const applied = applyTavernDirectorEvent(currentWorld, event, {
-        bricks: currentPlan.bricks,
-        structures: currentPlan.structures ?? [],
-      })
-      if (applied.world !== currentWorld) {
-        const nextWorld = advanceWorldScenarios(applied.world)
-        worldRef.current = nextWorld
-        setWorld(nextWorld)
-      }
-      onEntry({
-        ...event,
-        id: `director-entry-${Date.now().toString(36)}-${eventCount}`,
-        status: applied.status,
-        detail: applied.detail,
-        before: applied.before,
-        after: applied.after,
-      })
-    })
+    const parser = createTavernDirectorStreamParser(
+      (event) => {
+        eventCount += 1
+        const currentWorld = worldRef.current
+        const currentPlan = planRef.current
+        const applied = applyTavernDirectorEvent(currentWorld, event, {
+          bricks: currentPlan.bricks,
+          structures: currentPlan.structures ?? [],
+        })
+        if (applied.world !== currentWorld) {
+          const nextWorld = advanceWorldScenarios(applied.world)
+          worldRef.current = nextWorld
+          setWorld(nextWorld)
+        }
+        onEntry({
+          ...event,
+          id: `director-entry-${Date.now().toString(36)}-${eventCount}`,
+          status: applied.status,
+          detail: applied.detail,
+          before: applied.before,
+          after: applied.after,
+        })
+      },
+      (preview) => onProgress({ preview }),
+    )
     try {
+      if (llmConfigFeedback?.tone !== 'success') {
+        setIsTestingLlmConfig(true)
+        setLlmConfigFeedback(undefined)
+        try {
+          await testLlmConnection(llmConfig, locale)
+          setLlmConfigFeedback({ tone: 'success', text: t('config.success') })
+        } catch (error) {
+          setLlmConfigFeedback({
+            tone: 'error',
+            text: error instanceof Error ? error.message : t('config.failed'),
+          })
+          throw error
+        } finally {
+          setIsTestingLlmConfig(false)
+        }
+      }
       await requestLlmTextStream({
         config: llmConfig,
         systemPrompt: tavernDirectorSystemPrompt,
@@ -1668,6 +1688,7 @@ function App() {
         temperature: 0.65,
         maxTokens: 2_400,
         onDelta: (delta) => parser.push(delta),
+        onReasoningDelta: (reasoningDelta) => onProgress({ reasoningDelta }),
       })
       parser.finish()
       if (eventCount === 0) {
@@ -1679,7 +1700,7 @@ function App() {
         setIsTavernDirectorThinking(false)
       }
     }
-  }, [isTavernDirectorThinking, llmConfig, llmConfigComplete, locale])
+  }, [isTavernDirectorThinking, llmConfig, llmConfigComplete, llmConfigFeedback?.tone, locale, t])
 
   const stopTavernDirector = useCallback(() => {
     tavernDirectorAbortRef.current?.abort()
@@ -2481,6 +2502,7 @@ function App() {
                 world={world}
                 structures={plan.structures ?? []}
                 llmConfigured={llmConfigComplete}
+                isLlmTesting={isTestingLlmConfig}
                 isAiThinking={isWorldAiThinking}
                 isDirectorThinking={isTavernDirectorThinking}
                 isAiActivityThinking={isTavernAiThinking}

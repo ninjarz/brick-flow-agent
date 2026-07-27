@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createEmptyWorldState, createWorldEntity } from './worldEntity'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
-import { applyTavernDirectorEvent, createTavernDirectorStreamParser, parseTavernDirectorEvent } from './worldTavernDirector'
+import { applyTavernDirectorEvent, createTavernDirectorStreamParser, parseTavernDirectorEvent, parseTavernDirectorStreamPreview } from './worldTavernDirector'
 
 describe('tavern director protocol', () => {
   it('parses complete NDJSON events across arbitrary chunks', () => {
@@ -14,6 +14,30 @@ describe('tavern director protocol', () => {
       { type: 'narration', text: '炉火摇曳。' },
       { type: 'choice', label: '追问', suggestedInput: '继续追问。' },
     ])
+  })
+
+  it('exposes readable partial prose without raw NDJSON syntax', () => {
+    expect(parseTavernDirectorStreamPreview('{"type":"narration","text":"雨声敲打窗')).toEqual({
+      type: 'narration',
+      text: '雨声敲打窗',
+    })
+    expect(parseTavernDirectorStreamPreview('{"type":"dialogue","speakerId":"mara","text":"别出声')).toEqual({
+      type: 'dialogue',
+      speakerId: 'mara',
+      text: '别出声',
+    })
+  })
+
+  it('updates and clears partial prose as complete events arrive', () => {
+    const previews: Array<string | undefined> = []
+    const parser = createTavernDirectorStreamParser(
+      () => undefined,
+      (preview) => previews.push(preview?.text),
+    )
+    parser.push('{"type":"narration","text":"炉火')
+    parser.push('忽明忽暗"}\n')
+    parser.finish()
+    expect(previews).toEqual(['炉火', undefined, undefined])
   })
 
   it('rejects direct mutation and clamps relationship deltas', () => {

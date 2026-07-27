@@ -181,11 +181,17 @@ describe('buildWorldNarrativeFeed', () => {
       id: 'streaming',
       playerText: 'Speak',
       entries: [{ id: 'line', type: 'dialogue', speakerId: 'roland', text: 'Hello.' }],
+      reasoning: 'Choose a calm opening.',
+      streamPreview: { type: 'narration', text: 'The fire' },
       createdAtSeconds: 5,
       status: 'streaming',
     })
 
     expect(feed.map((item) => item.id)).toEqual(['saved', 'streaming'])
-    expect(feed[1].status).toBe('streaming')
+    expect(feed[1]).toMatchObject({
+      status: 'streaming',
+      reasoning: 'Choose a calm opening.',
+      streamPreview: { type: 'narration', text: 'The fire' },
+    })
   })
 })

@@ -51,6 +51,7 @@ export type LlmJsonRequestInput = {
 
 export type LlmStreamRequestInput = LlmJsonRequestInput & {
   onDelta: (text: string) => void
+  onReasoningDelta?: (text: string) => void
 }
 
 const clientRequestTimeoutMs = 240_000
@@ -329,6 +330,26 @@ const extractMessageContent = (payload: unknown) => {
   }
 
   return stringifyDirectJsonPayload(payload)
+}
+
+const extractReasoningContent = (payload: unknown) => {
+  if (!isRecord(payload)) return ''
+  const fromRecord = (value: unknown) => {
+    if (!isRecord(value)) return ''
+    return extractTextContent(value.reasoning_content)
+      || extractTextContent(value.reasoning)
+      || extractTextContent(value.thinking)
+  }
+  const directReasoning = fromRecord(payload)
+    || fromRecord(payload.message)
+    || fromRecord(payload.delta)
+  if (directReasoning) return directReasoning
+  return Array.isArray(payload.choices)
+    ? payload.choices.map((choice) => (
+        fromRecord(choice)
+        || (isRecord(choice) ? fromRecord(choice.message) || fromRecord(choice.delta) : '')
+      )).join('')
+    : ''
 }
 
 const hasReasoningOnlyLengthFinish = (payload: unknown) => {
@@ -655,7 +676,11 @@ export const requestLlmJsonContent = async ({
   return content
 }
 
-const readLlmEventStream = async (response: Response, onDelta: (text: string) => void) => {
+const readLlmEventStream = async (
+  response: Response,
+  onDelta: (text: string) => void,
+  onReasoningDelta?: (text: string) => void,
+) => {
   if (!response.body) return ''
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
@@ -665,7 +690,10 @@ const readLlmEventStream = async (response: Response, onDelta: (text: string) =>
     const trimmed = payloadText.trim()
     if (!trimmed || trimmed === '[DONE]') return
     try {
-      const delta = extractMessageContent(JSON.parse(trimmed) as unknown)
+      const payload = JSON.parse(trimmed) as unknown
+      const reasoningDelta = extractReasoningContent(payload)
+      if (reasoningDelta) onReasoningDelta?.(reasoningDelta)
+      const delta = extractMessageContent(payload)
       if (!delta) return
       content += delta
       onDelta(delta)
@@ -707,6 +735,7 @@ export const requestLlmTextStream = async ({
   temperature = 0.5,
   maxTokens = 4_096,
   onDelta,
+  onReasoningDelta,
 }: LlmStreamRequestInput) => {
   if (!isLlmConfigComplete(config)) throw new Error(llmText[locale].incompleteConfig)
   const controller = new AbortController()
@@ -728,12 +757,14 @@ export const requestLlmTextStream = async ({
     const contentType = response.headers.get('content-type')?.toLowerCase() ?? ''
     if (!contentType.includes('text/event-stream') && contentType.includes('application/json')) {
       const payload = await response.json() as unknown
+      const reasoning = extractReasoningContent(payload)
+      if (reasoning) onReasoningDelta?.(reasoning)
       const content = extractMessageContent(payload)
       if (!content) throw new Error(formatEmptyContentError(payload, llmText[locale].responseContext, locale))
       onDelta(content)
       return content
     }
-    const content = await readLlmEventStream(response, onDelta)
+    const content = await readLlmEventStream(response, onDelta, onReasoningDelta)
     if (!content.trim()) throw new Error(llmText[locale].emptyGenerationResponse)
     return content
   } catch (error) {

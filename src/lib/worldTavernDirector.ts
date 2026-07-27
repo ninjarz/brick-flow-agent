@@ -5,6 +5,11 @@ import { issueWorldEntityCommand } from './worldEntity'
 
 export type TavernDirectorEvent = WorldDirectorEvent
 export type TavernDirectorEntry = WorldDirectorEntry
+export type TavernDirectorStreamPreview = {
+  type: 'narration' | 'dialogue' | 'end'
+  text: string
+  speakerId?: string
+}
 
 type DirectorLocale = 'zh-CN' | 'en-US'
 
@@ -80,7 +85,45 @@ export const parseTavernDirectorEvent = (value: unknown): TavernDirectorEvent | 
   return undefined
 }
 
-export const createTavernDirectorStreamParser = (onEvent: (event: TavernDirectorEvent) => void) => {
+const readPartialJsonString = (line: string, field: string) => {
+  const match = new RegExp(`"${field}"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)`).exec(line)
+  if (!match?.[1]) return ''
+  let content = match[1]
+  const trailingSlashes = content.match(/\\+$/)?.[0].length ?? 0
+  if (trailingSlashes % 2 === 1) content = content.slice(0, -1)
+  try {
+    return JSON.parse(`"${content}"`) as string
+  } catch {
+    return content
+      .replace(/\\n/g, '\n')
+      .replace(/\\t/g, '\t')
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, '\\')
+  }
+}
+
+export const parseTavernDirectorStreamPreview = (line: string): TavernDirectorStreamPreview | undefined => {
+  const type = readPartialJsonString(line, 'type')
+  if (type === 'narration') {
+    const text = readPartialJsonString(line, 'text')
+    return text ? { type, text } : undefined
+  }
+  if (type === 'dialogue') {
+    const text = readPartialJsonString(line, 'text')
+    const speakerId = readPartialJsonString(line, 'speakerId')
+    return text ? { type, text, ...(speakerId ? { speakerId } : {}) } : undefined
+  }
+  if (type === 'end') {
+    const text = readPartialJsonString(line, 'summary')
+    return text ? { type, text } : undefined
+  }
+  return undefined
+}
+
+export const createTavernDirectorStreamParser = (
+  onEvent: (event: TavernDirectorEvent) => void,
+  onPreview?: (preview: TavernDirectorStreamPreview | undefined) => void,
+) => {
   let buffer = ''
   const parseLine = (line: string) => {
     const cleanLine = line.trim().replace(/^```(?:jsonl?|ndjson)?$/i, '')
@@ -98,10 +141,12 @@ export const createTavernDirectorStreamParser = (onEvent: (event: TavernDirector
       const lines = buffer.split(/\r?\n/)
       buffer = lines.pop() ?? ''
       lines.forEach(parseLine)
+      onPreview?.(parseTavernDirectorStreamPreview(buffer))
     },
     finish() {
       parseLine(buffer)
       buffer = ''
+      onPreview?.(undefined)
     },
   }
 }

@@ -5,6 +5,7 @@ import type {
   WorldStory,
   WorldStoryBlock,
 } from '../types/world'
+import type { TavernDirectorStreamPreview } from './worldTavernDirector'
 
 export type WorldNarrativeFeedBlock =
   | (WorldStoryBlock & { id: string })
@@ -20,10 +21,13 @@ export type WorldNarrativeFeedItem = {
   source?: WorldStory['source']
   status?: WorldDirectorTurn['status'] | 'streaming'
   error?: string
+  reasoning?: string
+  streamPreview?: TavernDirectorStreamPreview
 }
 
 export type ActiveWorldDirectorTurn = Omit<WorldDirectorTurn, 'status'> & {
   status: WorldDirectorTurn['status'] | 'streaming'
+  streamPreview?: TavernDirectorStreamPreview
 }
 
 export const makeScenarioDialogueStoryId = (
@@ -69,6 +73,8 @@ const directorFeedItem = (turn: ActiveWorldDirectorTurn): WorldNarrativeFeedItem
   playerText: turn.playerText,
   status: turn.status,
   error: turn.error,
+  reasoning: turn.reasoning,
+  streamPreview: turn.streamPreview,
 })
 
 const activeDialogueFeedItems = (

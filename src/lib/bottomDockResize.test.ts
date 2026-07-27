@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resizeBottomDockHeight } from './bottomDockResize'
+import { resizeBottomDockHeight, resizeBottomDockWidth } from './bottomDockResize'
 
 const base = {
   initialHeight: 400,
@@ -27,5 +27,42 @@ describe('resizeBottomDockHeight', () => {
       ...base,
       deltaY: 500,
     })).toBe(220)
+  })
+})
+
+describe('resizeBottomDockWidth', () => {
+  const widthBase = {
+    initialWidth: 760,
+    viewportWidth: 1200,
+    minimumWidth: 420,
+  }
+
+  it('expands symmetrically when the right edge moves outward', () => {
+    expect(resizeBottomDockWidth({
+      ...widthBase,
+      side: 'right',
+      deltaX: 50,
+    })).toBe(860)
+  })
+
+  it('expands symmetrically when the left edge moves outward', () => {
+    expect(resizeBottomDockWidth({
+      ...widthBase,
+      side: 'left',
+      deltaX: -50,
+    })).toBe(860)
+  })
+
+  it('clamps to the viewport and readable minimum', () => {
+    expect(resizeBottomDockWidth({
+      ...widthBase,
+      side: 'right',
+      deltaX: 400,
+    })).toBe(1176)
+    expect(resizeBottomDockWidth({
+      ...widthBase,
+      side: 'right',
+      deltaX: -400,
+    })).toBe(420)
   })
 })

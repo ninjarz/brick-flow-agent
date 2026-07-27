@@ -156,6 +156,7 @@ export type WorldDirectorTurn = {
   id: string
   playerText: string
   entries: WorldDirectorEntry[]
+  reasoning?: string
   createdAtSeconds: number
   status: 'completed' | 'stopped' | 'failed'
   error?: string

@@ -1,13 +1,13 @@
 import { BookOpen, Bot, ChevronDown, Dice5, GlassWater, MessageCircle, Send, Sparkles, Square, X } from 'lucide-react'
 import { type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
-import { resizeBottomDockHeight } from '../lib/bottomDockResize'
+import { resizeBottomDockHeight, resizeBottomDockWidth } from '../lib/bottomDockResize'
 import { useI18n } from '../lib/i18n'
 import {
   buildWorldNarrativeFeed,
   type ActiveWorldDirectorTurn,
   type WorldNarrativeFeedBlock,
 } from '../lib/worldNarrativeFeed'
-import type { TavernDirectorEntry } from '../lib/worldTavernDirector'
+import type { TavernDirectorEntry, TavernDirectorStreamPreview } from '../lib/worldTavernDirector'
 import type { TavernActivityKind, TavernActivityResult } from '../lib/worldTavernActivities'
 import type { BrickStructure } from '../types/bricks'
 import type { WorldDirectorTurn, WorldState } from '../types/world'
@@ -16,6 +16,7 @@ type WorldStoryDockProps = {
   world: WorldState
   structures: BrickStructure[]
   llmConfigured: boolean
+  isLlmTesting: boolean
   isAiThinking: boolean
   isDirectorThinking: boolean
   isAiActivityThinking: boolean
@@ -28,6 +29,7 @@ type WorldStoryDockProps = {
     text: string,
     recentEntries: TavernDirectorEntry[],
     onEntry: (entry: TavernDirectorEntry) => void,
+    onProgress: (progress: { reasoningDelta?: string; preview?: TavernDirectorStreamPreview }) => void,
   ) => Promise<void>
   onStopDirector: () => void
   onCommitDirectorTurn: (turn: WorldDirectorTurn) => void
@@ -46,7 +48,9 @@ const storyActivityOptions: Array<{
 ]
 
 const minimumStoryPanelHeight = 220
+const minimumStoryPanelWidth = 420
 const initialStoryPanelHeight = () => Math.min(520, Math.max(minimumStoryPanelHeight, window.innerHeight - 24))
+const initialStoryPanelWidth = () => Math.min(760, Math.max(0, window.innerWidth - 24))
 
 type NarrativeReference = {
   name: string
@@ -120,10 +124,39 @@ const FeedBlock = ({
   return <p className="summary">{block.summary}</p>
 }
 
+const ReasoningPanel = ({
+  text,
+  streaming,
+  locale,
+}: {
+  text: string
+  streaming: boolean
+  locale: 'zh-CN' | 'en-US'
+}) => {
+  const [open, setOpen] = useState(streaming)
+  useEffect(() => setOpen(streaming), [streaming])
+  return (
+    <details
+      className="world-story-reasoning"
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
+      <summary>
+        <Bot size={12} />
+        {streaming
+          ? (locale === 'zh-CN' ? '正在思考……' : 'Thinking…')
+          : (locale === 'zh-CN' ? '思考过程' : 'Reasoning')}
+      </summary>
+      <div>{text}</div>
+    </details>
+  )
+}
+
 export const WorldStoryDock = ({
   world,
   structures,
   llmConfigured,
+  isLlmTesting,
   isAiThinking,
   isDirectorThinking,
   isAiActivityThinking,
@@ -145,6 +178,7 @@ export const WorldStoryDock = ({
   const [input, setInput] = useState('')
   const [activeTurn, setActiveTurn] = useState<ActiveWorldDirectorTurn>()
   const [panelHeight, setPanelHeight] = useState(initialStoryPanelHeight)
+  const [panelWidth, setPanelWidth] = useState(initialStoryPanelWidth)
   const [isResizing, setIsResizing] = useState(false)
   const panelRef = useRef<HTMLElement>(null)
   const resizeCleanupRef = useRef<() => void>()
@@ -183,6 +217,9 @@ export const WorldStoryDock = ({
     ].sort((a, b) => b.name.length - a.name.length)
   }, [locale, structures, world.entities, world.hiddenTargets])
   const feedVersion = feed.reduce((total, item) => total + item.blocks.length, 0)
+  const streamVersion = activeTurn
+    ? (activeTurn.reasoning?.length ?? 0) + (activeTurn.streamPreview?.text.length ?? 0)
+    : 0
   const availableEntities = world.entities.filter((entity) => entity.health > 0 && !world.hiddenTargets.some((target) => target.kind === 'entity' && target.id === entity.id))
   const getResizeViewport = () => {
     const bounds = panelRef.current?.parentElement?.getBoundingClientRect()
@@ -199,7 +236,7 @@ export const WorldStoryDock = ({
   useEffect(() => {
     const container = feedRef.current
     if (container && shouldAutoScrollRef.current) container.scrollTop = container.scrollHeight
-  }, [feed.length, feedVersion])
+  }, [feed.length, feedVersion, streamVersion])
 
   useEffect(() => {
     const parent = panelRef.current?.parentElement
@@ -207,6 +244,7 @@ export const WorldStoryDock = ({
     const clampToViewport = () => {
       const bounds = parent.getBoundingClientRect()
       setPanelHeight((current) => Math.min(current, Math.max(0, bounds.height - 24)))
+      setPanelWidth((current) => Math.min(current, Math.max(0, bounds.width - 24)))
     }
     const observer = new ResizeObserver(clampToViewport)
     observer.observe(parent)
@@ -216,7 +254,7 @@ export const WorldStoryDock = ({
 
   useEffect(() => () => resizeCleanupRef.current?.(), [])
 
-  const beginResize = (event: ReactPointerEvent) => {
+  const beginHeightResize = (event: ReactPointerEvent) => {
     event.preventDefault()
     const session = {
       startY: event.clientY,
@@ -247,6 +285,38 @@ export const WorldStoryDock = ({
     setIsResizing(true)
   }
 
+  const beginWidthResize = (side: 'left' | 'right') => (event: ReactPointerEvent) => {
+    event.preventDefault()
+    const session = {
+      startX: event.clientX,
+      initialWidth: panelWidth,
+    }
+    const handlePointerMove = (event: PointerEvent) => {
+      setPanelWidth(resizeBottomDockWidth({
+        initialWidth: session.initialWidth,
+        deltaX: event.clientX - session.startX,
+        side,
+        viewportWidth: getResizeViewport().width,
+        minimumWidth: minimumStoryPanelWidth,
+      }))
+    }
+    const finishResize = () => {
+      resizeCleanupRef.current?.()
+      resizeCleanupRef.current = undefined
+      setIsResizing(false)
+    }
+    resizeCleanupRef.current?.()
+    resizeCleanupRef.current = () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', finishResize)
+      window.removeEventListener('pointercancel', finishResize)
+    }
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', finishResize)
+    window.addEventListener('pointercancel', finishResize)
+    setIsResizing(true)
+  }
+
   const chooseInput = (value: string) => {
     setInput(value)
     window.requestAnimationFrame(() => inputRef.current?.focus())
@@ -254,10 +324,27 @@ export const WorldStoryDock = ({
 
   const submit = async () => {
     const playerText = input.trim()
-    if (!playerText || isDirectorThinking || !llmConfigured) return
+    if (!playerText || isDirectorThinking || isLlmTesting || !llmConfigured) return
     const id = `director-turn-${Date.now().toString(36)}`
     const createdAtSeconds = world.elapsedSeconds
     const entries: TavernDirectorEntry[] = []
+    let reasoning = ''
+    let streamPreview: TavernDirectorStreamPreview | undefined
+    let progressFrame = 0
+    const flushProgress = () => {
+      progressFrame = 0
+      setActiveTurn((current) => current?.id === id
+        ? {
+            ...current,
+            ...(reasoning ? { reasoning } : {}),
+            ...(streamPreview ? { streamPreview } : { streamPreview: undefined }),
+          }
+        : current)
+    }
+    const scheduleProgress = () => {
+      if (progressFrame) return
+      progressFrame = window.requestAnimationFrame(flushProgress)
+    }
     shouldAutoScrollRef.current = true
     setInput('')
     setActiveTurn({ id, playerText, entries: [], createdAtSeconds, status: 'streaming' })
@@ -271,12 +358,26 @@ export const WorldStoryDock = ({
           entries.push(entry)
           setActiveTurn((current) => current?.id === id ? { ...current, entries: [...entries] } : current)
         },
+        (progress) => {
+          if (progress.reasoningDelta) reasoning += progress.reasoningDelta
+          if ('preview' in progress) streamPreview = progress.preview
+          scheduleProgress()
+        },
       )
     } catch (error) {
       errorMessage = error instanceof Error ? error.message : (locale === 'zh-CN' ? '导演请求失败' : 'Director request failed')
       status = /取消|canceled/i.test(errorMessage) ? 'stopped' : 'failed'
     } finally {
-      onCommitDirectorTurn({ id, playerText, entries, createdAtSeconds, status, ...(errorMessage ? { error: errorMessage } : {}) })
+      if (progressFrame) window.cancelAnimationFrame(progressFrame)
+      onCommitDirectorTurn({
+        id,
+        playerText,
+        entries,
+        ...(reasoning.trim() ? { reasoning: reasoning.trim() } : {}),
+        createdAtSeconds,
+        status,
+        ...(errorMessage ? { error: errorMessage } : {}),
+      })
       setActiveTurn(undefined)
     }
   }
@@ -292,14 +393,28 @@ export const WorldStoryDock = ({
       ref={panelRef}
       className={`world-story-dock${collapsed ? ' collapsed' : ''}${isResizing ? ' resizing' : ''}`}
       aria-label={locale === 'zh-CN' ? '剧情对话' : 'Story dialogue'}
-      style={collapsed ? undefined : { height: panelHeight, maxHeight: 'none' }}
+      style={collapsed ? undefined : { width: panelWidth, height: panelHeight, maxWidth: 'none', maxHeight: 'none' }}
     >
       {!collapsed && (
         <div
           className="world-story-resize-handle top"
           aria-hidden="true"
-          onPointerDown={beginResize}
+          onPointerDown={beginHeightResize}
         />
+      )}
+      {!collapsed && (
+        <>
+          <div
+            className="world-story-resize-handle left"
+            aria-hidden="true"
+            onPointerDown={beginWidthResize('left')}
+          />
+          <div
+            className="world-story-resize-handle right"
+            aria-hidden="true"
+            onPointerDown={beginWidthResize('right')}
+          />
+        </>
       )}
       <header>
         <div>
@@ -335,10 +450,28 @@ export const WorldStoryDock = ({
             {feed.map((item) => (
               <article className={`narrative-passage ${item.kind}`} key={item.id}>
                 {item.playerText && <p className="player"><strong>{locale === 'zh-CN' ? `你（${protagonist?.name ?? '玩家'}）` : `You (${protagonist?.name ?? 'Player'})`}</strong><AnnotatedText text={item.playerText} references={references} /></p>}
+                {item.reasoning && (
+                  <ReasoningPanel text={item.reasoning} streaming={item.status === 'streaming'} locale={locale} />
+                )}
                 {item.blocks.map((block) => (
                   <FeedBlock key={block.id} block={block} world={world} structures={structures} references={references} locale={locale} disabled={isDirectorThinking} onChoose={chooseInput} />
                 ))}
-                {item.status === 'streaming' && <p className="streaming"><Bot size={12} />{locale === 'zh-CN' ? '场景正在演绎……' : 'The scene is unfolding…'}</p>}
+                {item.streamPreview && (
+                  <p className={`world-story-stream-preview ${item.streamPreview.type}`}>
+                    {item.streamPreview.type === 'dialogue' && item.streamPreview.speakerId && (
+                      <strong>{world.entities.find((entity) => entity.id === item.streamPreview?.speakerId)?.name ?? item.streamPreview.speakerId}</strong>
+                    )}
+                    <span>{item.streamPreview.text}</span><i aria-hidden="true" />
+                  </p>
+                )}
+                {item.status === 'streaming' && (
+                  <p className="streaming">
+                    <Bot size={12} />
+                    {isLlmTesting
+                      ? (locale === 'zh-CN' ? '首次使用，正在测试 LLM 连接……' : 'First use: testing the LLM connection…')
+                      : (locale === 'zh-CN' ? '场景正在演绎……' : 'The scene is unfolding…')}
+                  </p>
+                )}
                 {item.error && <p className="error">{item.error}</p>}
               </article>
             ))}
@@ -379,7 +512,7 @@ export const WorldStoryDock = ({
                   rows={2}
                   maxLength={800}
                   value={input}
-                  disabled={isDirectorThinking}
+                  disabled={isDirectorThinking || isLlmTesting}
                   placeholder={locale === 'zh-CN' ? '让角色行动、交谈，或改变故事走向……' : 'Let characters act, speak, or change the story…'}
                   onChange={(event) => setInput(event.target.value)}
                   onKeyDown={(event) => {
@@ -390,7 +523,9 @@ export const WorldStoryDock = ({
                 />
                 {isDirectorThinking
                   ? <button type="button" className="stop" onClick={onStopDirector}><Square size={14} />{locale === 'zh-CN' ? '停止' : 'Stop'}</button>
-                  : <button type="submit" disabled={!input.trim()}><Send size={14} />{locale === 'zh-CN' ? '发送' : 'Send'}</button>}
+                  : <button type="submit" disabled={!input.trim() || isLlmTesting}><Send size={14} />{isLlmTesting
+                      ? (locale === 'zh-CN' ? '测试中' : 'Testing')
+                      : (locale === 'zh-CN' ? '发送' : 'Send')}</button>}
               </form>
             ) : (
               <p className="world-story-config-hint">{locale === 'zh-CN' ? '配置 LLM 后可用自然语言推进剧情；剧情灵感仍可使用本地规则。' : 'Configure an LLM for freeform direction; local story prompts remain available.'}</p>

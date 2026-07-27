@@ -318,6 +318,39 @@ button.status-pill:hover {
   cursor: ns-resize;
 }
 
+.world-story-resize-handle.left,
+.world-story-resize-handle.right {
+  top: 16px;
+  bottom: 16px;
+  width: 10px;
+  cursor: ew-resize;
+}
+
+.world-story-resize-handle.left { left: 0; }
+.world-story-resize-handle.right { right: 0; }
+
+.world-story-resize-handle.left::after,
+.world-story-resize-handle.right::after {
+  position: absolute;
+  top: 50%;
+  width: 3px;
+  height: 30px;
+  border-radius: 999px;
+  background: rgba(120, 83, 41, 0.22);
+  content: "";
+  transform: translateY(-50%);
+  transition: background 120ms ease, height 120ms ease;
+}
+
+.world-story-resize-handle.left::after { left: 3px; }
+.world-story-resize-handle.right::after { right: 3px; }
+
+.world-story-resize-handle.left:hover::after,
+.world-story-resize-handle.right:hover::after {
+  height: 42px;
+  background: rgba(120, 83, 41, 0.48);
+}
+
 .world-story-dock:not(.collapsed)::after {
   position: absolute;
   top: 3px;
@@ -498,6 +531,75 @@ button.status-pill:hover {
 }
 
 .narrative-passage p.player strong { margin-right: 7px; }
+
+.world-story-reasoning {
+  flex-basis: 100%;
+  overflow: hidden;
+  border: 1px solid #dbe4f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.world-story-reasoning > summary {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+  list-style: none;
+}
+
+.world-story-reasoning > summary::-webkit-details-marker { display: none; }
+
+.world-story-reasoning[open] > summary {
+  border-bottom: 1px solid #e2e8f0;
+  color: #475569;
+}
+
+.world-story-reasoning > div {
+  max-height: 150px;
+  overflow-y: auto;
+  padding: 7px 9px;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 9px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.narrative-passage p.world-story-stream-preview {
+  flex-basis: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  color: #493a2a;
+}
+
+.narrative-passage p.world-story-stream-preview.dialogue {
+  padding-left: 1em;
+}
+
+.world-story-stream-preview strong {
+  color: #8a4b16;
+  white-space: nowrap;
+}
+
+.world-story-stream-preview i {
+  width: 2px;
+  height: 1em;
+  display: inline-block;
+  flex: none;
+  background: #b7791f;
+  animation: story-stream-caret 850ms steps(2, jump-none) infinite;
+}
+
+@keyframes story-stream-caret {
+  50% { opacity: 0; }
+}
+
 .narrative-passage p.stage-direction {
   flex-basis: 100%;
   color: #65715f;
