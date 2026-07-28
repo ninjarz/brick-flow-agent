@@ -18,18 +18,28 @@ const makeWorld = () => {
 describe('world AI adapter', () => {
   it('builds a readonly ID-addressable snapshot and prompt', () => {
     const world = makeWorld()
+    world.narrative.stories = [{
+      id: 'intro',
+      title: 'Opening',
+      body: 'A stranger waits outside.',
+      createdAtSeconds: 1,
+      eventIds: [],
+      source: 'local',
+    }]
     const snapshot = createWorldAiSnapshot(world, [{
       id: 'brick-1', brickId: 'lego-brick-2x2', color: 'gray',
       pose: { xStud: 4, yStud: 0, zStud: 2, rotationQuarterTurns: 0 },
     }], [{ id: 'tower-1', name: 'Tower', description: 'A tower', brickIds: ['brick-1'] }])
     expect(snapshot.entities[0]).toMatchObject({
       id: 'ai-knight',
+      description: expect.any(String),
       role: 'melee',
       position: { x: 2, y: 0, z: 0 },
       combat: { attackRangeStuds: 1.5, damage: 12, windupSeconds: 0.55 },
       nearbyHostileIds: ['rule-knight'],
     })
     expect(snapshot.structures[0]).toMatchObject({ id: 'tower-1', brickCount: 1, position: { x: 4, y: 0, z: 2 } })
+    expect(snapshot.recentNarratives).toEqual([{ title: 'Opening', text: 'A stranger waits outside.' }])
     expect(buildWorldAiTurnPrompt(snapshot)).toContain('Never return coordinates')
   })
 

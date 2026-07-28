@@ -20,6 +20,7 @@ export type WorldAiSnapshot = {
   entities: Array<{
     id: string
     name: string
+    description: string
     definitionId: string
     factionId: string
     controller: 'rule' | 'player' | 'ai'
@@ -54,6 +55,10 @@ export type WorldAiSnapshot = {
     description: string
     brickCount: number
     position?: { x: number; y: number; z: number }
+  }>
+  recentNarratives: Array<{
+    title: string
+    text: string
   }>
   recentEvents: Array<{
     type: string
@@ -129,6 +134,7 @@ export const createWorldAiSnapshot = (
   const visibleStructures = structures.filter((structure) => !hiddenStructureIds.has(structure.id))
   const selectedBricks = selectRelevantBricks({ ...world, entities: visibleEntities }, visibleBricks)
   const bricksById = new Map(visibleBricks.map((brick) => [brick.id, brick]))
+  const visibleEntityNameById = new Map(visibleEntities.map((entity) => [entity.id, entity.name]))
   return {
   worldId: world.id,
   elapsedSeconds: Number(world.elapsedSeconds.toFixed(2)),
@@ -146,6 +152,7 @@ export const createWorldAiSnapshot = (
     return ({
     id: entity.id,
     name: entity.name,
+    description: entity.description,
     definitionId: entity.definitionId,
     factionId: entity.factionId,
     controller: entity.controller,
@@ -209,6 +216,17 @@ export const createWorldAiSnapshot = (
       } : undefined,
     }
   }),
+  recentNarratives: world.narrative.stories.slice(-4).map((story) => ({
+    title: story.title,
+    text: (
+      story.blocks?.map((block) => (
+        block.type === 'dialogue'
+          ? `${visibleEntityNameById.get(block.speakerId) ?? block.speakerId}: ${block.text}`
+          : block.text
+      )).join('\n')
+      || story.body
+    ).trim().slice(0, 1_200),
+  })).filter((story) => Boolean(story.text)),
   recentEvents: world.events.slice(-16).map((event) => ({
     type: event.type,
     actorId: event.actorId,

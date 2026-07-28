@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { createEmptyWorldState, createWorldEntity } from './worldEntity'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
-import { applyTavernDirectorEvent, createTavernDirectorStreamParser, parseTavernDirectorEvent, parseTavernDirectorStreamPreview } from './worldTavernDirector'
+import { applyTavernDirectorEvent, buildTavernDirectorPrompt, createTavernDirectorStreamParser, parseTavernDirectorEvent, parseTavernDirectorStreamPreview } from './worldTavernDirector'
 import { stepWorldSimulation } from './worldSimulation'
+import { createWorldAiSnapshot } from './worldAi'
 
 describe('tavern director protocol', () => {
   it('parses complete NDJSON events across arbitrary chunks', () => {
@@ -73,6 +74,36 @@ describe('tavern director protocol', () => {
       speakerId: 'eileen',
       text: '北路有异动。',
     })
+  })
+
+  it('gives the director entity descriptions for resolving indirect references', () => {
+    const definition = worldEntityDefinitionById.get('knight')!
+    const world = {
+      ...createEmptyWorldState('plan'),
+      entities: [
+        createWorldEntity(definition, {
+          id: 'roland',
+          name: '罗兰',
+          controller: 'player',
+          description: '守护酒馆的骑士。',
+        }),
+        createWorldEntity(definition, {
+          id: 'envoy',
+          name: '黑岩使者',
+          description: '在酒馆外徘徊的陌生武士。',
+        }),
+      ],
+    }
+    const prompt = buildTavernDirectorPrompt(
+      createWorldAiSnapshot(world, []),
+      '和陌生人说说看',
+      [],
+      'zh-CN',
+      { id: 'roland', name: '罗兰' },
+    )
+
+    expect(prompt).toContain('"id":"envoy","name":"黑岩使者","description":"在酒馆外徘徊的陌生武士。"')
+    expect(prompt).toContain('Prefer the entity whose description explicitly matches the wording')
   })
 
   it('turns matching story dialogue into one directed scenario conversation fact', () => {

@@ -169,6 +169,13 @@ ${JSON.stringify(playerText)}
 Player identity:
 ${JSON.stringify(protagonist ?? snapshot.entities.find((entity) => entity.controller === 'player') ?? null)}
 
+Entity reference glossary:
+${JSON.stringify(snapshot.entities.map((entity) => ({
+  id: entity.id,
+  name: entity.name,
+  description: entity.description,
+})))}
+
 World snapshot:
 ${JSON.stringify(snapshot)}
 
@@ -188,6 +195,7 @@ Emit 2 to 10 of these NDJSON events:
 Rules:
 - Write all visible text in ${locale === 'zh-CN' ? 'Simplified Chinese' : 'English'}.
 - The player-controlled protagonist is the player's identity in the story. Address them by name, not as an unknown "you".
+- Resolve indirect references such as "the stranger", roles, titles, and pronouns from the entity reference glossary and recentNarratives. Prefer the entity whose description explicitly matches the wording; never substitute a merely nearby entity.
 - Every dialogue event must identify who is listening. A dialogue is itself a completed conversation fact; do not also emit an interact command for the same exchange.
 - Dialogue should come before a command that interrupts the speaker.
 - Commands start actions; never claim that movement, attacks, revival, or interaction already succeeded.

@@ -44,7 +44,7 @@ import { buildWorldScenarioAiPrompt, parseWorldScenarioAiResolution, worldScenar
 import { advanceWorldScenarios, getActiveWorldScenarioStages, resolveWorldScenarioAi } from './lib/worldScenarioRuntime'
 import { clearWorkspaceDraft, hasIndexedDbWorkspaceDraft, loadWorkspaceDraft, loadWorkspaceDraftFromIndexedDb, saveWorkspaceDraft } from './lib/workspaceDraft'
 import type { BrickStructure, BuildPlan, FinishedAsset, LlmConfig, PlacedBrick } from './types/bricks'
-import type { WorldDirectorMemory, WorldDirectorTurn, WorldEntity, WorldEntityCommand, WorldEntityControllerKind, WorldState } from './types/world'
+import type { WorldDirectorTurn, WorldEntity, WorldEntityCommand, WorldEntityControllerKind, WorldState } from './types/world'
 import './App.css'
 
 const BrickScene = lazy(() => import('./components/BrickScene').then((module) => ({ default: module.BrickScene })))
@@ -212,7 +212,6 @@ function App() {
   const [isWorldRosterOpen, setIsWorldRosterOpen] = useState(false)
   const [isTavernAiThinking, setIsTavernAiThinking] = useState(false)
   const [isTavernDirectorThinking, setIsTavernDirectorThinking] = useState(false)
-  const [isTavernDirectorCompacting, setIsTavernDirectorCompacting] = useState(false)
   const tavernAiAbortRef = useRef<AbortController>()
   const tavernDirectorAbortRef = useRef<AbortController>()
   const worldScenarioAiAbortRef = useRef<AbortController>()
@@ -1638,13 +1637,9 @@ function App() {
 
   const compactTavernDirectorHistory = useCallback(async ({
     currentRequest = '',
-    force = false,
-    commit = true,
     signal,
   }: {
     currentRequest?: string
-    force?: boolean
-    commit?: boolean
     signal?: AbortSignal
   } = {}) => {
     const contextWorld = worldRef.current
@@ -1653,7 +1648,6 @@ function App() {
       memory: contextWorld.narrative.directorMemory,
       turns: contextWorld.narrative.directorTurns,
       currentRequest,
-      force,
     })
     if (!compactionPlan?.candidateTurns.length) return { compactedTurns: 0, triggered: false }
     let summary = ''
@@ -1695,69 +1689,17 @@ function App() {
       compactedTurnCount: compactionPlan.candidateTurns.length,
       updatedAtSeconds: latestWorld.elapsedSeconds,
     })
-    if (commit) {
-      const compactedWorld = {
-        ...latestWorld,
-        narrative: {
-          ...latestWorld.narrative,
-          directorMemory: memory,
-        },
-      }
-      worldRef.current = compactedWorld
-      setWorld(compactedWorld)
-    }
-    return { compactedTurns: compactionPlan.candidateTurns.length, triggered: true, memory }
-  }, [llmConfig, llmConfigComplete, locale])
-
-  const manuallyCompactTavernDirectorHistory = useCallback(async () => {
-    if (isTavernDirectorThinking || isTavernDirectorCompacting) return { compactedTurns: 0, triggered: false }
-    setIsTavernDirectorCompacting(true)
-    try {
-      return await compactTavernDirectorHistory({ force: true, commit: false })
-    } finally {
-      setIsTavernDirectorCompacting(false)
-    }
-  }, [compactTavernDirectorHistory, isTavernDirectorCompacting, isTavernDirectorThinking])
-
-  const applyTavernDirectorMemoryPreview = useCallback((memory: WorldDirectorMemory) => {
-    const current = worldRef.current
-    const checkpointExists = current.narrative.directorTurns.some((turn) => turn.id === memory.throughTurnId)
-    if (!checkpointExists || memory.sourceTurnCount > current.narrative.directorTurns.length) return false
-    const next = {
-      ...current,
+    const compactedWorld = {
+      ...latestWorld,
       narrative: {
-        ...current.narrative,
+        ...latestWorld.narrative,
         directorMemory: memory,
       },
     }
-    worldRef.current = next
-    setWorld(next)
-    return true
-  }, [])
-
-  const updateTavernDirectorMemory = useCallback((summary: string, lockedFacts: string[]) => {
-    const cleanSummary = summary.trim().slice(0, 4_000)
-    const cleanFacts = Array.from(new Set(
-      lockedFacts.map((fact) => fact.trim().slice(0, 300)).filter(Boolean),
-    )).slice(0, 30)
-    const current = worldRef.current
-    const previousMemory = current.narrative.directorMemory
-    const next = {
-      ...current,
-      narrative: {
-        ...current.narrative,
-        directorMemory: {
-          summary: cleanSummary,
-          ...(cleanFacts.length ? { lockedFacts: cleanFacts } : {}),
-          throughTurnId: previousMemory?.throughTurnId ?? '',
-          sourceTurnCount: previousMemory?.sourceTurnCount ?? 0,
-          updatedAtSeconds: current.elapsedSeconds,
-        },
-      },
-    }
-    worldRef.current = next
-    setWorld(next)
-  }, [])
+    worldRef.current = compactedWorld
+    setWorld(compactedWorld)
+    return { compactedTurns: compactionPlan.candidateTurns.length, triggered: true, memory }
+  }, [llmConfig, llmConfigComplete, locale])
 
   const runTavernDirectorTurn = useCallback(async (
     playerText: string,
@@ -2768,7 +2710,6 @@ function App() {
                 llmConfigured={llmConfigComplete}
                 isLlmTesting={isTestingLlmConfig}
                 isDirectorThinking={isTavernDirectorThinking}
-                isDirectorCompacting={isTavernDirectorCompacting}
                 isAiActivityThinking={isTavernAiThinking}
                 onGenerateStory={() => generateTavernStory()}
                 onPlayActivity={runTavernActivity}
@@ -2776,9 +2717,6 @@ function App() {
                 onDirectWorld={runTavernDirectorTurn}
                 onStopDirector={stopTavernDirector}
                 onCommitDirectorTurn={commitTavernDirectorTurn}
-                onCompactDirectorMemory={manuallyCompactTavernDirectorHistory}
-                onApplyDirectorMemory={applyTavernDirectorMemoryPreview}
-                onUpdateDirectorMemory={updateTavernDirectorMemory}
                 onSelectEntity={selectWorldEntity}
                 onClose={() => setIsWorldStoryDockOpen(false)}
               />
