@@ -159,6 +159,17 @@ export type WorldDirectorTurn = {
   reasoning?: string
   requestMessage?: string
   responseMessage?: string
+  contextStats?: {
+    messageCount: number
+    estimatedInputTokens: number
+    rawTurnCount: number
+    memoryTurnCount: number
+    compactionTriggered?: boolean
+    inputTokens?: number
+    outputTokens?: number
+    cachedTokens?: number
+    totalTokens?: number
+  }
   createdAtSeconds: number
   status: 'completed' | 'stopped' | 'failed'
   error?: string

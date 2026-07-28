@@ -86,7 +86,7 @@ describe('LLM thinking parameter compatibility', () => {
     const content: string[] = []
     const reasoning: string[] = []
 
-    await requestLlmTextStream({
+    const result = await requestLlmTextStream({
       config,
       systemPrompt: 'Direct the scene.',
       userPrompt: 'Continue.',
@@ -96,6 +96,63 @@ describe('LLM thinking parameter compatibility', () => {
 
     expect(reasoning).toEqual(['先观察环境。'])
     expect(content).toEqual(['{"type":"narration","text":"门外传来脚步声。"}\n'])
+    expect(result.content).toBe('{"type":"narration","text":"门外传来脚步声。"}\n')
+  })
+
+  it('collects cached-token usage from the final stream event', async () => {
+    const response = [
+      'data: {"choices":[{"delta":{"content":"ok"}}]}',
+      '',
+      'data: {"choices":[],"usage":{"prompt_tokens":1200,"completion_tokens":30,"total_tokens":1230,"prompt_tokens_details":{"cached_tokens":896}}}',
+      '',
+      'data: [DONE]',
+      '',
+    ].join('\n')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(response, {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    })))
+
+    const result = await requestLlmTextStream({
+      config,
+      systemPrompt: 'Direct.',
+      userPrompt: 'Continue.',
+      onDelta: () => undefined,
+    })
+
+    expect(result.usage).toEqual({
+      inputTokens: 1200,
+      outputTokens: 30,
+      cachedTokens: 896,
+      totalTokens: 1230,
+    })
+  })
+
+  it('retries and remembers when stream usage options are unsupported', async () => {
+    const unsupported = new Response(JSON.stringify({
+      error: { message: 'Unsupported parameter: stream_options' },
+    }), { status: 400 })
+    const streamed = () => new Response([
+      'data: {"choices":[{"delta":{"content":"ok"}}]}',
+      '',
+      'data: [DONE]',
+      '',
+    ].join('\n'), {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    })
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(unsupported)
+      .mockImplementation(() => Promise.resolve(streamed()))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await requestLlmTextStream({ config, systemPrompt: 'Direct.', userPrompt: 'One.', onDelta: () => undefined })
+    await requestLlmTextStream({ config, systemPrompt: 'Direct.', userPrompt: 'Two.', onDelta: () => undefined })
+
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(payloadAt(fetchMock, 0)).toHaveProperty('stream_options')
+    expect(payloadAt(fetchMock, 1)).not.toHaveProperty('stream_options')
+    expect(payloadAt(fetchMock, 2)).not.toHaveProperty('stream_options')
   })
 
   it('sends an explicit multi-turn message sequence unchanged', async () => {

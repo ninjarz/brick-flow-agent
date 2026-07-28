@@ -441,6 +441,26 @@ const parseStoredDirectorTurns = (value: unknown): WorldState['narrative']['dire
     if (!isRecord(turn) || typeof turn.id !== 'string' || !isFiniteNumber(turn.createdAtSeconds)) return []
     const playerText = cleanStoredText(turn.playerText, 800)
     if (!playerText || !['completed', 'stopped', 'failed'].includes(String(turn.status))) return []
+    const storedContextStats = isRecord(turn.contextStats) ? turn.contextStats : undefined
+    const contextStats = storedContextStats
+      && isFiniteNumber(storedContextStats.messageCount)
+      && isFiniteNumber(storedContextStats.estimatedInputTokens)
+      && isFiniteNumber(storedContextStats.rawTurnCount)
+      && isFiniteNumber(storedContextStats.memoryTurnCount)
+      ? {
+          messageCount: Math.max(0, Math.floor(storedContextStats.messageCount)),
+          estimatedInputTokens: Math.max(0, Math.floor(storedContextStats.estimatedInputTokens)),
+          rawTurnCount: Math.max(0, Math.floor(storedContextStats.rawTurnCount)),
+          memoryTurnCount: Math.max(0, Math.floor(storedContextStats.memoryTurnCount)),
+          ...(typeof storedContextStats.compactionTriggered === 'boolean'
+            ? { compactionTriggered: storedContextStats.compactionTriggered }
+            : {}),
+          ...(isFiniteNumber(storedContextStats.inputTokens) ? { inputTokens: Math.max(0, Math.floor(storedContextStats.inputTokens)) } : {}),
+          ...(isFiniteNumber(storedContextStats.outputTokens) ? { outputTokens: Math.max(0, Math.floor(storedContextStats.outputTokens)) } : {}),
+          ...(isFiniteNumber(storedContextStats.cachedTokens) ? { cachedTokens: Math.max(0, Math.floor(storedContextStats.cachedTokens)) } : {}),
+          ...(isFiniteNumber(storedContextStats.totalTokens) ? { totalTokens: Math.max(0, Math.floor(storedContextStats.totalTokens)) } : {}),
+        }
+      : undefined
     return [{
       id: turn.id.slice(0, 180),
       playerText,
@@ -455,6 +475,7 @@ const parseStoredDirectorTurns = (value: unknown): WorldState['narrative']['dire
       ...(typeof turn.reasoning === 'string' ? { reasoning: turn.reasoning.slice(0, 20_000) } : {}),
       ...(typeof turn.requestMessage === 'string' ? { requestMessage: turn.requestMessage.slice(0, 60_000) } : {}),
       ...(typeof turn.responseMessage === 'string' ? { responseMessage: turn.responseMessage.slice(0, 30_000) } : {}),
+      ...(contextStats ? { contextStats } : {}),
       ...(typeof turn.error === 'string' ? { error: turn.error.slice(0, 300) } : {}),
     }]
   }).slice(-100) : []

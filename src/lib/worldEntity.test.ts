@@ -363,6 +363,15 @@ describe('WorldEntity foundation', () => {
           playerText: '让罗兰停下来。',
           createdAtSeconds: 12,
           status: 'completed',
+          contextStats: {
+            messageCount: 6,
+            estimatedInputTokens: 1400,
+            rawTurnCount: 2,
+            memoryTurnCount: 4,
+            inputTokens: 1320,
+            outputTokens: 120,
+            cachedTokens: 896,
+          },
           entries: [
             { id: 'entry-1', type: 'dialogue', speakerId: entity.id, text: '先等等。', status: 'accepted' },
             { id: 'entry-2', type: 'command', entityId: entity.id, command: { type: 'stop' }, status: 'accepted' },
@@ -376,6 +385,15 @@ describe('WorldEntity foundation', () => {
       playerText: '让罗兰停下来。',
       createdAtSeconds: 12,
       status: 'completed',
+      contextStats: {
+        messageCount: 6,
+        estimatedInputTokens: 1400,
+        rawTurnCount: 2,
+        memoryTurnCount: 4,
+        inputTokens: 1320,
+        outputTokens: 120,
+        cachedTokens: 896,
+      },
       entries: [
         { id: 'entry-1', type: 'dialogue', speakerId: entity.id, text: '先等等。', status: 'accepted' },
         { id: 'entry-2', type: 'command', entityId: entity.id, command: { type: 'stop' }, status: 'accepted' },

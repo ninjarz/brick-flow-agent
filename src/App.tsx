@@ -29,7 +29,7 @@ import { isWorldEntityGroundPointBlockedByBricks, stepWorldSimulation, worldSimu
 import { findNearestAvailableWorldEntityPoint } from './lib/worldEntityCollision'
 import { advanceWorldFixedStepClock, createWorldFixedStepClock } from './lib/worldClock'
 import { getWorldDirectorPlaybackEntityIds, isWorldDirectorPlaybackSettled } from './lib/worldDirectorPlayback'
-import { buildDirectorCompactionPrompt, buildDirectorMessages, createFallbackDirectorSummary, parseDirectorCompactionSummary, planDirectorCompaction } from './lib/worldDirectorContext'
+import { buildDirectorCompactionPrompt, buildDirectorMessages, createFallbackDirectorSummary, estimateDirectorMessagesTokens, getDirectorTurnsAfterMemory, parseDirectorCompactionSummary, planDirectorCompaction } from './lib/worldDirectorContext'
 import { addWorldStory, createLocalTavernStory } from './lib/worldNarrative'
 import { playTavernActivity, type TavernActivityKind } from './lib/worldTavernActivities'
 import { applyTavernAiResponse, requestTavernAiActivity } from './lib/worldTavernAi'
@@ -1645,6 +1645,7 @@ function App() {
     let eventCount = 0
     let requestMessage = ''
     let responseMessage = ''
+    let contextStats: WorldDirectorTurn['contextStats']
     const playbackEntityIds = new Set<string>()
     const parser = createTavernDirectorStreamParser(
       (event) => {
@@ -1774,14 +1775,15 @@ function App() {
         protagonist ? { id: protagonist.id, name: protagonist.name } : undefined,
       )
       requestMessage = prospectiveRequest
-      responseMessage = await requestLlmTextStream({
+      const directorMessages = buildDirectorMessages({
+        systemPrompt: tavernDirectorSystemPrompt,
+        memory: contextWorld.narrative.directorMemory,
+        turns: contextWorld.narrative.directorTurns,
+        currentRequest: requestMessage,
+      })
+      const streamResult = await requestLlmTextStream({
         config: llmConfig,
-        messages: buildDirectorMessages({
-          systemPrompt: tavernDirectorSystemPrompt,
-          memory: contextWorld.narrative.directorMemory,
-          turns: contextWorld.narrative.directorTurns,
-          currentRequest: requestMessage,
-        }),
+        messages: directorMessages,
         locale,
         signal: controller.signal,
         temperature: 0.65,
@@ -1789,6 +1791,18 @@ function App() {
         onDelta: (delta) => parser.push(delta),
         onReasoningDelta: (reasoningDelta) => onProgress({ reasoningDelta }),
       })
+      responseMessage = streamResult.content
+      contextStats = {
+        messageCount: directorMessages.length,
+        estimatedInputTokens: estimateDirectorMessagesTokens(directorMessages),
+        rawTurnCount: getDirectorTurnsAfterMemory(
+          contextWorld.narrative.directorTurns,
+          contextWorld.narrative.directorMemory,
+        ).length,
+        memoryTurnCount: contextWorld.narrative.directorMemory?.sourceTurnCount ?? 0,
+        ...(compactionPlan ? { compactionTriggered: true } : {}),
+        ...streamResult.usage,
+      }
       parser.finish()
       if (eventCount === 0) {
         throw new Error(locale === 'zh-CN' ? 'AI 没有返回可执行的剧情事件。' : 'The AI returned no usable story events.')
@@ -1802,7 +1816,7 @@ function App() {
       ) {
         await new Promise((resolve) => window.setTimeout(resolve, 100))
       }
-      return { requestMessage, responseMessage }
+      return { requestMessage, responseMessage, contextStats }
     } finally {
       if (tavernDirectorAbortRef.current === controller) {
         tavernDirectorAbortRef.current = undefined

@@ -466,6 +466,36 @@ button.status-pill:hover {
   content: "◆";
 }
 
+.world-story-context-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: -1px 0 4px;
+  color: #64748b;
+  font-size: 9px;
+}
+
+.world-story-context-status span,
+.world-story-context-status strong {
+  padding: 2px 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: rgba(248, 250, 252, 0.92);
+  font-weight: 600;
+}
+
+.world-story-context-status .cache-hit {
+  border-color: #bbf7d0;
+  color: #15803d;
+  background: #f0fdf4;
+}
+
+.world-story-context-status strong {
+  border-color: #c4b5fd;
+  color: #6d28d9;
+  background: #f5f3ff;
+}
+
 .narrative-reference {
   display: inline;
   padding: 0;

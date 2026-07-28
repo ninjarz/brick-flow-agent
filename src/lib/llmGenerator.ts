@@ -42,6 +42,16 @@ export type LlmChatMessage = {
   role: 'system' | 'user' | 'assistant'
   content: string
 }
+export type LlmTokenUsage = {
+  inputTokens?: number
+  outputTokens?: number
+  cachedTokens?: number
+  totalTokens?: number
+}
+export type LlmStreamResult = {
+  content: string
+  usage?: LlmTokenUsage
+}
 
 export type LlmJsonRequestInput = {
   config: LlmConfig
@@ -69,9 +79,11 @@ const generationThinkingMaxTokens = 128_000
 export const maxLlmBricks = 64
 
 let omitUnsupportedThinkingParameters = false
+let omitUnsupportedStreamOptions = false
 
 export const resetLlmThinkingCompatibility = () => {
   omitUnsupportedThinkingParameters = false
+  omitUnsupportedStreamOptions = false
 }
 
 const llmText: Record<LlmLocale, {
@@ -359,6 +371,42 @@ const extractReasoningContent = (payload: unknown) => {
     : ''
 }
 
+const readUsageNumber = (...values: unknown[]) => {
+  const value = values.find((candidate) => typeof candidate === 'number' && Number.isFinite(candidate))
+  return typeof value === 'number' ? Math.max(0, Math.round(value)) : undefined
+}
+
+const extractLlmTokenUsage = (payload: unknown): LlmTokenUsage | undefined => {
+  if (!isRecord(payload)) return undefined
+  const usage = isRecord(payload.usage)
+    ? payload.usage
+    : isRecord(payload.usage_metadata)
+      ? payload.usage_metadata
+      : undefined
+  if (!usage) return undefined
+  const promptDetails = isRecord(usage.prompt_tokens_details) ? usage.prompt_tokens_details : undefined
+  const inputDetails = isRecord(usage.input_tokens_details) ? usage.input_tokens_details : undefined
+  const inputTokens = readUsageNumber(usage.prompt_tokens, usage.input_tokens, usage.promptTokenCount)
+  const outputTokens = readUsageNumber(usage.completion_tokens, usage.output_tokens, usage.candidatesTokenCount)
+  const cachedTokens = readUsageNumber(
+    promptDetails?.cached_tokens,
+    inputDetails?.cached_tokens,
+    usage.cached_tokens,
+    usage.total_cached_tokens,
+    usage.cache_read_input_tokens,
+    usage.cachedContentTokenCount,
+  )
+  const totalTokens = readUsageNumber(usage.total_tokens, usage.totalTokenCount)
+  return inputTokens !== undefined || outputTokens !== undefined || cachedTokens !== undefined || totalTokens !== undefined
+    ? {
+        ...(inputTokens !== undefined ? { inputTokens } : {}),
+        ...(outputTokens !== undefined ? { outputTokens } : {}),
+        ...(cachedTokens !== undefined ? { cachedTokens } : {}),
+        ...(totalTokens !== undefined ? { totalTokens } : {}),
+      }
+    : undefined
+}
+
 const hasReasoningOnlyLengthFinish = (payload: unknown) => {
   if (!isRecord(payload) || !Array.isArray(payload.choices)) return false
 
@@ -449,10 +497,10 @@ const withoutThinkingParameters = (payload: LlmRequestPayload): LlmRequestPayloa
   return compatiblePayload
 }
 
-const hasThinkingParameterError = async (response: Response) => {
-  if (response.ok) return false
-  const detail = (await response.clone().text()).toLowerCase()
-  return detail.includes('thinking') || detail.includes('enable_thinking')
+const withoutStreamOptions = (payload: LlmRequestPayload): LlmRequestPayload => {
+  const compatiblePayload = { ...payload }
+  delete compatiblePayload.stream_options
+  return compatiblePayload
 }
 
 const requestLlmChatWithCompatibility = async (
@@ -460,12 +508,26 @@ const requestLlmChatWithCompatibility = async (
   payload: LlmRequestPayload,
   signal: AbortSignal,
 ) => {
-  const effectivePayload = omitUnsupportedThinkingParameters ? withoutThinkingParameters(payload) : payload
-  const response = await requestLlmChat(config, effectivePayload, signal)
-  if (omitUnsupportedThinkingParameters || !await hasThinkingParameterError(response)) return response
-
-  omitUnsupportedThinkingParameters = true
-  return requestLlmChat(config, withoutThinkingParameters(payload), signal)
+  const compatiblePayload = () => {
+    let next = payload
+    if (omitUnsupportedThinkingParameters) next = withoutThinkingParameters(next)
+    if (omitUnsupportedStreamOptions) next = withoutStreamOptions(next)
+    return next
+  }
+  let response = await requestLlmChat(config, compatiblePayload(), signal)
+  if (response.ok) return response
+  let detail = (await response.clone().text()).toLowerCase()
+  if (!omitUnsupportedThinkingParameters && (detail.includes('thinking') || detail.includes('enable_thinking'))) {
+    omitUnsupportedThinkingParameters = true
+    response = await requestLlmChat(config, compatiblePayload(), signal)
+    if (response.ok) return response
+    detail = (await response.clone().text()).toLowerCase()
+  }
+  if (!omitUnsupportedStreamOptions && detail.includes('stream_options')) {
+    omitUnsupportedStreamOptions = true
+    return requestLlmChat(config, compatiblePayload(), signal)
+  }
+  return response
 }
 
 const formatFetchError = (error: unknown, requestMode: LlmConfig['requestMode'], locale: LlmLocale) => {
@@ -688,16 +750,18 @@ const readLlmEventStream = async (
   onDelta: (text: string) => void,
   onReasoningDelta?: (text: string) => void,
 ) => {
-  if (!response.body) return ''
+  if (!response.body) return { content: '' } satisfies LlmStreamResult
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let transportBuffer = ''
   let content = ''
+  let usage: LlmTokenUsage | undefined
   const emitPayload = (payloadText: string) => {
     const trimmed = payloadText.trim()
     if (!trimmed || trimmed === '[DONE]') return
     try {
       const payload = JSON.parse(trimmed) as unknown
+      usage = extractLlmTokenUsage(payload) ?? usage
       const reasoningDelta = extractReasoningContent(payload)
       if (reasoningDelta) onReasoningDelta?.(reasoningDelta)
       const delta = extractMessageContent(payload)
@@ -730,7 +794,7 @@ const readLlmEventStream = async (
       : transportBuffer
     emitPayload(data)
   }
-  return content
+  return { content, ...(usage ? { usage } : {}) } satisfies LlmStreamResult
 }
 
 export const requestLlmTextStream = async ({
@@ -766,6 +830,7 @@ export const requestLlmTextStream = async ({
       temperature,
       max_tokens: maxTokens,
       stream: true,
+      stream_options: { include_usage: true },
     }, config.enableThinking), controller.signal)
     if (!response.ok) throw new Error(await formatRequestError(response, config.requestMode, locale))
     const contentType = response.headers.get('content-type')?.toLowerCase() ?? ''
@@ -776,11 +841,12 @@ export const requestLlmTextStream = async ({
       const content = extractMessageContent(payload)
       if (!content) throw new Error(formatEmptyContentError(payload, llmText[locale].responseContext, locale))
       onDelta(content)
-      return content
+      const usage = extractLlmTokenUsage(payload)
+      return { content, ...(usage ? { usage } : {}) } satisfies LlmStreamResult
     }
-    const content = await readLlmEventStream(response, onDelta, onReasoningDelta)
-    if (!content.trim()) throw new Error(llmText[locale].emptyGenerationResponse)
-    return content
+    const result = await readLlmEventStream(response, onDelta, onReasoningDelta)
+    if (!result.content.trim()) throw new Error(llmText[locale].emptyGenerationResponse)
+    return result
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       if (signal?.aborted) throw new Error(llmText[locale].generationCanceled)

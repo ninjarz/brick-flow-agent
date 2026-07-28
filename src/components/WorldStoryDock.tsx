@@ -30,7 +30,11 @@ type WorldStoryDockProps = {
     recentEntries: TavernDirectorEntry[],
     onEntry: (entry: TavernDirectorEntry) => void,
     onProgress: (progress: { reasoningDelta?: string; preview?: TavernDirectorStreamPreview }) => void,
-  ) => Promise<{ requestMessage: string; responseMessage: string }>
+  ) => Promise<{
+    requestMessage: string
+    responseMessage: string
+    contextStats?: WorldDirectorTurn['contextStats']
+  }>
   onStopDirector: () => void
   onCommitDirectorTurn: (turn: WorldDirectorTurn) => void
   onSelectEntity: (entityId: string) => void
@@ -238,6 +242,13 @@ export const WorldStoryDock = ({
         })),
     ].sort((a, b) => b.name.length - a.name.length)
   }, [locale, structures, world.entities, world.hiddenTargets])
+  const latestContextStats = useMemo(() => (
+    [...world.narrative.directorTurns].reverse().find((turn) => turn.contextStats)?.contextStats
+  ), [world.narrative.directorTurns])
+  const displayedInputTokens = latestContextStats?.inputTokens ?? latestContextStats?.estimatedInputTokens
+  const cachedPercent = latestContextStats?.cachedTokens !== undefined && latestContextStats.inputTokens
+    ? Math.round(latestContextStats.cachedTokens / latestContextStats.inputTokens * 100)
+    : undefined
   const feedVersion = feed.reduce((total, item) => total + item.blocks.length, 0)
   const streamVersion = activeTurn
     ? (activeTurn.reasoning?.length ?? 0) + (activeTurn.streamPreview?.text.length ?? 0)
@@ -354,6 +365,7 @@ export const WorldStoryDock = ({
     let streamPreview: TavernDirectorStreamPreview | undefined
     let requestMessage = ''
     let responseMessage = ''
+    let contextStats: WorldDirectorTurn['contextStats']
     let progressFrame = 0
     const flushProgress = () => {
       progressFrame = 0
@@ -390,6 +402,7 @@ export const WorldStoryDock = ({
       )
       requestMessage = result.requestMessage
       responseMessage = result.responseMessage
+      contextStats = result.contextStats
     } catch (error) {
       errorMessage = error instanceof Error ? error.message : (locale === 'zh-CN' ? '导演请求失败' : 'Director request failed')
       status = /取消|canceled/i.test(errorMessage) ? 'stopped' : 'failed'
@@ -402,6 +415,7 @@ export const WorldStoryDock = ({
         ...(reasoning.trim() ? { reasoning: reasoning.trim() } : {}),
         ...(requestMessage ? { requestMessage } : {}),
         ...(responseMessage ? { responseMessage } : {}),
+        ...(contextStats ? { contextStats } : {}),
         createdAtSeconds,
         status,
         ...(errorMessage ? { error: errorMessage } : {}),
@@ -473,6 +487,33 @@ export const WorldStoryDock = ({
                 {locale === 'zh-CN' ? '你将扮演 ' : 'You are '}
                 <AnnotatedText text={protagonist.name} references={references} onSelectEntity={onSelectEntity} />
                 {locale === 'zh-CN' ? `。${protagonist.description}` : `. ${protagonist.description}`}
+              </aside>
+            )}
+            {(latestContextStats || world.narrative.directorMemory) && (
+              <aside
+                className="world-story-context-status"
+                aria-label={locale === 'zh-CN' ? '剧情上下文状态' : 'Story context status'}
+                title={world.narrative.directorMemory?.summary}
+              >
+                {displayedInputTokens !== undefined && (
+                  <span>{latestContextStats?.inputTokens === undefined ? '~' : ''}{displayedInputTokens.toLocaleString(locale)} tok</span>
+                )}
+                {latestContextStats?.cachedTokens !== undefined && (
+                  <span className={latestContextStats.cachedTokens > 0 ? 'cache-hit' : ''}>
+                    {locale === 'zh-CN' ? '缓存' : 'Cache'} {latestContextStats.cachedTokens.toLocaleString(locale)}
+                    {cachedPercent !== undefined ? ` · ${cachedPercent}%` : ''}
+                  </span>
+                )}
+                {latestContextStats && (
+                  <span>{locale === 'zh-CN' ? '消息' : 'Messages'} {latestContextStats.messageCount}</span>
+                )}
+                <span>{locale === 'zh-CN' ? '原文' : 'Raw'} {latestContextStats?.rawTurnCount ?? world.narrative.directorTurns.length}</span>
+                {(latestContextStats?.memoryTurnCount || world.narrative.directorMemory?.sourceTurnCount) ? (
+                  <span>{locale === 'zh-CN' ? '摘要' : 'Memory'} {latestContextStats?.memoryTurnCount ?? world.narrative.directorMemory?.sourceTurnCount}</span>
+                ) : null}
+                {latestContextStats?.compactionTriggered && (
+                  <strong>{locale === 'zh-CN' ? '本轮已压缩' : 'Compacted this turn'}</strong>
+                )}
               </aside>
             )}
             {feed.map((item) => (
