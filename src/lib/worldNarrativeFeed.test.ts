@@ -194,4 +194,31 @@ describe('buildWorldNarrativeFeed', () => {
       streamPreview: { type: 'narration', text: 'The fire' },
     })
   })
+
+  it('replaces a failed persisted turn with its streaming retry', () => {
+    const world = makeWorld()
+    world.narrative.directorTurns = [{
+      id: 'retry-turn',
+      playerText: 'Speak to the stranger',
+      entries: [],
+      createdAtSeconds: 5,
+      status: 'failed',
+      error: 'Timed out',
+    }]
+
+    const feed = buildWorldNarrativeFeed(world, {
+      id: 'retry-turn',
+      playerText: 'Speak to the stranger',
+      entries: [],
+      createdAtSeconds: 5,
+      status: 'streaming',
+    })
+
+    expect(feed).toHaveLength(1)
+    expect(feed[0]).toMatchObject({
+      id: 'retry-turn',
+      status: 'streaming',
+      error: undefined,
+    })
+  })
 })

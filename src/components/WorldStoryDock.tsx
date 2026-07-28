@@ -411,11 +411,11 @@ export const WorldStoryDock = ({
     setMemoryPreview(undefined)
   }
 
-  const submit = async () => {
-    const playerText = input.trim()
+  const submit = async (retryTurn?: WorldDirectorTurn) => {
+    const playerText = (retryTurn?.playerText ?? input).trim()
     if (!playerText || isDirectorThinking || isScenarioDialoguePlaying || isLlmTesting || !llmConfigured) return
-    const id = `director-turn-${Date.now().toString(36)}`
-    const createdAtSeconds = world.elapsedSeconds
+    const id = retryTurn?.id ?? `director-turn-${Date.now().toString(36)}`
+    const createdAtSeconds = retryTurn?.createdAtSeconds ?? world.elapsedSeconds
     const entries: TavernDirectorEntry[] = []
     let reasoning = ''
     let streamPreview: TavernDirectorStreamPreview | undefined
@@ -438,7 +438,7 @@ export const WorldStoryDock = ({
       progressFrame = window.requestAnimationFrame(flushProgress)
     }
     shouldAutoScrollRef.current = true
-    setInput('')
+    if (!retryTurn) setInput('')
     setActiveTurn({ id, playerText, entries: [], createdAtSeconds, status: 'streaming' })
     let status: WorldDirectorTurn['status'] = 'completed'
     let errorMessage: string | undefined
@@ -694,7 +694,24 @@ export const WorldStoryDock = ({
                       : (locale === 'zh-CN' ? '场景正在演绎……' : 'The scene is unfolding…')}
                   </p>
                 )}
-                {item.error && <p className="error">{item.error}</p>}
+                {item.error && (
+                  <div className="world-story-turn-error">
+                    <p className="error">{item.error}</p>
+                    {item.kind === 'director-turn' && item.status === 'failed' && (
+                      <button
+                        type="button"
+                        disabled={isDirectorThinking || isScenarioDialoguePlaying || isLlmTesting || !llmConfigured}
+                        onClick={() => {
+                          const retryTurn = world.narrative.directorTurns.find((turn) => turn.id === item.id)
+                          if (retryTurn) void submit(retryTurn)
+                        }}
+                      >
+                        <RefreshCw size={12} />
+                        {locale === 'zh-CN' ? '重试' : 'Retry'}
+                      </button>
+                    )}
+                  </div>
+                )}
               </article>
             ))}
             {feed.length === 0 && <p className="world-story-empty">{locale === 'zh-CN' ? '故事还没有开始。输入一句话，或从“剧情灵感”选择一个轻量事件。' : 'The story has not begun. Enter a direction or choose a story prompt.'}</p>}

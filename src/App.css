@@ -876,6 +876,37 @@ button.status-pill:hover {
 }
 .narrative-passage p.stage-direction.rejected,
 .narrative-passage p.error { color: #b42318; }
+.world-story-turn-error {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-basis: 100%;
+}
+.world-story-turn-error p {
+  margin: 0;
+}
+.world-story-turn-error button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 27px;
+  padding: 0 10px;
+  border: 1px solid #efb4ac;
+  border-radius: 8px;
+  background: #fff7f5;
+  color: #a12b21;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+.world-story-turn-error button:hover:not(:disabled) {
+  border-color: #db7467;
+  background: #ffede9;
+}
+.world-story-turn-error button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
 .narrative-passage p.summary { color: #6d28d9; font-family: inherit; }
 .narrative-passage p.streaming {
   display: inline-flex;

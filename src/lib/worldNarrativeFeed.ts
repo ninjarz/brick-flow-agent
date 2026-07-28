@@ -124,7 +124,9 @@ export const buildWorldNarrativeFeed = (
   const persistedStoryIds = new Set(world.narrative.stories.map((story) => story.id))
   const items = [
     ...world.narrative.stories.map(storyFeedItem),
-    ...world.narrative.directorTurns.map(directorFeedItem),
+    ...world.narrative.directorTurns
+      .filter((turn) => turn.id !== activeTurn?.id)
+      .map(directorFeedItem),
     ...(activeTurn ? [directorFeedItem(activeTurn)] : []),
     ...activeDialogueFeedItems(world, persistedStoryIds),
   ]
