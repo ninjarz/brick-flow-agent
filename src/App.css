@@ -399,6 +399,21 @@ button.status-pill:hover {
   font-weight: 700;
 }
 
+.world-story-debug-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 3px;
+  padding: 2px 5px;
+  border-radius: 999px;
+  color: #6d28d9;
+  background: #ede9fe;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+}
+
 .world-story-dock > header button {
   min-height: 28px;
   display: inline-flex;
@@ -464,6 +479,60 @@ button.status-pill:hover {
   margin-right: 5px;
   color: #2563eb;
   content: "◆";
+}
+
+.world-story-debug-context {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 5px;
+  padding: 7px 8px;
+  border: 1px dashed #c4b5fd;
+  border-radius: 8px;
+  color: #4c1d95;
+  background: rgba(245, 243, 255, 0.72);
+  font-size: 9px;
+}
+
+.world-story-debug-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.world-story-debug-stats span {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #fff;
+  color: #6d28d9;
+  font-weight: 750;
+}
+
+.world-story-debug-memory summary,
+.world-story-debug-turn summary {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.world-story-debug-memory p {
+  margin: 6px 0 0;
+  color: #475569;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.world-story-debug-memory ul {
+  margin: 6px 0;
+  padding-left: 18px;
+  color: #475569;
+}
+
+.world-story-debug-memory small {
+  display: block;
+  margin-top: 5px;
+  color: #7c6f8f;
 }
 
 .narrative-reference {
@@ -647,6 +716,62 @@ button.status-pill:hover {
 }
 .narrative-passage p.stage-direction.rejected,
 .narrative-passage p.error { color: #b42318; }
+.world-story-debug-turn {
+  flex-basis: 100%;
+  min-width: 0;
+  padding: 6px 7px;
+  border: 1px dashed #d8b4fe;
+  border-radius: 7px;
+  color: #5b21b6;
+  background: rgba(250, 245, 255, 0.68);
+  font: 9px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.world-story-debug-turn summary span {
+  margin-left: auto;
+  color: #8b5cf6;
+  font-size: 8px;
+  font-weight: 650;
+}
+.world-story-debug-turn dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  margin: 7px 0;
+}
+.world-story-debug-turn dl div {
+  min-width: 0;
+  padding: 4px 5px;
+  border-radius: 5px;
+  background: #fff;
+}
+.world-story-debug-turn dt {
+  color: #8b5cf6;
+  font-size: 8px;
+}
+.world-story-debug-turn dd {
+  margin: 1px 0 0;
+  overflow: hidden;
+  color: #4c1d95;
+  font-weight: 750;
+  text-overflow: ellipsis;
+}
+.world-story-debug-turn section {
+  display: grid;
+  gap: 3px;
+  margin-top: 7px;
+}
+.world-story-debug-turn pre {
+  max-height: 180px;
+  margin: 0;
+  padding: 7px;
+  overflow: auto;
+  border-radius: 5px;
+  color: #334155;
+  background: #fff;
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .world-story-turn-error {
   display: flex;
   align-items: center;

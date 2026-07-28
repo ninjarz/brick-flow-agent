@@ -1,11 +1,13 @@
-import { BookOpen, Bot, ChevronDown, Dice5, GlassWater, MessageCircle, RefreshCw, Send, Sparkles, Square, X } from 'lucide-react'
+import { BookOpen, Bot, Bug, ChevronDown, Database, Dice5, GlassWater, MessageCircle, RefreshCw, Send, Sparkles, Square, X } from 'lucide-react'
 import { type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { resizeBottomDockHeight, resizeBottomDockWidth } from '../lib/bottomDockResize'
+import { isDebugModeEnabled } from '../lib/debugMode'
 import { useI18n } from '../lib/i18n'
 import {
   buildWorldNarrativeFeed,
   type ActiveWorldDirectorTurn,
   type WorldNarrativeFeedBlock,
+  type WorldNarrativeFeedItem,
 } from '../lib/worldNarrativeFeed'
 import type { TavernDirectorEntry, TavernDirectorStreamPreview } from '../lib/worldTavernDirector'
 import type { TavernActivityKind, TavernActivityResult } from '../lib/worldTavernActivities'
@@ -173,6 +175,46 @@ const ReasoningPanel = ({
   )
 }
 
+const DirectorDebugPanel = ({
+  item,
+  locale,
+}: {
+  item: WorldNarrativeFeedItem
+  locale: 'zh-CN' | 'en-US'
+}) => (
+  <details className="world-story-debug-turn">
+    <summary>
+      <Bug size={11} />
+      {locale === 'zh-CN' ? 'LLM 编排' : 'LLM orchestration'}
+      <span>{item.blocks.length} events · {item.status ?? 'completed'}</span>
+    </summary>
+    {item.contextStats && (
+      <dl>
+        <div><dt>{locale === 'zh-CN' ? '消息' : 'Messages'}</dt><dd>{item.contextStats.messageCount}</dd></div>
+        <div><dt>{locale === 'zh-CN' ? '输入' : 'Input'}</dt><dd>{(item.contextStats.inputTokens ?? item.contextStats.estimatedInputTokens).toLocaleString(locale)} tok</dd></div>
+        <div><dt>{locale === 'zh-CN' ? '输出' : 'Output'}</dt><dd>{item.contextStats.outputTokens?.toLocaleString(locale) ?? '—'} tok</dd></div>
+        <div><dt>{locale === 'zh-CN' ? '缓存' : 'Cached'}</dt><dd>{item.contextStats.cachedTokens?.toLocaleString(locale) ?? '—'} tok</dd></div>
+      </dl>
+    )}
+    <section>
+      <strong>{locale === 'zh-CN' ? '结构化事件' : 'Structured events'}</strong>
+      <pre>{JSON.stringify(item.blocks, null, 2)}</pre>
+    </section>
+    {item.requestMessage && (
+      <section>
+        <strong>{locale === 'zh-CN' ? '发送给 LLM' : 'Request to LLM'}</strong>
+        <pre>{item.requestMessage}</pre>
+      </section>
+    )}
+    {item.responseMessage && (
+      <section>
+        <strong>{locale === 'zh-CN' ? 'LLM 原始响应' : 'Raw LLM response'}</strong>
+        <pre>{item.responseMessage}</pre>
+      </section>
+    )}
+  </details>
+)
+
 export const WorldStoryDock = ({
   world,
   structures,
@@ -190,6 +232,7 @@ export const WorldStoryDock = ({
   onClose,
 }: WorldStoryDockProps) => {
   const { locale, t } = useI18n()
+  const debugMode = isDebugModeEnabled(window.location.search)
   const [collapsed, setCollapsed] = useState(false)
   const [showStoryTools, setShowStoryTools] = useState(false)
   const [activityHost, setActivityHost] = useState<'local' | 'ai'>('local')
@@ -236,6 +279,10 @@ export const WorldStoryDock = ({
         })),
     ].sort((a, b) => b.name.length - a.name.length)
   }, [locale, structures, world.entities, world.hiddenTargets])
+  const latestContextStats = useMemo(() => (
+    [...world.narrative.directorTurns].reverse().find((turn) => turn.contextStats)?.contextStats
+  ), [world.narrative.directorTurns])
+  const displayedInputTokens = latestContextStats?.inputTokens ?? latestContextStats?.estimatedInputTokens
   const isScenarioDialoguePlaying = world.scenarios.some((scenario) => Boolean(scenario.activeDialogue || scenario.pendingAi))
   const feedVersion = feed.reduce((total, item) => total + item.blocks.length, 0)
   const streamVersion = activeTurn
@@ -451,6 +498,7 @@ export const WorldStoryDock = ({
           <BookOpen size={14} />
           <strong>{locale === 'zh-CN' ? '剧情对话' : 'Story dialogue'}</strong>
           <small>{locale === 'zh-CN' ? `${feed.length} 段` : `${feed.length} passages`}</small>
+          {debugMode && <em className="world-story-debug-badge"><Bug size={10} />DEBUG</em>}
         </div>
         <span>
           <button className="icon-button" type="button" aria-label={collapsed ? (locale === 'zh-CN' ? '展开' : 'Expand') : (locale === 'zh-CN' ? '折叠' : 'Collapse')} onClick={() => setCollapsed((current) => !current)}>
@@ -477,6 +525,36 @@ export const WorldStoryDock = ({
                 {locale === 'zh-CN' ? `。${protagonist.description}` : `. ${protagonist.description}`}
               </aside>
             )}
+            {debugMode && (
+              <aside className="world-story-debug-context" aria-label={locale === 'zh-CN' ? 'LLM 调试上下文' : 'LLM debug context'}>
+                <div className="world-story-debug-stats">
+                  <span>{displayedInputTokens === undefined ? '—' : displayedInputTokens.toLocaleString(locale)} tok</span>
+                  <span>{locale === 'zh-CN' ? '消息' : 'Messages'} {latestContextStats?.messageCount ?? '—'}</span>
+                  <span>{locale === 'zh-CN' ? '原文轮次' : 'Raw turns'} {latestContextStats?.rawTurnCount ?? world.narrative.directorTurns.length}</span>
+                  <span>{locale === 'zh-CN' ? '已压缩' : 'Compacted'} {world.narrative.directorMemory?.sourceTurnCount ?? 0}</span>
+                </div>
+                <details className="world-story-debug-memory">
+                  <summary><Database size={11} />{locale === 'zh-CN' ? '剧情记忆' : 'Story memory'}</summary>
+                  {world.narrative.directorMemory ? (
+                    <>
+                      <p>{world.narrative.directorMemory.summary || (locale === 'zh-CN' ? '摘要为空。' : 'The summary is empty.')}</p>
+                      {(world.narrative.directorMemory.lockedFacts?.length ?? 0) > 0 && (
+                        <ul>
+                          {world.narrative.directorMemory.lockedFacts?.map((fact) => <li key={fact}>{fact}</li>)}
+                        </ul>
+                      )}
+                      <small>
+                        {locale === 'zh-CN' ? '截至轮次' : 'Through turn'}：{world.narrative.directorMemory.throughTurnId || '—'}
+                        {' · '}
+                        {locale === 'zh-CN' ? '更新时间' : 'Updated'}：{world.narrative.directorMemory.updatedAtSeconds.toFixed(1)}s
+                      </small>
+                    </>
+                  ) : (
+                    <p>{locale === 'zh-CN' ? '尚未达到自动压缩阈值，当前仍使用原始对话历史。' : 'The automatic compaction threshold has not been reached; raw turns are still in use.'}</p>
+                  )}
+                </details>
+              </aside>
+            )}
             {feed.map((item) => (
               <article className={`narrative-passage ${item.kind}`} key={item.id}>
                 {item.kind === 'active-dialogue' && (
@@ -489,6 +567,9 @@ export const WorldStoryDock = ({
                 {item.playerText && <p className="player"><strong>{locale === 'zh-CN' ? `你（${protagonist?.name ?? '玩家'}）` : `You (${protagonist?.name ?? 'Player'})`}</strong><AnnotatedText text={item.playerText} references={references} onSelectEntity={onSelectEntity} /></p>}
                 {item.reasoning && (
                   <ReasoningPanel text={item.reasoning} streaming={item.status === 'streaming'} locale={locale} />
+                )}
+                {debugMode && item.kind === 'director-turn' && (
+                  <DirectorDebugPanel item={item} locale={locale} />
                 )}
                 {item.blocks.map((block) => (
                   <FeedBlock key={block.id} block={block} world={world} structures={structures} references={references} locale={locale} disabled={isDirectorThinking || isScenarioDialoguePlaying} onChoose={chooseInput} onSelectEntity={onSelectEntity} />

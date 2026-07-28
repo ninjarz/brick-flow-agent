@@ -22,6 +22,9 @@ export type WorldNarrativeFeedItem = {
   status?: WorldDirectorTurn['status'] | 'streaming'
   error?: string
   reasoning?: string
+  requestMessage?: string
+  responseMessage?: string
+  contextStats?: WorldDirectorTurn['contextStats']
   streamPreview?: TavernDirectorStreamPreview
 }
 
@@ -74,6 +77,9 @@ const directorFeedItem = (turn: ActiveWorldDirectorTurn): WorldNarrativeFeedItem
   status: turn.status,
   error: turn.error,
   reasoning: turn.reasoning,
+  requestMessage: turn.requestMessage,
+  responseMessage: turn.responseMessage,
+  contextStats: turn.contextStats,
   streamPreview: turn.streamPreview,
 })
 

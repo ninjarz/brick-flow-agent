@@ -23,14 +23,28 @@ describe('buildWorldNarrativeFeed', () => {
       id: 'turn-earlier',
       playerText: 'Go',
       entries: [{ id: 'entry-1', type: 'narration', text: 'Earlier narration' }],
+      requestMessage: 'World snapshot request',
+      responseMessage: '{"type":"end","summary":"Done"}',
+      contextStats: {
+        messageCount: 3,
+        estimatedInputTokens: 120,
+        rawTurnCount: 1,
+        memoryTurnCount: 0,
+      },
       createdAtSeconds: 3,
       status: 'completed',
     }]
 
-    expect(buildWorldNarrativeFeed(world).map((item) => item.id)).toEqual([
+    const feed = buildWorldNarrativeFeed(world)
+    expect(feed.map((item) => item.id)).toEqual([
       'turn-earlier',
       'story-later',
     ])
+    expect(feed[0]).toMatchObject({
+      requestMessage: 'World snapshot request',
+      responseMessage: '{"type":"end","summary":"Done"}',
+      contextStats: { messageCount: 3 },
+    })
   })
 
   it('prefers structured story blocks and falls back to legacy body paragraphs', () => {
