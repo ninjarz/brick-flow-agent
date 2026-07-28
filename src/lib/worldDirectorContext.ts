@@ -56,10 +56,13 @@ export const buildDirectorMessages = ({
   currentRequest: string
 }): LlmChatMessage[] => {
   const messages: LlmChatMessage[] = [{ role: 'system', content: systemPrompt }]
-  if (memory?.summary.trim()) {
+  if (memory?.summary.trim() || memory?.lockedFacts?.length) {
+    const lockedFacts = memory.lockedFacts?.length
+      ? `\nLocked facts that must never be contradicted or removed:\n${memory.lockedFacts.map((fact) => `- ${fact}`).join('\n')}`
+      : ''
     messages.push({
       role: 'user',
-      content: `Compacted story memory checkpoint. Treat these established facts as prior conversation:\n${memory.summary.trim()}`,
+      content: `Compacted story memory checkpoint. Treat these established facts as prior conversation:\n${memory.summary.trim() || 'No compacted summary yet.'}${lockedFacts}`,
     })
     messages.push({
       role: 'assistant',
@@ -100,11 +103,13 @@ export const planDirectorCompaction = ({
   memory,
   turns,
   currentRequest,
+  force = false,
 }: {
   systemPrompt: string
   memory?: WorldDirectorMemory
   turns: WorldDirectorTurn[]
   currentRequest: string
+  force?: boolean
 }): DirectorCompactionPlan | undefined => {
   const activeTurns = getDirectorTurnsAfterMemory(turns, memory)
   if (activeTurns.length <= directorRecentRawTurnCount) return undefined
@@ -121,7 +126,7 @@ export const planDirectorCompaction = ({
     ...historyMessages,
     { role: 'user', content: currentRequest },
   ])
-  const shouldCompact = (
+  const shouldCompact = force || (
     activeTurns.length >= directorCompactionTurnThreshold
     || estimatedHistoryTokens >= directorHistoryTokenThreshold
     || estimatedTotalTokens >= directorTotalTokenThreshold
@@ -140,6 +145,9 @@ export const buildDirectorCompactionPrompt = (
 ${locale === 'zh-CN' ? '已有摘要' : 'Existing summary'}:
 ${memory?.summary || 'none'}
 
+${locale === 'zh-CN' ? '必须原样保留且不得否定的锁定事实' : 'Locked facts that must be preserved and never contradicted'}:
+${JSON.stringify(memory?.lockedFacts ?? [])}
+
 ${locale === 'zh-CN' ? '待压缩轮次' : 'Turns to compact'}:
 ${JSON.stringify(turns.map((turn) => ({
   player: turn.playerText,
@@ -147,8 +155,8 @@ ${JSON.stringify(turns.map((turn) => ({
 })))}
 
 ${locale === 'zh-CN'
-    ? '返回 JSON：{"summary":"..."}。摘要必须保留角色身份与目标、已确认事实、关系变化、承诺、冲突结果、未解决线索、已触发或隐藏要素、玩家的重要选择。不要把意图写成已经成功的结果，不要虚构坐标或 ID。控制在 1200 个汉字以内。'
-    : 'Return JSON: {"summary":"..."}. Preserve character identities and goals, established facts, relationship changes, promises, conflict outcomes, unresolved clues, revealed or hidden elements, and important player choices. Do not turn attempted actions into successful outcomes or invent coordinates or IDs. Stay under 1800 words.'}`
+    ? '返回 JSON：{"summary":"..."}。摘要必须逐条保留锁定事实，并保留角色身份与目标、已确认事实、关系变化、承诺、冲突结果、未解决线索、已触发或隐藏要素、玩家的重要选择。不要把意图写成已经成功的结果，不要虚构坐标或 ID。控制在 1200 个汉字以内。'
+    : 'Return JSON: {"summary":"..."}. Preserve every locked fact verbatim, plus character identities and goals, established facts, relationship changes, promises, conflict outcomes, unresolved clues, revealed or hidden elements, and important player choices. Do not turn attempted actions into successful outcomes or invent coordinates or IDs. Stay under 1800 words.'}`
 
 export const createFallbackDirectorSummary = (
   memory: WorldDirectorMemory | undefined,
@@ -166,7 +174,10 @@ export const createFallbackDirectorSummary = (
       ending?.type === 'end' ? ending.summary : dialogue,
     ].filter(Boolean)
   })
-  return [memory?.summary, ...lines].filter(Boolean).join('\n').slice(0, 4_000)
+  const lockedFacts = memory?.lockedFacts?.length
+    ? `${locale === 'zh-CN' ? '锁定事实' : 'Locked facts'}:\n${memory.lockedFacts.map((fact) => `- ${fact}`).join('\n')}`
+    : ''
+  return [lockedFacts, memory?.summary, ...lines].filter(Boolean).join('\n').slice(0, 4_000)
 }
 
 export const parseDirectorCompactionSummary = (content: string) => {

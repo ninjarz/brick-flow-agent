@@ -679,6 +679,14 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
     && isFiniteNumber(storedDirectorMemory.updatedAtSeconds)
     ? {
         summary: storedDirectorMemory.summary.slice(0, 4_000),
+        ...(Array.isArray(storedDirectorMemory.lockedFacts)
+          ? {
+              lockedFacts: storedDirectorMemory.lockedFacts
+                .filter((fact): fact is string => typeof fact === 'string' && Boolean(fact.trim()))
+                .map((fact) => fact.trim().slice(0, 300))
+                .slice(0, 30),
+            }
+          : {}),
         throughTurnId: storedDirectorMemory.throughTurnId.slice(0, 180),
         sourceTurnCount: Math.max(0, Math.floor(storedDirectorMemory.sourceTurnCount)),
         updatedAtSeconds: Math.max(0, storedDirectorMemory.updatedAtSeconds),

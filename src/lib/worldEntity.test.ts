@@ -400,4 +400,29 @@ describe('WorldEntity foundation', () => {
       ],
     }])
   })
+
+  it('restores bounded locked story facts', () => {
+    const world = createEmptyWorldState('director-memory')
+    const restored = parseStoredWorldState({
+      ...world,
+      narrative: {
+        ...world.narrative,
+        directorMemory: {
+          summary: '罗兰正在追查商队。',
+          lockedFacts: [' 罗兰是玩家角色 ', '', 3, '黑岩使者尚未招供'],
+          throughTurnId: 'turn-4',
+          sourceTurnCount: 4,
+          updatedAtSeconds: 12,
+        },
+      },
+    }, world.planId)
+
+    expect(restored?.narrative.directorMemory).toEqual({
+      summary: '罗兰正在追查商队。',
+      lockedFacts: ['罗兰是玩家角色', '黑岩使者尚未招供'],
+      throughTurnId: 'turn-4',
+      sourceTurnCount: 4,
+      updatedAtSeconds: 12,
+    })
+  })
 })

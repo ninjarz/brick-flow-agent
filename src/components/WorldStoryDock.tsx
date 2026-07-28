@@ -1,4 +1,4 @@
-import { BookOpen, Bot, ChevronDown, Dice5, GlassWater, MessageCircle, Send, Sparkles, Square, X } from 'lucide-react'
+import { BookOpen, Bot, Brain, ChevronDown, Dice5, GlassWater, LockKeyhole, MessageCircle, RefreshCw, Save, Send, Sparkles, Square, X } from 'lucide-react'
 import { type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { resizeBottomDockHeight, resizeBottomDockWidth } from '../lib/bottomDockResize'
 import { useI18n } from '../lib/i18n'
@@ -19,6 +19,7 @@ type WorldStoryDockProps = {
   isLlmTesting: boolean
   isAiThinking: boolean
   isDirectorThinking: boolean
+  isDirectorCompacting: boolean
   isAiActivityThinking: boolean
   aiFeedback?: { tone: 'success' | 'error'; text: string }
   onGenerateStory: () => void
@@ -37,6 +38,8 @@ type WorldStoryDockProps = {
   }>
   onStopDirector: () => void
   onCommitDirectorTurn: (turn: WorldDirectorTurn) => void
+  onCompactDirectorMemory: () => Promise<{ compactedTurns: number; triggered: boolean }>
+  onUpdateDirectorMemory: (summary: string, lockedFacts: string[]) => void
   onSelectEntity: (entityId: string) => void
   onClose: () => void
 }
@@ -183,6 +186,7 @@ export const WorldStoryDock = ({
   isLlmTesting,
   isAiThinking,
   isDirectorThinking,
+  isDirectorCompacting,
   isAiActivityThinking,
   aiFeedback,
   onGenerateStory,
@@ -192,6 +196,8 @@ export const WorldStoryDock = ({
   onDirectWorld,
   onStopDirector,
   onCommitDirectorTurn,
+  onCompactDirectorMemory,
+  onUpdateDirectorMemory,
   onSelectEntity,
   onClose,
 }: WorldStoryDockProps) => {
@@ -202,6 +208,10 @@ export const WorldStoryDock = ({
   const [focusEntityId, setFocusEntityId] = useState(world.entities.find((entity) => entity.health > 0)?.id ?? '')
   const [input, setInput] = useState('')
   const [activeTurn, setActiveTurn] = useState<ActiveWorldDirectorTurn>()
+  const [showDirectorMemory, setShowDirectorMemory] = useState(false)
+  const [memorySummaryDraft, setMemorySummaryDraft] = useState('')
+  const [lockedFactsDraft, setLockedFactsDraft] = useState('')
+  const [memoryFeedback, setMemoryFeedback] = useState('')
   const [panelHeight, setPanelHeight] = useState(initialStoryPanelHeight)
   const [panelWidth, setPanelWidth] = useState(initialStoryPanelWidth)
   const [isResizing, setIsResizing] = useState(false)
@@ -249,6 +259,10 @@ export const WorldStoryDock = ({
   const cachedPercent = latestContextStats?.cachedTokens !== undefined && latestContextStats.inputTokens
     ? Math.round(latestContextStats.cachedTokens / latestContextStats.inputTokens * 100)
     : undefined
+  const activeRawTurnCount = Math.max(
+    0,
+    world.narrative.directorTurns.length - (world.narrative.directorMemory?.sourceTurnCount ?? 0),
+  )
   const feedVersion = feed.reduce((total, item) => total + item.blocks.length, 0)
   const streamVersion = activeTurn
     ? (activeTurn.reasoning?.length ?? 0) + (activeTurn.streamPreview?.text.length ?? 0)
@@ -353,6 +367,30 @@ export const WorldStoryDock = ({
   const chooseInput = (value: string) => {
     setInput(value)
     window.requestAnimationFrame(() => inputRef.current?.focus())
+  }
+
+  const toggleDirectorMemory = () => {
+    setShowDirectorMemory((current) => {
+      if (!current) {
+        setMemorySummaryDraft(world.narrative.directorMemory?.summary ?? '')
+        setLockedFactsDraft((world.narrative.directorMemory?.lockedFacts ?? []).join('\n'))
+        setMemoryFeedback('')
+      }
+      return !current
+    })
+  }
+
+  const saveDirectorMemory = () => {
+    onUpdateDirectorMemory(memorySummaryDraft, lockedFactsDraft.split(/\r?\n/))
+    setMemoryFeedback(locale === 'zh-CN' ? '剧情记忆已保存。' : 'Story memory saved.')
+  }
+
+  const compactDirectorMemory = async () => {
+    setMemoryFeedback('')
+    const result = await onCompactDirectorMemory()
+    setMemoryFeedback(result.compactedTurns > 0
+      ? (locale === 'zh-CN' ? `已将 ${result.compactedTurns} 轮剧情并入摘要。` : `Compacted ${result.compactedTurns} story turns.`)
+      : (locale === 'zh-CN' ? '最近原文不足 5 轮，暂时无需压缩。' : 'Fewer than five raw turns; nothing to compact.'))
   }
 
   const submit = async () => {
@@ -489,12 +527,11 @@ export const WorldStoryDock = ({
                 {locale === 'zh-CN' ? `。${protagonist.description}` : `. ${protagonist.description}`}
               </aside>
             )}
-            {(latestContextStats || world.narrative.directorMemory) && (
-              <aside
-                className="world-story-context-status"
-                aria-label={locale === 'zh-CN' ? '剧情上下文状态' : 'Story context status'}
-                title={world.narrative.directorMemory?.summary}
-              >
+            <aside
+              className="world-story-context-status"
+              aria-label={locale === 'zh-CN' ? '剧情上下文状态' : 'Story context status'}
+              title={world.narrative.directorMemory?.summary}
+            >
                 {displayedInputTokens !== undefined && (
                   <span>{latestContextStats?.inputTokens === undefined ? '~' : ''}{displayedInputTokens.toLocaleString(locale)} tok</span>
                 )}
@@ -514,7 +551,59 @@ export const WorldStoryDock = ({
                 {latestContextStats?.compactionTriggered && (
                   <strong>{locale === 'zh-CN' ? '本轮已压缩' : 'Compacted this turn'}</strong>
                 )}
-              </aside>
+                <button type="button" onClick={toggleDirectorMemory} aria-expanded={showDirectorMemory}>
+                  <Brain size={10} />
+                  {locale === 'zh-CN' ? '剧情记忆' : 'Story memory'}
+                </button>
+            </aside>
+            {showDirectorMemory && (
+              <section className="world-story-memory-editor" aria-label={locale === 'zh-CN' ? '编辑剧情记忆' : 'Edit story memory'}>
+                <header>
+                  <div>
+                    <Brain size={13} />
+                    <strong>{locale === 'zh-CN' ? '剧情记忆' : 'Story memory'}</strong>
+                  </div>
+                  <small>
+                    {locale === 'zh-CN'
+                      ? `摘要覆盖 ${world.narrative.directorMemory?.sourceTurnCount ?? 0} 轮 · 最近原文 ${activeRawTurnCount} 轮`
+                      : `${world.narrative.directorMemory?.sourceTurnCount ?? 0} summarized · ${activeRawTurnCount} raw`}
+                  </small>
+                </header>
+                <label>
+                  <span>{locale === 'zh-CN' ? '长期摘要' : 'Long-term summary'}</span>
+                  <textarea
+                    rows={5}
+                    maxLength={4_000}
+                    value={memorySummaryDraft}
+                    placeholder={locale === 'zh-CN' ? '压缩后保留的剧情事实、关系与未解决线索……' : 'Compacted facts, relationships, and unresolved clues…'}
+                    onChange={(event) => setMemorySummaryDraft(event.target.value)}
+                  />
+                </label>
+                <label>
+                  <span><LockKeyhole size={11} />{locale === 'zh-CN' ? '锁定事实（每行一条）' : 'Locked facts (one per line)'}</span>
+                  <textarea
+                    rows={3}
+                    maxLength={9_000}
+                    value={lockedFactsDraft}
+                    placeholder={locale === 'zh-CN' ? '例如：罗兰是玩家角色\n黑岩使者尚未透露采石场入口' : 'Example: Roland is the player character'}
+                    onChange={(event) => setLockedFactsDraft(event.target.value)}
+                  />
+                </label>
+                <div className="world-story-memory-actions">
+                  <button type="button" onClick={saveDirectorMemory}><Save size={12} />{locale === 'zh-CN' ? '保存记忆' : 'Save memory'}</button>
+                  <button
+                    type="button"
+                    disabled={activeRawTurnCount <= 4 || isDirectorThinking || isDirectorCompacting}
+                    onClick={() => void compactDirectorMemory()}
+                  >
+                    <RefreshCw size={12} className={isDirectorCompacting ? 'spinning' : ''} />
+                    {isDirectorCompacting
+                      ? (locale === 'zh-CN' ? '压缩中' : 'Compacting')
+                      : (locale === 'zh-CN' ? '手动压缩' : 'Compact now')}
+                  </button>
+                  {memoryFeedback && <span role="status">{memoryFeedback}</span>}
+                </div>
+              </section>
             )}
             {feed.map((item) => (
               <article className={`narrative-passage ${item.kind}`} key={item.id}>

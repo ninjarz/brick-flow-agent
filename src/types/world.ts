@@ -177,6 +177,7 @@ export type WorldDirectorTurn = {
 
 export type WorldDirectorMemory = {
   summary: string
+  lockedFacts?: string[]
   throughTurnId: string
   sourceTurnCount: number
   updatedAtSeconds: number

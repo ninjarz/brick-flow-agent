@@ -476,12 +476,28 @@ button.status-pill:hover {
 }
 
 .world-story-context-status span,
-.world-story-context-status strong {
+.world-story-context-status strong,
+.world-story-context-status button {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
   padding: 2px 6px;
   border: 1px solid #e2e8f0;
   border-radius: 999px;
   background: rgba(248, 250, 252, 0.92);
   font-weight: 600;
+}
+
+.world-story-context-status button {
+  color: #475569;
+  cursor: pointer;
+}
+
+.world-story-context-status button:hover,
+.world-story-context-status button[aria-expanded="true"] {
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  background: #eff6ff;
 }
 
 .world-story-context-status .cache-hit {
@@ -494,6 +510,100 @@ button.status-pill:hover {
   border-color: #c4b5fd;
   color: #6d28d9;
   background: #f5f3ff;
+}
+
+.world-story-memory-editor {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 6px;
+  padding: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: linear-gradient(145deg, #f8fafc, #fffdf8);
+}
+
+.world-story-memory-editor > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.world-story-memory-editor > header div,
+.world-story-memory-editor label > span {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.world-story-memory-editor > header small {
+  color: #64748b;
+  font-size: 9px;
+}
+
+.world-story-memory-editor label {
+  display: grid;
+  gap: 3px;
+  color: #475569;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.world-story-memory-editor textarea {
+  width: 100%;
+  min-height: 0;
+  padding: 7px 8px;
+  resize: vertical;
+  border: 1px solid #d8dee8;
+  border-radius: 7px;
+  color: #334155;
+  background: #fff;
+  font: 10px/1.55 ui-sans-serif, system-ui, sans-serif;
+}
+
+.world-story-memory-editor textarea:focus {
+  border-color: #60a5fa;
+  outline: 2px solid rgba(96, 165, 250, 0.18);
+}
+
+.world-story-memory-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+
+.world-story-memory-actions button {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  padding: 5px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  color: #334155;
+  background: #fff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.world-story-memory-actions button:disabled {
+  opacity: 0.48;
+}
+
+.world-story-memory-actions > span {
+  color: #166534;
+  font-size: 9px;
+}
+
+.world-story-memory-actions .spinning {
+  animation: world-story-memory-spin 0.8s linear infinite;
+}
+
+@keyframes world-story-memory-spin {
+  to { transform: rotate(360deg); }
 }
 
 .narrative-reference {

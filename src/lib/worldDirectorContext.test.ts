@@ -47,6 +47,21 @@ describe('world director context', () => {
     expect(plan?.retainedTurns.map((item) => item.id)).toEqual(['turn-7', 'turn-8', 'turn-9', 'turn-10'])
   })
 
+  it('allows manual compaction below the automatic high-water mark', () => {
+    const turns = Array.from({ length: 6 }, (_, index) => turn(index + 1))
+    expect(planDirectorCompaction({
+      systemPrompt: 'stable system',
+      turns,
+      currentRequest: '',
+    })).toBeUndefined()
+    expect(planDirectorCompaction({
+      systemPrompt: 'stable system',
+      turns,
+      currentRequest: '',
+      force: true,
+    })?.candidateTurns.map((item) => item.id)).toEqual(['turn-1', 'turn-2'])
+  })
+
   it('uses a memory checkpoint without deleting persisted older turns', () => {
     const turns = Array.from({ length: 8 }, (_, index) => turn(index + 1))
     const memory = {
@@ -75,5 +90,23 @@ describe('world director context', () => {
 
   it('accepts fenced JSON compaction responses', () => {
     expect(parseDirectorCompactionSummary('```json\n{"summary":"保留线索"}\n```')).toBe('保留线索')
+  })
+
+  it('places locked facts in the persistent memory prefix', () => {
+    const messages = buildDirectorMessages({
+      systemPrompt: 'stable system',
+      memory: {
+        summary: '罗兰正在调查商队。',
+        lockedFacts: ['罗兰是玩家角色', '黑岩使者尚未招供'],
+        throughTurnId: 'turn-1',
+        sourceTurnCount: 1,
+        updatedAtSeconds: 1,
+      },
+      turns: [turn(1)],
+      currentRequest: '继续',
+    })
+
+    expect(messages[1].content).toContain('罗兰是玩家角色')
+    expect(messages[1].content).toContain('黑岩使者尚未招供')
   })
 })
