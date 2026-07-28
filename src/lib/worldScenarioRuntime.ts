@@ -385,7 +385,10 @@ export const advanceWorldScenarios = (
       .sort((left, right) => right.event.timeSeconds - left.event.timeSeconds)[0]
     if (!matched) return scenario
     if (options.allowNewStages === false) return scenario
-    const { event, branch } = matched
+    const { event } = matched
+    const branch = activeStage.ai?.mode === 'choice' && !options.enableAi
+      ? activeStage.branches?.find((candidate) => candidate.id === activeStage.ai?.fallbackBranchId)
+      : matched.branch
 
     const dialogue = branch?.dialogue ?? activeStage.dialogue
     if (dialogue?.length && dialogueLaneOccupied) return scenario

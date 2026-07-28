@@ -357,6 +357,48 @@ describe('world scenario runtime', () => {
     expect(resolved.scenarios[0].stages[1].status).toBe('locked')
   })
 
+  it('uses the authored fallback branch when an AI choice node runs without an LLM', () => {
+    const scenario: WorldScenarioRuntime = {
+      id: 'offline-ai-choice',
+      assetId: 'authored',
+      title: 'Offline choice',
+      description: 'Offline choice',
+      processedEventIds: [],
+      stages: [{
+        id: 'choice',
+        title: 'Choice',
+        description: 'Choice',
+        status: 'active',
+        trigger: { eventType: 'interaction', actorId: 'hero', targetId: 'stranger' },
+        ai: {
+          mode: 'choice',
+          instruction: 'Choose whether the stranger cooperates.',
+          fallbackBranchId: 'refuse',
+        },
+        branches: [
+          { id: 'cooperate', title: 'Cooperate', trigger: { eventType: 'interaction' }, nextStageId: 'ending' },
+          { id: 'refuse', title: 'Refuse', trigger: { eventType: 'interaction' } },
+        ],
+      }, {
+        id: 'ending',
+        title: 'Ending',
+        description: 'Ending',
+        status: 'locked',
+        trigger: { eventType: 'interaction' },
+        nextStageId: null,
+      }],
+    }
+    const advanced = advanceWorldScenarios({
+      ...createEmptyWorldState('offline-ai-choice'),
+      scenarios: [scenario],
+      events: [{ id: 'choice-event', timeSeconds: 1, type: 'interaction', actorId: 'hero', targetId: 'stranger' }],
+    })
+
+    expect(advanced.scenarios[0].outcomeId).toBe('refuse')
+    expect(advanced.scenarios[0].pendingAi).toBeUndefined()
+    expect(advanced.scenarios[0].stages[1].status).toBe('locked')
+  })
+
   it('takes a matching failure branch without unlocking the linear next stage', () => {
     const hero = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'hero', factionId: 'blue' })
     const enemy = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'enemy', factionId: 'red' })

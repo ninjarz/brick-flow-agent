@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Copy, GitBranch, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Bot, Copy, GitBranch, Plus, Trash2 } from 'lucide-react'
 import type { WorldScenarioRuntime } from '../types/world'
 import type { WorldScenarioValidationIssue } from '../lib/worldScenarioValidation'
 import { getWorldScenarioDefaultNextStageId } from '../lib/worldScenarioAuthoring'
@@ -69,7 +69,7 @@ export const WorldScenarioFlowEditor = ({
       <header>
         <div>
           <strong><GitBranch size={15} />{zh ? '剧情流程图' : 'Scenario flowchart'}</strong>
-          <small>{zh ? '每个节点独立判定触发；实线是默认推进，紫线是条件分支。' : 'Each node evaluates its trigger. Solid lines advance by default; purple lines are conditional branches.'}</small>
+          <small>{zh ? '流程图控制触发和去向；AI 节点只生成对白或从紫色分支中选择。' : 'The graph controls triggers and outcomes; AI nodes only write dialogue or choose a purple branch.'}</small>
         </div>
         <div className="scenario-flow-actions">
           <button type="button" title={zh ? '向前移动节点' : 'Move node left'} disabled={selectedIndex <= 0} onClick={() => onMoveStage(-1)}><ArrowLeft size={13} /></button>
@@ -125,7 +125,7 @@ export const WorldScenarioFlowEditor = ({
                 type="button"
                 id={`scenario-flow-stage-${stageIndex}`}
                 key={`${stage.id}-${stageIndex}`}
-                className={`scenario-flow-node ${stage.status}${stage.id === selectedStageId ? ' selected' : ''}${stageIssues.some((issue) => issue.severity === 'error') ? ' has-errors' : ''}`}
+                className={`scenario-flow-node ${stage.status}${stage.ai ? ' ai' : ''}${stage.id === selectedStageId ? ' selected' : ''}${stageIssues.some((issue) => issue.severity === 'error') ? ' has-errors' : ''}`}
                 style={{ left: point.x, top: point.y, width: nodeWidth, height: nodeHeight }}
                 onClick={() => onSelectStage(stage.id)}
                 aria-pressed={stage.id === selectedStageId}
@@ -133,7 +133,10 @@ export const WorldScenarioFlowEditor = ({
                 <span>{stageIndex + 1}</span>
                 <strong>{stage.title}</strong>
                 <small>{stage.description}</small>
-                <em>{triggerLabel(stage.trigger.eventType, zh)} · {stage.dialogue?.length ?? 0} {zh ? '句台词' : 'lines'} · {stage.branches?.length ?? 0} {zh ? '个分支' : 'branches'}</em>
+                <em>{stage.ai
+                  ? `${stage.ai.mode === 'choice' ? (zh ? 'AI 抉择' : 'AI choice') : (zh ? 'AI 对白' : 'AI dialogue')} · `
+                  : ''}{triggerLabel(stage.trigger.eventType, zh)} · {stage.dialogue?.length ?? 0} {zh ? '句台词' : 'lines'} · {stage.branches?.length ?? 0} {zh ? '个分支' : 'branches'}</em>
+                {stage.ai && <b className="ai-badge"><Bot size={9} />AI</b>}
                 {stageIssues.length > 0 && <i>{stageIssues.length}</i>}
               </button>
             )

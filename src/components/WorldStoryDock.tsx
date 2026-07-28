@@ -266,7 +266,7 @@ export const WorldStoryDock = ({
     0,
     world.narrative.directorTurns.length - (world.narrative.directorMemory?.sourceTurnCount ?? 0),
   )
-  const isScenarioDialoguePlaying = world.scenarios.some((scenario) => Boolean(scenario.activeDialogue))
+  const isScenarioDialoguePlaying = world.scenarios.some((scenario) => Boolean(scenario.activeDialogue || scenario.pendingAi))
   const feedVersion = feed.reduce((total, item) => total + item.blocks.length, 0)
   const streamVersion = activeTurn
     ? (activeTurn.reasoning?.length ?? 0) + (activeTurn.streamPreview?.text.length ?? 0)

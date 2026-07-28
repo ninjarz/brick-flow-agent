@@ -10,6 +10,7 @@ import type { BrickStructure } from '../types/bricks'
 
 type WorldTavernProps = {
   world: WorldState
+  llmConfigured: boolean
   onClearHistory: () => void
   onUpdateScenario: (scenario: WorldScenarioRuntime) => void
   onAddScenario: (scenario: WorldScenarioRuntime) => void
@@ -27,6 +28,7 @@ type ScenarioEditSession = {
 
 export const WorldTavern = ({
   world,
+  llmConfigured,
   onClearHistory,
   onUpdateScenario,
   onAddScenario,
@@ -192,8 +194,8 @@ export const WorldTavern = ({
               <div>
                 <strong><BookOpen size={15} />{locale === 'zh-CN' ? `剧情流程 ${world.scenarios.length} 条` : `${world.scenarios.length} story flows`}</strong>
                 <small>{locale === 'zh-CN'
-                  ? '每条流程地位平等、独立判定并可同时推进；节点之间可以自由连接和分支。'
-                  : 'Every flow is equal, evaluated independently, and may advance in parallel.'}</small>
+                  ? '每条流程地位平等并独立判定；演出统一排队，AI 节点也遵守作者定义的连线。'
+                  : 'Every flow is equal and evaluated independently; performances are queued and AI follows authored edges.'}</small>
               </div>
               <button
                 type="button"
@@ -227,7 +229,9 @@ export const WorldTavern = ({
                 ? (editingScenarioId === scenario.id
                     ? (locale === 'zh-CN' ? '创作中' : 'Authoring')
                     : completedCount === 0 ? (locale === 'zh-CN' ? '草稿' : 'Draft') : (locale === 'zh-CN' ? '已暂停' : 'Paused'))
-                : hasActiveNode
+                : scenario.pendingAi
+                  ? (locale === 'zh-CN' ? 'AI 编排中' : 'AI directing')
+                  : hasActiveNode
                   ? (locale === 'zh-CN' ? '探索中' : 'Exploring')
                   : (locale === 'zh-CN' ? '已结束' : 'Completed')
               return (
@@ -242,8 +246,8 @@ export const WorldTavern = ({
                       <strong>{t('tavern.questProgress', { completed: completedCount, total: scenario.stages.length })}</strong>
                       <button
                         type="button"
-                        disabled={Boolean(scenario.activeDialogue) || !hasActiveNode || Boolean(scenarioEditSession)}
-                        title={scenario.activeDialogue
+                        disabled={Boolean(scenario.activeDialogue || scenario.pendingAi) || !hasActiveNode || Boolean(scenarioEditSession)}
+                        title={scenario.activeDialogue || scenario.pendingAi
                           ? (locale === 'zh-CN' ? '演出结束后才能暂停' : 'Pause after the performance')
                           : undefined}
                         onClick={() => onUpdateScenario({
@@ -274,8 +278,8 @@ export const WorldTavern = ({
                       <button
                         type="button"
                         className={editingScenarioId === scenario.id ? 'active' : ''}
-                        disabled={Boolean(scenario.activeDialogue) || (Boolean(scenarioEditSession) && editingScenarioId !== scenario.id)}
-                        title={scenario.activeDialogue
+                        disabled={Boolean(scenario.activeDialogue || scenario.pendingAi) || (Boolean(scenarioEditSession) && editingScenarioId !== scenario.id)}
+                        title={scenario.activeDialogue || scenario.pendingAi
                           ? (locale === 'zh-CN' ? '对话演出结束后可编辑' : 'Editable after dialogue finishes')
                           : scenarioEditSession && editingScenarioId !== scenario.id
                             ? (locale === 'zh-CN' ? '请先保存或取消当前编辑' : 'Save or cancel the current edit first')
@@ -314,8 +318,8 @@ export const WorldTavern = ({
                       <button
                         type="button"
                         className={confirmDeleteScenarioId === scenario.id ? 'danger confirm' : 'danger'}
-                        disabled={Boolean(scenario.activeDialogue) || Boolean(scenarioEditSession)}
-                        title={scenario.activeDialogue ? (locale === 'zh-CN' ? '演出结束后才能删除' : 'Delete after the performance') : undefined}
+                        disabled={Boolean(scenario.activeDialogue || scenario.pendingAi) || Boolean(scenarioEditSession)}
+                        title={scenario.activeDialogue || scenario.pendingAi ? (locale === 'zh-CN' ? '演出结束后才能删除' : 'Delete after the performance') : undefined}
                         onClick={() => {
                           if (confirmDeleteScenarioId !== scenario.id) {
                             setConfirmDeleteScenarioId(scenario.id)
@@ -349,11 +353,17 @@ export const WorldTavern = ({
                   {scenario.activeDialogue && (
                     <div className="tavern-dialogue-progress">
                       {locale === 'zh-CN' ? '剧情演出中' : 'Dialogue playing'} · {scenario.activeDialogue.lineIndex + 1}/{(() => {
+                        if (scenario.activeDialogue?.generatedDialogue?.length) return scenario.activeDialogue.generatedDialogue.length
                         const stage = scenario.stages.find((candidate) => candidate.id === scenario.activeDialogue?.stageId)
                         return scenario.activeDialogue?.branchId
                           ? stage?.branches?.find((branch) => branch.id === scenario.activeDialogue?.branchId)?.dialogue?.length ?? 1
                           : stage?.dialogue?.length ?? 1
                       })()}
+                    </div>
+                  )}
+                  {scenario.pendingAi && (
+                    <div className="tavern-dialogue-progress ai">
+                      {locale === 'zh-CN' ? 'AI 正在按节点约束编排对白与分支……' : 'AI is composing within this node’s dialogue and branch constraints…'}
                     </div>
                   )}
                   {scenario.outcomeId && <div className="tavern-scenario-outcome">{locale === 'zh-CN' ? '流程结果' : 'Flow result'} · {scenario.stages.flatMap((stage) => stage.branches ?? []).find((branch) => branch.id === scenario.outcomeId)?.title ?? scenario.outcomeId}</div>}
@@ -395,6 +405,7 @@ export const WorldTavern = ({
                           entities={world.entities}
                           structures={structures}
                           hiddenTargets={world.hiddenTargets}
+                          llmConfigured={llmConfigured}
                           locale={locale}
                           onChange={(draft) => {
                             setScenarioEditSession((current) => current ? { ...current, draft } : current)

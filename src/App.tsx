@@ -40,7 +40,8 @@ import { formatLDrawPlan, parseLDrawPlan } from './lib/ldrawPlan'
 import { getEffectiveInventory, loadInventoryOverrides, saveInventoryOverrides } from './lib/userInventory'
 import { importAssetPlanIncrementally } from './lib/incrementalAssetImport'
 import { addWorldScenario, startWorldScenario } from './lib/worldScenarioImport'
-import { advanceWorldScenarios, getActiveWorldScenarioStages } from './lib/worldScenarioRuntime'
+import { buildWorldScenarioAiPrompt, parseWorldScenarioAiResolution, worldScenarioAiSystemPrompt } from './lib/worldScenarioAi'
+import { advanceWorldScenarios, getActiveWorldScenarioStages, resolveWorldScenarioAi } from './lib/worldScenarioRuntime'
 import { clearWorkspaceDraft, hasIndexedDbWorkspaceDraft, loadWorkspaceDraft, loadWorkspaceDraftFromIndexedDb, saveWorkspaceDraft } from './lib/workspaceDraft'
 import type { BrickStructure, BuildPlan, FinishedAsset, LlmConfig, PlacedBrick } from './types/bricks'
 import type { WorldDirectorMemory, WorldDirectorTurn, WorldEntity, WorldEntityCommand, WorldEntityControllerKind, WorldState } from './types/world'
@@ -217,6 +218,8 @@ function App() {
   const worldAiAbortRef = useRef<AbortController>()
   const tavernAiAbortRef = useRef<AbortController>()
   const tavernDirectorAbortRef = useRef<AbortController>()
+  const worldScenarioAiAbortRef = useRef<AbortController>()
+  const worldScenarioAiRequestKeyRef = useRef('')
   const tavernDirectorPlaybackRef = useRef<{
     controller: AbortController
     restorePaused: boolean
@@ -609,6 +612,56 @@ function App() {
   }, [world])
 
   useEffect(() => {
+    worldScenarioAiAbortRef.current?.abort()
+    worldScenarioAiAbortRef.current = undefined
+    worldScenarioAiRequestKeyRef.current = ''
+  }, [llmConfig])
+
+  useEffect(() => {
+    if (!llmConfigComplete || worldScenarioAiAbortRef.current) return
+    const scenario = world.scenarios.find((candidate) => Boolean(candidate.pendingAi))
+    const pending = scenario?.pendingAi
+    if (!scenario || !pending) return
+    const requestKey = `${scenario.id}:${pending.stageId}:${pending.eventId}:${pending.requestedAtSeconds}`
+    if (worldScenarioAiRequestKeyRef.current === requestKey) return
+
+    const controller = new AbortController()
+    worldScenarioAiAbortRef.current = controller
+    worldScenarioAiRequestKeyRef.current = requestKey
+    const prompt = buildWorldScenarioAiPrompt(world, scenario, locale)
+
+    void requestLlmJsonContent({
+      config: llmConfig,
+      systemPrompt: worldScenarioAiSystemPrompt,
+      userPrompt: prompt,
+      signal: controller.signal,
+      locale,
+      temperature: 0.65,
+      maxTokens: 1_000,
+    }).then((content) => {
+      if (controller.signal.aborted) return
+      const latest = worldRef.current
+      const latestPending = latest.scenarios.find((candidate) => candidate.id === scenario.id)?.pendingAi
+      if (!latestPending || latestPending.stageId !== pending.stageId || latestPending.eventId !== pending.eventId) return
+      const resolved = resolveWorldScenarioAi(latest, scenario.id, parseWorldScenarioAiResolution(content))
+      worldRef.current = resolved
+      setWorld(resolved)
+    }).catch(() => {
+      if (controller.signal.aborted) return
+      const latest = worldRef.current
+      const latestPending = latest.scenarios.find((candidate) => candidate.id === scenario.id)?.pendingAi
+      if (!latestPending || latestPending.stageId !== pending.stageId || latestPending.eventId !== pending.eventId) return
+      const fallback = resolveWorldScenarioAi(latest, scenario.id, {})
+      worldRef.current = fallback
+      setWorld(fallback)
+    }).finally(() => {
+      if (worldScenarioAiAbortRef.current !== controller) return
+      worldScenarioAiAbortRef.current = undefined
+      worldScenarioAiRequestKeyRef.current = ''
+    })
+  }, [llmConfig, llmConfigComplete, locale, world])
+
+  useEffect(() => {
     promptRef.current = prompt
   }, [prompt])
 
@@ -668,7 +721,10 @@ function App() {
                 worldSimulationStepSeconds,
                 planRef.current.structures ?? [],
               ),
-              { allowNewStages: !tavernDirectorPlaybackRef.current },
+              {
+                allowNewStages: !tavernDirectorPlaybackRef.current,
+                enableAi: llmConfigComplete,
+              },
             )
           }
           return next
@@ -682,7 +738,7 @@ function App() {
       document.removeEventListener('visibilitychange', resetClock)
       window.clearTimeout(timeoutId)
     }
-  }, [placementSession, world.entities.length, world.paused, worldEntityPlacement])
+  }, [llmConfigComplete, placementSession, world.entities.length, world.paused, worldEntityPlacement])
 
   useEffect(() => {
     setFinishedAssets((current) => {
@@ -1524,9 +1580,9 @@ function App() {
       'replace',
     )
     if (!result.ok) return false
-    setWorld(advanceWorldScenarios(result.world))
+    setWorld(advanceWorldScenarios(result.world, { enableAi: llmConfigComplete }))
     return true
-  }, [])
+  }, [llmConfigComplete])
 
   const generateTavernStory = useCallback((focusEntityId?: string) => {
     setWorld((current) => addWorldStory(current, createLocalTavernStory(current, locale, focusEntityId)))
@@ -1896,7 +1952,7 @@ function App() {
         await new Promise((resolve) => window.setTimeout(resolve, 100))
       }
       if (!controller.signal.aborted && !worldRef.current.paused) {
-        const scenarioWorld = advanceWorldScenarios(worldRef.current)
+        const scenarioWorld = advanceWorldScenarios(worldRef.current, { enableAi: llmConfigComplete })
         if (scenarioWorld !== worldRef.current) {
           worldRef.current = scenarioWorld
           setWorld(scenarioWorld)
@@ -1906,7 +1962,7 @@ function App() {
           !controller.signal.aborted
           && !worldRef.current.paused
           && performance.now() < scenarioDeadline
-          && worldRef.current.scenarios.some((scenario) => Boolean(scenario.activeDialogue))
+          && worldRef.current.scenarios.some((scenario) => Boolean(scenario.activeDialogue || scenario.pendingAi))
         ) {
           await new Promise((resolve) => window.setTimeout(resolve, 100))
         }
@@ -2854,6 +2910,7 @@ function App() {
         <Suspense fallback={null}>
           <WorldTavern
             world={world}
+            llmConfigured={llmConfigComplete}
             onClearHistory={clearTavernHistory}
             onUpdateScenario={updateWorldScenario}
             onAddScenario={addAuthoredWorldScenario}

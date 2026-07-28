@@ -1,4 +1,4 @@
-import { GitBranch, ListTree, Plus, Trash2 } from 'lucide-react'
+import { Bot, GitBranch, ListTree, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { WorldEntity, WorldEntityCommand, WorldEvent, WorldScenarioAction, WorldScenarioBranch, WorldScenarioRuntime, WorldScenarioStage } from '../types/world'
 import type { BrickStructure } from '../types/bricks'
@@ -17,6 +17,7 @@ type Props = {
   entities: WorldEntity[]
   structures: BrickStructure[]
   hiddenTargets: Array<{ kind: 'entity' | 'brick' | 'structure'; id: string }>
+  llmConfigured: boolean
   locale: 'zh-CN' | 'en-US'
   onChange: (scenario: WorldScenarioRuntime) => void
   onSetTargetVisibility: (target: { kind: 'entity' | 'brick' | 'structure'; id: string }, visible: boolean) => void
@@ -145,7 +146,7 @@ const ScenarioBranchContentEditor = ({
   )
 }
 
-export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTargets, locale, onChange, onSetTargetVisibility }: Props) => {
+export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTargets, llmConfigured, locale, onChange, onSetTargetVisibility }: Props) => {
   const zh = locale === 'zh-CN'
   const [editorMode, setEditorMode] = useState<'flow' | 'form'>('flow')
   const [selectedStageId, setSelectedStageId] = useState(
@@ -155,7 +156,7 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
     if (scenario.stages.some((stage) => stage.id === selectedStageId)) return
     setSelectedStageId(scenario.stages.find((stage) => stage.status === 'active')?.id ?? scenario.stages[0]?.id ?? '')
   }, [scenario.stages, selectedStageId])
-  const patchScenario = (patch: Partial<WorldScenarioRuntime>) => onChange({ ...scenario, ...patch, authoringVersion: 2 })
+  const patchScenario = (patch: Partial<WorldScenarioRuntime>) => onChange({ ...scenario, ...patch, authoringVersion: 3 })
   const patchStage = (stageIndex: number, patch: Partial<WorldScenarioStage>) => patchScenario({
     stages: scenario.stages.map((stage, index) => index === stageIndex ? { ...stage, ...patch } : stage),
   })
@@ -190,23 +191,23 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
           onAddStage={() => {
             const result = addWorldScenarioStage(scenario, locale)
             setSelectedStageId(result.stageId)
-            onChange({ ...result.scenario, authoringVersion: 2 })
+            onChange({ ...result.scenario, authoringVersion: 3 })
           }}
           onDuplicateStage={() => {
             const result = duplicateWorldScenarioStage(scenario, selectedStageId, locale)
             if (!result) return
             setSelectedStageId(result.stageId)
-            onChange({ ...result.scenario, authoringVersion: 2 })
+            onChange({ ...result.scenario, authoringVersion: 3 })
           }}
           onDeleteStage={() => {
             const result = deleteWorldScenarioStage(scenario, selectedStageId)
             if (!result) return
             setSelectedStageId(result.selectedStageId)
-            onChange({ ...result.scenario, authoringVersion: 2 })
+            onChange({ ...result.scenario, authoringVersion: 3 })
           }}
           onMoveStage={(direction) => onChange({
             ...moveWorldScenarioStage(scenario, selectedStageId, direction),
-            authoringVersion: 2,
+            authoringVersion: 3,
           })}
         />
       )}
@@ -266,7 +267,7 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
                     const nextStageId = value === '__auto__' ? undefined : value === '__end__' ? null : value
                     onChange({
                       ...updateWorldScenarioStageTransition(scenario, stage.id, nextStageId),
-                      authoringVersion: 2,
+                      authoringVersion: 3,
                     })
                   }}
                 >
@@ -292,6 +293,120 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
                   {entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}
                 </select>
               </label>
+            </div>
+
+            <div className={`scenario-editor-section scenario-ai-editor${stage.ai ? ' enabled' : ''}`}>
+              <header>
+                <strong><Bot size={13} />{zh ? '节点编排方式' : 'Node direction'}</strong>
+                <small>{zh
+                  ? '流程图决定何时触发和最终去向；AI 只补对白，或在作者列出的分支中选择。'
+                  : 'The graph owns triggers and outcomes. AI only fills dialogue or chooses among authored branches.'}</small>
+              </header>
+              <div className="scenario-ai-mode-row">
+                <label>{zh ? '模式' : 'Mode'}
+                  <select
+                    value={stage.ai?.mode ?? 'authored'}
+                    onChange={(event) => {
+                      const mode = event.target.value
+                      if (mode === 'authored') {
+                        patchStage(stageIndex, { ai: undefined })
+                        return
+                      }
+                      patchStage(stageIndex, {
+                        ai: {
+                          mode: mode as 'dialogue' | 'choice',
+                          instruction: stage.ai?.instruction ?? (zh
+                            ? '结合已有剧情自然推进当前节点，不新增角色、地点或世界状态。'
+                            : 'Advance this node naturally from established canon without inventing entities, places, or world state.'),
+                          speakerIds: stage.ai?.speakerIds?.length
+                            ? stage.ai.speakerIds
+                            : (scenario.castEntityIds ?? entities.map((entity) => entity.id)).slice(0, 8),
+                          maxDialogueLines: stage.ai?.maxDialogueLines ?? 3,
+                          ...(mode === 'choice'
+                            ? { fallbackBranchId: stage.ai?.fallbackBranchId ?? stage.branches?.[0]?.id }
+                            : {}),
+                        },
+                      })
+                    }}
+                  >
+                    <option value="authored">{zh ? '固定编排' : 'Authored'}</option>
+                    <option value="dialogue">{zh ? 'AI 生成对白' : 'AI dialogue'}</option>
+                    <option value="choice">{zh ? 'AI 对白并选择分支' : 'AI dialogue + branch choice'}</option>
+                  </select>
+                </label>
+                {stage.ai && (
+                  <label>{zh ? '最多台词' : 'Max lines'}
+                    <input
+                      type="number"
+                      min="1"
+                      max="6"
+                      value={stage.ai.maxDialogueLines ?? 3}
+                      onChange={(event) => patchStage(stageIndex, {
+                        ai: { ...stage.ai!, maxDialogueLines: Math.max(1, Math.min(6, Number(event.target.value) || 1)) },
+                      })}
+                    />
+                  </label>
+                )}
+                {stage.ai?.mode === 'choice' && (
+                  <label>{zh ? '保底分支' : 'Fallback branch'}
+                    <select
+                      value={stage.ai.fallbackBranchId ?? ''}
+                      onChange={(event) => patchStage(stageIndex, {
+                        ai: { ...stage.ai!, fallbackBranchId: event.target.value || undefined },
+                      })}
+                    >
+                      <option value="">{zh ? '请选择' : 'Select'}</option>
+                      {(stage.branches ?? []).map((branch) => <option key={branch.id} value={branch.id}>{branch.title}</option>)}
+                    </select>
+                  </label>
+                )}
+              </div>
+              {stage.ai && (
+                <>
+                  <label>{zh ? '给 AI 的节点目标与边界' : 'AI node objective and boundaries'}
+                    <textarea
+                      rows={3}
+                      maxLength={2_000}
+                      value={stage.ai.instruction}
+                      placeholder={zh ? '说明这一幕要推进什么、哪些事实不能改变……' : 'Describe what this scene should advance and which facts must not change…'}
+                      onChange={(event) => patchStage(stageIndex, { ai: { ...stage.ai!, instruction: event.target.value } })}
+                    />
+                  </label>
+                  <div className="scenario-ai-speakers">
+                    <strong>{zh ? '允许说话的角色' : 'Allowed speakers'}</strong>
+                    <div>
+                      {entities.map((entity) => {
+                        const selected = stage.ai?.speakerIds?.includes(entity.id) ?? false
+                        return (
+                          <label className={selected ? 'selected' : ''} key={entity.id}>
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={(event) => {
+                                const current = stage.ai?.speakerIds ?? []
+                                patchStage(stageIndex, {
+                                  ai: {
+                                    ...stage.ai!,
+                                    speakerIds: event.target.checked
+                                      ? Array.from(new Set([...current, entity.id]))
+                                      : current.filter((id) => id !== entity.id),
+                                  },
+                                })
+                              }}
+                            />
+                            {entity.name}
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  {!llmConfigured && (
+                    <p className="scenario-ai-notice">{zh
+                      ? '当前未配置 LLM：游玩时会使用本节点的固定台词和保底分支，不会卡住流程。'
+                      : 'No LLM configured: play mode will use authored dialogue and the fallback branch without blocking.'}</p>
+                  )}
+                </>
+              )}
             </div>
 
             <div className="scenario-editor-section">
@@ -355,13 +470,23 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
               {(stage.branches ?? []).map((branch, branchIndex) => (
                 <div className="scenario-branch-card" key={branch.id}>
                   <input value={branch.title} aria-label={zh ? '分支名称' : 'Branch name'} onChange={(event) => patchStage(stageIndex, { branches: stage.branches?.map((item, index) => index === branchIndex ? { ...item, title: event.target.value } : item) })} />
-                  <select value={branch.trigger.eventType} aria-label={zh ? '分支触发事件' : 'Branch trigger'} onChange={(event) => patchStage(stageIndex, { branches: stage.branches?.map((item, index) => index === branchIndex ? { ...item, trigger: { ...item.trigger, eventType: event.target.value as WorldEvent['type'] } } : item) })}>{triggerTypes.map((type) => <option key={type} value={type}>{triggerLabel(type, zh)}</option>)}</select>
-                  <select value={branch.trigger.actorId ?? ''} aria-label={zh ? '分支发起者' : 'Branch actor'} onChange={(event) => patchStage(stageIndex, { branches: stage.branches?.map((item, index) => index === branchIndex ? { ...item, trigger: { ...item.trigger, actorId: event.target.value || undefined } } : item) })}>
-                    <option value="">{zh ? '任意发起者' : 'Any actor'}</option>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}
-                  </select>
-                  <select value={branch.trigger.targetId ?? ''} aria-label={zh ? '分支目标' : 'Branch target'} onChange={(event) => patchStage(stageIndex, { branches: stage.branches?.map((item, index) => index === branchIndex ? { ...item, trigger: { ...item.trigger, targetId: event.target.value || undefined } } : item) })}>
-                    <option value="">{zh ? '任意目标' : 'Any target'}</option>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}
-                  </select>
+                  {stage.ai?.mode === 'choice'
+                    ? <textarea
+                        rows={2}
+                        value={branch.aiGuidance ?? ''}
+                        aria-label={zh ? 'AI 选择条件' : 'AI choice guidance'}
+                        placeholder={zh ? '什么情况下应选择这个分支？' : 'When should AI choose this branch?'}
+                        onChange={(event) => patchStage(stageIndex, { branches: stage.branches?.map((item, index) => index === branchIndex ? { ...item, aiGuidance: event.target.value } : item) })}
+                      />
+                    : <>
+                        <select value={branch.trigger.eventType} aria-label={zh ? '分支触发事件' : 'Branch trigger'} onChange={(event) => patchStage(stageIndex, { branches: stage.branches?.map((item, index) => index === branchIndex ? { ...item, trigger: { ...item.trigger, eventType: event.target.value as WorldEvent['type'] } } : item) })}>{triggerTypes.map((type) => <option key={type} value={type}>{triggerLabel(type, zh)}</option>)}</select>
+                        <select value={branch.trigger.actorId ?? ''} aria-label={zh ? '分支发起者' : 'Branch actor'} onChange={(event) => patchStage(stageIndex, { branches: stage.branches?.map((item, index) => index === branchIndex ? { ...item, trigger: { ...item.trigger, actorId: event.target.value || undefined } } : item) })}>
+                          <option value="">{zh ? '任意发起者' : 'Any actor'}</option>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}
+                        </select>
+                        <select value={branch.trigger.targetId ?? ''} aria-label={zh ? '分支目标' : 'Branch target'} onChange={(event) => patchStage(stageIndex, { branches: stage.branches?.map((item, index) => index === branchIndex ? { ...item, trigger: { ...item.trigger, targetId: event.target.value || undefined } } : item) })}>
+                          <option value="">{zh ? '任意目标' : 'Any target'}</option>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}
+                        </select>
+                      </>}
                   <select value={branch.nextStageId ?? ''} aria-label={zh ? '分支下一节点' : 'Branch next node'} onChange={(event) => patchStage(stageIndex, { branches: stage.branches?.map((item, index) => index === branchIndex ? { ...item, nextStageId: event.target.value || undefined } : item) })}>
                     <option value="">{zh ? '结束这条流程' : 'End this flow'}</option>{scenario.stages.filter((candidate) => candidate.id !== stage.id).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.title}</option>)}
                   </select>

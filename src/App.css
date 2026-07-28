@@ -4127,6 +4127,12 @@ button:disabled {
   font-weight: 800;
 }
 
+.tavern-dialogue-progress.ai {
+  border-color: #c4b5fd;
+  color: #6d28d9;
+  background: linear-gradient(90deg, #faf5ff, #eff6ff);
+}
+
 .tavern-scenario-outcome {
   margin-top: 9px;
   padding: 7px 9px;
@@ -4364,6 +4370,7 @@ button:disabled {
 .scenario-flow-node.completed { border-color: #86efac; background: #f0fdf4; }
 .scenario-flow-node.active { border-color: #60a5fa; background: #eff6ff; }
 .scenario-flow-node.locked { background: #f8fafc; }
+.scenario-flow-node.ai { box-shadow: inset 0 3px 0 #8b5cf6, 0 5px 14px rgba(92, 55, 18, 0.08); }
 .scenario-flow-node.has-errors { border-color: #f87171; }
 
 .scenario-flow-node > span {
@@ -4417,6 +4424,20 @@ button:disabled {
   font-size: 8px;
   font-style: normal;
   text-align: center;
+}
+
+.scenario-flow-node > .ai-badge {
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+  padding: 2px 5px;
+  border-radius: 999px;
+  color: #6d28d9;
+  background: #ede9fe;
+  font-size: 8px;
 }
 
 .scenario-flow-terminal {
@@ -4515,6 +4536,79 @@ button:disabled {
 .scenario-stage-editor { display: grid; gap: 10px; padding: 0 9px 9px; }
 .scenario-editor-section { display: grid; gap: 7px; padding-top: 9px; border-top: 1px solid #eadfc9; }
 .scenario-editor-section > header small { color: #927b60; font-weight: 500; }
+
+.scenario-ai-editor {
+  padding: 10px;
+  border: 1px solid #ddd6fe;
+  border-radius: 9px;
+  background: #fafaff;
+}
+
+.scenario-ai-editor.enabled {
+  background: linear-gradient(135deg, #faf5ff, #eff6ff);
+}
+
+.scenario-ai-editor > header strong {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  color: #6d28d9;
+}
+
+.scenario-ai-mode-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.5fr) minmax(90px, .6fr) minmax(150px, 1fr);
+  gap: 7px;
+}
+
+.scenario-ai-speakers {
+  display: grid;
+  gap: 5px;
+}
+
+.scenario-ai-speakers > strong {
+  color: #785f42;
+  font-size: 10px;
+}
+
+.scenario-ai-speakers > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.scenario-ai-speakers label {
+  display: inline-flex;
+  grid-auto-flow: column;
+  gap: 4px;
+  align-items: center;
+  padding: 4px 7px;
+  border: 1px solid #ddd6fe;
+  border-radius: 999px;
+  color: #6b7280;
+  background: #fff;
+  cursor: pointer;
+}
+
+.scenario-ai-speakers label.selected {
+  border-color: #a78bfa;
+  color: #6d28d9;
+  background: #ede9fe;
+}
+
+.scenario-ai-speakers input {
+  width: auto;
+  margin: 0;
+}
+
+.scenario-ai-notice {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 7px;
+  color: #92400e;
+  background: #fffbeb;
+  font-size: 9px;
+}
 
 .scenario-revealables > div {
   display: flex;
@@ -4781,6 +4875,7 @@ button:disabled {
   .scenario-edit-session-bar > div { flex-basis: 100%; }
   .tavern-quest > ol { grid-template-columns: 1fr; }
   .scenario-editor-grid { grid-template-columns: 1fr; }
+  .scenario-ai-mode-row { grid-template-columns: 1fr; }
   .scenario-dialogue-row,
   .scenario-action-row,
   .scenario-branch-card { grid-template-columns: 1fr; }
