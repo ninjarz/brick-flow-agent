@@ -11,6 +11,10 @@ const makeUniqueId = (preferred: string, existingIds: Set<string>) => {
 const cloneStage = (stage: WorldScenarioStage): WorldScenarioStage => ({
   ...stage,
   trigger: { ...stage.trigger },
+  ai: stage.ai ? {
+    ...stage.ai,
+    speakerIds: stage.ai.speakerIds ? [...stage.ai.speakerIds] : undefined,
+  } : undefined,
   dialogue: stage.dialogue?.map((line) => ({ ...line })),
   actions: stage.actions?.map((action) => (
     action.type === 'issue-command'
@@ -50,7 +54,7 @@ export const createWorldScenarioFlow = (
     enabled: false,
     castEntityIds: entityIds,
     processedEventIds: existingEventIds.slice(-500),
-    authoringVersion: 2,
+    authoringVersion: 3,
     stages: [{
       id: 'start',
       title: locale === 'zh-CN' ? '起始节点' : 'Start node',
@@ -81,9 +85,10 @@ export const duplicateWorldScenarioFlow = (
       completedAtSeconds: undefined,
     })),
     processedEventIds: existingEventIds.slice(-500),
+    pendingAi: undefined,
     activeDialogue: undefined,
     outcomeId: undefined,
-    authoringVersion: 2,
+    authoringVersion: 3,
   }
 }
 
@@ -98,6 +103,7 @@ export const resetWorldScenarioFlow = (
     completedAtSeconds: undefined,
   })),
   processedEventIds: existingEventIds.slice(-500),
+  pendingAi: undefined,
   activeDialogue: undefined,
   outcomeId: undefined,
 })
@@ -125,7 +131,7 @@ export const addWorldScenarioStage = (
     trigger: { eventType: 'interaction' },
   }
   return {
-    scenario: { ...scenario, stages: [...scenario.stages, stage], activeDialogue: undefined, outcomeId: undefined },
+    scenario: { ...scenario, stages: [...scenario.stages, stage], pendingAi: undefined, activeDialogue: undefined, outcomeId: undefined },
     stageId,
   }
 }
@@ -154,7 +160,7 @@ export const duplicateWorldScenarioStage = (
   if (source.nextStageId !== undefined) stages[sourceIndex] = { ...source, nextStageId: stageId }
   stages.splice(sourceIndex + 1, 0, copied)
   return {
-    scenario: { ...scenario, stages, activeDialogue: undefined, outcomeId: undefined },
+    scenario: { ...scenario, stages, pendingAi: undefined, activeDialogue: undefined, outcomeId: undefined },
     stageId,
   }
 }
@@ -184,6 +190,7 @@ export const deleteWorldScenarioStage = (
     scenario: {
       ...scenario,
       stages,
+      pendingAi: scenario.pendingAi?.stageId === stageId ? undefined : scenario.pendingAi,
       activeDialogue: scenario.activeDialogue?.stageId === stageId ? undefined : scenario.activeDialogue,
       outcomeId: undefined,
     },

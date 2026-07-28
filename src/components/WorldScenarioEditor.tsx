@@ -414,6 +414,8 @@ const formatValidationIssue = (
     'missing-entity': `引用的单位 ${reference} 不存在`,
     'missing-structure': `引用的建筑 ${reference} 不存在`,
     'invalid-dialogue': '台词为空或显示时间不足 0.5 秒',
+    'invalid-ai-config': 'AI 节点缺少有效指令，或对白数量超出 1–6 句',
+    'missing-ai-fallback': `AI 抉择节点缺少有效的保底分支 ${reference}`,
   } : {
     'duplicate-stage-id': `Duplicate stage ID ${reference}`,
     'duplicate-branch-id': `Duplicate branch ID ${reference}`,
@@ -423,6 +425,8 @@ const formatValidationIssue = (
     'missing-entity': `Referenced entity ${reference} does not exist`,
     'missing-structure': `Referenced structure ${reference} does not exist`,
     'invalid-dialogue': 'Dialogue is empty or shorter than 0.5 seconds',
+    'invalid-ai-config': 'AI node needs a valid instruction and a 1–6 line limit',
+    'missing-ai-fallback': `AI choice node needs a valid fallback branch ${reference}`,
   }
   return `${location}${messages[issue.code]}`
 }

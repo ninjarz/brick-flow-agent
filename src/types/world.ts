@@ -216,6 +216,8 @@ export type WorldScenarioDialogueState = {
   stageId: string
   eventId: string
   branchId?: string
+  generatedDialogue?: WorldScenarioDialogueLine[]
+  source?: 'authored' | 'ai'
   lineIndex: number
   lineEndsAtSeconds: number
 }
@@ -223,10 +225,26 @@ export type WorldScenarioDialogueState = {
 export type WorldScenarioBranch = {
   id: string
   title: string
+  aiGuidance?: string
   trigger: WorldScenarioTrigger
   nextStageId?: string
   dialogue?: WorldScenarioDialogueLine[]
   actions?: WorldScenarioAction[]
+}
+
+export type WorldScenarioAiConfig = {
+  mode: 'dialogue' | 'choice'
+  instruction: string
+  speakerIds?: string[]
+  maxDialogueLines?: number
+  fallbackBranchId?: string
+}
+
+export type WorldScenarioAiPendingState = {
+  stageId: string
+  eventId: string
+  branchId?: string
+  requestedAtSeconds: number
 }
 
 export type WorldScenarioStage = {
@@ -235,6 +253,7 @@ export type WorldScenarioStage = {
   description: string
   status: 'locked' | 'active' | 'completed'
   trigger: WorldScenarioTrigger
+  ai?: WorldScenarioAiConfig
   dialogue?: WorldScenarioDialogueLine[]
   actions?: WorldScenarioAction[]
   nextStageId?: string | null
@@ -251,6 +270,7 @@ export type WorldScenarioRuntime = {
   castEntityIds?: string[]
   stages: WorldScenarioStage[]
   processedEventIds: string[]
+  pendingAi?: WorldScenarioAiPendingState
   activeDialogue?: WorldScenarioDialogueState
   outcomeId?: string
   authoringVersion?: number

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import type { WorldEvent, WorldScenarioRuntime } from '../types/world'
 import { createEmptyWorldState, createWorldEntity } from './worldEntity'
-import { advanceWorldScenarios, getActiveWorldScenarioStages } from './worldScenarioRuntime'
+import { advanceWorldScenarios, getActiveWorldScenarioStages, resolveWorldScenarioAi } from './worldScenarioRuntime'
 
 const commandEvent = (id: string, actorId: string, targetId: string): WorldEvent => ({
   id,
@@ -264,6 +264,97 @@ describe('world scenario runtime', () => {
     expect(firstFinished.scenarios[0].activeDialogue).toBeUndefined()
     const secondStarted = advanceWorldScenarios(firstFinished)
     expect(secondStarted.scenarios[1].activeDialogue?.eventId).toBe('shared-event')
+  })
+
+  it('pauses an AI dialogue node until a validated resolution arrives', () => {
+    const guide = createWorldEntity(worldEntityDefinitionById.get('archer')!, { id: 'guide', name: '艾琳' })
+    const scenario: WorldScenarioRuntime = {
+      id: 'ai-dialogue',
+      assetId: 'authored',
+      title: 'AI dialogue',
+      description: 'AI dialogue',
+      castEntityIds: [guide.id],
+      processedEventIds: [],
+      stages: [{
+        id: 'talk',
+        title: 'Talk',
+        description: 'Talk',
+        status: 'active',
+        trigger: { eventType: 'interaction', actorId: 'hero', targetId: guide.id },
+        ai: {
+          mode: 'dialogue',
+          instruction: 'Reveal one clue without inventing a new location.',
+          speakerIds: [guide.id],
+          maxDialogueLines: 2,
+        },
+        dialogue: [{ id: 'fallback', speakerId: guide.id, text: '先沿旧路调查。', durationSeconds: 2 }],
+        nextStageId: null,
+      }],
+    }
+    const world = {
+      ...createEmptyWorldState('ai-dialogue'),
+      entities: [guide],
+      scenarios: [scenario],
+      events: [{ id: 'talk-event', timeSeconds: 1, type: 'interaction' as const, actorId: 'hero', targetId: guide.id }],
+    }
+
+    const pending = advanceWorldScenarios(world, { enableAi: true })
+    expect(pending.scenarios[0].pendingAi?.stageId).toBe('talk')
+    expect(pending.scenarios[0].activeDialogue).toBeUndefined()
+
+    const resolved = resolveWorldScenarioAi(pending, scenario.id, {
+      dialogue: [
+        { speakerId: guide.id, text: '断箭上的灰白石粉来自旧采石场。' },
+        { speakerId: 'invented', text: 'This speaker is not allowed.' },
+      ],
+    })
+    expect(resolved.scenarios[0].pendingAi).toBeUndefined()
+    expect(resolved.scenarios[0].activeDialogue?.source).toBe('ai')
+    expect(resolved.scenarios[0].activeDialogue?.generatedDialogue).toHaveLength(1)
+    expect(resolved.entities[0].speech?.text).toContain('旧采石场')
+  })
+
+  it('lets AI choose only among authored branches and falls back deterministically', () => {
+    const scenario: WorldScenarioRuntime = {
+      id: 'ai-choice',
+      assetId: 'authored',
+      title: 'AI choice',
+      description: 'AI choice',
+      processedEventIds: [],
+      stages: [{
+        id: 'choice',
+        title: 'Choice',
+        description: 'Choice',
+        status: 'active',
+        trigger: { eventType: 'interaction', actorId: 'hero', targetId: 'stranger' },
+        ai: {
+          mode: 'choice',
+          instruction: 'Choose whether the stranger cooperates.',
+          fallbackBranchId: 'refuse',
+        },
+        branches: [
+          { id: 'cooperate', title: 'Cooperate', aiGuidance: 'Choose when trust is high.', trigger: { eventType: 'interaction' }, nextStageId: 'ending' },
+          { id: 'refuse', title: 'Refuse', aiGuidance: 'Choose when trust is low.', trigger: { eventType: 'interaction' } },
+        ],
+      }, {
+        id: 'ending',
+        title: 'Ending',
+        description: 'Ending',
+        status: 'locked',
+        trigger: { eventType: 'interaction' },
+        nextStageId: null,
+      }],
+    }
+    const pending = advanceWorldScenarios({
+      ...createEmptyWorldState('ai-choice'),
+      scenarios: [scenario],
+      events: [{ id: 'choice-event', timeSeconds: 1, type: 'interaction' as const, actorId: 'hero', targetId: 'stranger' }],
+    }, { enableAi: true })
+
+    const resolved = resolveWorldScenarioAi(pending, scenario.id, { branchId: 'invented' })
+    expect(resolved.scenarios[0].outcomeId).toBe('refuse')
+    expect(resolved.scenarios[0].stages[0].status).toBe('completed')
+    expect(resolved.scenarios[0].stages[1].status).toBe('locked')
   })
 
   it('takes a matching failure branch without unlocking the linear next stage', () => {

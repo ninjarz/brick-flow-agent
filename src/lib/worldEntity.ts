@@ -569,6 +569,9 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
             return [{
               id: branch.id,
               title: branch.title,
+              ...(typeof branch.aiGuidance === 'string' && branch.aiGuidance.trim()
+                ? { aiGuidance: branch.aiGuidance.trim().slice(0, 1_000) }
+                : {}),
               trigger: {
                 eventType: branch.trigger.eventType as WorldState['events'][number]['type'],
                 ...(typeof branch.trigger.actorId === 'string' ? { actorId: branch.trigger.actorId } : {}),
@@ -580,6 +583,27 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
               ...(branchActions ? { actions: branchActions } : {}),
             }]
           }) : undefined
+          const ai = isRecord(stage.ai)
+            && (stage.ai.mode === 'dialogue' || stage.ai.mode === 'choice')
+            && typeof stage.ai.instruction === 'string'
+            ? {
+                mode: stage.ai.mode as 'dialogue' | 'choice',
+                instruction: stage.ai.instruction.trim().slice(0, 2_000),
+                ...(Array.isArray(stage.ai.speakerIds)
+                  ? {
+                      speakerIds: stage.ai.speakerIds
+                        .filter((id): id is string => typeof id === 'string' && entityIds.has(id))
+                        .slice(0, 20),
+                    }
+                  : {}),
+                ...(isFiniteNumber(stage.ai.maxDialogueLines)
+                  ? { maxDialogueLines: Math.max(1, Math.min(6, Math.floor(stage.ai.maxDialogueLines))) }
+                  : {}),
+                ...(typeof stage.ai.fallbackBranchId === 'string'
+                  ? { fallbackBranchId: stage.ai.fallbackBranchId.slice(0, 180) }
+                  : {}),
+              }
+            : undefined
           return [{
             id: stage.id,
             title: stage.title,
@@ -591,6 +615,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
               ...(typeof stage.trigger.targetId === 'string' ? { targetId: stage.trigger.targetId } : {}),
               ...(typeof stage.trigger.commandType === 'string' ? { commandType: stage.trigger.commandType as WorldEntityCommand['type'] } : {}),
             },
+            ...(ai ? { ai } : {}),
             ...(dialogue?.length ? { dialogue } : {}),
             ...(actions ? { actions } : {}),
             ...(stage.nextStageId === null
@@ -614,8 +639,38 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
               stageId: scenario.activeDialogue.stageId,
               eventId: scenario.activeDialogue.eventId,
               ...(typeof scenario.activeDialogue.branchId === 'string' ? { branchId: scenario.activeDialogue.branchId } : {}),
+              ...(Array.isArray(scenario.activeDialogue.generatedDialogue)
+                ? {
+                    generatedDialogue: scenario.activeDialogue.generatedDialogue.flatMap((line) => {
+                      if (!isRecord(line) || typeof line.id !== 'string' || typeof line.speakerId !== 'string' ||
+                        typeof line.text !== 'string' || !line.text.trim() || !isFiniteNumber(line.durationSeconds)) return []
+                      return [{
+                        id: line.id.slice(0, 180),
+                        speakerId: line.speakerId.slice(0, 180),
+                        text: line.text.trim().slice(0, 500),
+                        durationSeconds: Math.max(0.5, Math.min(30, line.durationSeconds)),
+                      }]
+                    }).slice(0, 6),
+                  }
+                : {}),
+              ...(scenario.activeDialogue.source === 'ai' || scenario.activeDialogue.source === 'authored'
+                ? { source: scenario.activeDialogue.source as 'ai' | 'authored' }
+                : {}),
               lineIndex: Math.max(0, Math.floor(scenario.activeDialogue.lineIndex)),
               lineEndsAtSeconds: Math.max(0, scenario.activeDialogue.lineEndsAtSeconds),
+            }
+          : undefined
+        const pendingAi = isRecord(scenario.pendingAi)
+          && typeof scenario.pendingAi.stageId === 'string'
+          && typeof scenario.pendingAi.eventId === 'string'
+          && isFiniteNumber(scenario.pendingAi.requestedAtSeconds)
+          ? {
+              stageId: scenario.pendingAi.stageId.slice(0, 180),
+              eventId: scenario.pendingAi.eventId.slice(0, 180),
+              ...(typeof scenario.pendingAi.branchId === 'string'
+                ? { branchId: scenario.pendingAi.branchId.slice(0, 180) }
+                : {}),
+              requestedAtSeconds: Math.max(0, scenario.pendingAi.requestedAtSeconds),
             }
           : undefined
         const inferredCastEntityIds = Array.from(new Set(upgradedStages.flatMap((stage) => [
@@ -652,6 +707,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
           processedEventIds: Array.isArray(scenario.processedEventIds)
             ? scenario.processedEventIds.filter((id): id is string => typeof id === 'string').slice(-500)
             : [],
+          ...(pendingAi ? { pendingAi } : {}),
           ...(activeDialogue ? { activeDialogue } : {}),
           ...(typeof scenario.outcomeId === 'string' ? { outcomeId: scenario.outcomeId } : {}),
           ...(scenario.assetId === 'scenario-border-tavern' ? { authoringVersion: 2 } : authoringVersion ? { authoringVersion } : {}),

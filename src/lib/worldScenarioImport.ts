@@ -239,12 +239,19 @@ const remapScenarioWorld = (
       return [{
         ...stage,
         trigger: { ...stage.trigger, ...(actorId ? { actorId } : {}), ...(targetId ? { targetId } : {}) },
+        ai: stage.ai ? {
+          ...stage.ai,
+          speakerIds: stage.ai.speakerIds
+            ?.map((id) => entityIdMap[id])
+            .filter((id): id is string => Boolean(id)),
+        } : undefined,
         dialogue,
         branches,
         actions,
       }]
     }),
     processedEventIds: [],
+    pendingAi: undefined,
     activeDialogue: undefined,
   } : undefined
 

@@ -9,6 +9,8 @@ export type WorldScenarioValidationIssueCode =
   | 'missing-entity'
   | 'missing-structure'
   | 'invalid-dialogue'
+  | 'invalid-ai-config'
+  | 'missing-ai-fallback'
 
 export type WorldScenarioValidationIssue = {
   code: WorldScenarioValidationIssueCode
@@ -94,6 +96,27 @@ export const validateWorldScenario = (
   scenario.stages.forEach((stage, stageIndex) => {
     validateTrigger(stage.trigger, stageIndex)
     validateDialogue(stage.dialogue, stageIndex)
+    if (stage.ai) {
+      if (!stage.ai.instruction.trim() || (stage.ai.maxDialogueLines !== undefined && (
+        !Number.isFinite(stage.ai.maxDialogueLines)
+        || stage.ai.maxDialogueLines < 1
+        || stage.ai.maxDialogueLines > 6
+      ))) {
+        issues.push({ code: 'invalid-ai-config', severity: 'error', stageIndex })
+      }
+      for (const speakerId of stage.ai.speakerIds ?? []) addMissingEntity(speakerId, stageIndex)
+      if (stage.ai.mode === 'choice' && (
+        !stage.ai.fallbackBranchId
+        || !stage.branches?.some((branch) => branch.id === stage.ai?.fallbackBranchId)
+      )) {
+        issues.push({
+          code: 'missing-ai-fallback',
+          severity: 'error',
+          stageIndex,
+          referenceId: stage.ai.fallbackBranchId,
+        })
+      }
+    }
     for (const action of stage.actions ?? []) validateAction(action, stageIndex)
     const branchIds = new Set<string>()
     stage.branches?.forEach((branch, branchIndex) => {
