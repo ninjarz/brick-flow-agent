@@ -28,7 +28,7 @@ import { changeAllWorldEntityControllers, createEmptyWorldState, createWorldEnti
 import { isWorldEntityGroundPointBlockedByBricks, stepWorldSimulation, worldSimulationStepSeconds } from './lib/worldSimulation'
 import { findNearestAvailableWorldEntityPoint } from './lib/worldEntityCollision'
 import { advanceWorldFixedStepClock, createWorldFixedStepClock } from './lib/worldClock'
-import { getWorldDirectorPlaybackEntityIds, isWorldDirectorPlaybackSettled } from './lib/worldDirectorPlayback'
+import { getWorldDirectorPlaybackEntityIds, isWorldDirectorPlaybackSettled, shouldStartWorldDirectorPlayback } from './lib/worldDirectorPlayback'
 import { buildDirectorCompactionPrompt, buildDirectorMessages, createDirectorMemoryCheckpoint, createFallbackDirectorSummary, estimateDirectorMessagesTokens, getDirectorTurnsAfterMemory, parseDirectorCompactionSummary, planDirectorCompaction } from './lib/worldDirectorContext'
 import { addWorldStory, createLocalTavernStory } from './lib/worldNarrative'
 import { playTavernActivity, type TavernActivityKind } from './lib/worldTavernActivities'
@@ -223,6 +223,7 @@ function App() {
   const tavernDirectorPlaybackRef = useRef<{
     controller: AbortController
     restorePaused: boolean
+    simulationStarted: boolean
   }>()
   const [isManualOpen, setIsManualOpen] = useState(false)
   const [manualPlan, setManualPlan] = useState<BuildPlan>()
@@ -1817,13 +1818,9 @@ function App() {
     const playback = {
       controller,
       restorePaused: previousPlayback?.restorePaused ?? worldRef.current.paused,
+      simulationStarted: previousPlayback?.simulationStarted ?? !worldRef.current.paused,
     }
     tavernDirectorPlaybackRef.current = playback
-    if (worldRef.current.paused) {
-      const resumedWorld = { ...worldRef.current, paused: false }
-      worldRef.current = resumedWorld
-      setWorld(resumedWorld)
-    }
     setIsTavernDirectorThinking(true)
     const requestPlan = planRef.current
     let eventCount = 0
@@ -1840,9 +1837,18 @@ function App() {
           bricks: currentPlan.bricks,
           structures: currentPlan.structures ?? [],
         })
-        if (applied.world !== currentWorld) {
-          worldRef.current = applied.world
-          setWorld(applied.world)
+        const startsSimulation = (
+          applied.status !== 'rejected'
+          && shouldStartWorldDirectorPlayback(event)
+          && !playback.simulationStarted
+        )
+        if (startsSimulation) playback.simulationStarted = true
+        const nextWorld = startsSimulation && applied.world.paused
+          ? { ...applied.world, paused: false }
+          : applied.world
+        if (nextWorld !== currentWorld) {
+          worldRef.current = nextWorld
+          setWorld(nextWorld)
         }
         if (applied.status !== 'rejected') {
           getWorldDirectorPlaybackEntityIds(event).forEach((entityId) => playbackEntityIds.add(entityId))

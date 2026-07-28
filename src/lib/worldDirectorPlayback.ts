@@ -17,6 +17,10 @@ export const getWorldDirectorPlaybackEntityIds = (event: WorldDirectorEvent) => 
   return []
 }
 
+export const shouldStartWorldDirectorPlayback = (event: WorldDirectorEvent) => (
+  event.type === 'dialogue' || event.type === 'command'
+)
+
 export const isWorldDirectorPlaybackSettled = (world: WorldState, entityIds: ReadonlySet<string>) => {
   if (entityIds.size === 0) return true
   return world.entities

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { createEmptyWorldState, createWorldEntity } from './worldEntity'
-import { getWorldDirectorPlaybackEntityIds, isWorldDirectorPlaybackSettled } from './worldDirectorPlayback'
+import { getWorldDirectorPlaybackEntityIds, isWorldDirectorPlaybackSettled, shouldStartWorldDirectorPlayback } from './worldDirectorPlayback'
 
 const createWorld = () => {
   const world = createEmptyWorldState('plan')
@@ -17,6 +17,22 @@ const createWorld = () => {
 }
 
 describe('world director playback', () => {
+  it('starts simulation only for accepted event kinds that need world time', () => {
+    expect(shouldStartWorldDirectorPlayback({
+      type: 'dialogue',
+      speakerId: 'speaker',
+      listenerId: 'listener',
+      text: '走吧。',
+    })).toBe(true)
+    expect(shouldStartWorldDirectorPlayback({
+      type: 'command',
+      entityId: 'speaker',
+      command: { type: 'wander' },
+    })).toBe(true)
+    expect(shouldStartWorldDirectorPlayback({ type: 'narration', text: '风吹过酒馆。' })).toBe(false)
+    expect(shouldStartWorldDirectorPlayback({ type: 'end', summary: '思考结束。' })).toBe(false)
+  })
+
   it('tracks command actors and both dialogue participants', () => {
     expect(getWorldDirectorPlaybackEntityIds({
       type: 'command',
