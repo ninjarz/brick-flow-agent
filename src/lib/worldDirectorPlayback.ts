@@ -21,6 +21,33 @@ export const shouldStartWorldDirectorPlayback = (event: WorldDirectorEvent) => (
   event.type === 'dialogue' || event.type === 'command'
 )
 
+export const prepareWorldForDirectorPlayback = (world: WorldState): WorldState => {
+  let changed = false
+  const entities = world.entities.map((entity) => {
+    if (
+      entity.controller === 'player'
+      || (
+        !entity.activeCommand
+        && entity.commandQueue.length === 0
+        && entity.navigation.status === 'idle'
+        && entity.navigation.path.length === 0
+        && entity.behaviorState === (entity.health > 0 ? 'idle' : 'dead')
+        && !entity.combat.attackTargetId
+      )
+    ) return entity
+    changed = true
+    return {
+      ...entity,
+      activeCommand: undefined,
+      commandQueue: [],
+      behaviorState: entity.health > 0 ? 'idle' as const : 'dead' as const,
+      navigation: { status: 'idle' as const, path: [], pathIndex: 0 },
+      combat: { ...entity.combat, attackTargetId: undefined },
+    }
+  })
+  return changed ? { ...world, entities } : world
+}
+
 export const isWorldDirectorPlaybackSettled = (world: WorldState, entityIds: ReadonlySet<string>) => {
   if (entityIds.size === 0) return true
   return world.entities

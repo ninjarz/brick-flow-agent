@@ -6,6 +6,22 @@ import { getWorldEntityCollisionRadius } from './worldEntityCollision'
 import { makeBrick } from './planUtils'
 
 describe('WorldEntity simulation', () => {
+  it('does not create autonomous orders while directed playback owns the scene', () => {
+    const actor = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'actor', controller: 'rule' })
+    actor.autonomy.nextDecisionAtSeconds = 0
+    const suspended = stepWorldSimulation(
+      { ...createEmptyWorldState('plan'), entities: [actor] },
+      [],
+      0.1,
+      [],
+      { suspendAutomaticControllers: true },
+    )
+
+    expect(suspended.entities[0].activeCommand).toBeUndefined()
+    expect(suspended.entities[0].commandQueue).toEqual([])
+    expect(suspended.entities[0].behaviorState).toBe('idle')
+  })
+
   it('keeps autonomous combat isolated between independent storylines', () => {
     const first = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'first', factionId: 'blue', transform: { x: 0, z: 0 } })
     const second = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'second', factionId: 'red', transform: { x: 3, z: 0 } })

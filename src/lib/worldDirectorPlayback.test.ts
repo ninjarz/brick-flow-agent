@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { createEmptyWorldState, createWorldEntity } from './worldEntity'
-import { getWorldDirectorPlaybackEntityIds, isWorldDirectorPlaybackSettled, shouldStartWorldDirectorPlayback } from './worldDirectorPlayback'
+import { getWorldDirectorPlaybackEntityIds, isWorldDirectorPlaybackSettled, prepareWorldForDirectorPlayback, shouldStartWorldDirectorPlayback } from './worldDirectorPlayback'
 
 const createWorld = () => {
   const world = createEmptyWorldState('plan')
@@ -45,6 +45,38 @@ describe('world director playback', () => {
       listenerId: 'erin',
       text: '等等。',
     })).toEqual(['roland', 'erin'])
+  })
+
+  it('clears autonomous work but preserves player orders before a directed scene', () => {
+    const world = createWorld()
+    const prepared = prepareWorldForDirectorPlayback({
+      ...world,
+      entities: world.entities.map((entity, index) => ({
+        ...entity,
+        controller: index === 0 ? 'rule' as const : 'player' as const,
+        activeCommand: { type: 'wander' as const },
+        commandQueue: [{ type: 'stop' as const }],
+        behaviorState: 'moving' as const,
+        navigation: {
+          status: 'moving' as const,
+          path: [{ x: 1, y: 0, z: 1 }],
+          pathIndex: 0,
+        },
+        combat: {
+          ...entity.combat,
+          attackTargetId: 'target',
+        },
+      })),
+    })
+
+    expect(prepared.entities[0]).toMatchObject({
+      activeCommand: undefined,
+      commandQueue: [],
+      behaviorState: 'idle',
+      navigation: { status: 'idle', path: [] },
+      combat: { attackTargetId: undefined },
+    })
+    expect(prepared.entities[1].activeCommand).toEqual({ type: 'wander' })
   })
 
   it('waits for finite commands and speech, but not persistent guard behavior', () => {

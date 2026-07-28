@@ -99,7 +99,6 @@ export const WorldEntityEditorPanel = ({ entity, commandTargets, onUpdate, onIss
           >
             <option value="rule">{t('worldEntity.controller.rule')}</option>
             <option value="player">{t('worldEntity.controller.player')}</option>
-            <option value="ai">{t('worldEntity.controller.ai')}</option>
           </select>
         </label>
       </div>

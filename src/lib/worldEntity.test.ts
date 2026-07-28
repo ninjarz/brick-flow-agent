@@ -196,6 +196,19 @@ describe('WorldEntity foundation', () => {
     expect(parseStoredWorldState(world, 'plan-2')).toBeUndefined()
   })
 
+  it('migrates the removed AI unit controller to rule control', () => {
+    const legacyEntity = createWorldEntity(worldEntityDefinitionById.get('knight')!, {
+      id: 'legacy-ai',
+      controller: 'ai',
+    })
+    const restored = parseStoredWorldState({
+      ...createEmptyWorldState('legacy-controller'),
+      entities: [legacyEntity],
+    }, 'legacy-controller')
+
+    expect(restored?.entities[0].controller).toBe('rule')
+  })
+
   it('upgrades legacy Gray Raven stages with contact-triggered dialogue', () => {
     const world = {
       ...createEmptyWorldState('gray-raven-plan'),

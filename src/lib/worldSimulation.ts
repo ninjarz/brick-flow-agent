@@ -826,6 +826,7 @@ export const stepWorldSimulation = (
   allBricks: PlacedBrick[],
   deltaSeconds = worldSimulationStepSeconds,
   allStructures: BrickStructure[] = [],
+  options: { suspendAutomaticControllers?: boolean } = {},
 ): WorldState => {
   if (world.entities.length === 0 || deltaSeconds <= 0) return world
   const hiddenTargetKeys = new Set(world.hiddenTargets.map((target) => `${target.kind}:${target.id}`))
@@ -1003,7 +1004,7 @@ export const stepWorldSimulation = (
       commandQueue = commandQueue.slice(1)
       commandStarted = true
     }
-    if (!activeCommand && entity.controller !== 'player') {
+    if (!activeCommand && entity.controller !== 'player' && !options.suspendAutomaticControllers) {
       const definition = worldEntityDefinitionById.get(entity.definitionId)
       const reviveTarget = definition?.support ? findNearestReviveTarget(entity, entities) : undefined
       const enemy = reviveTarget ? undefined : findBestEnemy(entity, entities, timeSeconds)

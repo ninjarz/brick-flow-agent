@@ -28,13 +28,13 @@ import { changeAllWorldEntityControllers, createEmptyWorldState, createWorldEnti
 import { isWorldEntityGroundPointBlockedByBricks, stepWorldSimulation, worldSimulationStepSeconds } from './lib/worldSimulation'
 import { findNearestAvailableWorldEntityPoint } from './lib/worldEntityCollision'
 import { advanceWorldFixedStepClock, createWorldFixedStepClock } from './lib/worldClock'
-import { getWorldDirectorPlaybackEntityIds, isWorldDirectorPlaybackSettled, shouldStartWorldDirectorPlayback } from './lib/worldDirectorPlayback'
+import { getWorldDirectorPlaybackEntityIds, isWorldDirectorPlaybackSettled, prepareWorldForDirectorPlayback, shouldStartWorldDirectorPlayback } from './lib/worldDirectorPlayback'
 import { buildDirectorCompactionPrompt, buildDirectorMessages, createDirectorMemoryCheckpoint, createFallbackDirectorSummary, estimateDirectorMessagesTokens, getDirectorTurnsAfterMemory, parseDirectorCompactionSummary, planDirectorCompaction } from './lib/worldDirectorContext'
 import { addWorldStory, createLocalTavernStory } from './lib/worldNarrative'
 import { playTavernActivity, type TavernActivityKind } from './lib/worldTavernActivities'
 import { applyTavernAiResponse, requestTavernAiActivity } from './lib/worldTavernAi'
 import { applyTavernDirectorEvent, buildTavernDirectorPrompt, createTavernDirectorStreamParser, tavernDirectorSystemPrompt, type TavernDirectorEntry, type TavernDirectorStreamPreview } from './lib/worldTavernDirector'
-import { applyWorldAiTurn, createWorldAiSnapshot, formatWorldAiTurnSummary, requestWorldAiTurn } from './lib/worldAi'
+import { createWorldAiSnapshot } from './lib/worldAi'
 import { analyzeBuildStability } from './lib/stabilityAnalysis'
 import { formatLDrawPlan, parseLDrawPlan } from './lib/ldrawPlan'
 import { getEffectiveInventory, loadInventoryOverrides, saveInventoryOverrides } from './lib/userInventory'
@@ -210,12 +210,9 @@ function App() {
   const [isTavernOpen, setIsTavernOpen] = useState(false)
   const [isWorldStoryDockOpen, setIsWorldStoryDockOpen] = useState(true)
   const [isWorldRosterOpen, setIsWorldRosterOpen] = useState(false)
-  const [isWorldAiThinking, setIsWorldAiThinking] = useState(false)
   const [isTavernAiThinking, setIsTavernAiThinking] = useState(false)
   const [isTavernDirectorThinking, setIsTavernDirectorThinking] = useState(false)
   const [isTavernDirectorCompacting, setIsTavernDirectorCompacting] = useState(false)
-  const [worldAiFeedback, setWorldAiFeedback] = useState<{ tone: 'success' | 'error'; text: string }>()
-  const worldAiAbortRef = useRef<AbortController>()
   const tavernAiAbortRef = useRef<AbortController>()
   const tavernDirectorAbortRef = useRef<AbortController>()
   const worldScenarioAiAbortRef = useRef<AbortController>()
@@ -721,6 +718,7 @@ function App() {
                 planRef.current.bricks,
                 worldSimulationStepSeconds,
                 planRef.current.structures ?? [],
+                { suspendAutomaticControllers: Boolean(tavernDirectorPlaybackRef.current?.simulationStarted) },
               ),
               {
                 allowNewStages: !tavernDirectorPlaybackRef.current,
@@ -1638,47 +1636,6 @@ function App() {
     }
   }, [isTavernAiThinking, llmConfig, llmConfigComplete, locale])
 
-  const runWorldAiTurn = useCallback(async () => {
-    if (!llmConfigComplete || isWorldAiThinking) return
-    worldAiAbortRef.current?.abort()
-    const controller = new AbortController()
-    worldAiAbortRef.current = controller
-    setIsWorldAiThinking(true)
-    setWorldAiFeedback(undefined)
-    const requestWorld = worldRef.current
-    const requestPlan = planRef.current
-    try {
-      const response = await requestWorldAiTurn({
-        world: requestWorld,
-        bricks: requestPlan.bricks,
-        structures: requestPlan.structures,
-        config: llmConfig,
-        locale,
-        signal: controller.signal,
-      })
-      const currentWorld = worldRef.current
-      const currentPlan = planRef.current
-      const result = applyWorldAiTurn(currentWorld, response, {
-        bricks: currentPlan.bricks,
-        structures: currentPlan.structures,
-      })
-      const nextWorld = result.story ? addWorldStory(result.world, result.story) : result.world
-      setWorld(nextWorld)
-      setWorldAiFeedback({ tone: 'success', text: formatWorldAiTurnSummary(result, locale) })
-    } catch (error) {
-      if (controller.signal.aborted) return
-      setWorldAiFeedback({
-        tone: 'error',
-        text: error instanceof Error ? error.message : t('tavern.aiFailed'),
-      })
-    } finally {
-      if (worldAiAbortRef.current === controller) {
-        worldAiAbortRef.current = undefined
-        setIsWorldAiThinking(false)
-      }
-    }
-  }, [isWorldAiThinking, llmConfig, llmConfigComplete, locale, t])
-
   const compactTavernDirectorHistory = useCallback(async ({
     currentRequest = '',
     force = false,
@@ -1828,38 +1785,56 @@ function App() {
     let responseMessage = ''
     let contextStats: WorldDirectorTurn['contextStats']
     const playbackEntityIds = new Set<string>()
+    let playbackQueue = Promise.resolve()
     const parser = createTavernDirectorStreamParser(
       (event) => {
         eventCount += 1
-        const currentWorld = worldRef.current
-        const currentPlan = planRef.current
-        const applied = applyTavernDirectorEvent(currentWorld, event, {
-          bricks: currentPlan.bricks,
-          structures: currentPlan.structures ?? [],
-        })
-        const startsSimulation = (
-          applied.status !== 'rejected'
-          && shouldStartWorldDirectorPlayback(event)
-          && !playback.simulationStarted
-        )
-        if (startsSimulation) playback.simulationStarted = true
-        const nextWorld = startsSimulation && applied.world.paused
-          ? { ...applied.world, paused: false }
-          : applied.world
-        if (nextWorld !== currentWorld) {
-          worldRef.current = nextWorld
-          setWorld(nextWorld)
-        }
-        if (applied.status !== 'rejected') {
-          getWorldDirectorPlaybackEntityIds(event).forEach((entityId) => playbackEntityIds.add(entityId))
-        }
-        onEntry({
-          ...event,
-          id: `director-entry-${Date.now().toString(36)}-${eventCount}`,
-          status: applied.status,
-          detail: applied.detail,
-          before: applied.before,
-          after: applied.after,
+        const entryIndex = eventCount
+        playbackQueue = playbackQueue.then(async () => {
+          if (controller.signal.aborted) return
+          const currentWorld = worldRef.current
+          const currentPlan = planRef.current
+          const mayStartSimulation = shouldStartWorldDirectorPlayback(event) && !playback.simulationStarted
+          const eventWorld = mayStartSimulation
+            ? prepareWorldForDirectorPlayback(currentWorld)
+            : currentWorld
+          const applied = applyTavernDirectorEvent(eventWorld, event, {
+            bricks: currentPlan.bricks,
+            structures: currentPlan.structures ?? [],
+          })
+          const startsSimulation = applied.status !== 'rejected' && mayStartSimulation
+          if (startsSimulation) playback.simulationStarted = true
+          const acceptedWorld = applied.status === 'rejected' ? currentWorld : applied.world
+          const nextWorld = startsSimulation && acceptedWorld.paused
+            ? { ...acceptedWorld, paused: false }
+            : acceptedWorld
+          if (nextWorld !== currentWorld) {
+            worldRef.current = nextWorld
+            setWorld(nextWorld)
+          }
+          const eventEntityIds = applied.status !== 'rejected'
+            ? getWorldDirectorPlaybackEntityIds(event)
+            : []
+          eventEntityIds.forEach((entityId) => playbackEntityIds.add(entityId))
+          onEntry({
+            ...event,
+            id: `director-entry-${Date.now().toString(36)}-${entryIndex}`,
+            status: applied.status,
+            detail: applied.detail,
+            before: applied.before,
+            after: applied.after,
+          })
+          if (event.type !== 'dialogue' || eventEntityIds.length === 0) return
+          const eventDeadline = performance.now() + tavernDirectorPlaybackTimeoutMs
+          const eventEntityIdSet = new Set(eventEntityIds)
+          while (
+            !controller.signal.aborted
+            && !worldRef.current.paused
+            && performance.now() < eventDeadline
+            && !isWorldDirectorPlaybackSettled(worldRef.current, eventEntityIdSet)
+          ) {
+            await new Promise((resolve) => window.setTimeout(resolve, 100))
+          }
         })
       },
       (preview) => onProgress({ preview }),
@@ -1945,6 +1920,7 @@ function App() {
         ...streamResult.usage,
       }
       parser.finish()
+      await playbackQueue
       if (eventCount === 0) {
         throw new Error(locale === 'zh-CN' ? 'AI 没有返回可执行的剧情事件。' : 'The AI returned no usable story events.')
       }
@@ -2686,7 +2662,7 @@ function App() {
                       <small>{t(`worldEntity.controller.${globalWorldController}`)}</small>
                     </span>
                     <div role="group" aria-label={t('worldEntity.globalController')}>
-                      {(['rule', 'player', 'ai'] as const).map((controller) => (
+                      {(['rule', 'player'] as const).map((controller) => (
                         <button
                           key={controller}
                           type="button"
@@ -2791,13 +2767,10 @@ function App() {
                 structures={plan.structures ?? []}
                 llmConfigured={llmConfigComplete}
                 isLlmTesting={isTestingLlmConfig}
-                isAiThinking={isWorldAiThinking}
                 isDirectorThinking={isTavernDirectorThinking}
                 isDirectorCompacting={isTavernDirectorCompacting}
                 isAiActivityThinking={isTavernAiThinking}
-                aiFeedback={worldAiFeedback}
                 onGenerateStory={() => generateTavernStory()}
-                onRunAiTurn={runWorldAiTurn}
                 onPlayActivity={runTavernActivity}
                 onPlayAiActivity={runAiTavernActivity}
                 onDirectWorld={runTavernDirectorTurn}

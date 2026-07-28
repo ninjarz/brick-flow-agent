@@ -17,13 +17,10 @@ type WorldStoryDockProps = {
   structures: BrickStructure[]
   llmConfigured: boolean
   isLlmTesting: boolean
-  isAiThinking: boolean
   isDirectorThinking: boolean
   isDirectorCompacting: boolean
   isAiActivityThinking: boolean
-  aiFeedback?: { tone: 'success' | 'error'; text: string }
   onGenerateStory: () => void
-  onRunAiTurn: () => void
   onPlayActivity: (activity: TavernActivityKind, focusEntityId?: string) => TavernActivityResult | undefined
   onPlayAiActivity: (activity: TavernActivityKind, focusEntityId?: string) => Promise<TavernActivityResult | undefined>
   onDirectWorld: (
@@ -185,13 +182,10 @@ export const WorldStoryDock = ({
   structures,
   llmConfigured,
   isLlmTesting,
-  isAiThinking,
   isDirectorThinking,
   isDirectorCompacting,
   isAiActivityThinking,
-  aiFeedback,
   onGenerateStory,
-  onRunAiTurn,
   onPlayActivity,
   onPlayAiActivity,
   onDirectWorld,
@@ -722,10 +716,8 @@ export const WorldStoryDock = ({
                   <button type="button" key={kind} disabled={availableEntities.length === 0 || isAiActivityThinking} onClick={() => void playActivity(kind)}><Icon size={13} />{locale === 'zh-CN' ? zh : en}</button>
                 ))}
                 <button type="button" onClick={onGenerateStory} disabled={world.entities.length === 0 && world.events.length === 0}><Sparkles size={13} />{locale === 'zh-CN' ? '整理传闻' : 'Compose rumor'}</button>
-                <button type="button" onClick={onRunAiTurn} disabled={!llmConfigured || isAiThinking}><Bot size={13} />{isAiThinking ? (locale === 'zh-CN' ? '推演中' : 'Thinking') : (locale === 'zh-CN' ? 'AI 推演' : 'AI turn')}</button>
               </div>
               {isAiActivityThinking && <p className="world-story-tool-status"><Bot size={12} />{locale === 'zh-CN' ? 'AI 正在编排这一刻……' : 'AI is staging this moment…'}</p>}
-              {aiFeedback && <p className={`tavern-ai-feedback ${aiFeedback.tone}`}>{aiFeedback.text}</p>}
             </div>
           )}
 

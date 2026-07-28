@@ -267,7 +267,7 @@ const parseStoredEntity = (value: unknown): WorldEntity | undefined => {
     name: value.name,
     description: typeof value.description === 'string' ? value.description : definition.description,
     factionId: typeof value.factionId === 'string' ? value.factionId.slice(0, 80) : 'neutral',
-    controller: isController(value.controller) ? value.controller : 'rule',
+    controller: isController(value.controller) && value.controller !== 'ai' ? value.controller : 'rule',
     transform: value.transform,
   })
   const health = isFiniteNumber(value.health) ? Math.max(0, Math.min(definition.combat.maxHealth, value.health)) : definition.combat.maxHealth

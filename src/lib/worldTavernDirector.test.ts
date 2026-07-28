@@ -104,6 +104,11 @@ describe('tavern director protocol', () => {
       text: '北路有异动。',
     }, { bricks: [], structures: [] })
     expect(applied.status).toBe('accepted')
+    expect(applied.world.entities.find((entity) => entity.id === eileen.id)?.speech).toMatchObject({
+      message: 'scenario-dialogue',
+      text: '北路有异动。',
+      expiresAtSeconds: 5,
+    })
     expect(applied.world.events).toHaveLength(1)
     expect(applied.world.events[0]).toMatchObject({
       type: 'interaction',
