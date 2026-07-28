@@ -29,7 +29,7 @@ import { isWorldEntityGroundPointBlockedByBricks, stepWorldSimulation, worldSimu
 import { findNearestAvailableWorldEntityPoint } from './lib/worldEntityCollision'
 import { advanceWorldFixedStepClock, createWorldFixedStepClock } from './lib/worldClock'
 import { getWorldDirectorPlaybackEntityIds, isWorldDirectorPlaybackSettled } from './lib/worldDirectorPlayback'
-import { buildDirectorCompactionPrompt, buildDirectorMessages, createFallbackDirectorSummary, estimateDirectorMessagesTokens, getDirectorTurnsAfterMemory, parseDirectorCompactionSummary, planDirectorCompaction } from './lib/worldDirectorContext'
+import { buildDirectorCompactionPrompt, buildDirectorMessages, createDirectorMemoryCheckpoint, createFallbackDirectorSummary, estimateDirectorMessagesTokens, getDirectorTurnsAfterMemory, parseDirectorCompactionSummary, planDirectorCompaction } from './lib/worldDirectorContext'
 import { addWorldStory, createLocalTavernStory } from './lib/worldNarrative'
 import { playTavernActivity, type TavernActivityKind } from './lib/worldTavernActivities'
 import { applyTavernAiResponse, requestTavernAiActivity } from './lib/worldTavernAi'
@@ -43,7 +43,7 @@ import { addWorldScenario, startWorldScenario } from './lib/worldScenarioImport'
 import { advanceWorldScenarios, getActiveWorldScenarioStages } from './lib/worldScenarioRuntime'
 import { clearWorkspaceDraft, hasIndexedDbWorkspaceDraft, loadWorkspaceDraft, loadWorkspaceDraftFromIndexedDb, saveWorkspaceDraft } from './lib/workspaceDraft'
 import type { BrickStructure, BuildPlan, FinishedAsset, LlmConfig, PlacedBrick } from './types/bricks'
-import type { WorldDirectorTurn, WorldEntity, WorldEntityCommand, WorldEntityControllerKind, WorldState } from './types/world'
+import type { WorldDirectorMemory, WorldDirectorTurn, WorldEntity, WorldEntityCommand, WorldEntityControllerKind, WorldState } from './types/world'
 import './App.css'
 
 const BrickScene = lazy(() => import('./components/BrickScene').then((module) => ({ default: module.BrickScene })))
@@ -1621,10 +1621,12 @@ function App() {
   const compactTavernDirectorHistory = useCallback(async ({
     currentRequest = '',
     force = false,
+    commit = true,
     signal,
   }: {
     currentRequest?: string
     force?: boolean
+    commit?: boolean
     signal?: AbortSignal
   } = {}) => {
     const contextWorld = worldRef.current
@@ -1668,33 +1670,52 @@ function App() {
     if (!summary || !throughTurn) return { compactedTurns: 0, triggered: false }
     const latestWorld = worldRef.current
     const previousMemory = latestWorld.narrative.directorMemory
-    const compactedWorld = {
-      ...latestWorld,
-      narrative: {
-        ...latestWorld.narrative,
-        directorMemory: {
-          summary,
-          ...(previousMemory?.lockedFacts?.length ? { lockedFacts: previousMemory.lockedFacts } : {}),
-          throughTurnId: throughTurn.id,
-          sourceTurnCount: (previousMemory?.sourceTurnCount ?? 0) + compactionPlan.candidateTurns.length,
-          updatedAtSeconds: latestWorld.elapsedSeconds,
+    const memory = createDirectorMemoryCheckpoint({
+      memory: previousMemory,
+      summary,
+      throughTurnId: throughTurn.id,
+      compactedTurnCount: compactionPlan.candidateTurns.length,
+      updatedAtSeconds: latestWorld.elapsedSeconds,
+    })
+    if (commit) {
+      const compactedWorld = {
+        ...latestWorld,
+        narrative: {
+          ...latestWorld.narrative,
+          directorMemory: memory,
         },
-      },
+      }
+      worldRef.current = compactedWorld
+      setWorld(compactedWorld)
     }
-    worldRef.current = compactedWorld
-    setWorld(compactedWorld)
-    return { compactedTurns: compactionPlan.candidateTurns.length, triggered: true }
+    return { compactedTurns: compactionPlan.candidateTurns.length, triggered: true, memory }
   }, [llmConfig, llmConfigComplete, locale])
 
   const manuallyCompactTavernDirectorHistory = useCallback(async () => {
     if (isTavernDirectorThinking || isTavernDirectorCompacting) return { compactedTurns: 0, triggered: false }
     setIsTavernDirectorCompacting(true)
     try {
-      return await compactTavernDirectorHistory({ force: true })
+      return await compactTavernDirectorHistory({ force: true, commit: false })
     } finally {
       setIsTavernDirectorCompacting(false)
     }
   }, [compactTavernDirectorHistory, isTavernDirectorCompacting, isTavernDirectorThinking])
+
+  const applyTavernDirectorMemoryPreview = useCallback((memory: WorldDirectorMemory) => {
+    const current = worldRef.current
+    const checkpointExists = current.narrative.directorTurns.some((turn) => turn.id === memory.throughTurnId)
+    if (!checkpointExists || memory.sourceTurnCount > current.narrative.directorTurns.length) return false
+    const next = {
+      ...current,
+      narrative: {
+        ...current.narrative,
+        directorMemory: memory,
+      },
+    }
+    worldRef.current = next
+    setWorld(next)
+    return true
+  }, [])
 
   const updateTavernDirectorMemory = useCallback((summary: string, lockedFacts: string[]) => {
     const cleanSummary = summary.trim().slice(0, 4_000)
@@ -2702,6 +2723,7 @@ function App() {
                 onStopDirector={stopTavernDirector}
                 onCommitDirectorTurn={commitTavernDirectorTurn}
                 onCompactDirectorMemory={manuallyCompactTavernDirectorHistory}
+                onApplyDirectorMemory={applyTavernDirectorMemoryPreview}
                 onUpdateDirectorMemory={updateTavernDirectorMemory}
                 onSelectEntity={selectWorldEntity}
                 onClose={() => setIsWorldStoryDockOpen(false)}

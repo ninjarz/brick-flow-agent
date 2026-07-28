@@ -98,6 +98,26 @@ export type DirectorCompactionPlan = {
   estimatedTotalTokens: number
 }
 
+export const createDirectorMemoryCheckpoint = ({
+  memory,
+  summary,
+  throughTurnId,
+  compactedTurnCount,
+  updatedAtSeconds,
+}: {
+  memory?: WorldDirectorMemory
+  summary: string
+  throughTurnId: string
+  compactedTurnCount: number
+  updatedAtSeconds: number
+}): WorldDirectorMemory => ({
+  summary: summary.trim().slice(0, 4_000),
+  ...(memory?.lockedFacts?.length ? { lockedFacts: [...memory.lockedFacts] } : {}),
+  throughTurnId,
+  sourceTurnCount: (memory?.sourceTurnCount ?? 0) + compactedTurnCount,
+  updatedAtSeconds,
+})
+
 export const planDirectorCompaction = ({
   systemPrompt,
   memory,

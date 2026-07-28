@@ -10,7 +10,7 @@ import {
 import type { TavernDirectorEntry, TavernDirectorStreamPreview } from '../lib/worldTavernDirector'
 import type { TavernActivityKind, TavernActivityResult } from '../lib/worldTavernActivities'
 import type { BrickStructure } from '../types/bricks'
-import type { WorldDirectorTurn, WorldState } from '../types/world'
+import type { WorldDirectorMemory, WorldDirectorTurn, WorldState } from '../types/world'
 
 type WorldStoryDockProps = {
   world: WorldState
@@ -38,7 +38,8 @@ type WorldStoryDockProps = {
   }>
   onStopDirector: () => void
   onCommitDirectorTurn: (turn: WorldDirectorTurn) => void
-  onCompactDirectorMemory: () => Promise<{ compactedTurns: number; triggered: boolean }>
+  onCompactDirectorMemory: () => Promise<{ compactedTurns: number; triggered: boolean; memory?: WorldDirectorMemory }>
+  onApplyDirectorMemory: (memory: WorldDirectorMemory) => boolean
   onUpdateDirectorMemory: (summary: string, lockedFacts: string[]) => void
   onSelectEntity: (entityId: string) => void
   onClose: () => void
@@ -197,6 +198,7 @@ export const WorldStoryDock = ({
   onStopDirector,
   onCommitDirectorTurn,
   onCompactDirectorMemory,
+  onApplyDirectorMemory,
   onUpdateDirectorMemory,
   onSelectEntity,
   onClose,
@@ -212,6 +214,7 @@ export const WorldStoryDock = ({
   const [memorySummaryDraft, setMemorySummaryDraft] = useState('')
   const [lockedFactsDraft, setLockedFactsDraft] = useState('')
   const [memoryFeedback, setMemoryFeedback] = useState('')
+  const [memoryPreview, setMemoryPreview] = useState<{ memory: WorldDirectorMemory; compactedTurns: number }>()
   const [panelHeight, setPanelHeight] = useState(initialStoryPanelHeight)
   const [panelWidth, setPanelWidth] = useState(initialStoryPanelWidth)
   const [isResizing, setIsResizing] = useState(false)
@@ -375,6 +378,7 @@ export const WorldStoryDock = ({
         setMemorySummaryDraft(world.narrative.directorMemory?.summary ?? '')
         setLockedFactsDraft((world.narrative.directorMemory?.lockedFacts ?? []).join('\n'))
         setMemoryFeedback('')
+        setMemoryPreview(undefined)
       }
       return !current
     })
@@ -382,15 +386,34 @@ export const WorldStoryDock = ({
 
   const saveDirectorMemory = () => {
     onUpdateDirectorMemory(memorySummaryDraft, lockedFactsDraft.split(/\r?\n/))
+    setMemoryPreview(undefined)
     setMemoryFeedback(locale === 'zh-CN' ? '剧情记忆已保存。' : 'Story memory saved.')
   }
 
   const compactDirectorMemory = async () => {
     setMemoryFeedback('')
     const result = await onCompactDirectorMemory()
-    setMemoryFeedback(result.compactedTurns > 0
-      ? (locale === 'zh-CN' ? `已将 ${result.compactedTurns} 轮剧情并入摘要。` : `Compacted ${result.compactedTurns} story turns.`)
+    setMemoryPreview(result.memory && result.compactedTurns > 0
+      ? { memory: result.memory, compactedTurns: result.compactedTurns }
+      : undefined)
+    setMemoryFeedback(result.memory && result.compactedTurns > 0
+      ? (locale === 'zh-CN' ? '压缩预览已生成，确认后才会替换当前摘要。' : 'Compaction preview ready. Confirm to replace the current summary.')
       : (locale === 'zh-CN' ? '最近原文不足 5 轮，暂时无需压缩。' : 'Fewer than five raw turns; nothing to compact.'))
+  }
+
+  const applyDirectorMemoryPreview = () => {
+    if (!memoryPreview) return
+    if (!onApplyDirectorMemory(memoryPreview.memory)) {
+      setMemoryFeedback(locale === 'zh-CN' ? '剧情已变化，预览失效，请重新压缩。' : 'The story changed. Generate a new preview.')
+      setMemoryPreview(undefined)
+      return
+    }
+    setMemorySummaryDraft(memoryPreview.memory.summary)
+    setLockedFactsDraft((memoryPreview.memory.lockedFacts ?? []).join('\n'))
+    setMemoryFeedback(locale === 'zh-CN'
+      ? `已确认压缩，${memoryPreview.compactedTurns} 轮剧情已并入摘要。`
+      : `Compaction applied to ${memoryPreview.compactedTurns} story turns.`)
+    setMemoryPreview(undefined)
   }
 
   const submit = async () => {
@@ -576,7 +599,10 @@ export const WorldStoryDock = ({
                     maxLength={4_000}
                     value={memorySummaryDraft}
                     placeholder={locale === 'zh-CN' ? '压缩后保留的剧情事实、关系与未解决线索……' : 'Compacted facts, relationships, and unresolved clues…'}
-                    onChange={(event) => setMemorySummaryDraft(event.target.value)}
+                    onChange={(event) => {
+                      setMemorySummaryDraft(event.target.value)
+                      setMemoryPreview(undefined)
+                    }}
                   />
                 </label>
                 <label>
@@ -586,9 +612,45 @@ export const WorldStoryDock = ({
                     maxLength={9_000}
                     value={lockedFactsDraft}
                     placeholder={locale === 'zh-CN' ? '例如：罗兰是玩家角色\n黑岩使者尚未透露采石场入口' : 'Example: Roland is the player character'}
-                    onChange={(event) => setLockedFactsDraft(event.target.value)}
+                    onChange={(event) => {
+                      setLockedFactsDraft(event.target.value)
+                      setMemoryPreview(undefined)
+                    }}
                   />
                 </label>
+                {memoryPreview && (
+                  <section className="world-story-memory-preview" aria-label={locale === 'zh-CN' ? '剧情记忆压缩预览' : 'Story memory compaction preview'}>
+                    <header>
+                      <strong>{locale === 'zh-CN' ? '压缩前后预览' : 'Compaction preview'}</strong>
+                      <span>
+                        {locale === 'zh-CN'
+                          ? `${memoryPreview.compactedTurns} 轮并入摘要 · 保留 ${memoryPreview.memory.lockedFacts?.length ?? 0} 条锁定事实`
+                          : `${memoryPreview.compactedTurns} turns compacted · ${memoryPreview.memory.lockedFacts?.length ?? 0} locked facts preserved`}
+                      </span>
+                    </header>
+                    <div>
+                      <article>
+                        <small>{locale === 'zh-CN' ? '当前摘要' : 'Current'}</small>
+                        <p>{world.narrative.directorMemory?.summary || (locale === 'zh-CN' ? '暂无摘要' : 'No summary yet')}</p>
+                      </article>
+                      <article className="next">
+                        <small>{locale === 'zh-CN' ? '压缩后' : 'After compaction'}</small>
+                        <p>{memoryPreview.memory.summary}</p>
+                      </article>
+                    </div>
+                    <footer>
+                      <button type="button" onClick={applyDirectorMemoryPreview}>
+                        <Save size={11} />{locale === 'zh-CN' ? '确认采用' : 'Apply'}
+                      </button>
+                      <button type="button" onClick={() => {
+                        setMemoryPreview(undefined)
+                        setMemoryFeedback(locale === 'zh-CN' ? '已放弃本次压缩预览。' : 'Compaction preview discarded.')
+                      }}>
+                        {locale === 'zh-CN' ? '放弃' : 'Discard'}
+                      </button>
+                    </footer>
+                  </section>
+                )}
                 <div className="world-story-memory-actions">
                   <button type="button" onClick={saveDirectorMemory}><Save size={12} />{locale === 'zh-CN' ? '保存记忆' : 'Save memory'}</button>
                   <button

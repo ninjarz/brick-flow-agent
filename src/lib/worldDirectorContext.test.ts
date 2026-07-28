@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { WorldDirectorTurn } from '../types/world'
 import {
   buildDirectorMessages,
+  createDirectorMemoryCheckpoint,
   directorRecentRawTurnCount,
   getDirectorTurnsAfterMemory,
   parseDirectorCompactionSummary,
@@ -108,5 +109,32 @@ describe('world director context', () => {
 
     expect(messages[1].content).toContain('罗兰是玩家角色')
     expect(messages[1].content).toContain('黑岩使者尚未招供')
+  })
+
+  it('preserves locked facts in a compaction preview checkpoint', () => {
+    const memory = {
+      summary: '旧摘要',
+      lockedFacts: ['罗兰是玩家角色', '黑岩使者尚未招供'],
+      throughTurnId: 'turn-2',
+      sourceTurnCount: 2,
+      updatedAtSeconds: 4,
+    }
+
+    const next = createDirectorMemoryCheckpoint({
+      memory,
+      summary: ' 新摘要 ',
+      throughTurnId: 'turn-7',
+      compactedTurnCount: 5,
+      updatedAtSeconds: 12,
+    })
+
+    expect(next).toEqual({
+      summary: '新摘要',
+      lockedFacts: ['罗兰是玩家角色', '黑岩使者尚未招供'],
+      throughTurnId: 'turn-7',
+      sourceTurnCount: 7,
+      updatedAtSeconds: 12,
+    })
+    expect(next.lockedFacts).not.toBe(memory.lockedFacts)
   })
 })
