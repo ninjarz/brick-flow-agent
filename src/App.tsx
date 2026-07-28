@@ -10,7 +10,7 @@ import { worldEntityDefinitionById } from './data/worldEntityDefinitions'
 import { createDefaultWorldScenarios } from './data/worldScenarios'
 import { dropBrickGroupAtPoint, findNearestOpenBrickGroupAround, getBrickGroupDragPointerOffset, offsetBrickGroupDragPoint, rotationRepositionSearchRadiusStuds, type HorizontalDropPoint, type StationaryPlanSpatialData } from './lib/brickGroupPlacement'
 import { generateBuildPlan } from './lib/localGenerator'
-import { buildLlmUserPrompt, generateLlmBuildPlan, isLlmConfigComplete, llmSystemPrompt, requestLlmTextStream, resetLlmThinkingCompatibility, testLlmConnection } from './lib/llmGenerator'
+import { buildLlmUserPrompt, generateLlmBuildPlan, isLlmConfigComplete, llmSystemPrompt, requestLlmJsonContent, requestLlmTextStream, resetLlmThinkingCompatibility, testLlmConnection } from './lib/llmGenerator'
 import { loadLlmConfig, saveLlmConfig } from './lib/llmConfig'
 import { defaultFinishedAssets, hasIndexedDbFinishedAssets, isDefaultFinishedAsset, loadAllDefaultFinishedAssets, loadFinishedAssets, loadFinishedAssetsFromIndexedDb, mergeWithDefaultAssets, saveFinishedAssets } from './lib/finishedAssets'
 import { formatBuildManualHtml, formatBuildManualMarkdown, serializeBuildManual } from './lib/manualSerializer'
@@ -28,6 +28,8 @@ import { changeAllWorldEntityControllers, createEmptyWorldState, createWorldEnti
 import { isWorldEntityGroundPointBlockedByBricks, stepWorldSimulation, worldSimulationStepSeconds } from './lib/worldSimulation'
 import { findNearestAvailableWorldEntityPoint } from './lib/worldEntityCollision'
 import { advanceWorldFixedStepClock, createWorldFixedStepClock } from './lib/worldClock'
+import { getWorldDirectorPlaybackEntityIds, isWorldDirectorPlaybackSettled } from './lib/worldDirectorPlayback'
+import { buildDirectorCompactionPrompt, buildDirectorMessages, createFallbackDirectorSummary, parseDirectorCompactionSummary, planDirectorCompaction } from './lib/worldDirectorContext'
 import { addWorldStory, createLocalTavernStory } from './lib/worldNarrative'
 import { playTavernActivity, type TavernActivityKind } from './lib/worldTavernActivities'
 import { applyTavernAiResponse, requestTavernAiActivity } from './lib/worldTavernAi'
@@ -78,6 +80,7 @@ type WorldEntityPlacementSession = {
 }
 type AssetLibraryKind = 'models' | 'scenarios'
 const workspaceDraftSaveDebounceMs = 120
+const tavernDirectorPlaybackTimeoutMs = 15_000
 const sceneViewModeOrder: BrickSceneViewMode[] = ['border', 'borderless', 'xray', 'voxel']
 const ignoreSceneInteraction = () => {}
 
@@ -212,6 +215,10 @@ function App() {
   const worldAiAbortRef = useRef<AbortController>()
   const tavernAiAbortRef = useRef<AbortController>()
   const tavernDirectorAbortRef = useRef<AbortController>()
+  const tavernDirectorPlaybackRef = useRef<{
+    controller: AbortController
+    restorePaused: boolean
+  }>()
   const [isManualOpen, setIsManualOpen] = useState(false)
   const [manualPlan, setManualPlan] = useState<BuildPlan>()
   const [manualStepIndex, setManualStepIndex] = useState(0)
@@ -1616,21 +1623,29 @@ function App() {
     onEntry: (entry: TavernDirectorEntry) => void,
     onProgress: (progress: { reasoningDelta?: string; preview?: TavernDirectorStreamPreview }) => void,
   ) => {
-    if (!llmConfigComplete || isTavernDirectorThinking) return
+    if (!llmConfigComplete) throw new Error(locale === 'zh-CN' ? 'LLM 配置不完整。' : 'LLM configuration is incomplete.')
+    if (isTavernDirectorThinking) throw new Error(locale === 'zh-CN' ? '上一轮剧情仍在演绎。' : 'The previous story turn is still running.')
+    void recentEntries
+    const previousPlayback = tavernDirectorPlaybackRef.current
     tavernDirectorAbortRef.current?.abort()
     const controller = new AbortController()
     tavernDirectorAbortRef.current = controller
+    const playback = {
+      controller,
+      restorePaused: previousPlayback?.restorePaused ?? worldRef.current.paused,
+    }
+    tavernDirectorPlaybackRef.current = playback
+    if (worldRef.current.paused) {
+      const resumedWorld = { ...worldRef.current, paused: false }
+      worldRef.current = resumedWorld
+      setWorld(resumedWorld)
+    }
     setIsTavernDirectorThinking(true)
-    const requestWorld = worldRef.current
     const requestPlan = planRef.current
-    const snapshot = createWorldAiSnapshot(requestWorld, requestPlan.bricks, requestPlan.structures)
-    const protagonist = requestWorld.scenarios
-      .flatMap((scenario) => scenario.stages)
-      .map((stage) => stage.trigger.actorId)
-      .map((actorId) => requestWorld.entities.find((entity) => entity.id === actorId))
-      .find((entity) => Boolean(entity))
-      ?? requestWorld.entities.find((entity) => entity.controller === 'player')
     let eventCount = 0
+    let requestMessage = ''
+    let responseMessage = ''
+    const playbackEntityIds = new Set<string>()
     const parser = createTavernDirectorStreamParser(
       (event) => {
         eventCount += 1
@@ -1644,6 +1659,9 @@ function App() {
           const nextWorld = advanceWorldScenarios(applied.world)
           worldRef.current = nextWorld
           setWorld(nextWorld)
+        }
+        if (applied.status !== 'rejected') {
+          getWorldDirectorPlaybackEntityIds(event).forEach((entityId) => playbackEntityIds.add(entityId))
         }
         onEntry({
           ...event,
@@ -1673,16 +1691,97 @@ function App() {
           setIsTestingLlmConfig(false)
         }
       }
-      await requestLlmTextStream({
-        config: llmConfig,
+      let contextWorld = worldRef.current
+      let contextSnapshot = createWorldAiSnapshot(contextWorld, requestPlan.bricks, requestPlan.structures)
+      let protagonist = contextWorld.scenarios
+        .flatMap((scenario) => scenario.stages)
+        .map((stage) => stage.trigger.actorId)
+        .map((actorId) => contextWorld.entities.find((entity) => entity.id === actorId))
+        .find((entity) => Boolean(entity))
+        ?? contextWorld.entities.find((entity) => entity.controller === 'player')
+      let prospectiveRequest = buildTavernDirectorPrompt(
+        contextSnapshot,
+        playerText,
+        [],
+        locale,
+        protagonist ? { id: protagonist.id, name: protagonist.name } : undefined,
+      )
+      const compactionPlan = planDirectorCompaction({
         systemPrompt: tavernDirectorSystemPrompt,
-        userPrompt: buildTavernDirectorPrompt(
-          snapshot,
-          playerText,
-          recentEntries,
-          locale,
-          protagonist ? { id: protagonist.id, name: protagonist.name } : undefined,
-        ),
+        memory: contextWorld.narrative.directorMemory,
+        turns: contextWorld.narrative.directorTurns,
+        currentRequest: prospectiveRequest,
+      })
+      if (compactionPlan?.candidateTurns.length) {
+        let summary = ''
+        try {
+          const compacted = await requestLlmJsonContent({
+            config: llmConfig,
+            systemPrompt: 'You compact interactive story history into durable factual memory. Return JSON only.',
+            userPrompt: buildDirectorCompactionPrompt(
+              contextWorld.narrative.directorMemory,
+              compactionPlan.candidateTurns,
+              locale,
+            ),
+            locale,
+            signal: controller.signal,
+            temperature: 0.1,
+            maxTokens: 1_600,
+          })
+          summary = parseDirectorCompactionSummary(compacted)
+        } catch (error) {
+          if (controller.signal.aborted) throw error
+        }
+        if (!summary) {
+          summary = createFallbackDirectorSummary(
+            contextWorld.narrative.directorMemory,
+            compactionPlan.candidateTurns,
+            locale,
+          )
+        }
+        const throughTurn = compactionPlan.candidateTurns[compactionPlan.candidateTurns.length - 1]
+        if (summary && throughTurn) {
+          const latestWorld = worldRef.current
+          const compactedWorld = {
+            ...latestWorld,
+            narrative: {
+              ...latestWorld.narrative,
+              directorMemory: {
+                summary,
+                throughTurnId: throughTurn.id,
+                sourceTurnCount: (latestWorld.narrative.directorMemory?.sourceTurnCount ?? 0) + compactionPlan.candidateTurns.length,
+                updatedAtSeconds: latestWorld.elapsedSeconds,
+              },
+            },
+          }
+          worldRef.current = compactedWorld
+          setWorld(compactedWorld)
+        }
+      }
+      contextWorld = worldRef.current
+      contextSnapshot = createWorldAiSnapshot(contextWorld, requestPlan.bricks, requestPlan.structures)
+      protagonist = contextWorld.scenarios
+        .flatMap((scenario) => scenario.stages)
+        .map((stage) => stage.trigger.actorId)
+        .map((actorId) => contextWorld.entities.find((entity) => entity.id === actorId))
+        .find((entity) => Boolean(entity))
+        ?? contextWorld.entities.find((entity) => entity.controller === 'player')
+      prospectiveRequest = buildTavernDirectorPrompt(
+        contextSnapshot,
+        playerText,
+        [],
+        locale,
+        protagonist ? { id: protagonist.id, name: protagonist.name } : undefined,
+      )
+      requestMessage = prospectiveRequest
+      responseMessage = await requestLlmTextStream({
+        config: llmConfig,
+        messages: buildDirectorMessages({
+          systemPrompt: tavernDirectorSystemPrompt,
+          memory: contextWorld.narrative.directorMemory,
+          turns: contextWorld.narrative.directorTurns,
+          currentRequest: requestMessage,
+        }),
         locale,
         signal: controller.signal,
         temperature: 0.65,
@@ -1694,10 +1793,28 @@ function App() {
       if (eventCount === 0) {
         throw new Error(locale === 'zh-CN' ? 'AI 没有返回可执行的剧情事件。' : 'The AI returned no usable story events.')
       }
+      const playbackDeadline = performance.now() + tavernDirectorPlaybackTimeoutMs
+      while (
+        !controller.signal.aborted
+        && !worldRef.current.paused
+        && performance.now() < playbackDeadline
+        && !isWorldDirectorPlaybackSettled(worldRef.current, playbackEntityIds)
+      ) {
+        await new Promise((resolve) => window.setTimeout(resolve, 100))
+      }
+      return { requestMessage, responseMessage }
     } finally {
       if (tavernDirectorAbortRef.current === controller) {
         tavernDirectorAbortRef.current = undefined
         setIsTavernDirectorThinking(false)
+      }
+      if (tavernDirectorPlaybackRef.current === playback) {
+        tavernDirectorPlaybackRef.current = undefined
+        if (playback.restorePaused && !worldRef.current.paused) {
+          const restoredWorld = { ...worldRef.current, paused: true }
+          worldRef.current = restoredWorld
+          setWorld(restoredWorld)
+        }
       }
     }
   }, [isTavernDirectorThinking, llmConfig, llmConfigComplete, llmConfigFeedback?.tone, locale, t])
@@ -1715,7 +1832,7 @@ function App() {
         directorTurns: [
           ...current.narrative.directorTurns.filter((candidate) => candidate.id !== turn.id),
           turn,
-        ].slice(-20),
+        ].slice(-100),
       },
     }
     worldRef.current = next

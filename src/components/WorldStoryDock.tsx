@@ -30,7 +30,7 @@ type WorldStoryDockProps = {
     recentEntries: TavernDirectorEntry[],
     onEntry: (entry: TavernDirectorEntry) => void,
     onProgress: (progress: { reasoningDelta?: string; preview?: TavernDirectorStreamPreview }) => void,
-  ) => Promise<void>
+  ) => Promise<{ requestMessage: string; responseMessage: string }>
   onStopDirector: () => void
   onCommitDirectorTurn: (turn: WorldDirectorTurn) => void
   onSelectEntity: (entityId: string) => void
@@ -352,6 +352,8 @@ export const WorldStoryDock = ({
     const entries: TavernDirectorEntry[] = []
     let reasoning = ''
     let streamPreview: TavernDirectorStreamPreview | undefined
+    let requestMessage = ''
+    let responseMessage = ''
     let progressFrame = 0
     const flushProgress = () => {
       progressFrame = 0
@@ -373,7 +375,7 @@ export const WorldStoryDock = ({
     let status: WorldDirectorTurn['status'] = 'completed'
     let errorMessage: string | undefined
     try {
-      await onDirectWorld(
+      const result = await onDirectWorld(
         playerText,
         world.narrative.directorTurns.flatMap((turn) => turn.entries).slice(-12),
         (entry) => {
@@ -386,6 +388,8 @@ export const WorldStoryDock = ({
           scheduleProgress()
         },
       )
+      requestMessage = result.requestMessage
+      responseMessage = result.responseMessage
     } catch (error) {
       errorMessage = error instanceof Error ? error.message : (locale === 'zh-CN' ? '导演请求失败' : 'Director request failed')
       status = /取消|canceled/i.test(errorMessage) ? 'stopped' : 'failed'
@@ -396,6 +400,8 @@ export const WorldStoryDock = ({
         playerText,
         entries,
         ...(reasoning.trim() ? { reasoning: reasoning.trim() } : {}),
+        ...(requestMessage ? { requestMessage } : {}),
+        ...(responseMessage ? { responseMessage } : {}),
         createdAtSeconds,
         status,
         ...(errorMessage ? { error: errorMessage } : {}),

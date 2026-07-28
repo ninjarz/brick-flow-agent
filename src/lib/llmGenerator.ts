@@ -38,6 +38,10 @@ type LlmGenerateInput = GeneratorInput & {
 
 type LlmRequestPayload = Record<string, unknown>
 type LlmLocale = 'zh-CN' | 'en-US'
+export type LlmChatMessage = {
+  role: 'system' | 'user' | 'assistant'
+  content: string
+}
 
 export type LlmJsonRequestInput = {
   config: LlmConfig
@@ -49,7 +53,10 @@ export type LlmJsonRequestInput = {
   maxTokens?: number
 }
 
-export type LlmStreamRequestInput = LlmJsonRequestInput & {
+export type LlmStreamRequestInput = Omit<LlmJsonRequestInput, 'systemPrompt' | 'userPrompt'> & {
+  systemPrompt?: string
+  userPrompt?: string
+  messages?: LlmChatMessage[]
   onDelta: (text: string) => void
   onReasoningDelta?: (text: string) => void
 }
@@ -730,6 +737,7 @@ export const requestLlmTextStream = async ({
   config,
   systemPrompt,
   userPrompt,
+  messages,
   signal,
   locale = 'zh-CN',
   temperature = 0.5,
@@ -738,6 +746,15 @@ export const requestLlmTextStream = async ({
   onReasoningDelta,
 }: LlmStreamRequestInput) => {
   if (!isLlmConfigComplete(config)) throw new Error(llmText[locale].incompleteConfig)
+  const requestMessages = messages?.length
+    ? messages
+    : systemPrompt && userPrompt
+      ? [
+          { role: 'system' as const, content: systemPrompt },
+          { role: 'user' as const, content: userPrompt },
+        ]
+      : []
+  if (requestMessages.length === 0) throw new Error('LLM messages are required.')
   const controller = new AbortController()
   const abortFromCaller = () => controller.abort()
   signal?.addEventListener('abort', abortFromCaller)
@@ -745,10 +762,7 @@ export const requestLlmTextStream = async ({
   try {
     const response = await requestLlmChatWithCompatibility(config, applyThinkingMode({
       model: config.modelName.trim(),
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
+      messages: requestMessages,
       temperature,
       max_tokens: maxTokens,
       stream: true,

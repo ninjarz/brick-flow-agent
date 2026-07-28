@@ -157,9 +157,18 @@ export type WorldDirectorTurn = {
   playerText: string
   entries: WorldDirectorEntry[]
   reasoning?: string
+  requestMessage?: string
+  responseMessage?: string
   createdAtSeconds: number
   status: 'completed' | 'stopped' | 'failed'
   error?: string
+}
+
+export type WorldDirectorMemory = {
+  summary: string
+  throughTurnId: string
+  sourceTurnCount: number
+  updatedAtSeconds: number
 }
 
 export type WorldNarrativeState = {
@@ -168,6 +177,7 @@ export type WorldNarrativeState = {
   relationshipsByEntityId: Record<string, Record<string, WorldRelationship>>
   stories: WorldStory[]
   directorTurns: WorldDirectorTurn[]
+  directorMemory?: WorldDirectorMemory
 }
 
 export type WorldScenarioTrigger = {

@@ -98,6 +98,29 @@ describe('LLM thinking parameter compatibility', () => {
     expect(content).toEqual(['{"type":"narration","text":"门外传来脚步声。"}\n'])
   })
 
+  it('sends an explicit multi-turn message sequence unchanged', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response([
+      'data: {"choices":[{"delta":{"content":"ok"}}]}',
+      '',
+      'data: [DONE]',
+      '',
+    ].join('\n'), {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const messages = [
+      { role: 'system' as const, content: 'Stable rules.' },
+      { role: 'user' as const, content: 'Turn one.' },
+      { role: 'assistant' as const, content: 'Result one.' },
+      { role: 'user' as const, content: 'Turn two.' },
+    ]
+
+    await requestLlmTextStream({ config, messages, onDelta: () => undefined })
+
+    expect(payloadAt(fetchMock, 0).messages).toEqual(messages)
+  })
+
   it('reuses a thinking-parameter downgrade discovered by the connection test', async () => {
     const streamResponse = new Response([
       'data: {"choices":[{"delta":{"content":"ok"}}]}',

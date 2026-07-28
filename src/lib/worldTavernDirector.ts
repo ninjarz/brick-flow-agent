@@ -172,8 +172,9 @@ ${JSON.stringify(protagonist ?? snapshot.entities.find((entity) => entity.contro
 World snapshot:
 ${JSON.stringify(snapshot)}
 
-Recent director events:
+${recentEntries.length > 0 ? `Recent director events:
 ${JSON.stringify(recentEntries.slice(-12))}
+` : ''}
 
 Emit 2 to 10 of these NDJSON events:
 {"type":"narration","text":"short atmospheric narration"}

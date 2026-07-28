@@ -452,9 +452,12 @@ const parseStoredDirectorTurns = (value: unknown): WorldState['narrative']['dire
         : [],
       createdAtSeconds: Math.max(0, turn.createdAtSeconds),
       status: turn.status as 'completed' | 'stopped' | 'failed',
+      ...(typeof turn.reasoning === 'string' ? { reasoning: turn.reasoning.slice(0, 20_000) } : {}),
+      ...(typeof turn.requestMessage === 'string' ? { requestMessage: turn.requestMessage.slice(0, 60_000) } : {}),
+      ...(typeof turn.responseMessage === 'string' ? { responseMessage: turn.responseMessage.slice(0, 30_000) } : {}),
       ...(typeof turn.error === 'string' ? { error: turn.error.slice(0, 300) } : {}),
     }]
-  }).slice(-20) : []
+  }).slice(-100) : []
 )
 
 export const parseStoredWorldState = (value: unknown, planId: string) => {
@@ -647,6 +650,19 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
     return memberships.length === 1 ? { ...entity, storylineId: memberships[0] } : entity
   })
   const directorTurns = parseStoredDirectorTurns(narrative.directorTurns)
+  const storedDirectorMemory = isRecord(narrative.directorMemory) ? narrative.directorMemory : undefined
+  const directorMemory = storedDirectorMemory
+    && typeof storedDirectorMemory.summary === 'string'
+    && typeof storedDirectorMemory.throughTurnId === 'string'
+    && isFiniteNumber(storedDirectorMemory.sourceTurnCount)
+    && isFiniteNumber(storedDirectorMemory.updatedAtSeconds)
+    ? {
+        summary: storedDirectorMemory.summary.slice(0, 4_000),
+        throughTurnId: storedDirectorMemory.throughTurnId.slice(0, 180),
+        sourceTurnCount: Math.max(0, Math.floor(storedDirectorMemory.sourceTurnCount)),
+        updatedAtSeconds: Math.max(0, storedDirectorMemory.updatedAtSeconds),
+      }
+    : undefined
   const migratedEvents = [...events]
   const entityById = new Map(restoredEntities.map((entity) => [entity.id, entity]))
   for (const scenario of scenarios) {
@@ -709,6 +725,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
       relationshipsByEntityId: normalizeRelationships(narrative.relationshipsByEntityId),
       stories: Array.isArray(narrative.stories) ? narrative.stories.filter(isStoredStory).slice(-80) : [],
       directorTurns,
+      ...(directorMemory ? { directorMemory } : {}),
     },
   } satisfies WorldState
 }
