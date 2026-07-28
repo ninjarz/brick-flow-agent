@@ -81,6 +81,7 @@ type WorldEntityPlacementSession = {
 type AssetLibraryKind = 'models' | 'scenarios'
 const workspaceDraftSaveDebounceMs = 120
 const tavernDirectorPlaybackTimeoutMs = 15_000
+const tavernScenarioDialogueTimeoutMs = 60_000
 const sceneViewModeOrder: BrickSceneViewMode[] = ['border', 'borderless', 'xray', 'voxel']
 const ignoreSceneInteraction = () => {}
 
@@ -660,12 +661,15 @@ function App() {
         setWorld((current) => {
           let next = current
           for (let step = 0; step < advanced.stepCount; step += 1) {
-            next = advanceWorldScenarios(stepWorldSimulation(
-              next,
-              planRef.current.bricks,
-              worldSimulationStepSeconds,
-              planRef.current.structures ?? [],
-            ))
+            next = advanceWorldScenarios(
+              stepWorldSimulation(
+                next,
+                planRef.current.bricks,
+                worldSimulationStepSeconds,
+                planRef.current.structures ?? [],
+              ),
+              { allowNewStages: !tavernDirectorPlaybackRef.current },
+            )
           }
           return next
         })
@@ -1781,9 +1785,8 @@ function App() {
           structures: currentPlan.structures ?? [],
         })
         if (applied.world !== currentWorld) {
-          const nextWorld = advanceWorldScenarios(applied.world)
-          worldRef.current = nextWorld
-          setWorld(nextWorld)
+          worldRef.current = applied.world
+          setWorld(applied.world)
         }
         if (applied.status !== 'rejected') {
           getWorldDirectorPlaybackEntityIds(event).forEach((entityId) => playbackEntityIds.add(entityId))
@@ -1891,6 +1894,22 @@ function App() {
         && !isWorldDirectorPlaybackSettled(worldRef.current, playbackEntityIds)
       ) {
         await new Promise((resolve) => window.setTimeout(resolve, 100))
+      }
+      if (!controller.signal.aborted && !worldRef.current.paused) {
+        const scenarioWorld = advanceWorldScenarios(worldRef.current)
+        if (scenarioWorld !== worldRef.current) {
+          worldRef.current = scenarioWorld
+          setWorld(scenarioWorld)
+        }
+        const scenarioDeadline = performance.now() + tavernScenarioDialogueTimeoutMs
+        while (
+          !controller.signal.aborted
+          && !worldRef.current.paused
+          && performance.now() < scenarioDeadline
+          && worldRef.current.scenarios.some((scenario) => Boolean(scenario.activeDialogue))
+        ) {
+          await new Promise((resolve) => window.setTimeout(resolve, 100))
+        }
       }
       return { requestMessage, responseMessage, contextStats }
     } finally {

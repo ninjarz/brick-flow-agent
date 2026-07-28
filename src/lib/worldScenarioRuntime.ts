@@ -194,9 +194,13 @@ const completeStage = (
   return { world: nextWorld, scenario: updatedScenario }
 }
 
-export const advanceWorldScenarios = (world: WorldState): WorldState => {
+export const advanceWorldScenarios = (
+  world: WorldState,
+  options: { allowNewStages?: boolean } = {},
+): WorldState => {
   let nextWorld = world
   let scenariosChanged = false
+  let dialogueLaneOccupied = world.scenarios.some((scenario) => Boolean(scenario.activeDialogue))
   const nextScenarios = world.scenarios.map((scenario) => {
     if (scenario.enabled === false) return scenario
     const activeStageIndex = scenario.stages.findIndex((stage) => stage.status === 'active')
@@ -250,7 +254,11 @@ export const advanceWorldScenarios = (world: WorldState): WorldState => {
       .filter((transition): transition is typeof transition & { event: WorldEvent } => Boolean(transition.event))
       .sort((left, right) => right.event.timeSeconds - left.event.timeSeconds)[0]
     if (!matched) return scenario
+    if (options.allowNewStages === false) return scenario
     const { event, branch } = matched
+
+    const dialogue = branch?.dialogue ?? activeStage.dialogue
+    if (dialogue?.length && dialogueLaneOccupied) return scenario
 
     scenariosChanged = true
     const consumedScenario = {
@@ -260,8 +268,8 @@ export const advanceWorldScenarios = (world: WorldState): WorldState => {
         ...world.events.map((candidate) => candidate.id),
       ])).slice(-500),
     }
-    const dialogue = branch?.dialogue ?? activeStage.dialogue
     if (dialogue?.length) {
+      dialogueLaneOccupied = true
       const firstLine = dialogue[0]
       const updatedScenario: WorldScenarioRuntime = {
         ...consumedScenario,

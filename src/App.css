@@ -739,6 +739,21 @@ button.status-pill:hover {
   line-height: 1.72;
 }
 
+.narrative-passage p.narrative-phase {
+  flex-basis: 100%;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 3px 7px;
+  border-radius: 6px;
+  color: #7c3f12;
+  background: #fff4dd;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
 .narrative-passage p.narration {
   flex-basis: 100%;
   text-indent: 2em;

@@ -204,6 +204,68 @@ describe('world scenario runtime', () => {
     expect(world.entities[1].commandQueue[0]?.type).toBe('attack')
   })
 
+  it('defers a new scenario stage while another narrative lane is playing', () => {
+    const scenario: WorldScenarioRuntime = {
+      id: 'deferred-runtime',
+      assetId: 'asset',
+      title: 'Deferred',
+      description: 'Deferred',
+      processedEventIds: [],
+      stages: [{
+        id: 'talk',
+        title: 'Talk',
+        description: 'Talk',
+        status: 'active',
+        trigger: { eventType: 'interaction', actorId: 'hero', targetId: 'guide' },
+        dialogue: [{ id: 'line', speakerId: 'guide', text: 'Follow me.', durationSeconds: 2 }],
+      }],
+    }
+    const pending = {
+      ...createEmptyWorldState('deferred'),
+      scenarios: [scenario],
+      events: [{ id: 'talk-event', timeSeconds: 1, type: 'interaction' as const, actorId: 'hero', targetId: 'guide' }],
+    }
+
+    const deferred = advanceWorldScenarios(pending, { allowNewStages: false })
+    expect(deferred).toBe(pending)
+    expect(deferred.scenarios[0].processedEventIds).toEqual([])
+
+    const started = advanceWorldScenarios(deferred)
+    expect(started.scenarios[0].activeDialogue?.eventId).toBe('talk-event')
+  })
+
+  it('starts matching authored dialogues one at a time', () => {
+    const makeScenario = (id: string): WorldScenarioRuntime => ({
+      id,
+      assetId: 'asset',
+      title: id,
+      description: id,
+      processedEventIds: [],
+      stages: [{
+        id: 'talk',
+        title: 'Talk',
+        description: 'Talk',
+        status: 'active',
+        trigger: { eventType: 'interaction', actorId: 'hero', targetId: 'guide' },
+        dialogue: [{ id: `${id}-line`, speakerId: 'guide', text: id, durationSeconds: 2 }],
+      }],
+    })
+    const world = {
+      ...createEmptyWorldState('serial-dialogue'),
+      scenarios: [makeScenario('first'), makeScenario('second')],
+      events: [{ id: 'shared-event', timeSeconds: 1, type: 'interaction' as const, actorId: 'hero', targetId: 'guide' }],
+    }
+
+    const started = advanceWorldScenarios(world)
+    expect(started.scenarios.map((scenario) => Boolean(scenario.activeDialogue))).toEqual([true, false])
+    expect(started.scenarios[1].processedEventIds).toEqual([])
+
+    const firstFinished = advanceWorldScenarios({ ...started, elapsedSeconds: 2 })
+    expect(firstFinished.scenarios[0].activeDialogue).toBeUndefined()
+    const secondStarted = advanceWorldScenarios(firstFinished)
+    expect(secondStarted.scenarios[1].activeDialogue?.eventId).toBe('shared-event')
+  })
+
   it('takes a matching failure branch without unlocking the linear next stage', () => {
     const hero = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'hero', factionId: 'blue' })
     const enemy = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'enemy', factionId: 'red' })

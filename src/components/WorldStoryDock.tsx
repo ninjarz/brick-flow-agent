@@ -266,6 +266,7 @@ export const WorldStoryDock = ({
     0,
     world.narrative.directorTurns.length - (world.narrative.directorMemory?.sourceTurnCount ?? 0),
   )
+  const isScenarioDialoguePlaying = world.scenarios.some((scenario) => Boolean(scenario.activeDialogue))
   const feedVersion = feed.reduce((total, item) => total + item.blocks.length, 0)
   const streamVersion = activeTurn
     ? (activeTurn.reasoning?.length ?? 0) + (activeTurn.streamPreview?.text.length ?? 0)
@@ -418,7 +419,7 @@ export const WorldStoryDock = ({
 
   const submit = async () => {
     const playerText = input.trim()
-    if (!playerText || isDirectorThinking || isLlmTesting || !llmConfigured) return
+    if (!playerText || isDirectorThinking || isScenarioDialoguePlaying || isLlmTesting || !llmConfigured) return
     const id = `director-turn-${Date.now().toString(36)}`
     const createdAtSeconds = world.elapsedSeconds
     const entries: TavernDirectorEntry[] = []
@@ -669,12 +670,19 @@ export const WorldStoryDock = ({
             )}
             {feed.map((item) => (
               <article className={`narrative-passage ${item.kind}`} key={item.id}>
+                {item.kind === 'active-dialogue' && (
+                  <p className="narrative-phase">
+                    <BookOpen size={11} />
+                    {locale === 'zh-CN' ? '预设剧情接续' : 'Authored scene continues'}
+                    {item.title ? ` · ${item.title}` : ''}
+                  </p>
+                )}
                 {item.playerText && <p className="player"><strong>{locale === 'zh-CN' ? `你（${protagonist?.name ?? '玩家'}）` : `You (${protagonist?.name ?? 'Player'})`}</strong><AnnotatedText text={item.playerText} references={references} onSelectEntity={onSelectEntity} /></p>}
                 {item.reasoning && (
                   <ReasoningPanel text={item.reasoning} streaming={item.status === 'streaming'} locale={locale} />
                 )}
                 {item.blocks.map((block) => (
-                  <FeedBlock key={block.id} block={block} world={world} structures={structures} references={references} locale={locale} disabled={isDirectorThinking} onChoose={chooseInput} onSelectEntity={onSelectEntity} />
+                  <FeedBlock key={block.id} block={block} world={world} structures={structures} references={references} locale={locale} disabled={isDirectorThinking || isScenarioDialoguePlaying} onChoose={chooseInput} onSelectEntity={onSelectEntity} />
                 ))}
                 {item.streamPreview && (
                   <p className={`world-story-stream-preview ${item.streamPreview.type}`}>
@@ -732,8 +740,10 @@ export const WorldStoryDock = ({
                   rows={2}
                   maxLength={800}
                   value={input}
-                  disabled={isDirectorThinking || isLlmTesting}
-                  placeholder={locale === 'zh-CN' ? '让角色行动、交谈，或改变故事走向……' : 'Let characters act, speak, or change the story…'}
+                  disabled={isDirectorThinking || isScenarioDialoguePlaying || isLlmTesting}
+                  placeholder={isScenarioDialoguePlaying
+                    ? (locale === 'zh-CN' ? '预设剧情正在演绎，结束后可继续……' : 'An authored scene is playing. Continue when it finishes…')
+                    : (locale === 'zh-CN' ? '让角色行动、交谈，或改变故事走向……' : 'Let characters act, speak, or change the story…')}
                   onChange={(event) => setInput(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
@@ -743,9 +753,11 @@ export const WorldStoryDock = ({
                 />
                 {isDirectorThinking
                   ? <button type="button" className="stop" onClick={onStopDirector}><Square size={14} />{locale === 'zh-CN' ? '停止' : 'Stop'}</button>
-                  : <button type="submit" disabled={!input.trim() || isLlmTesting}><Send size={14} />{isLlmTesting
+                  : <button type="submit" disabled={!input.trim() || isScenarioDialoguePlaying || isLlmTesting}><Send size={14} />{isLlmTesting
                       ? (locale === 'zh-CN' ? '测试中' : 'Testing')
-                      : (locale === 'zh-CN' ? '发送' : 'Send')}</button>}
+                      : isScenarioDialoguePlaying
+                        ? (locale === 'zh-CN' ? '演绎中' : 'Playing')
+                        : (locale === 'zh-CN' ? '发送' : 'Send')}</button>}
               </form>
             ) : (
               <p className="world-story-config-hint">{locale === 'zh-CN' ? '配置 LLM 后可用自然语言推进剧情；剧情灵感仍可使用本地规则。' : 'Configure an LLM for freeform direction; local story prompts remain available.'}</p>
