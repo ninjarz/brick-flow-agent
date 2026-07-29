@@ -320,9 +320,15 @@ export const advanceWorldScenarios = (
   let nextWorld = world
   let scenariosChanged = false
   let dialogueLaneOccupied = world.scenarios.some((scenario) => Boolean(scenario.activeDialogue || scenario.pendingAi))
+  const claimedEventIds = new Set(world.scenarios.flatMap((scenario) => scenario.claimedEventIds ?? []))
   const nextScenarios = world.scenarios.map((scenario) => {
     if (scenario.enabled === false) return scenario
-    if (scenario.pendingAi) return scenario
+    if (scenario.pendingAi) {
+      if (options.enableAi !== false) return scenario
+      scenariosChanged = true
+      nextWorld = resolveWorldScenarioAi(nextWorld, scenario.id, {})
+      return nextWorld.scenarios.find((candidate) => candidate.id === scenario.id) ?? scenario
+    }
     const activeStageIndex = scenario.stages.findIndex((stage) => stage.status === 'active')
     if (activeStageIndex < 0) return scenario
     const activeStage = scenario.stages[activeStageIndex]
@@ -372,7 +378,7 @@ export const advanceWorldScenarios = (
       return completed.scenario
     }
 
-    const consumedEventIds = new Set(scenario.processedEventIds)
+    const consumedEventIds = new Set([...scenario.processedEventIds, ...claimedEventIds])
     const transitions = activeStage.ai?.mode === 'choice'
       ? [{ branch: undefined, trigger: activeStage.trigger }]
       : [
@@ -394,8 +400,10 @@ export const advanceWorldScenarios = (
     if (dialogue?.length && dialogueLaneOccupied) return scenario
 
     scenariosChanged = true
+    claimedEventIds.add(event.id)
     const consumedScenario = {
       ...scenario,
+      claimedEventIds: Array.from(new Set([...(scenario.claimedEventIds ?? []), event.id])).slice(-500),
       processedEventIds: Array.from(new Set([
         ...scenario.processedEventIds,
         ...world.events.map((candidate) => candidate.id),

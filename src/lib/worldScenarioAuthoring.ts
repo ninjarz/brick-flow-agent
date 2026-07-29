@@ -54,6 +54,7 @@ export const createWorldScenarioFlow = (
     enabled: false,
     castEntityIds: entityIds,
     processedEventIds: existingEventIds.slice(-500),
+    claimedEventIds: [],
     authoringVersion: 3,
     stages: [{
       id: 'start',
@@ -85,6 +86,7 @@ export const duplicateWorldScenarioFlow = (
       completedAtSeconds: undefined,
     })),
     processedEventIds: existingEventIds.slice(-500),
+    claimedEventIds: [],
     pendingAi: undefined,
     activeDialogue: undefined,
     outcomeId: undefined,
@@ -103,6 +105,7 @@ export const resetWorldScenarioFlow = (
     completedAtSeconds: undefined,
   })),
   processedEventIds: existingEventIds.slice(-500),
+  claimedEventIds: [],
   pendingAi: undefined,
   activeDialogue: undefined,
   outcomeId: undefined,

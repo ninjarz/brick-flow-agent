@@ -710,6 +710,11 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
           processedEventIds: Array.isArray(scenario.processedEventIds)
             ? scenario.processedEventIds.filter((id): id is string => typeof id === 'string').slice(-500)
             : [],
+          ...(Array.isArray(scenario.claimedEventIds) ? {
+            claimedEventIds: scenario.claimedEventIds
+              .filter((id): id is string => typeof id === 'string')
+              .slice(-500),
+          } : {}),
           ...(pendingAi ? { pendingAi } : {}),
           ...(activeDialogue ? { activeDialogue } : {}),
           ...(typeof scenario.outcomeId === 'string' ? { outcomeId: scenario.outcomeId } : {}),

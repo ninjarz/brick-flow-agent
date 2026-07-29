@@ -32,7 +32,20 @@ describe('world scenario AI', () => {
     }
     const world = {
       ...createEmptyWorldState('prompt'),
-      scenarios: [scenario],
+      scenarios: [scenario, {
+        id: 'other-flow',
+        assetId: 'authored',
+        title: 'Quarry alarm',
+        description: 'A separate investigation.',
+        processedEventIds: [],
+        stages: [{
+          id: 'alarm',
+          title: 'Search the quarry',
+          description: 'Search.',
+          status: 'active' as const,
+          trigger: { eventType: 'interaction' as const },
+        }],
+      }],
       events: [{ id: 'event', timeSeconds: 1, type: 'interaction' as const, actorId: 'hero' }],
     }
 
@@ -40,6 +53,8 @@ describe('world scenario AI', () => {
     expect(prompt).toContain('Use established trust to decide.')
     expect(prompt).toContain('"id":"help"')
     expect(prompt).toContain('1 to 2 short dialogue lines')
+    expect(prompt).toContain('Quarry alarm')
+    expect(prompt).toContain('Search the quarry')
   })
 
   it('parses fenced JSON while discarding malformed dialogue rows', () => {

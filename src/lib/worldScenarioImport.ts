@@ -251,6 +251,7 @@ const remapScenarioWorld = (
       }]
     }),
     processedEventIds: [],
+    claimedEventIds: [],
     pendingAi: undefined,
     activeDialogue: undefined,
   } : undefined

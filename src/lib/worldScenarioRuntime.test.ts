@@ -234,7 +234,7 @@ describe('world scenario runtime', () => {
     expect(started.scenarios[0].activeDialogue?.eventId).toBe('talk-event')
   })
 
-  it('starts matching authored dialogues one at a time', () => {
+  it('lets only one flow claim a shared event and requires a fresh event for another flow', () => {
     const makeScenario = (id: string): WorldScenarioRuntime => ({
       id,
       assetId: 'asset',
@@ -262,8 +262,60 @@ describe('world scenario runtime', () => {
 
     const firstFinished = advanceWorldScenarios({ ...started, elapsedSeconds: 2 })
     expect(firstFinished.scenarios[0].activeDialogue).toBeUndefined()
-    const secondStarted = advanceWorldScenarios(firstFinished)
-    expect(secondStarted.scenarios[1].activeDialogue?.eventId).toBe('shared-event')
+    expect(advanceWorldScenarios(firstFinished)).toBe(firstFinished)
+
+    const secondStarted = advanceWorldScenarios({
+      ...firstFinished,
+      events: [...firstFinished.events, {
+        id: 'fresh-event',
+        timeSeconds: 3,
+        type: 'interaction',
+        actorId: 'hero',
+        targetId: 'guide',
+      }],
+    })
+    expect(secondStarted.scenarios[1].activeDialogue?.eventId).toBe('fresh-event')
+    expect(secondStarted.scenarios[0].claimedEventIds).toEqual(['shared-event'])
+    expect(secondStarted.scenarios[1].claimedEventIds).toEqual(['fresh-event'])
+  })
+
+  it('resolves a persisted pending AI node through its authored fallback when AI is disabled', () => {
+    const scenario: WorldScenarioRuntime = {
+      id: 'pending-offline',
+      assetId: 'authored',
+      title: 'Pending offline',
+      description: 'Pending offline',
+      processedEventIds: ['event'],
+      claimedEventIds: ['event'],
+      pendingAi: { stageId: 'choice', eventId: 'event', requestedAtSeconds: 1 },
+      stages: [{
+        id: 'choice',
+        title: 'Choice',
+        description: 'Choice',
+        status: 'active',
+        trigger: { eventType: 'interaction' },
+        ai: {
+          mode: 'choice',
+          instruction: 'Choose a branch.',
+          fallbackBranchId: 'safe',
+        },
+        branches: [{
+          id: 'safe',
+          title: 'Safe fallback',
+          trigger: { eventType: 'interaction' },
+        }],
+      }],
+    }
+    const world = {
+      ...createEmptyWorldState('pending-offline'),
+      scenarios: [scenario],
+      events: [{ id: 'event', timeSeconds: 1, type: 'interaction' as const, actorId: 'hero' }],
+    }
+
+    const resolved = advanceWorldScenarios(world, { enableAi: false })
+    expect(resolved.scenarios[0].pendingAi).toBeUndefined()
+    expect(resolved.scenarios[0].outcomeId).toBe('safe')
+    expect(resolved.scenarios[0].stages[0].status).toBe('completed')
   })
 
   it('pauses an AI dialogue node until a validated resolution arrives', () => {

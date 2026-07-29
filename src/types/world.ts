@@ -274,6 +274,7 @@ export type WorldScenarioRuntime = {
   castEntityIds?: string[]
   stages: WorldScenarioStage[]
   processedEventIds: string[]
+  claimedEventIds?: string[]
   pendingAi?: WorldScenarioAiPendingState
   activeDialogue?: WorldScenarioDialogueState
   outcomeId?: string

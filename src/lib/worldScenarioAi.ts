@@ -21,6 +21,14 @@ const compactRecentStory = (world: WorldState) => [
   })),
 ].slice(-6)
 
+const compactActiveFlows = (world: WorldState, currentScenarioId: string) => world.scenarios
+  .filter((scenario) => scenario.enabled !== false && scenario.id !== currentScenarioId)
+  .flatMap((scenario) => {
+    const stage = scenario.stages.find((candidate) => candidate.status === 'active')
+    return stage ? [{ flow: scenario.title, node: stage.title }] : []
+  })
+  .slice(0, 8)
+
 export const buildWorldScenarioAiPrompt = (
   world: WorldState,
   scenario: WorldScenarioRuntime,
@@ -78,6 +86,9 @@ ${JSON.stringify(branches)}
 
 RECENT CANON:
 ${JSON.stringify(compactRecentStory(world))}
+
+OTHER ACTIVE FLOWS:
+${JSON.stringify(compactActiveFlows(world, scenario.id))}
 
 Return:
 {"branchId":${stage.ai.mode === 'choice' ? '"one exact legal branch id"' : 'null'},"dialogue":[{"speakerId":"one allowed speaker id","text":"spoken line"}]}
