@@ -1871,7 +1871,7 @@ function App() {
         locale,
         signal: controller.signal,
         temperature: 0.65,
-        maxTokens: 2_400,
+        maxTokens: 8_192,
         onDelta: (delta) => parser.push(delta),
         onReasoningDelta: (reasoningDelta) => onProgress({ reasoningDelta }),
       })
@@ -1886,6 +1886,9 @@ function App() {
         memoryTurnCount: contextWorld.narrative.directorMemory?.sourceTurnCount ?? 0,
         ...(compactionResult.triggered ? { compactionTriggered: true } : {}),
         ...streamResult.usage,
+        maxOutputTokens: streamResult.maxTokens,
+        responseRetryCount: streamResult.retryCount,
+        ...(streamResult.finishReason ? { finishReason: streamResult.finishReason } : {}),
       }
       parser.finish()
       streamFinished = true

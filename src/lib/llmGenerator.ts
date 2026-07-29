@@ -51,6 +51,9 @@ export type LlmTokenUsage = {
 export type LlmStreamResult = {
   content: string
   usage?: LlmTokenUsage
+  finishReason?: string
+  maxTokens: number
+  retryCount: number
 }
 
 export type LlmJsonRequestInput = {
@@ -76,6 +79,8 @@ const configTestTimeoutMs = 15_000
 const configTestMaxTokens = 128
 const generationMaxTokens = 12_800
 const generationThinkingMaxTokens = 128_000
+const emptyStreamRetryFloorTokens = 8_192
+const emptyStreamRetryMaxTokens = 32_768
 export const maxLlmBricks = 64
 
 let omitUnsupportedThinkingParameters = false
@@ -405,6 +410,14 @@ const extractLlmTokenUsage = (payload: unknown): LlmTokenUsage | undefined => {
         ...(totalTokens !== undefined ? { totalTokens } : {}),
       }
     : undefined
+}
+
+const extractLlmFinishReason = (payload: unknown) => {
+  if (!isRecord(payload) || !Array.isArray(payload.choices)) return undefined
+  const reason = payload.choices
+    .map((choice) => isRecord(choice) ? choice.finish_reason : undefined)
+    .find((candidate): candidate is string => typeof candidate === 'string' && Boolean(candidate))
+  return reason
 }
 
 const hasReasoningOnlyLengthFinish = (payload: unknown) => {
@@ -750,18 +763,20 @@ const readLlmEventStream = async (
   onDelta: (text: string) => void,
   onReasoningDelta?: (text: string) => void,
 ) => {
-  if (!response.body) return { content: '' } satisfies LlmStreamResult
+  if (!response.body) return { content: '', maxTokens: 0, retryCount: 0 } satisfies LlmStreamResult
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let transportBuffer = ''
   let content = ''
   let usage: LlmTokenUsage | undefined
+  let finishReason: string | undefined
   const emitPayload = (payloadText: string) => {
     const trimmed = payloadText.trim()
     if (!trimmed || trimmed === '[DONE]') return
     try {
       const payload = JSON.parse(trimmed) as unknown
       usage = extractLlmTokenUsage(payload) ?? usage
+      finishReason = extractLlmFinishReason(payload) ?? finishReason
       const reasoningDelta = extractReasoningContent(payload)
       if (reasoningDelta) onReasoningDelta?.(reasoningDelta)
       const delta = extractMessageContent(payload)
@@ -794,8 +809,19 @@ const readLlmEventStream = async (
       : transportBuffer
     emitPayload(data)
   }
-  return { content, ...(usage ? { usage } : {}) } satisfies LlmStreamResult
+  return {
+    content,
+    ...(usage ? { usage } : {}),
+    ...(finishReason ? { finishReason } : {}),
+    maxTokens: 0,
+    retryCount: 0,
+  } satisfies LlmStreamResult
 }
+
+export const getLlmEmptyResponseRetryTokens = (maxTokens: number) => Math.min(
+  emptyStreamRetryMaxTokens,
+  Math.max(emptyStreamRetryFloorTokens, Math.max(1, Math.round(maxTokens)) * 2),
+)
 
 export const requestLlmTextStream = async ({
   config,
@@ -824,29 +850,47 @@ export const requestLlmTextStream = async ({
   signal?.addEventListener('abort', abortFromCaller)
   const timeout = window.setTimeout(() => controller.abort(), clientRequestTimeoutMs)
   try {
-    const response = await requestLlmChatWithCompatibility(config, applyThinkingMode({
-      model: config.modelName.trim(),
-      messages: requestMessages,
-      temperature,
-      max_tokens: maxTokens,
-      stream: true,
-      stream_options: { include_usage: true },
-    }, config.enableThinking), controller.signal)
-    if (!response.ok) throw new Error(await formatRequestError(response, config.requestMode, locale))
-    const contentType = response.headers.get('content-type')?.toLowerCase() ?? ''
-    if (!contentType.includes('text/event-stream') && contentType.includes('application/json')) {
-      const payload = await response.json() as unknown
-      const reasoning = extractReasoningContent(payload)
-      if (reasoning) onReasoningDelta?.(reasoning)
-      const content = extractMessageContent(payload)
-      if (!content) throw new Error(formatEmptyContentError(payload, llmText[locale].responseContext, locale))
-      onDelta(content)
-      const usage = extractLlmTokenUsage(payload)
-      return { content, ...(usage ? { usage } : {}) } satisfies LlmStreamResult
+    const retryMaxTokens = getLlmEmptyResponseRetryTokens(maxTokens)
+    const tokenBudgets = retryMaxTokens > maxTokens ? [maxTokens, retryMaxTokens] : [maxTokens]
+    for (let attempt = 0; attempt < tokenBudgets.length; attempt += 1) {
+      const attemptMaxTokens = tokenBudgets[attempt]
+      const response = await requestLlmChatWithCompatibility(config, applyThinkingMode({
+        model: config.modelName.trim(),
+        messages: requestMessages,
+        temperature,
+        max_tokens: attemptMaxTokens,
+        stream: true,
+        stream_options: { include_usage: true },
+      }, config.enableThinking), controller.signal)
+      if (!response.ok) throw new Error(await formatRequestError(response, config.requestMode, locale))
+      const contentType = response.headers.get('content-type')?.toLowerCase() ?? ''
+      if (!contentType.includes('text/event-stream') && contentType.includes('application/json')) {
+        const payload = await response.json() as unknown
+        const reasoning = extractReasoningContent(payload)
+        if (reasoning) onReasoningDelta?.(reasoning)
+        const content = extractMessageContent(payload)
+        if (!content) {
+          if (attempt + 1 < tokenBudgets.length) continue
+          throw new Error(formatEmptyContentError(payload, llmText[locale].responseContext, locale))
+        }
+        onDelta(content)
+        const usage = extractLlmTokenUsage(payload)
+        const finishReason = extractLlmFinishReason(payload)
+        return {
+          content,
+          ...(usage ? { usage } : {}),
+          ...(finishReason ? { finishReason } : {}),
+          maxTokens: attemptMaxTokens,
+          retryCount: attempt,
+        } satisfies LlmStreamResult
+      }
+      const result = await readLlmEventStream(response, onDelta, onReasoningDelta)
+      if (result.content.trim()) {
+        return { ...result, maxTokens: attemptMaxTokens, retryCount: attempt }
+      }
+      if (attempt + 1 >= tokenBudgets.length) throw new Error(llmText[locale].emptyGenerationResponse)
     }
-    const result = await readLlmEventStream(response, onDelta, onReasoningDelta)
-    if (!result.content.trim()) throw new Error(llmText[locale].emptyGenerationResponse)
-    return result
+    throw new Error(llmText[locale].emptyGenerationResponse)
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       if (signal?.aborted) throw new Error(llmText[locale].generationCanceled)

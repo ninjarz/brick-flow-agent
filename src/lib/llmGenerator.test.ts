@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LlmConfig } from '../types/bricks'
-import { requestLlmJsonContent, requestLlmTextStream, resetLlmThinkingCompatibility, testLlmConnection } from './llmGenerator'
+import { getLlmEmptyResponseRetryTokens, requestLlmJsonContent, requestLlmTextStream, resetLlmThinkingCompatibility, testLlmConnection } from './llmGenerator'
 
 const config: LlmConfig = {
   modelName: 'test-model',
@@ -97,6 +97,53 @@ describe('LLM thinking parameter compatibility', () => {
     expect(reasoning).toEqual(['先观察环境。'])
     expect(content).toEqual(['{"type":"narration","text":"门外传来脚步声。"}\n'])
     expect(result.content).toBe('{"type":"narration","text":"门外传来脚步声。"}\n')
+    expect(result).toMatchObject({ maxTokens: 4096, retryCount: 0 })
+  })
+
+  it('retries an empty completed stream once with a larger token budget', async () => {
+    const emptyStream = () => new Response('data: [DONE]\n\n', {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    })
+    const completedStream = () => new Response([
+      'data: {"choices":[{"delta":{"content":"继续前进。"},"finish_reason":null}]}',
+      '',
+      'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}',
+      '',
+      'data: [DONE]',
+      '',
+    ].join('\n'), {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    })
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(() => Promise.resolve(emptyStream()))
+      .mockImplementationOnce(() => Promise.resolve(completedStream()))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await requestLlmTextStream({
+      config,
+      systemPrompt: 'Direct.',
+      userPrompt: 'Continue.',
+      maxTokens: 2_400,
+      onDelta: () => undefined,
+    })
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(payloadAt(fetchMock, 0).max_tokens).toBe(2_400)
+    expect(payloadAt(fetchMock, 1).max_tokens).toBe(8_192)
+    expect(result).toMatchObject({
+      content: '继续前进。',
+      finishReason: 'stop',
+      maxTokens: 8_192,
+      retryCount: 1,
+    })
+  })
+
+  it('caps the automatic empty-response retry budget', () => {
+    expect(getLlmEmptyResponseRetryTokens(2_400)).toBe(8_192)
+    expect(getLlmEmptyResponseRetryTokens(20_000)).toBe(32_768)
+    expect(getLlmEmptyResponseRetryTokens(80_000)).toBe(32_768)
   })
 
   it('collects cached-token usage from the final stream event', async () => {

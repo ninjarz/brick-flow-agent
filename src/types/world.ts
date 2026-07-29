@@ -169,6 +169,9 @@ export type WorldDirectorTurn = {
     outputTokens?: number
     cachedTokens?: number
     totalTokens?: number
+    maxOutputTokens?: number
+    responseRetryCount?: number
+    finishReason?: string
   }
   createdAtSeconds: number
   status: 'completed' | 'stopped' | 'failed'

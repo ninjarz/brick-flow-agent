@@ -217,6 +217,9 @@ const DirectorDebugPanel = ({
         <div><dt>{locale === 'zh-CN' ? '输入' : 'Input'}</dt><dd>{(item.contextStats.inputTokens ?? item.contextStats.estimatedInputTokens).toLocaleString(locale)} tok</dd></div>
         <div><dt>{locale === 'zh-CN' ? '输出' : 'Output'}</dt><dd>{item.contextStats.outputTokens?.toLocaleString(locale) ?? '—'} tok</dd></div>
         <div><dt>{locale === 'zh-CN' ? '缓存' : 'Cached'}</dt><dd>{item.contextStats.cachedTokens?.toLocaleString(locale) ?? '—'} tok</dd></div>
+        <div><dt>{locale === 'zh-CN' ? '预算' : 'Budget'}</dt><dd>{item.contextStats.maxOutputTokens?.toLocaleString(locale) ?? '—'} tok</dd></div>
+        <div><dt>{locale === 'zh-CN' ? '空响应重试' : 'Empty retries'}</dt><dd>{item.contextStats.responseRetryCount ?? 0}</dd></div>
+        {item.contextStats.finishReason && <div><dt>{locale === 'zh-CN' ? '结束原因' : 'Finish'}</dt><dd>{item.contextStats.finishReason}</dd></div>}
       </dl>
     )}
     <section>
