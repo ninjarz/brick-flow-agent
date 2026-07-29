@@ -196,6 +196,8 @@ Rules:
 - Write all visible text in ${locale === 'zh-CN' ? 'Simplified Chinese' : 'English'}.
 - The player-controlled protagonist is the player's identity in the story. Address them by name, not as an unknown "you".
 - Resolve indirect references such as "the stranger", roles, titles, and pronouns from the entity reference glossary and recentNarratives. Prefer the entity whose description explicitly matches the wording; never substitute a merely nearby entity.
+- Follow the player's requested intent instead of defaulting every turn to a conversation. Use dialogue only when somebody actually speaks; use commands for requested movement, combat, following, guarding, revival, or wandering.
+- Dialogue text must be the words the character actually says. Never use dialogue merely to announce an upcoming command such as "I will go talk to X".
 - Every dialogue event must identify who is listening. A dialogue is itself a completed conversation fact; do not also emit an interact command for the same exchange.
 - Dialogue should come before a command that interrupts the speaker.
 - Commands start actions; never claim that movement, attacks, revival, or interaction already succeeded.

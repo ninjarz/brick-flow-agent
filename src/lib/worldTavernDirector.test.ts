@@ -232,6 +232,13 @@ describe('tavern director protocol', () => {
     expect(queuedDialogue.world.events.some((event) => event.type === 'interaction')).toBe(false)
 
     world = queuedDialogue.world
+    world = stepWorldSimulation(world, [], 0.1)
+    expect(world.entities[0].activeCommand).toMatchObject({
+      type: 'move',
+      target: { kind: 'entity', id: listener.id },
+    })
+    expect(world.entities[0].speech?.text).toBeUndefined()
+
     for (let step = 0; step < 120 && !world.events.some((event) => event.type === 'interaction'); step += 1) {
       world = stepWorldSimulation(world, [], 0.1)
     }
@@ -239,5 +246,48 @@ describe('tavern director protocol', () => {
     expect(world.entities[0].transform.x).toBeGreaterThan(0)
     expect(world.events.some((event) => event.type === 'interaction')).toBe(true)
     expect(world.entities[0].speech?.text).toBe('阁下可是远道而来？')
+    expect(world.entities[0].speech?.message).toBe('scenario-dialogue')
+  })
+
+  it('keeps scripted dialogue silent until the speaker reaches the listener', () => {
+    const definition = worldEntityDefinitionById.get('knight')!
+    const speaker = createWorldEntity(definition, {
+      id: 'speaker',
+      name: '罗兰',
+      controller: 'player',
+      transform: { x: 0, z: 0 },
+    })
+    const listener = createWorldEntity(definition, {
+      id: 'listener',
+      name: '黑岩使者',
+      controller: 'player',
+      transform: { x: 8, z: 0 },
+    })
+    const queued = applyTavernDirectorEvent({
+      ...createEmptyWorldState('plan'),
+      entities: [speaker, listener],
+    }, {
+      type: 'dialogue',
+      speakerId: speaker.id,
+      listenerId: listener.id,
+      text: '这里没有你要找的东西，骑士。',
+    }, { bricks: [], structures: [] })
+
+    let world = stepWorldSimulation(queued.world, [], 0.1)
+    expect(world.entities[0].activeCommand).toMatchObject({
+      type: 'interact',
+      speechText: '这里没有你要找的东西，骑士。',
+    })
+    expect(world.entities[0].speech).toBeUndefined()
+
+    for (let step = 0; step < 120 && !world.events.some((event) => event.type === 'interaction'); step += 1) {
+      world = stepWorldSimulation(world, [], 0.1)
+    }
+
+    expect(world.events.some((event) => event.type === 'interaction')).toBe(true)
+    expect(world.entities[0].speech).toMatchObject({
+      message: 'scenario-dialogue',
+      text: '这里没有你要找的东西，骑士。',
+    })
   })
 })

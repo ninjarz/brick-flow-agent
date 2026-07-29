@@ -1050,11 +1050,15 @@ export const stepWorldSimulation = (
     }
     entity = { ...entity, activeCommand, commandQueue }
     if (commandStarted && activeCommand) {
+      const isScriptedDialogue = activeCommand.type === 'interact'
+        && Boolean(activeCommand.speechText?.trim())
       entity = {
         ...entity,
         speech: entity.speech?.message === 'combat-hurt' || entity.speech?.message === 'combat-victory'
           ? entity.speech
-          : {
+          : isScriptedDialogue
+            ? undefined
+            : {
               message: activeCommand.type,
               targetName: getCommandTargetName(activeCommand, entities, targetLookup),
               expiresAtSeconds: timeSeconds + commandSpeechDurationSeconds,
