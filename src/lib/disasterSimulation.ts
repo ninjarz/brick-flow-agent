@@ -124,6 +124,7 @@ export type DisasterSimulationResult = {
     loadFactor: number
   }>
   simulationStepCount: number
+  initialStaticFailureCount: number
   survivedBrickCount: number
   failedBrickCount: number
   score: number
@@ -1477,6 +1478,8 @@ export const runDisasterSimulation = (
   const score = Math.round(
     survival * 0.55 + staticStability * 0.2 + span * 0.15 + materialEfficiency * 0.1,
   )
+  const initialStaticFailureCount = [...failureTimeByBrickId.values()]
+    .filter((failureTime) => failureTime <= epsilon).length
 
   return {
     options: resolvedOptions,
@@ -1500,6 +1503,7 @@ export const runDisasterSimulation = (
     maxFallByBrickId,
     timeline,
     simulationStepCount: simulationFrameCount,
+    initialStaticFailureCount,
     survivedBrickCount: Math.max(0, prepared.length - failureTimeByBrickId.size),
     failedBrickCount: failureTimeByBrickId.size,
     score,

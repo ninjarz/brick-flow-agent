@@ -549,6 +549,13 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
                   </span>
                 )}
                 <span>{t('stabilityLab.gravityActive')}</span>
+                <span className={result.initialStaticFailureCount > 0 ? 'failed' : ''}>
+                  {t(result.initialStaticFailureCount > 0
+                    ? 'stabilityLab.staticPreflightFailed'
+                    : 'stabilityLab.staticPreflightPassed', {
+                    count: result.initialStaticFailureCount,
+                  })}
+                </span>
                 <span>{t('stabilityLab.load', { load: Math.round(frame.loadFactor * result.options.intensity) })}</span>
                 <span className={currentFailedCount > 0 ? 'failed' : ''}>{t('stabilityLab.failedNow', { count: currentFailedCount })}</span>
                 {primaryFailureMode && (

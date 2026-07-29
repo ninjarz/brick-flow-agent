@@ -80,6 +80,7 @@ describe('disaster simulation', () => {
     expect(first.score).toBe(second.score)
     expect(first.score).toBeGreaterThanOrEqual(0)
     expect(first.score).toBeLessThanOrEqual(100)
+    expect(first.initialStaticFailureCount).toBe(0)
     expect(Object.keys(first.scoreBreakdown)).toEqual(['survival', 'staticStability', 'span', 'materialEfficiency'])
   })
 
@@ -369,6 +370,7 @@ describe('disaster simulation', () => {
 
     expect(result.analysis.tippingMargin).toBeLessThan(0)
     expect(result.failureTimeByBrickId.get(base.id)).toBe(0)
+    expect(result.initialStaticFailureCount).toBe(bricks.length)
     expect(result.failureModeByBrickId.get(base.id)).toBe('ground-overturn')
     expect(result.failureHingeByBrickId.get(deck.id)?.pivot.y).toBe(0)
     expect(getDisasterFrame(result, 0.5).rotationsByBrickId.get(deck.id)?.angle ?? 0)
