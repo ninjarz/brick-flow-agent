@@ -4,6 +4,7 @@ import { createEmptyWorldState, createWorldEntity } from './worldEntity'
 import {
   applyWorldDirectorPlaybackEvent,
   getWorldDirectorPlaybackEntityIds,
+  getWorldDirectorPlaybackOutcomeDetail,
   getWorldDirectorDialoguePlaybackPhase,
   isWorldDirectorDialogueVisible,
   isWorldDirectorPlaybackSettled,
@@ -198,6 +199,8 @@ describe('world director playback', () => {
       sleep: async (delayMs) => { clock += delayMs },
     })
     expect(timedOut).toBe('timed-out')
+    expect(getWorldDirectorPlaybackOutcomeDetail(timedOut)).toBe('PLAYBACK_TIMEOUT')
+    expect(getWorldDirectorPlaybackOutcomeDetail('aborted')).toBe('PLAYBACK_STOPPED')
   })
 
   it('tracks command actors and both dialogue participants', () => {

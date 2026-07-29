@@ -113,6 +113,18 @@ export const isWorldDirectorDialogueVisible = (
 export type WorldDirectorDialoguePlaybackPhase = 'approaching' | 'speaking' | 'completed' | 'missed'
 export type WorldDirectorDialoguePlaybackOutcome = 'played' | 'missed' | 'timed-out' | 'paused' | 'aborted'
 
+export const getWorldDirectorPlaybackOutcomeDetail = (
+  outcome: WorldDirectorDialoguePlaybackOutcome,
+) => outcome === 'played'
+  ? 'PLAYED'
+  : outcome === 'missed'
+    ? 'PLAYBACK_MISSED'
+    : outcome === 'timed-out'
+      ? 'PLAYBACK_TIMEOUT'
+      : outcome === 'paused'
+        ? 'PLAYBACK_PAUSED'
+        : 'PLAYBACK_STOPPED'
+
 export const getWorldDirectorDialoguePlaybackPhase = ({
   world,
   event,

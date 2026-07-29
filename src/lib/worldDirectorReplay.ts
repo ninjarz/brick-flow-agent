@@ -1,4 +1,4 @@
-import type { WorldDirectorCheckpoint, WorldState } from '../types/world'
+import type { WorldDirectorCheckpoint, WorldDirectorEntry, WorldDirectorTurn, WorldState } from '../types/world'
 
 const clone = <T,>(value: T): T => structuredClone(value)
 
@@ -27,3 +27,33 @@ export const restoreWorldDirectorCheckpoint = (
     },
   })
 }
+
+export const getWorldDirectorReplayEntries = (
+  turn: WorldDirectorTurn,
+  targetEntryId?: string,
+) => {
+  const targetIndex = targetEntryId
+    ? turn.entries.findIndex((entry) => entry.id === targetEntryId)
+    : turn.entries.length - 1
+  if (targetIndex < 0) return []
+  return turn.entries
+    .slice(0, targetIndex + 1)
+    .filter((entry) => entry.status !== 'rejected' || entry.id === targetEntryId)
+}
+
+export const replaceWorldDirectorTurnEntry = (
+  world: WorldState,
+  turnId: string,
+  entry: WorldDirectorEntry,
+): WorldState => ({
+  ...world,
+  narrative: {
+    ...world.narrative,
+    directorTurns: world.narrative.directorTurns.map((turn) => turn.id === turnId
+      ? {
+          ...turn,
+          entries: turn.entries.map((candidate) => candidate.id === entry.id ? entry : candidate),
+        }
+      : turn),
+  },
+})

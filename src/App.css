@@ -583,6 +583,39 @@ button.status-pill:hover {
 .world-story-replay:hover:not(:disabled) { color: #2563eb; }
 .world-story-replay:disabled { cursor: not-allowed; opacity: 0.4; }
 
+.world-story-block-row {
+  flex-basis: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px;
+  align-items: start;
+  min-width: 0;
+}
+
+.world-story-entry-replay {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  color: #9a7b59;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.18;
+  transition: color 140ms ease, background 140ms ease, opacity 140ms ease;
+}
+
+.world-story-block-row:hover .world-story-entry-replay,
+.world-story-entry-replay:focus-visible {
+  color: #2563eb;
+  background: #eff6ff;
+  opacity: 1;
+}
+
+.world-story-entry-replay:disabled { cursor: not-allowed; opacity: 0.12; }
+
 .narrative-passage + .narrative-passage {
   margin-top: 6px;
   padding-top: 10px;

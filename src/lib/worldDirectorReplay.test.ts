@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { createEmptyWorldState, createWorldEntity, parseStoredWorldState } from './worldEntity'
-import { createWorldDirectorCheckpoint, restoreWorldDirectorCheckpoint } from './worldDirectorReplay'
+import { createWorldDirectorCheckpoint, getWorldDirectorReplayEntries, replaceWorldDirectorTurnEntry, restoreWorldDirectorCheckpoint } from './worldDirectorReplay'
 
 describe('world director replay checkpoints', () => {
   it('restores scene state and keeps only turns that preceded the checkpoint', () => {
@@ -95,5 +95,36 @@ describe('world director replay checkpoints', () => {
       elapsedSeconds: 0,
     })
     expect(restored?.narrative.directorTurns[0].checkpoint?.narrative).not.toHaveProperty('directorTurns')
+  })
+
+  it('rebuilds only through the selected entry and retries that entry even if it failed', () => {
+    const world = createEmptyWorldState('plan')
+    const turn = {
+      id: 'turn',
+      playerText: '继续',
+      createdAtSeconds: 1,
+      status: 'completed' as const,
+      entries: [
+        { id: 'intro', type: 'narration' as const, text: '门开了。' },
+        { id: 'old-failure', type: 'dialogue' as const, speakerId: 'missing', text: '等等。', status: 'rejected' as const },
+        { id: 'target', type: 'command' as const, entityId: 'roland', command: { type: 'wander' as const }, status: 'rejected' as const },
+        { id: 'later', type: 'narration' as const, text: '后来。' },
+      ],
+    }
+
+    expect(getWorldDirectorReplayEntries(turn, 'target').map((entry) => entry.id)).toEqual([
+      'intro',
+      'target',
+    ])
+    expect(getWorldDirectorReplayEntries(turn, 'missing')).toEqual([])
+
+    const stored = {
+      ...world,
+      narrative: { ...world.narrative, directorTurns: [turn] },
+    }
+    const acceptedTarget = { ...turn.entries[2], status: 'accepted' as const, detail: undefined }
+    const updated = replaceWorldDirectorTurnEntry(stored, turn.id, acceptedTarget)
+    expect(updated.narrative.directorTurns[0].entries[2]).toEqual(acceptedTarget)
+    expect(updated.narrative.directorTurns[0].entries[3]).toEqual(turn.entries[3])
   })
 })

@@ -39,6 +39,7 @@ type WorldStoryDockProps = {
   onStopDirector: () => void
   onCommitDirectorTurn: (turn: WorldDirectorTurn) => void
   onReplayDirectorTurn: (turn: WorldDirectorTurn) => Promise<void>
+  onReplayDirectorEntry: (turn: WorldDirectorTurn, entryId: string) => Promise<void>
   onSelectEntity: (entityId: string) => void
   onClose: () => void
 }
@@ -255,6 +256,7 @@ export const WorldStoryDock = ({
   onStopDirector,
   onCommitDirectorTurn,
   onReplayDirectorTurn,
+  onReplayDirectorEntry,
   onSelectEntity,
   onClose,
 }: WorldStoryDockProps) => {
@@ -616,7 +618,24 @@ export const WorldStoryDock = ({
                   <DirectorDebugPanel item={item} locale={locale} />
                 )}
                 {item.blocks.map((block) => (
-                  <FeedBlock key={block.id} block={block} world={world} structures={structures} references={references} locale={locale} disabled={isDirectorThinking || isScenarioDialoguePlaying} onChoose={chooseInput} onSelectEntity={onSelectEntity} />
+                  <div className="world-story-block-row" key={block.id}>
+                    <FeedBlock block={block} world={world} structures={structures} references={references} locale={locale} disabled={isDirectorThinking || isScenarioDialoguePlaying} onChoose={chooseInput} onSelectEntity={onSelectEntity} />
+                    {item.kind === 'director-turn' && item.status === 'completed' && world.narrative.directorTurns.some((turn) => turn.id === item.id && turn.checkpoint) && (
+                      <button
+                        type="button"
+                        className="world-story-entry-replay"
+                        disabled={isDirectorThinking || isScenarioDialoguePlaying || isLlmTesting}
+                        aria-label={locale === 'zh-CN' ? '重播到此事件' : 'Replay through this event'}
+                        title={locale === 'zh-CN' ? '恢复场景并重播到此事件' : 'Restore the scene and replay through this event'}
+                        onClick={() => {
+                          const turn = world.narrative.directorTurns.find((candidate) => candidate.id === item.id)
+                          if (turn?.checkpoint) void onReplayDirectorEntry(turn, block.id)
+                        }}
+                      >
+                        <RefreshCw size={10} />
+                      </button>
+                    )}
+                  </div>
                 ))}
                 {item.streamPreview && (
                   <p className={`world-story-stream-preview ${item.streamPreview.type}`}>
