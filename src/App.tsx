@@ -11,7 +11,7 @@ import { createDefaultWorldScenarios } from './data/worldScenarios'
 import { dropBrickGroupAtPoint, findNearestOpenBrickGroupAround, getBrickGroupDragPointerOffset, offsetBrickGroupDragPoint, rotationRepositionSearchRadiusStuds, type HorizontalDropPoint, type StationaryPlanSpatialData } from './lib/brickGroupPlacement'
 import { generateBuildPlan } from './lib/localGenerator'
 import { buildLlmUserPrompt, generateLlmBuildPlan, isLlmConfigComplete, llmSystemPrompt, requestLlmJsonContent, requestLlmTextStream, resetLlmThinkingCompatibility, testLlmConnection } from './lib/llmGenerator'
-import { loadLlmConfig, saveLlmConfig } from './lib/llmConfig'
+import { clearLlmConnection, hasPersistedLlmConnection, loadLlmConfig, saveLlmConfig, saveLlmConnection } from './lib/llmConfig'
 import { defaultFinishedAssets, hasIndexedDbFinishedAssets, isDefaultFinishedAsset, loadAllDefaultFinishedAssets, loadFinishedAssets, loadFinishedAssetsFromIndexedDb, mergeWithDefaultAssets, saveFinishedAssets } from './lib/finishedAssets'
 import { formatBuildManualHtml, formatBuildManualMarkdown, serializeBuildManual } from './lib/manualSerializer'
 import { getManualPageTabItems, getManualStepPage, manualStepPageSize } from './lib/manualPagination'
@@ -192,6 +192,9 @@ function App() {
   const [placementSession, setPlacementSession] = useState<PlacementSession>()
   const [worldEntityPlacement, setWorldEntityPlacement] = useState<WorldEntityPlacementSession>()
   const [llmConfig, setLlmConfig] = useState<LlmConfig>(() => loadLlmConfig())
+  const [isLlmConnectionVerified, setIsLlmConnectionVerified] = useState(
+    () => hasPersistedLlmConnection(llmConfig),
+  )
   const [inventoryOverrides, setInventoryOverrides] = useState(() => loadInventoryOverrides())
   const [isTestingLlmConfig, setIsTestingLlmConfig] = useState(false)
   const [llmConfigFeedback, setLlmConfigFeedback] = useState<{
@@ -257,7 +260,7 @@ function App() {
     ? 'incomplete'
     : isTestingLlmConfig
       ? 'testing'
-      : llmConfigFeedback?.tone === 'success'
+      : isLlmConnectionVerified
         ? 'connected'
         : llmConfigFeedback?.tone === 'error'
           ? 'failed'
@@ -530,6 +533,8 @@ function App() {
 
   const updateLlmConfig = (nextConfig: LlmConfig) => {
     resetLlmThinkingCompatibility()
+    clearLlmConnection()
+    setIsLlmConnectionVerified(false)
     setLlmConfigFeedback(undefined)
     setLlmConfig(nextConfig)
   }
@@ -1038,8 +1043,12 @@ function App() {
 
     try {
       await testLlmConnection(llmConfig, locale)
+      saveLlmConnection(llmConfig)
+      setIsLlmConnectionVerified(true)
       setLlmConfigFeedback({ tone: 'success', text: t('config.success') })
     } catch (error) {
+      clearLlmConnection()
+      setIsLlmConnectionVerified(false)
       setLlmConfigFeedback({
         tone: 'error',
         text: error instanceof Error ? error.message : t('config.failed'),
@@ -1794,13 +1803,17 @@ function App() {
       (preview) => onProgress({ preview }),
     )
     try {
-      if (llmConfigFeedback?.tone !== 'success') {
+      if (!isLlmConnectionVerified) {
         setIsTestingLlmConfig(true)
         setLlmConfigFeedback(undefined)
         try {
           await testLlmConnection(llmConfig, locale)
+          saveLlmConnection(llmConfig)
+          setIsLlmConnectionVerified(true)
           setLlmConfigFeedback({ tone: 'success', text: t('config.success') })
         } catch (error) {
+          clearLlmConnection()
+          setIsLlmConnectionVerified(false)
           setLlmConfigFeedback({
             tone: 'error',
             text: error instanceof Error ? error.message : t('config.failed'),
@@ -1927,7 +1940,7 @@ function App() {
         }
       }
     }
-  }, [compactTavernDirectorHistory, isTavernDirectorThinking, llmConfig, llmConfigComplete, llmConfigFeedback?.tone, locale, t])
+  }, [compactTavernDirectorHistory, isLlmConnectionVerified, isTavernDirectorThinking, llmConfig, llmConfigComplete, locale, t])
 
   const stopTavernDirector = useCallback(() => {
     tavernDirectorAbortRef.current?.abort()
