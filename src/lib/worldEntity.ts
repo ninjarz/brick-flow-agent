@@ -6,6 +6,7 @@ import type {
   WorldEntityTransform,
   WorldDirectorEntry,
   WorldDirectorEvent,
+  WorldDirectorCheckpoint,
   WorldScenarioAction,
   WorldScenarioStage,
   WorldState,
@@ -436,7 +437,7 @@ const parseStoredDirectorEntry = (value: unknown): WorldDirectorEntry | undefine
   } as WorldDirectorEntry
 }
 
-const parseStoredDirectorTurns = (value: unknown): WorldState['narrative']['directorTurns'] => (
+const parseStoredDirectorTurns = (value: unknown, planId: string): WorldState['narrative']['directorTurns'] => (
   Array.isArray(value) ? value.flatMap((turn) => {
     if (!isRecord(turn) || typeof turn.id !== 'string' || !isFiniteNumber(turn.createdAtSeconds)) return []
     const playerText = cleanStoredText(turn.playerText, 800)
@@ -461,6 +462,7 @@ const parseStoredDirectorTurns = (value: unknown): WorldState['narrative']['dire
           ...(isFiniteNumber(storedContextStats.totalTokens) ? { totalTokens: Math.max(0, Math.floor(storedContextStats.totalTokens)) } : {}),
         }
       : undefined
+    const checkpoint = parseStoredDirectorCheckpoint(turn.checkpoint, planId)
     return [{
       id: turn.id.slice(0, 180),
       playerText,
@@ -477,6 +479,7 @@ const parseStoredDirectorTurns = (value: unknown): WorldState['narrative']['dire
       ...(typeof turn.responseMessage === 'string' ? { responseMessage: turn.responseMessage.slice(0, 30_000) } : {}),
       ...(contextStats ? { contextStats } : {}),
       ...(typeof turn.error === 'string' ? { error: turn.error.slice(0, 300) } : {}),
+      ...(checkpoint ? { checkpoint } : {}),
     }]
   }).slice(-100) : []
 )
@@ -726,7 +729,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
     const memberships = storylineMemberships.get(entity.id) ?? []
     return memberships.length === 1 ? { ...entity, storylineId: memberships[0] } : entity
   })
-  const directorTurns = parseStoredDirectorTurns(narrative.directorTurns)
+  const directorTurns = parseStoredDirectorTurns(narrative.directorTurns, planId)
   const storedDirectorMemory = isRecord(narrative.directorMemory) ? narrative.directorMemory : undefined
   const directorMemory = storedDirectorMemory
     && typeof storedDirectorMemory.summary === 'string'
@@ -813,6 +816,31 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
       ...(directorMemory ? { directorMemory } : {}),
     },
   } satisfies WorldState
+}
+
+const parseStoredDirectorCheckpoint = (
+  value: unknown,
+  planId: string,
+): WorldDirectorCheckpoint | undefined => {
+  if (!isRecord(value) || !isRecord(value.narrative) || !Array.isArray(value.directorTurnIds)) return undefined
+  const parsedWorld = parseStoredWorldState({
+    ...value,
+    narrative: {
+      ...value.narrative,
+      directorTurns: [],
+    },
+  }, planId)
+  if (!parsedWorld) return undefined
+  const { directorTurns: _directorTurns, ...narrative } = parsedWorld.narrative
+  void _directorTurns
+  return {
+    ...parsedWorld,
+    narrative,
+    directorTurnIds: value.directorTurnIds
+      .filter((id): id is string => typeof id === 'string' && Boolean(id.trim()))
+      .map((id) => id.slice(0, 180))
+      .slice(-100),
+  }
 }
 
 const getCommandTargets = (command: WorldEntityCommand): WorldTargetRef[] => {

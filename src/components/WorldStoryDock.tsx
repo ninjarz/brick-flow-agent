@@ -3,6 +3,7 @@ import { type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useM
 import { resizeBottomDockHeight, resizeBottomDockWidth } from '../lib/bottomDockResize'
 import { isDebugModeEnabled } from '../lib/debugMode'
 import { useI18n } from '../lib/i18n'
+import { createWorldDirectorCheckpoint } from '../lib/worldDirectorReplay'
 import {
   buildWorldNarrativeFeed,
   type ActiveWorldDirectorTurn,
@@ -36,6 +37,7 @@ type WorldStoryDockProps = {
   }>
   onStopDirector: () => void
   onCommitDirectorTurn: (turn: WorldDirectorTurn) => void
+  onReplayDirectorTurn: (turn: WorldDirectorTurn) => Promise<void>
   onSelectEntity: (entityId: string) => void
   onClose: () => void
 }
@@ -228,6 +230,7 @@ export const WorldStoryDock = ({
   onDirectWorld,
   onStopDirector,
   onCommitDirectorTurn,
+  onReplayDirectorTurn,
   onSelectEntity,
   onClose,
 }: WorldStoryDockProps) => {
@@ -395,6 +398,7 @@ export const WorldStoryDock = ({
     if (!playerText || isDirectorThinking || isScenarioDialoguePlaying || isLlmTesting || !llmConfigured) return
     const id = retryTurn?.id ?? `director-turn-${Date.now().toString(36)}`
     const createdAtSeconds = retryTurn?.createdAtSeconds ?? world.elapsedSeconds
+    const checkpoint = createWorldDirectorCheckpoint(world)
     const entries: TavernDirectorEntry[] = []
     let reasoning = ''
     let streamPreview: TavernDirectorStreamPreview | undefined
@@ -453,6 +457,7 @@ export const WorldStoryDock = ({
         ...(contextStats ? { contextStats } : {}),
         createdAtSeconds,
         status,
+        checkpoint,
         ...(errorMessage ? { error: errorMessage } : {}),
       })
       setActiveTurn(undefined)
@@ -557,6 +562,21 @@ export const WorldStoryDock = ({
             )}
             {feed.map((item) => (
               <article className={`narrative-passage ${item.kind}`} key={item.id}>
+                {item.kind === 'director-turn' && item.status === 'completed' && world.narrative.directorTurns.some((turn) => turn.id === item.id && turn.checkpoint) && (
+                  <button
+                    type="button"
+                    className="world-story-replay"
+                    disabled={isDirectorThinking || isScenarioDialoguePlaying || isLlmTesting}
+                    title={locale === 'zh-CN' ? '恢复到此节点开始前的场景并重新演绎；之后的节点将被撤回' : 'Restore the scene before this node and replay it; later nodes will be rewound'}
+                    onClick={() => {
+                      const turn = world.narrative.directorTurns.find((candidate) => candidate.id === item.id)
+                      if (turn?.checkpoint) void onReplayDirectorTurn(turn)
+                    }}
+                  >
+                    <RefreshCw size={11} />
+                    {locale === 'zh-CN' ? '重播' : 'Replay'}
+                  </button>
+                )}
                 {item.kind === 'active-dialogue' && (
                   <p className="narrative-phase">
                     <BookOpen size={11} />

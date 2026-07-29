@@ -29,6 +29,7 @@ import { isWorldEntityGroundPointBlockedByBricks, stepWorldSimulation, worldSimu
 import { findNearestAvailableWorldEntityPoint } from './lib/worldEntityCollision'
 import { advanceWorldFixedStepClock, createWorldFixedStepClock } from './lib/worldClock'
 import { getWorldDirectorPlaybackEntityIds, isWorldDirectorDialogueVisible, isWorldDirectorPlaybackSettled, isWorldDirectorPlaybackSettledIgnoringSpeech, prepareWorldForDirectorPlayback, shouldStartWorldDirectorPlayback } from './lib/worldDirectorPlayback'
+import { restoreWorldDirectorCheckpoint } from './lib/worldDirectorReplay'
 import { buildDirectorCompactionPrompt, buildDirectorMessages, createDirectorMemoryCheckpoint, createFallbackDirectorSummary, estimateDirectorMessagesTokens, getDirectorTurnsAfterMemory, parseDirectorCompactionSummary, planDirectorCompaction } from './lib/worldDirectorContext'
 import { addWorldStory, createLocalTavernStory } from './lib/worldNarrative'
 import { playTavernActivity, type TavernActivityKind } from './lib/worldTavernActivities'
@@ -1946,6 +1947,111 @@ function App() {
     tavernDirectorAbortRef.current?.abort()
   }, [])
 
+  const replayTavernDirectorTurn = useCallback(async (turn: WorldDirectorTurn) => {
+    if (!turn.checkpoint || isTavernDirectorThinking) return
+    tavernDirectorAbortRef.current?.abort()
+    const controller = new AbortController()
+    tavernDirectorAbortRef.current = controller
+    const restoredCheckpoint = restoreWorldDirectorCheckpoint(worldRef.current, turn.checkpoint)
+    const restoredWorld = {
+      ...restoredCheckpoint,
+      narrative: {
+        ...restoredCheckpoint.narrative,
+        directorTurns: [...restoredCheckpoint.narrative.directorTurns, turn].slice(-100),
+      },
+    }
+    const playback = {
+      controller,
+      restorePaused: turn.checkpoint.paused,
+      simulationStarted: !turn.checkpoint.paused,
+    }
+    tavernDirectorPlaybackRef.current = playback
+    worldRef.current = restoredWorld
+    setWorld(restoredWorld)
+    setIsTavernDirectorThinking(true)
+
+    const playbackEntityIds = new Set<string>()
+    const playableEntries = turn.entries.filter((entry) => entry.status !== 'rejected')
+    const lastDialogueIndex = playableEntries.findLastIndex((entry) => entry.type === 'dialogue')
+    const lastDialogue = lastDialogueIndex >= 0 && playableEntries[lastDialogueIndex].type === 'dialogue'
+      ? playableEntries[lastDialogueIndex]
+      : undefined
+
+    try {
+      for (let index = 0; index < playableEntries.length; index += 1) {
+        if (controller.signal.aborted) break
+        const entry = playableEntries[index]
+        const currentWorld = worldRef.current
+        const currentPlan = planRef.current
+        const mayStartSimulation = shouldStartWorldDirectorPlayback(entry) && !playback.simulationStarted
+        const eventWorld = mayStartSimulation
+          ? prepareWorldForDirectorPlayback(currentWorld)
+          : currentWorld
+        const applied = applyTavernDirectorEvent(eventWorld, entry, {
+          bricks: currentPlan.bricks,
+          structures: currentPlan.structures ?? [],
+        })
+        if (applied.status === 'rejected') continue
+        const startsSimulation = mayStartSimulation
+        if (startsSimulation) playback.simulationStarted = true
+        const nextWorld = startsSimulation && applied.world.paused
+          ? { ...applied.world, paused: false }
+          : applied.world
+        worldRef.current = nextWorld
+        setWorld(nextWorld)
+        const eventEntityIds = getWorldDirectorPlaybackEntityIds(entry)
+        eventEntityIds.forEach((entityId) => playbackEntityIds.add(entityId))
+
+        if (entry.type !== 'dialogue' || eventEntityIds.length === 0) continue
+        const eventDeadline = performance.now() + tavernDirectorPlaybackTimeoutMs
+        const eventEntityIdSet = new Set(eventEntityIds)
+        while (
+          !controller.signal.aborted
+          && !worldRef.current.paused
+          && performance.now() < eventDeadline
+          && !isWorldDirectorPlaybackSettled(worldRef.current, eventEntityIdSet)
+        ) {
+          if (
+            index === lastDialogueIndex
+            && isWorldDirectorDialogueVisible(worldRef.current, entry.speakerId, entry.text)
+          ) break
+          await new Promise((resolve) => window.setTimeout(resolve, 100))
+        }
+      }
+
+      const preservedDialogueSpeakerIds = lastDialogue
+        && isWorldDirectorDialogueVisible(worldRef.current, lastDialogue.speakerId, lastDialogue.text)
+        ? new Set([lastDialogue.speakerId])
+        : new Set<string>()
+      const playbackDeadline = performance.now() + tavernDirectorPlaybackTimeoutMs
+      while (
+        !controller.signal.aborted
+        && !worldRef.current.paused
+        && performance.now() < playbackDeadline
+        && !isWorldDirectorPlaybackSettledIgnoringSpeech(
+          worldRef.current,
+          playbackEntityIds,
+          preservedDialogueSpeakerIds,
+        )
+      ) {
+        await new Promise((resolve) => window.setTimeout(resolve, 100))
+      }
+    } finally {
+      if (tavernDirectorAbortRef.current === controller) {
+        tavernDirectorAbortRef.current = undefined
+        setIsTavernDirectorThinking(false)
+      }
+      if (tavernDirectorPlaybackRef.current === playback) {
+        tavernDirectorPlaybackRef.current = undefined
+        if (playback.restorePaused && !worldRef.current.paused) {
+          const pausedWorld = { ...worldRef.current, paused: true }
+          worldRef.current = pausedWorld
+          setWorld(pausedWorld)
+        }
+      }
+    }
+  }, [isTavernDirectorThinking])
+
   const commitTavernDirectorTurn = useCallback((turn: WorldDirectorTurn) => {
     const current = worldRef.current
     const next = {
@@ -2751,6 +2857,7 @@ function App() {
                 onDirectWorld={runTavernDirectorTurn}
                 onStopDirector={stopTavernDirector}
                 onCommitDirectorTurn={commitTavernDirectorTurn}
+                onReplayDirectorTurn={replayTavernDirectorTurn}
                 onSelectEntity={selectWorldEntity}
                 onClose={() => setIsWorldStoryDockOpen(false)}
               />

@@ -173,6 +173,7 @@ export type WorldDirectorTurn = {
   createdAtSeconds: number
   status: 'completed' | 'stopped' | 'failed'
   error?: string
+  checkpoint?: WorldDirectorCheckpoint
 }
 
 export type WorldDirectorMemory = {
@@ -344,4 +345,9 @@ export type WorldState = {
   narrative: WorldNarrativeState
   scenarios: WorldScenarioRuntime[]
   hiddenTargets: Array<Extract<WorldTargetRef, { kind: 'entity' | 'brick' | 'structure' }>>
+}
+
+export type WorldDirectorCheckpoint = Omit<WorldState, 'narrative'> & {
+  narrative: Omit<WorldNarrativeState, 'directorTurns'>
+  directorTurnIds: string[]
 }

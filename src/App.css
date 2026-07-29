@@ -565,6 +565,24 @@ button.status-pill:hover {
   align-items: center;
 }
 
+.world-story-replay {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  margin-left: auto;
+  padding: 2px 5px;
+  border: 0;
+  color: #8a5a2f;
+  background: transparent;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.world-story-replay:hover:not(:disabled) { color: #2563eb; }
+.world-story-replay:disabled { cursor: not-allowed; opacity: 0.4; }
+
 .narrative-passage + .narrative-passage {
   margin-top: 6px;
   padding-top: 10px;
