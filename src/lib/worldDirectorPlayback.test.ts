@@ -4,11 +4,13 @@ import { createEmptyWorldState, createWorldEntity } from './worldEntity'
 import {
   applyWorldDirectorPlaybackEvent,
   getWorldDirectorPlaybackEntityIds,
+  getWorldDirectorDialoguePlaybackPhase,
   isWorldDirectorDialogueVisible,
   isWorldDirectorPlaybackSettled,
   isWorldDirectorPlaybackSettledIgnoringSpeech,
   prepareWorldForDirectorPlayback,
   shouldStartWorldDirectorPlayback,
+  waitForWorldDirectorDialoguePlayback,
 } from './worldDirectorPlayback'
 
 const createWorld = () => {
@@ -92,6 +94,110 @@ describe('world director playback', () => {
     expect(rejected.world).toBe(pausedWorld)
     expect(rejected.simulationStarted).toBe(false)
     expect(rejected.entityIds).toEqual([])
+  })
+
+  it('tracks an approaching dialogue through speaking and completion', async () => {
+    const world = createWorld()
+    const event = {
+      type: 'dialogue' as const,
+      speakerId: 'roland',
+      listenerId: 'erin',
+      text: '北边的路不好走。',
+    }
+    const entityIds = new Set(['roland', 'erin'])
+    const approaching = {
+      ...world,
+      entities: world.entities.map((entity) => entity.id === 'roland'
+        ? {
+            ...entity,
+            activeCommand: {
+              type: 'interact' as const,
+              target: { kind: 'entity' as const, id: 'erin' },
+              speechText: event.text,
+            },
+          }
+        : entity),
+    }
+    const speaking = {
+      ...world,
+      entities: world.entities.map((entity) => entity.id === 'roland'
+        ? {
+            ...entity,
+            speech: {
+              message: 'scenario-dialogue' as const,
+              text: event.text,
+              expiresAtSeconds: 8,
+            },
+          }
+        : entity),
+    }
+    const phases: string[] = []
+    const states = [approaching, speaking]
+    let stateIndex = 0
+    const outcome = await waitForWorldDirectorDialoguePlayback({
+      getWorld: () => states[stateIndex],
+      event,
+      entityIds,
+      signal: new AbortController().signal,
+      timeoutMs: 1_000,
+      finishWhenVisible: () => true,
+      onPhaseChange: (phase) => phases.push(phase),
+      now: () => 0,
+      sleep: async () => { stateIndex += 1 },
+    })
+
+    expect(phases).toEqual(['approaching', 'speaking'])
+    expect(outcome).toBe('played')
+    expect(getWorldDirectorDialoguePlaybackPhase({
+      world,
+      event,
+      entityIds,
+      dialogueWasVisible: true,
+    })).toBe('completed')
+  })
+
+  it('reports a missing or timed-out dialogue instead of leaving it queued forever', async () => {
+    const world = createWorld()
+    const event = {
+      type: 'dialogue' as const,
+      speakerId: 'roland',
+      listenerId: 'erin',
+      text: '等等。',
+    }
+    const entityIds = new Set(['roland', 'erin'])
+    const missed = await waitForWorldDirectorDialoguePlayback({
+      getWorld: () => world,
+      event,
+      entityIds,
+      signal: new AbortController().signal,
+      timeoutMs: 1_000,
+    })
+    expect(missed).toBe('missed')
+
+    const approaching = {
+      ...world,
+      entities: world.entities.map((entity) => entity.id === 'roland'
+        ? {
+            ...entity,
+            activeCommand: {
+              type: 'interact' as const,
+              target: { kind: 'entity' as const, id: 'erin' },
+              speechText: event.text,
+            },
+          }
+        : entity),
+    }
+    let clock = 0
+    const timedOut = await waitForWorldDirectorDialoguePlayback({
+      getWorld: () => approaching,
+      event,
+      entityIds,
+      signal: new AbortController().signal,
+      timeoutMs: 200,
+      now: () => clock,
+      sleep: async (delayMs) => { clock += delayMs },
+    })
+    expect(timedOut).toBe('timed-out')
   })
 
   it('tracks command actors and both dialogue participants', () => {

@@ -28,7 +28,7 @@ import { changeAllWorldEntityControllers, createEmptyWorldState, createWorldEnti
 import { isWorldEntityGroundPointBlockedByBricks, stepWorldSimulation, worldSimulationStepSeconds } from './lib/worldSimulation'
 import { findNearestAvailableWorldEntityPoint } from './lib/worldEntityCollision'
 import { advanceWorldFixedStepClock, createWorldFixedStepClock } from './lib/worldClock'
-import { applyWorldDirectorPlaybackEvent, isWorldDirectorDialogueVisible, isWorldDirectorPlaybackSettled, isWorldDirectorPlaybackSettledIgnoringSpeech } from './lib/worldDirectorPlayback'
+import { applyWorldDirectorPlaybackEvent, isWorldDirectorDialogueVisible, isWorldDirectorPlaybackSettledIgnoringSpeech, waitForWorldDirectorDialoguePlayback } from './lib/worldDirectorPlayback'
 import { restoreWorldDirectorCheckpoint } from './lib/worldDirectorReplay'
 import { buildDirectorCompactionPrompt, buildDirectorMessages, createDirectorMemoryCheckpoint, createFallbackDirectorSummary, estimateDirectorMessagesTokens, getDirectorTurnsAfterMemory, parseDirectorCompactionSummary, planDirectorCompaction } from './lib/worldDirectorContext'
 import { addWorldStory, createLocalTavernStory } from './lib/worldNarrative'
@@ -1777,37 +1777,28 @@ function App() {
           }
           onEntry(entry)
           if (event.type !== 'dialogue' || eventEntityIds.length === 0) return
-          const eventDeadline = performance.now() + tavernDirectorPlaybackTimeoutMs
           const eventEntityIdSet = new Set(eventEntityIds)
-          let dialogueWasVisible = isWorldDirectorDialogueVisible(
-            worldRef.current,
-            event.speakerId,
-            event.text,
-          )
-          while (
-            !controller.signal.aborted
-            && !worldRef.current.paused
-            && performance.now() < eventDeadline
-            && !isWorldDirectorPlaybackSettled(worldRef.current, eventEntityIdSet)
-          ) {
-            dialogueWasVisible ||= isWorldDirectorDialogueVisible(
-              worldRef.current,
-              event.speakerId,
-              event.text,
-            )
-            if (
-              streamFinished
-              && entryIndex === lastDialogueEntryIndex
-              && dialogueWasVisible
-            ) break
-            await new Promise((resolve) => window.setTimeout(resolve, 100))
-          }
-          dialogueWasVisible ||= isWorldDirectorDialogueVisible(
-            worldRef.current,
-            event.speakerId,
-            event.text,
-          )
-          if (dialogueWasVisible) onEntry({ ...entry, detail: 'PLAYED' })
+          const outcome = await waitForWorldDirectorDialoguePlayback({
+            getWorld: () => worldRef.current,
+            event,
+            entityIds: eventEntityIdSet,
+            signal: controller.signal,
+            timeoutMs: tavernDirectorPlaybackTimeoutMs,
+            finishWhenVisible: () => streamFinished && entryIndex === lastDialogueEntryIndex,
+            onPhaseChange: (phase) => {
+              if (phase === 'speaking') onEntry({ ...entry, detail: 'PLAYING' })
+            },
+          })
+          const outcomeDetail = outcome === 'played'
+            ? 'PLAYED'
+            : outcome === 'missed'
+              ? 'PLAYBACK_MISSED'
+              : outcome === 'timed-out'
+                ? 'PLAYBACK_TIMEOUT'
+                : outcome === 'paused'
+                  ? 'PLAYBACK_PAUSED'
+                  : 'PLAYBACK_STOPPED'
+          onEntry({ ...entry, detail: outcomeDetail })
         })
       },
       (preview) => onProgress({ preview }),
@@ -2007,20 +1998,15 @@ function App() {
         eventEntityIds.forEach((entityId) => playbackEntityIds.add(entityId))
 
         if (entry.type !== 'dialogue' || eventEntityIds.length === 0) continue
-        const eventDeadline = performance.now() + tavernDirectorPlaybackTimeoutMs
         const eventEntityIdSet = new Set(eventEntityIds)
-        while (
-          !controller.signal.aborted
-          && !worldRef.current.paused
-          && performance.now() < eventDeadline
-          && !isWorldDirectorPlaybackSettled(worldRef.current, eventEntityIdSet)
-        ) {
-          if (
-            index === lastDialogueIndex
-            && isWorldDirectorDialogueVisible(worldRef.current, entry.speakerId, entry.text)
-          ) break
-          await new Promise((resolve) => window.setTimeout(resolve, 100))
-        }
+        await waitForWorldDirectorDialoguePlayback({
+          getWorld: () => worldRef.current,
+          event: entry,
+          entityIds: eventEntityIdSet,
+          signal: controller.signal,
+          timeoutMs: tavernDirectorPlaybackTimeoutMs,
+          finishWhenVisible: () => index === lastDialogueIndex,
+        })
       }
 
       const preservedDialogueSpeakerIds = lastDialogue

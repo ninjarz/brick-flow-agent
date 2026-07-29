@@ -631,11 +631,12 @@ button.status-pill:hover {
   white-space: nowrap;
 }
 
-.narrative-passage p.dialogue.queued {
+.narrative-passage p.dialogue.queued,
+.narrative-passage p.dialogue.interrupted {
   opacity: 0.76;
 }
 
-.narrative-passage p.dialogue.queued em {
+.narrative-passage p.dialogue em {
   margin-right: 5px;
   padding: 1px 5px;
   border-radius: 999px;
@@ -645,6 +646,20 @@ button.status-pill:hover {
   font-size: 8px;
   font-style: normal;
   font-weight: 800;
+}
+
+.narrative-passage p.dialogue.playing em {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.narrative-passage p.dialogue.interrupted em,
+.narrative-passage p.dialogue.rejected {
+  color: #b42318;
+}
+
+.narrative-passage p.dialogue.interrupted em {
+  background: #fee2e2;
 }
 
 .narrative-passage p.player {

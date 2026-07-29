@@ -110,6 +110,79 @@ export const isWorldDirectorDialogueVisible = (
   )
 }
 
+export type WorldDirectorDialoguePlaybackPhase = 'approaching' | 'speaking' | 'completed' | 'missed'
+export type WorldDirectorDialoguePlaybackOutcome = 'played' | 'missed' | 'timed-out' | 'paused' | 'aborted'
+
+export const getWorldDirectorDialoguePlaybackPhase = ({
+  world,
+  event,
+  entityIds,
+  dialogueWasVisible,
+}: {
+  world: WorldState
+  event: Extract<WorldDirectorEvent, { type: 'dialogue' }>
+  entityIds: ReadonlySet<string>
+  dialogueWasVisible: boolean
+}): WorldDirectorDialoguePlaybackPhase => {
+  if (isWorldDirectorDialogueVisible(world, event.speakerId, event.text)) return 'speaking'
+  if (!isWorldDirectorPlaybackSettled(world, entityIds)) return 'approaching'
+  return dialogueWasVisible ? 'completed' : 'missed'
+}
+
+export const waitForWorldDirectorDialoguePlayback = async ({
+  getWorld,
+  event,
+  entityIds,
+  signal,
+  timeoutMs,
+  finishWhenVisible = () => false,
+  onPhaseChange,
+  pollIntervalMs = 100,
+  now = () => performance.now(),
+  sleep = (delayMs: number) => new Promise<void>((resolve) => setTimeout(resolve, delayMs)),
+}: {
+  getWorld: () => WorldState
+  event: Extract<WorldDirectorEvent, { type: 'dialogue' }>
+  entityIds: ReadonlySet<string>
+  signal: AbortSignal
+  timeoutMs: number
+  finishWhenVisible?: () => boolean
+  onPhaseChange?: (phase: WorldDirectorDialoguePlaybackPhase) => void
+  pollIntervalMs?: number
+  now?: () => number
+  sleep?: (delayMs: number) => Promise<void>
+}): Promise<WorldDirectorDialoguePlaybackOutcome> => {
+  const deadline = now() + timeoutMs
+  let dialogueWasVisible = false
+  let previousPhase: WorldDirectorDialoguePlaybackPhase | undefined
+
+  while (true) {
+    if (signal.aborted) return 'aborted'
+    const world = getWorld()
+    const phase = getWorldDirectorDialoguePlaybackPhase({
+      world,
+      event,
+      entityIds,
+      dialogueWasVisible,
+    })
+    if (phase !== previousPhase) {
+      previousPhase = phase
+      onPhaseChange?.(phase)
+    }
+    if (phase === 'speaking') {
+      dialogueWasVisible = true
+      if (finishWhenVisible()) return 'played'
+    } else if (phase === 'completed') {
+      return 'played'
+    } else if (phase === 'missed') {
+      return 'missed'
+    }
+    if (world.paused) return 'paused'
+    if (now() >= deadline) return 'timed-out'
+    await sleep(pollIntervalMs)
+  }
+}
+
 export const isWorldDirectorPlaybackSettledIgnoringSpeech = (
   world: WorldState,
   entityIds: ReadonlySet<string>,

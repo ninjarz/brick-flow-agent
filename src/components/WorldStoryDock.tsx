@@ -123,8 +123,28 @@ const FeedBlock = ({
   if (block.type === 'dialogue') {
     const speaker = world.entities.find((entity) => entity.id === block.speakerId)
     const speakerName = speaker?.name ?? block.speakerId
-    const waitingForProximity = 'detail' in block && block.detail === 'WAITING_FOR_PROXIMITY'
-    return <p className={`dialogue${waitingForProximity ? ' queued' : ''}`}><strong><AnnotatedText text={speakerName} references={references} onSelectEntity={onSelectEntity} /></strong><span>{waitingForProximity && <em>{locale === 'zh-CN' ? '接近后' : 'on arrival'}</em>}“<AnnotatedText text={block.text} references={references} onSelectEntity={onSelectEntity} />”</span></p>
+    const detail = 'detail' in block ? block.detail : undefined
+    const playbackBadge = detail === 'WAITING_FOR_PROXIMITY'
+      ? (locale === 'zh-CN' ? '正在接近' : 'approaching')
+      : detail === 'PLAYING'
+        ? (locale === 'zh-CN' ? '正在说' : 'speaking')
+        : detail === 'PLAYBACK_MISSED'
+          ? (locale === 'zh-CN' ? '未能说出' : 'not played')
+          : detail === 'PLAYBACK_TIMEOUT'
+            ? (locale === 'zh-CN' ? '演绎超时' : 'timed out')
+            : detail === 'PLAYBACK_PAUSED'
+              ? (locale === 'zh-CN' ? '已暂停' : 'paused')
+              : detail === 'PLAYBACK_STOPPED'
+                ? (locale === 'zh-CN' ? '已停止' : 'stopped')
+                : undefined
+    const playbackClass = detail === 'WAITING_FOR_PROXIMITY'
+      ? ' queued'
+      : detail === 'PLAYING'
+        ? ' playing'
+        : detail?.startsWith('PLAYBACK_')
+          ? ' interrupted'
+          : ''
+    return <p className={`dialogue${playbackClass}${'status' in block && block.status === 'rejected' ? ' rejected' : ''}`}><strong><AnnotatedText text={speakerName} references={references} onSelectEntity={onSelectEntity} /></strong><span>{playbackBadge && <em>{playbackBadge}</em>}“<AnnotatedText text={block.text} references={references} onSelectEntity={onSelectEntity} />”</span></p>
   }
   if (block.type === 'command') {
     const actor = world.entities.find((entity) => entity.id === block.entityId)
