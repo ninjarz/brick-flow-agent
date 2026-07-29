@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { createEmptyWorldState, createWorldEntity } from './worldEntity'
 import {
+  applyWorldDirectorPlaybackEvent,
   getWorldDirectorPlaybackEntityIds,
   isWorldDirectorDialogueVisible,
   isWorldDirectorPlaybackSettled,
@@ -38,6 +39,59 @@ describe('world director playback', () => {
     })).toBe(true)
     expect(shouldStartWorldDirectorPlayback({ type: 'narration', text: '风吹过酒馆。' })).toBe(false)
     expect(shouldStartWorldDirectorPlayback({ type: 'end', summary: '思考结束。' })).toBe(false)
+  })
+
+  it('applies accepted events through one playback transition and starts time only when needed', () => {
+    const pausedWorld = { ...createWorld(), paused: true }
+    const narration = applyWorldDirectorPlaybackEvent({
+      world: pausedWorld,
+      event: { type: 'narration', text: '风吹过酒馆。' },
+      simulationStarted: false,
+      bricks: [],
+      structures: [],
+    })
+    expect(narration.world.paused).toBe(true)
+    expect(narration.simulationStarted).toBe(false)
+    expect(narration.entityIds).toEqual([])
+
+    const dialogue = applyWorldDirectorPlaybackEvent({
+      world: pausedWorld,
+      event: {
+        type: 'dialogue',
+        speakerId: 'roland',
+        listenerId: 'erin',
+        text: '等等。',
+      },
+      simulationStarted: false,
+      bricks: [],
+      structures: [],
+    })
+    expect(dialogue.status).toBe('accepted')
+    expect(dialogue.detail).toBe('WAITING_FOR_PROXIMITY')
+    expect(dialogue.world.paused).toBe(false)
+    expect(dialogue.simulationStarted).toBe(true)
+    expect(dialogue.entityIds).toEqual(['roland', 'erin'])
+    expect(dialogue.world.entities.find((entity) => entity.id === 'roland')?.commandQueue[0]).toMatchObject({
+      type: 'interact',
+      target: { kind: 'entity', id: 'erin' },
+      speechText: '等等。',
+    })
+  })
+
+  it('does not start or mutate playback for a rejected event', () => {
+    const pausedWorld = { ...createWorld(), paused: true }
+    const rejected = applyWorldDirectorPlaybackEvent({
+      world: pausedWorld,
+      event: { type: 'dialogue', speakerId: 'missing', text: '有人吗？' },
+      simulationStarted: false,
+      bricks: [],
+      structures: [],
+    })
+
+    expect(rejected.status).toBe('rejected')
+    expect(rejected.world).toBe(pausedWorld)
+    expect(rejected.simulationStarted).toBe(false)
+    expect(rejected.entityIds).toEqual([])
   })
 
   it('tracks command actors and both dialogue participants', () => {

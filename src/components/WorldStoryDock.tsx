@@ -6,6 +6,7 @@ import { useI18n } from '../lib/i18n'
 import { createWorldDirectorCheckpoint } from '../lib/worldDirectorReplay'
 import {
   buildWorldNarrativeFeed,
+  upsertWorldDirectorEntry,
   type ActiveWorldDirectorTurn,
   type WorldNarrativeFeedBlock,
   type WorldNarrativeFeedItem,
@@ -430,7 +431,7 @@ export const WorldStoryDock = ({
         playerText,
         world.narrative.directorTurns.flatMap((turn) => turn.entries).slice(-12),
         (entry) => {
-          entries.push(entry)
+          entries.splice(0, entries.length, ...upsertWorldDirectorEntry(entries, entry))
           setActiveTurn((current) => current?.id === id ? { ...current, entries: [...entries] } : current)
         },
         (progress) => {

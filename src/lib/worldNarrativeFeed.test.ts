@@ -4,11 +4,28 @@ import { createEmptyWorldState } from './worldEntity'
 import {
   buildWorldNarrativeFeed,
   makeScenarioDialogueStoryId,
+  upsertWorldDirectorEntry,
 } from './worldNarrativeFeed'
 
 const makeWorld = (): WorldState => createEmptyWorldState('feed-test')
 
 describe('buildWorldNarrativeFeed', () => {
+  it('updates a streamed director entry in place without duplicating it', () => {
+    const waiting = {
+      id: 'dialogue-1',
+      type: 'dialogue' as const,
+      speakerId: 'roland',
+      listenerId: 'erin',
+      text: '等等。',
+      status: 'accepted' as const,
+      detail: 'WAITING_FOR_PROXIMITY',
+    }
+    const played = { ...waiting, detail: 'PLAYED' }
+
+    expect(upsertWorldDirectorEntry([waiting], played)).toEqual([played])
+    expect(upsertWorldDirectorEntry([], waiting)).toEqual([waiting])
+  })
+
   it('merges stories and director turns in ascending time order', () => {
     const world = makeWorld()
     world.narrative.stories = [{

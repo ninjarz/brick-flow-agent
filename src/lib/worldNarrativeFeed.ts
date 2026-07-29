@@ -33,6 +33,15 @@ export type ActiveWorldDirectorTurn = Omit<WorldDirectorTurn, 'status'> & {
   streamPreview?: TavernDirectorStreamPreview
 }
 
+export const upsertWorldDirectorEntry = (
+  entries: WorldDirectorEntry[],
+  entry: WorldDirectorEntry,
+) => {
+  const existingIndex = entries.findIndex((candidate) => candidate.id === entry.id)
+  if (existingIndex < 0) return [...entries, entry]
+  return entries.map((candidate, index) => index === existingIndex ? entry : candidate)
+}
+
 export const makeScenarioDialogueStoryId = (
   scenarioId: string,
   stageId: string,

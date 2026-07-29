@@ -1,4 +1,6 @@
+import type { BrickStructure, PlacedBrick } from '../types/bricks'
 import type { WorldDirectorEvent, WorldEntityCommand, WorldState } from '../types/world'
+import { applyTavernDirectorEvent } from './worldTavernDirector'
 
 const isFiniteDirectorCommand = (command: WorldEntityCommand) => (
   command.type === 'move'
@@ -20,6 +22,39 @@ export const getWorldDirectorPlaybackEntityIds = (event: WorldDirectorEvent) => 
 export const shouldStartWorldDirectorPlayback = (event: WorldDirectorEvent) => (
   event.type === 'dialogue' || event.type === 'command'
 )
+
+export const applyWorldDirectorPlaybackEvent = ({
+  world,
+  event,
+  simulationStarted,
+  bricks,
+  structures,
+}: {
+  world: WorldState
+  event: WorldDirectorEvent
+  simulationStarted: boolean
+  bricks: PlacedBrick[]
+  structures: BrickStructure[]
+}) => {
+  const mayStartSimulation = shouldStartWorldDirectorPlayback(event) && !simulationStarted
+  const eventWorld = mayStartSimulation ? prepareWorldForDirectorPlayback(world) : world
+  const applied = applyTavernDirectorEvent(eventWorld, event, { bricks, structures })
+  const accepted = applied.status !== 'rejected'
+  const startsSimulation = accepted && mayStartSimulation
+  const acceptedWorld = accepted ? applied.world : world
+  const nextWorld = startsSimulation && acceptedWorld.paused
+    ? { ...acceptedWorld, paused: false }
+    : acceptedWorld
+  return {
+    world: nextWorld,
+    simulationStarted: simulationStarted || startsSimulation,
+    entityIds: accepted ? getWorldDirectorPlaybackEntityIds(event) : [],
+    status: applied.status,
+    detail: applied.detail,
+    before: applied.before,
+    after: applied.after,
+  }
+}
 
 export const prepareWorldForDirectorPlayback = (world: WorldState): WorldState => {
   let changed = false
