@@ -61,3 +61,37 @@ export const isWorldDirectorPlaybackSettled = (world: WorldState, entityIds: Rea
       return !hasPendingCommand && !isSpeaking
     })
 }
+
+export const isWorldDirectorDialogueVisible = (
+  world: WorldState,
+  speakerId: string,
+  text: string,
+) => {
+  const speaker = world.entities.find((entity) => entity.id === speakerId)
+  return Boolean(
+    speaker?.speech?.message === 'scenario-dialogue'
+    && speaker.speech.text === text
+    && speaker.speech.expiresAtSeconds > world.elapsedSeconds,
+  )
+}
+
+export const isWorldDirectorPlaybackSettledIgnoringSpeech = (
+  world: WorldState,
+  entityIds: ReadonlySet<string>,
+  ignoredSpeechEntityIds: ReadonlySet<string>,
+) => {
+  if (entityIds.size === 0) return true
+  return world.entities
+    .filter((entity) => entityIds.has(entity.id))
+    .every((entity) => {
+      const hasPendingCommand = (
+        (entity.activeCommand && isFiniteDirectorCommand(entity.activeCommand))
+        || entity.commandQueue.some(isFiniteDirectorCommand)
+      )
+      const isSpeaking = (
+        !ignoredSpeechEntityIds.has(entity.id)
+        && Boolean(entity.speech && entity.speech.expiresAtSeconds > world.elapsedSeconds)
+      )
+      return !hasPendingCommand && !isSpeaking
+    })
+}

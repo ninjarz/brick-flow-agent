@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { createEmptyWorldState, createWorldEntity } from './worldEntity'
-import { getWorldDirectorPlaybackEntityIds, isWorldDirectorPlaybackSettled, prepareWorldForDirectorPlayback, shouldStartWorldDirectorPlayback } from './worldDirectorPlayback'
+import {
+  getWorldDirectorPlaybackEntityIds,
+  isWorldDirectorDialogueVisible,
+  isWorldDirectorPlaybackSettled,
+  isWorldDirectorPlaybackSettledIgnoringSpeech,
+  prepareWorldForDirectorPlayback,
+  shouldStartWorldDirectorPlayback,
+} from './worldDirectorPlayback'
 
 const createWorld = () => {
   const world = createEmptyWorldState('plan')
@@ -106,5 +113,44 @@ describe('world director playback', () => {
         : entity),
     }
     expect(isWorldDirectorPlaybackSettled(guarding, entityIds)).toBe(true)
+  })
+
+  it('can finish playback while preserving the visible final dialogue bubble', () => {
+    const world = createWorld()
+    const entityIds = new Set(['roland', 'erin'])
+    const speaking = {
+      ...world,
+      elapsedSeconds: 2,
+      entities: world.entities.map((entity) => entity.id === 'roland'
+        ? { ...entity, speech: { message: 'scenario-dialogue' as const, text: '北边的路不好走。', expiresAtSeconds: 8 } }
+        : entity),
+    }
+
+    expect(isWorldDirectorDialogueVisible(speaking, 'roland', '北边的路不好走。')).toBe(true)
+    expect(isWorldDirectorDialogueVisible(speaking, 'roland', '另一句话。')).toBe(false)
+    expect(isWorldDirectorPlaybackSettled(speaking, entityIds)).toBe(false)
+    expect(isWorldDirectorPlaybackSettledIgnoringSpeech(
+      speaking,
+      entityIds,
+      new Set(['roland']),
+    )).toBe(true)
+
+    const stillMoving = {
+      ...speaking,
+      entities: speaking.entities.map((entity) => entity.id === 'roland'
+        ? {
+            ...entity,
+            activeCommand: {
+              type: 'move' as const,
+              target: { kind: 'entity' as const, id: 'erin' },
+            },
+          }
+        : entity),
+    }
+    expect(isWorldDirectorPlaybackSettledIgnoringSpeech(
+      stillMoving,
+      entityIds,
+      new Set(['roland']),
+    )).toBe(false)
   })
 })

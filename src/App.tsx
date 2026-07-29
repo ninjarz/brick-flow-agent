@@ -28,12 +28,12 @@ import { changeAllWorldEntityControllers, createEmptyWorldState, createWorldEnti
 import { isWorldEntityGroundPointBlockedByBricks, stepWorldSimulation, worldSimulationStepSeconds } from './lib/worldSimulation'
 import { findNearestAvailableWorldEntityPoint } from './lib/worldEntityCollision'
 import { advanceWorldFixedStepClock, createWorldFixedStepClock } from './lib/worldClock'
-import { getWorldDirectorPlaybackEntityIds, isWorldDirectorPlaybackSettled, prepareWorldForDirectorPlayback, shouldStartWorldDirectorPlayback } from './lib/worldDirectorPlayback'
+import { getWorldDirectorPlaybackEntityIds, isWorldDirectorDialogueVisible, isWorldDirectorPlaybackSettled, isWorldDirectorPlaybackSettledIgnoringSpeech, prepareWorldForDirectorPlayback, shouldStartWorldDirectorPlayback } from './lib/worldDirectorPlayback'
 import { buildDirectorCompactionPrompt, buildDirectorMessages, createDirectorMemoryCheckpoint, createFallbackDirectorSummary, estimateDirectorMessagesTokens, getDirectorTurnsAfterMemory, parseDirectorCompactionSummary, planDirectorCompaction } from './lib/worldDirectorContext'
 import { addWorldStory, createLocalTavernStory } from './lib/worldNarrative'
 import { playTavernActivity, type TavernActivityKind } from './lib/worldTavernActivities'
 import { applyTavernAiResponse, requestTavernAiActivity } from './lib/worldTavernAi'
-import { applyTavernDirectorEvent, buildTavernDirectorPrompt, createTavernDirectorStreamParser, tavernDirectorSystemPrompt, type TavernDirectorEntry, type TavernDirectorStreamPreview } from './lib/worldTavernDirector'
+import { applyTavernDirectorEvent, buildTavernDirectorPrompt, createTavernDirectorStreamParser, tavernDirectorSystemPrompt, type TavernDirectorEntry, type TavernDirectorEvent, type TavernDirectorStreamPreview } from './lib/worldTavernDirector'
 import { createWorldAiSnapshot } from './lib/worldAi'
 import { analyzeBuildStability } from './lib/stabilityAnalysis'
 import { formatLDrawPlan, parseLDrawPlan } from './lib/ldrawPlan'
@@ -1728,10 +1728,17 @@ function App() {
     let contextStats: WorldDirectorTurn['contextStats']
     const playbackEntityIds = new Set<string>()
     let playbackQueue = Promise.resolve()
+    let streamFinished = false
+    let lastDialogueEntryIndex = 0
+    let lastDialogue: Extract<TavernDirectorEvent, { type: 'dialogue' }> | undefined
     const parser = createTavernDirectorStreamParser(
       (event) => {
         eventCount += 1
         const entryIndex = eventCount
+        if (event.type === 'dialogue') {
+          lastDialogueEntryIndex = entryIndex
+          lastDialogue = event
+        }
         playbackQueue = playbackQueue.then(async () => {
           if (controller.signal.aborted) return
           const currentWorld = worldRef.current
@@ -1775,6 +1782,11 @@ function App() {
             && performance.now() < eventDeadline
             && !isWorldDirectorPlaybackSettled(worldRef.current, eventEntityIdSet)
           ) {
+            if (
+              streamFinished
+              && entryIndex === lastDialogueEntryIndex
+              && isWorldDirectorDialogueVisible(worldRef.current, event.speakerId, event.text)
+            ) break
             await new Promise((resolve) => window.setTimeout(resolve, 100))
           }
         })
@@ -1862,16 +1874,25 @@ function App() {
         ...streamResult.usage,
       }
       parser.finish()
+      streamFinished = true
       await playbackQueue
       if (eventCount === 0) {
         throw new Error(locale === 'zh-CN' ? 'AI 没有返回可执行的剧情事件。' : 'The AI returned no usable story events.')
       }
       const playbackDeadline = performance.now() + tavernDirectorPlaybackTimeoutMs
+      const preservedDialogueSpeakerIds = lastDialogue
+        && isWorldDirectorDialogueVisible(worldRef.current, lastDialogue.speakerId, lastDialogue.text)
+        ? new Set([lastDialogue.speakerId])
+        : new Set<string>()
       while (
         !controller.signal.aborted
         && !worldRef.current.paused
         && performance.now() < playbackDeadline
-        && !isWorldDirectorPlaybackSettled(worldRef.current, playbackEntityIds)
+        && !isWorldDirectorPlaybackSettledIgnoringSpeech(
+          worldRef.current,
+          playbackEntityIds,
+          preservedDialogueSpeakerIds,
+        )
       ) {
         await new Promise((resolve) => window.setTimeout(resolve, 100))
       }
