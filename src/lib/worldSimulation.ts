@@ -1428,10 +1428,41 @@ export const stepWorldSimulation = (
         entity = { ...entity, behaviorState: 'following' }
       } else if (activeCommand.type === 'guard') {
         entity = { ...entity, behaviorState: 'guarding' }
+      } else if (activeCommand.type === 'interact' && target.kind === 'entity') {
+        events.push(makeEvent(timeSeconds, 'interaction', entity.id, target.id))
+        const listenerIndex = targetLookup.entityIndexById.get(target.id)
+        const listener = listenerIndex === undefined ? undefined : entities[listenerIndex]
+        const scriptedSpeech = activeCommand.speechText?.trim()
+        const speechDurationSeconds = scriptedSpeech
+          ? Math.min(14, Math.max(5, scriptedSpeech.length / 5))
+          : conversationSpeechDurationSeconds
+        entity = {
+          ...entity,
+          activeCommand: scriptedSpeech ? undefined : { type: 'wander', seed: Math.floor(timeSeconds * 10) + 1 },
+          behaviorState: 'idle',
+          speech: scriptedSpeech
+            ? {
+                message: 'scenario-dialogue',
+                text: scriptedSpeech,
+                expiresAtSeconds: timeSeconds + speechDurationSeconds,
+              }
+            : listener ? createConversationSpeech(entity, listener, timeSeconds) : entity.speech,
+          navigation: { status: 'idle', path: [], pathIndex: 0 },
+        }
+        if (!scriptedSpeech && listener && listener.health > 0) {
+          entities[listenerIndex!] = {
+            ...listener,
+            speech: createConversationSpeech(listener, entity, timeSeconds, true),
+            autonomy: {
+              ...listener.autonomy,
+              nextDecisionAtSeconds: Math.max(listener.autonomy.nextDecisionAtSeconds, timeSeconds + 4),
+            },
+          }
+        }
       } else {
         events.push(makeEvent(
           timeSeconds,
-          activeCommand.type === 'interact' && target.kind === 'entity' ? 'interaction' : 'command-complete',
+          'command-complete',
           entity.id,
           target.id,
         ))

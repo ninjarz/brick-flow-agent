@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { createDefaultWorldScenarios } from '../data/worldScenarios'
+import type { WorldState } from '../types/world'
 import { createEmptyWorldState, createWorldEntity } from './worldEntity'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { applyTavernDirectorEvent, buildTavernDirectorPrompt, createTavernDirectorStreamParser, parseTavernDirectorEvent, parseTavernDirectorStreamPreview } from './worldTavernDirector'
@@ -288,6 +290,49 @@ describe('tavern director protocol', () => {
     expect(world.entities[0].speech).toMatchObject({
       message: 'scenario-dialogue',
       text: '这里没有你要找的东西，骑士。',
+    })
+  })
+
+  it('plays queued dialogue after an explicit move across the Gray Raven scene', () => {
+    const asset = createDefaultWorldScenarios('zh-CN')[0]
+    const roland = asset.world.entities.find((entity) => entity.name === '罗兰')!
+    const envoy = asset.world.entities.find((entity) => entity.name === '黑岩使者')!
+    let world: WorldState = {
+      ...asset.world,
+      paused: false,
+      scenarios: asset.scenario ? [asset.scenario] : [],
+      entities: asset.world.entities.map((entity) => ({
+        ...entity,
+        activeCommand: undefined,
+        commandQueue: [],
+      })),
+    }
+    const moved = applyTavernDirectorEvent(world, {
+      type: 'command',
+      entityId: roland.id,
+      command: { type: 'move', target: { kind: 'entity', id: envoy.id } },
+    }, { bricks: asset.plan.bricks, structures: asset.plan.structures ?? [] })
+    const queued = applyTavernDirectorEvent(moved.world, {
+      type: 'dialogue',
+      speakerId: roland.id,
+      listenerId: envoy.id,
+      text: '你似乎对商队的事很在意？',
+    }, { bricks: asset.plan.bricks, structures: asset.plan.structures ?? [] })
+    world = queued.world
+
+    for (let step = 0; step < 300 && !world.entities.find((entity) => entity.id === roland.id)?.speech?.text; step += 1) {
+      world = stepWorldSimulation(
+        world,
+        asset.plan.bricks,
+        0.1,
+        asset.plan.structures ?? [],
+        { suspendAutomaticControllers: true },
+      )
+    }
+
+    expect(world.entities.find((entity) => entity.id === roland.id)?.speech).toMatchObject({
+      message: 'scenario-dialogue',
+      text: '你似乎对商队的事很在意？',
     })
   })
 })
