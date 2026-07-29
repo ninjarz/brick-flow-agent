@@ -15,6 +15,7 @@
     "generate:ldraw": "node scripts/generate-ldraw-structural.mjs",
     "generate:obj": "node scripts/generate-obj-assets.mjs",
     "profile:performance": "node scripts/profile-performance.mjs",
+    "verify:release": "npm run lint && npm run build && npm test && npm run validate:builds && npm run audit:ldraw && npm run audit:obj-connectivity",
     "validate:builds": "node scripts/validate-builds.mjs",
     "preview": "vite preview"
   },

@@ -70,6 +70,7 @@ npm test                     # 运行 Vitest 定向回归测试
 npm run validate:builds      # 校验默认素材和回归用例
 npm run audit:obj-connectivity # 确保每个生成的 OBJ 素材保持单一连通结构
 npm run profile:performance  # 性能分析
+npm run verify:release       # 执行完整发布验收
 npm run generate:obj         # 重新生成 OBJ 默认素材
 ```
 
@@ -147,13 +148,10 @@ node scripts/generate-obj-assets.mjs --dry-run --source=stanford-bunny --profile
 提交前建议运行：
 
 ```bash
-npm run lint
-npm run build
-npm test
-npm run validate:builds
+npm run verify:release
 ```
 
-如果 `validate:builds` 因为已知 demo 回归失败，请在 PR 说明里明确写出来
+发布验收会完成类型检查和构建、执行全部回归（包括结构体素指纹与静态自重测试）、验证所有默认素材及手册往返、审计 LDraw 覆盖，并要求内置 OBJ 模型保持单一连通体。
 
 ## 🙏 特别鸣谢
 

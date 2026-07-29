@@ -75,6 +75,7 @@ npm test                     # run focused Vitest regressions
 npm run validate:builds      # validate default assets and regression cases
 npm run audit:obj-connectivity # require every generated OBJ asset to stay connected
 npm run profile:performance  # profile performance-sensitive routines
+npm run verify:release       # run the complete release gate
 npm run generate:obj         # rebuild OBJ-derived default assets
 ```
 
@@ -152,13 +153,10 @@ Issues and patches are welcome. Useful contribution areas include:
 Before opening a pull request:
 
 ```bash
-npm run lint
-npm run build
-npm test
-npm run validate:builds
+npm run verify:release
 ```
 
-If `validate:builds` fails because of an existing demo regression, call that out clearly in the PR notes
+The release gate type-checks and builds the app, runs the full regression suite (including structural-voxel fingerprints and static-gravity cases), validates every default asset/manual round trip, audits LDraw coverage, and requires every bundled OBJ model to remain connected.
 
 ## 🙏 Acknowledgements
 

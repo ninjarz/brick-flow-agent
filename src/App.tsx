@@ -5,6 +5,7 @@ import { BrickCountsPanel } from './components/BrickCountsPanel'
 import type { WorldCommandTargetOption } from './components/WorldEntityEditorPanel'
 import type { BrickSceneViewMode } from './components/BrickScene'
 import { ControlPanel } from './components/ControlPanel'
+import { useWorldSimulationLoop } from './hooks/useWorldSimulationLoop'
 import { brickById, getDefaultBrickColor } from './data/basicBricks'
 import { worldEntityDefinitionById } from './data/worldEntityDefinitions'
 import { createDefaultWorldScenarios } from './data/worldScenarios'
@@ -25,9 +26,8 @@ import { simplifiedBrickThreshold } from './lib/scenePerformance'
 import { toggleBrickSelection } from './lib/brickSelection'
 import { dissolveBrickStructure, getBrickStructure, getExactSelectionStructure, pruneBrickStructures, solidifyBrickSelection, updateBrickStructure } from './lib/brickStructures'
 import { changeAllWorldEntityControllers, createEmptyWorldState, createWorldEntity, issueWorldEntityCommand } from './lib/worldEntity'
-import { isWorldEntityGroundPointBlockedByBricks, stepWorldSimulation, worldSimulationStepSeconds } from './lib/worldSimulation'
+import { isWorldEntityGroundPointBlockedByBricks } from './lib/worldSimulation'
 import { findNearestAvailableWorldEntityPoint } from './lib/worldEntityCollision'
-import { advanceWorldFixedStepClock, createWorldFixedStepClock } from './lib/worldClock'
 import { applyWorldDirectorPlaybackEvent, getWorldDirectorPlaybackOutcomeDetail, isWorldDirectorDialogueVisible, isWorldDirectorPlaybackSettledIgnoringSpeech, waitForWorldDirectorDialoguePlayback } from './lib/worldDirectorPlayback'
 import { getWorldDirectorReplayEntries, replaceWorldDirectorTurnEntry, restoreWorldDirectorCheckpoint } from './lib/worldDirectorReplay'
 import { buildDirectorCompactionPrompt, buildDirectorMessages, createDirectorMemoryCheckpoint, createFallbackDirectorSummary, estimateDirectorMessagesTokens, getDirectorTurnsAfterMemory, parseDirectorCompactionSummary, planDirectorCompaction } from './lib/worldDirectorContext'
@@ -699,50 +699,16 @@ function App() {
     return () => window.clearInterval(intervalId)
   }, [isWorkspaceStorageHydrated])
 
-  useEffect(() => {
-    if (world.entities.length === 0 || world.paused || placementSession || worldEntityPlacement) return
-    let timeoutId = 0
-    let clock = createWorldFixedStepClock(performance.now())
-    const resetClock = () => {
-      clock = createWorldFixedStepClock(performance.now())
-    }
-    const scheduleWorldStep = () => {
-      timeoutId = window.setTimeout(animateWorld, worldSimulationStepSeconds * 1_000)
-    }
-    const animateWorld = () => {
-      const now = performance.now()
-      const advanced = advanceWorldFixedStepClock(clock, now, worldSimulationStepSeconds)
-      clock = advanced.clock
-      if (advanced.stepCount > 0) {
-        setWorld((current) => {
-          let next = current
-          for (let step = 0; step < advanced.stepCount; step += 1) {
-            next = advanceWorldScenarios(
-              stepWorldSimulation(
-                next,
-                planRef.current.bricks,
-                worldSimulationStepSeconds,
-                planRef.current.structures ?? [],
-                { suspendAutomaticControllers: Boolean(tavernDirectorPlaybackRef.current?.simulationStarted) },
-              ),
-              {
-                allowNewStages: !tavernDirectorPlaybackRef.current,
-                enableAi: llmConfigComplete,
-              },
-            )
-          }
-          return next
-        })
-      }
-      scheduleWorldStep()
-    }
-    document.addEventListener('visibilitychange', resetClock)
-    scheduleWorldStep()
-    return () => {
-      document.removeEventListener('visibilitychange', resetClock)
-      window.clearTimeout(timeoutId)
-    }
-  }, [llmConfigComplete, placementSession, world.entities.length, world.paused, worldEntityPlacement])
+  useWorldSimulationLoop({
+    active: world.entities.length > 0 && !world.paused && !placementSession && !worldEntityPlacement,
+    enableAi: llmConfigComplete,
+    readPlan: () => planRef.current,
+    readDirectorPlayback: () => ({
+      active: Boolean(tavernDirectorPlaybackRef.current),
+      simulationStarted: Boolean(tavernDirectorPlaybackRef.current?.simulationStarted),
+    }),
+    setWorld,
+  })
 
   useEffect(() => {
     setFinishedAssets((current) => {
