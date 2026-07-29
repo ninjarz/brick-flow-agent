@@ -39,6 +39,9 @@ await writeFile(entry, `
       import(${JSON.stringify(`${workspace}/src/lib/manualSerializer.ts`)}),
       import(${JSON.stringify(`${workspace}/src/lib/stabilityAnalysis.ts`)}),
       import(${JSON.stringify(`${workspace}/src/lib/disasterSimulation.ts`)}),
+      import(${JSON.stringify(`${workspace}/src/data/worldEntityDefinitions.ts`)}),
+      import(${JSON.stringify(`${workspace}/src/lib/worldEntity.ts`)}),
+      import(${JSON.stringify(`${workspace}/src/lib/worldSimulation.ts`)}),
     ]);
     const ms = performance.now() - start;
     results.push({ name: 'module import + default asset construction', ms });
@@ -46,7 +49,7 @@ await writeFile(entry, `
     return modules;
   })();
 
-  const [{ brickById, brickDefinitions }, finishedAssets, { generateBuildPlan }, planUtils, structuralGrid, ldrawVisualGeometry, manualSerializer, stabilityAnalysis, disasterSimulation] = imports;
+  const [{ brickById, brickDefinitions }, finishedAssets, { generateBuildPlan }, planUtils, structuralGrid, ldrawVisualGeometry, manualSerializer, stabilityAnalysis, disasterSimulation, worldEntityDefinitions, worldEntity, worldSimulation] = imports;
   const defaultFinishedAssets = await measureAsync('load all default finished assets', () => finishedAssets.loadAllDefaultFinishedAssets());
   const largestAsset = defaultFinishedAssets.reduce((largest, asset) =>
     asset.plan.bricks.length > largest.plan.bricks.length ? asset : largest
@@ -154,6 +157,20 @@ await writeFile(entry, `
       };
       hasBrickCollision(moved, largestAsset.plan.bricks, collisionIndex);
       getBrickRawOverlapScore(moved, largestAsset.plan.bricks, collisionIndex);
+    }
+  });
+  measure('simulate 48 NPCs for 100 world steps', () => {
+    const knight = worldEntityDefinitions.worldEntityDefinitionById.get('knight')!;
+    let world = {
+      ...worldEntity.createEmptyWorldState('performance-profile'),
+      entities: Array.from({ length: 48 }, (_, index) => worldEntity.createWorldEntity(knight, {
+        id: 'profile-npc-' + index,
+        factionId: index % 2 === 0 ? 'blue' : 'red',
+        transform: { x: (index % 8) * 2.5 - 8.75, z: Math.floor(index / 8) * 2.5 - 6.25 },
+      })),
+    };
+    for (let step = 0; step < 100; step += 1) {
+      world = worldSimulation.stepWorldSimulation(world, largestAsset.plan.bricks, 0.1, largestAsset.plan.structures ?? []);
     }
   });
   measure('part definitions scan x1000', () => {

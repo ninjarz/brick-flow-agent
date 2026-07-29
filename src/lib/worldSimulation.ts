@@ -38,11 +38,14 @@ type BrickBounds = WorldObstacleBounds
 export type WorldGroundBounds = { minX: number; maxX: number; minZ: number; maxZ: number }
 type WorldTargetLookup = {
   entityIndexById: Map<string, number>
+  entityById: Map<string, WorldEntity>
   brickById: Map<string, PlacedBrick>
   structureById: Map<string, BrickStructure>
   structurePointById: Map<string, Point | undefined>
 }
 const obstacleIndexCache = new WeakMap<PlacedBrick[], WorldObstacleIndex>()
+const groundBoundsCache = new WeakMap<PlacedBrick[], WorldGroundBounds>()
+const brickLookupCache = new WeakMap<PlacedBrick[], Map<string, PlacedBrick>>()
 
 const getCachedObstacleIndex = (bricks: PlacedBrick[]) => {
   const cached = obstacleIndexCache.get(bricks)
@@ -62,6 +65,8 @@ const toGrid = (value: number) => Math.round(value / navigationGridStuds)
 const fromGrid = (value: number) => value * navigationGridStuds
 
 export const getWorldGroundBounds = (bricks: PlacedBrick[]): WorldGroundBounds => {
+  const cached = groundBoundsCache.get(bricks)
+  if (cached) return cached
   const brickBounds = bricks.map(getBrickBounds).filter((bounds): bounds is NonNullable<typeof bounds> => Boolean(bounds))
   const modelMinX = Math.min(0, ...brickBounds.map((bounds) => bounds.minX))
   const modelMaxX = Math.max(0, ...brickBounds.map((bounds) => bounds.maxX))
@@ -74,7 +79,17 @@ export const getWorldGroundBounds = (bricks: PlacedBrick[]): WorldGroundBounds =
   const size = Math.ceil(Math.max(rawMaxX - rawMinX, rawMaxZ - rawMinZ))
   const centerX = (rawMinX + rawMaxX) / 2
   const centerZ = (rawMinZ + rawMaxZ) / 2
-  return { minX: centerX - size / 2, maxX: centerX + size / 2, minZ: centerZ - size / 2, maxZ: centerZ + size / 2 }
+  const bounds = { minX: centerX - size / 2, maxX: centerX + size / 2, minZ: centerZ - size / 2, maxZ: centerZ + size / 2 }
+  groundBoundsCache.set(bricks, bounds)
+  return bounds
+}
+
+const getCachedBrickLookup = (bricks: PlacedBrick[]) => {
+  const cached = brickLookupCache.get(bricks)
+  if (cached) return cached
+  const lookup = new Map(bricks.map((brick) => [brick.id, brick]))
+  brickLookupCache.set(bricks, lookup)
+  return lookup
 }
 
 const clampEntityPointToGround = (entity: WorldEntity, point: { x: number; z: number }, bounds: WorldGroundBounds) => {
@@ -365,7 +380,12 @@ const findNearestEntity = (
   return nearest
 }
 
-const findBestEnemy = (entity: WorldEntity, entities: WorldEntity[], timeSeconds: number) => {
+const findBestEnemy = (
+  entity: WorldEntity,
+  entities: WorldEntity[],
+  entityById: ReadonlyMap<string, WorldEntity>,
+  timeSeconds: number,
+) => {
   const detectionRange = worldEntityDefinitionById.get(entity.definitionId)?.perception.detectionRangeStuds ?? 0
   const recentAttacker = entity.combat.lastAttackerId
     && (entity.combat.lastDamagedAtSeconds ?? -Infinity) + 8 >= timeSeconds
@@ -377,33 +397,39 @@ const findBestEnemy = (entity: WorldEntity, entities: WorldEntity[], timeSeconds
     : undefined
   if (recentAttacker) return recentAttacker
   if (entity.factionId === 'neutral') return undefined
-  return entities
-    .filter((candidate) => (
-      candidate.id !== entity.id
-      && candidate.health > 0
-      && sharesAutonomousStoryline(entity, candidate)
-      && candidate.factionId !== 'neutral'
-      && candidate.factionId !== entity.factionId
-      && distance2d(entity.transform, candidate.transform) <= detectionRange
-    ))
-    .map((candidate) => {
-      const candidateTarget = candidate.activeCommand && 'target' in candidate.activeCommand
-        ? candidate.activeCommand.target
-        : undefined
-      const threateningSelf = candidate.activeCommand?.type === 'attack'
-        && candidateTarget?.kind === 'entity'
-        && candidateTarget.id === entity.id
-      const threateningAlly = candidate.activeCommand?.type === 'attack'
-        && candidateTarget?.kind === 'entity'
-        && entities.some((ally) => ally.id === candidateTarget.id && ally.factionId === entity.factionId)
-      const healthRatio = candidate.health / Math.max(1, candidate.maxHealth)
-      const score = distance2d(entity.transform, candidate.transform)
-        + healthRatio * 1.5
-        - (threateningSelf ? detectionRange * 2 : 0)
-        - (threateningAlly ? detectionRange : 0)
-      return { candidate, score }
-    })
-    .sort((left, right) => left.score - right.score || left.candidate.id.localeCompare(right.candidate.id))[0]?.candidate
+  let best: WorldEntity | undefined
+  let bestScore = Infinity
+  for (const candidate of entities) {
+    if (
+      candidate.id === entity.id
+      || candidate.health <= 0
+      || !sharesAutonomousStoryline(entity, candidate)
+      || candidate.factionId === 'neutral'
+      || candidate.factionId === entity.factionId
+    ) continue
+    const distance = distance2d(entity.transform, candidate.transform)
+    if (distance > detectionRange) continue
+    const candidateTarget = candidate.activeCommand && 'target' in candidate.activeCommand
+      ? candidate.activeCommand.target
+      : undefined
+    const threateningSelf = candidate.activeCommand?.type === 'attack'
+      && candidateTarget?.kind === 'entity'
+      && candidateTarget.id === entity.id
+    const threateningTarget = candidateTarget?.kind === 'entity'
+      ? entityById.get(candidateTarget.id)
+      : undefined
+    const threateningAlly = candidate.activeCommand?.type === 'attack'
+      && threateningTarget?.factionId === entity.factionId
+    const healthRatio = candidate.health / Math.max(1, candidate.maxHealth)
+    const score = distance
+      + healthRatio * 1.5
+      - (threateningSelf ? detectionRange * 2 : 0)
+      - (threateningAlly ? detectionRange : 0)
+    if (score > bestScore || (score === bestScore && best && candidate.id.localeCompare(best.id) >= 0)) continue
+    best = candidate
+    bestScore = score
+  }
+  return best
 }
 
 const findNearestGuardEnemy = (entity: WorldEntity, entities: WorldEntity[], guardPoint: Point) => {
@@ -836,11 +862,19 @@ export const stepWorldSimulation = (
     ...allStructures.filter((structure) => hiddenStructureIds.has(structure.id)).flatMap((structure) => structure.brickIds),
   ])
   const hiddenEntityIds = new Set(world.hiddenTargets.filter((target) => target.kind === 'entity').map((target) => target.id))
-  const bricks = allBricks.filter((brick) => !hiddenBrickIds.has(brick.id))
-  const structures = allStructures.filter((structure) => !hiddenStructureIds.has(structure.id))
+  // Preserve stable collection identities in the common case. The obstacle,
+  // ground-bounds and brick lookup caches are keyed by these immutable arrays.
+  const bricks = hiddenBrickIds.size === 0
+    ? allBricks
+    : allBricks.filter((brick) => !hiddenBrickIds.has(brick.id))
+  const structures = hiddenStructureIds.size === 0
+    ? allStructures
+    : allStructures.filter((structure) => !hiddenStructureIds.has(structure.id))
   const groundBounds = getWorldGroundBounds(bricks)
   let correctedBoundary = false
-  const visibleSourceEntities = world.entities.filter((entity) => !hiddenTargetKeys.has(`entity:${entity.id}`))
+  const visibleSourceEntities = hiddenEntityIds.size === 0
+    ? world.entities
+    : world.entities.filter((entity) => !hiddenTargetKeys.has(`entity:${entity.id}`))
   const boundedEntities = visibleSourceEntities.map((entity) => {
     const point = clampEntityPointToGround(entity, entity.transform, groundBounds)
     if (point.x === entity.transform.x && point.z === entity.transform.z) return entity
@@ -873,7 +907,8 @@ export const stepWorldSimulation = (
   }))
   const targetLookup: WorldTargetLookup = {
     entityIndexById: new Map(entities.map((entity, index) => [entity.id, index])),
-    brickById: new Map(bricks.map((brick) => [brick.id, brick])),
+    entityById: new Map(entities.map((entity) => [entity.id, entity])),
+    brickById: getCachedBrickLookup(bricks),
     structureById: new Map(structures.map((structure) => [structure.id, structure])),
     structurePointById: new Map(),
   }
@@ -1007,7 +1042,7 @@ export const stepWorldSimulation = (
     if (!activeCommand && entity.controller !== 'player' && !options.suspendAutomaticControllers) {
       const definition = worldEntityDefinitionById.get(entity.definitionId)
       const reviveTarget = definition?.support ? findNearestReviveTarget(entity, entities) : undefined
-      const enemy = reviveTarget ? undefined : findBestEnemy(entity, entities, timeSeconds)
+      const enemy = reviveTarget ? undefined : findBestEnemy(entity, entities, targetLookup.entityById, timeSeconds)
       if (reviveTarget) {
         activeCommand = { type: 'revive', target: { kind: 'entity', id: reviveTarget.id } }
         commandStarted = true
