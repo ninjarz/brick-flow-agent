@@ -24,6 +24,7 @@ export type WorldNarrativeFeedItem = {
   reasoning?: string
   requestMessage?: string
   responseMessage?: string
+  validationIssues?: WorldDirectorTurn['validationIssues']
   contextStats?: WorldDirectorTurn['contextStats']
   streamPreview?: TavernDirectorStreamPreview
 }
@@ -88,6 +89,7 @@ const directorFeedItem = (turn: ActiveWorldDirectorTurn): WorldNarrativeFeedItem
   reasoning: turn.reasoning,
   requestMessage: turn.requestMessage,
   responseMessage: turn.responseMessage,
+  validationIssues: turn.validationIssues,
   contextStats: turn.contextStats,
   streamPreview: turn.streamPreview,
 })

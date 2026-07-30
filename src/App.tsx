@@ -1705,6 +1705,7 @@ function App() {
     let requestMessage = ''
     let responseMessage = ''
     let contextStats: WorldDirectorTurn['contextStats']
+    let validationIssues: WorldDirectorTurn['validationIssues']
     const playbackEntityIds = new Set<string>()
     let playbackQueue = Promise.resolve()
     let streamFinished = false
@@ -1850,7 +1851,7 @@ function App() {
         responseRetryCount: streamResult.retryCount,
         ...(streamResult.finishReason ? { finishReason: streamResult.finishReason } : {}),
       }
-      parser.finish()
+      validationIssues = parser.finish()
       streamFinished = true
       await playbackQueue
       if (eventCount === 0) {
@@ -1889,7 +1890,7 @@ function App() {
           await new Promise((resolve) => window.setTimeout(resolve, 100))
         }
       }
-      return { requestMessage, responseMessage, contextStats }
+      return { requestMessage, responseMessage, contextStats, validationIssues }
     } finally {
       if (tavernDirectorAbortRef.current === controller) {
         tavernDirectorAbortRef.current = undefined

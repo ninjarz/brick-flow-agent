@@ -11,6 +11,11 @@ export type TavernDirectorStreamPreview = {
   text: string
   speakerId?: string
 }
+export type TavernDirectorValidationIssue = {
+  lineNumber: number
+  code: 'INVALID_JSON' | 'INVALID_EVENT' | 'EVENT_AFTER_END' | 'TOO_MANY_EVENTS' | 'TOO_MANY_COMMANDS' | 'TOO_MANY_DIALOGUE_LINES' | 'MISSING_END'
+  raw: string
+}
 
 type DirectorLocale = 'zh-CN' | 'en-US'
 
@@ -126,15 +131,52 @@ export const createTavernDirectorStreamParser = (
   onPreview?: (preview: TavernDirectorStreamPreview | undefined) => void,
 ) => {
   let buffer = ''
+  let lineNumber = 0
+  let eventCount = 0
+  let commandCount = 0
+  let dialogueCount = 0
+  let ended = false
+  const issues: TavernDirectorValidationIssue[] = []
+  const reject = (code: TavernDirectorValidationIssue['code'], raw: string) => {
+    issues.push({ lineNumber, code, raw: raw.trim().slice(0, 500) })
+  }
   const parseLine = (line: string) => {
+    lineNumber += 1
     const cleanLine = line.trim().replace(/^```(?:jsonl?|ndjson)?$/i, '')
     if (!cleanLine || cleanLine === '```') return
+    let value: unknown
     try {
-      const event = parseTavernDirectorEvent(JSON.parse(cleanLine) as unknown)
-      if (event) onEvent(event)
+      value = JSON.parse(cleanLine) as unknown
     } catch {
-      // Incomplete or explanatory lines are ignored; only complete validated events can affect the world.
+      reject('INVALID_JSON', cleanLine)
+      return
     }
+    const event = parseTavernDirectorEvent(value)
+    if (!event) {
+      reject('INVALID_EVENT', cleanLine)
+      return
+    }
+    if (ended) {
+      reject('EVENT_AFTER_END', cleanLine)
+      return
+    }
+    if (eventCount >= 10) {
+      reject('TOO_MANY_EVENTS', cleanLine)
+      return
+    }
+    if (event.type === 'command' && commandCount >= 3) {
+      reject('TOO_MANY_COMMANDS', cleanLine)
+      return
+    }
+    if (event.type === 'dialogue' && dialogueCount >= 3) {
+      reject('TOO_MANY_DIALOGUE_LINES', cleanLine)
+      return
+    }
+    eventCount += 1
+    if (event.type === 'command') commandCount += 1
+    if (event.type === 'dialogue') dialogueCount += 1
+    if (event.type === 'end') ended = true
+    onEvent(event)
   }
   return {
     push(chunk: string) {
@@ -144,10 +186,12 @@ export const createTavernDirectorStreamParser = (
       lines.forEach(parseLine)
       onPreview?.(parseTavernDirectorStreamPreview(buffer))
     },
-    finish() {
+    finish(): TavernDirectorValidationIssue[] {
       parseLine(buffer)
       buffer = ''
+      if (eventCount > 0 && !ended) reject('MISSING_END', '')
       onPreview?.(undefined)
+      return [...issues]
     },
   }
 }

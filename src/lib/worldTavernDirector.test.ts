@@ -44,6 +44,39 @@ describe('tavern director protocol', () => {
     expect(previews).toEqual(['炉火', undefined, undefined])
   })
 
+  it('enforces streamed event budgets and records rejected protocol lines', () => {
+    const events: unknown[] = []
+    const parser = createTavernDirectorStreamParser((event) => events.push(event))
+    parser.push([
+      '{"type":"dialogue","speakerId":"a","listenerId":"b","text":"一"}',
+      '{"type":"dialogue","speakerId":"b","listenerId":"a","text":"二"}',
+      '{"type":"dialogue","speakerId":"a","listenerId":"b","text":"三"}',
+      '{"type":"dialogue","speakerId":"b","listenerId":"a","text":"四"}',
+      '{"type":"end","summary":"结束"}',
+      '{"type":"narration","text":"不应执行"}',
+      'not-json',
+    ].join('\n'))
+    const issues = parser.finish()
+
+    expect(events).toHaveLength(4)
+    expect(events.at(-1)).toEqual({ type: 'end', summary: '结束' })
+    expect(issues.map((issue) => issue.code)).toEqual([
+      'TOO_MANY_DIALOGUE_LINES',
+      'EVENT_AFTER_END',
+      'INVALID_JSON',
+    ])
+  })
+
+  it('reports a missing end event without discarding valid streamed events', () => {
+    const events: unknown[] = []
+    const parser = createTavernDirectorStreamParser((event) => events.push(event))
+    parser.push('{"type":"narration","text":"仍然有效"}\n')
+    const issues = parser.finish()
+
+    expect(events).toEqual([{ type: 'narration', text: '仍然有效' }])
+    expect(issues).toMatchObject([{ code: 'MISSING_END' }])
+  })
+
   it('rejects direct mutation and clamps relationship deltas', () => {
     expect(parseTavernDirectorEvent({ type: 'command', entityId: 'a', command: { type: 'move', x: 4 } })).toBeUndefined()
     expect(parseTavernDirectorEvent({

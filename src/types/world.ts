@@ -175,6 +175,11 @@ export type WorldDirectorTurn = {
   reasoning?: string
   requestMessage?: string
   responseMessage?: string
+  validationIssues?: Array<{
+    lineNumber: number
+    code: string
+    raw: string
+  }>
   contextStats?: {
     messageCount: number
     estimatedInputTokens: number

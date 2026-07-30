@@ -858,6 +858,20 @@ const parseStoredDirectorTurns = (value: unknown, planId: string): WorldState['n
       ...(typeof turn.reasoning === 'string' ? { reasoning: turn.reasoning.slice(0, 20_000) } : {}),
       ...(typeof turn.requestMessage === 'string' ? { requestMessage: turn.requestMessage.slice(0, 60_000) } : {}),
       ...(typeof turn.responseMessage === 'string' ? { responseMessage: turn.responseMessage.slice(0, 30_000) } : {}),
+      ...(Array.isArray(turn.validationIssues) ? {
+        validationIssues: turn.validationIssues.flatMap((issue) => (
+          isRecord(issue)
+          && isFiniteNumber(issue.lineNumber)
+          && typeof issue.code === 'string'
+          && typeof issue.raw === 'string'
+            ? [{
+                lineNumber: Math.max(0, Math.floor(issue.lineNumber)),
+                code: issue.code.slice(0, 80),
+                raw: issue.raw.slice(0, 500),
+              }]
+            : []
+        )).slice(-20),
+      } : {}),
       ...(contextStats ? { contextStats } : {}),
       ...(typeof turn.error === 'string' ? { error: turn.error.slice(0, 300) } : {}),
       ...(checkpoint ? { checkpoint } : {}),

@@ -35,6 +35,7 @@ type WorldStoryDockProps = {
     requestMessage: string
     responseMessage: string
     contextStats?: WorldDirectorTurn['contextStats']
+    validationIssues?: WorldDirectorTurn['validationIssues']
   }>
   onStopDirector: () => void
   onCommitDirectorTurn: (turn: WorldDirectorTurn) => void
@@ -227,6 +228,12 @@ const DirectorDebugPanel = ({
       <strong>{locale === 'zh-CN' ? '结构化事件' : 'Structured events'}</strong>
       <pre>{JSON.stringify(item.blocks, null, 2)}</pre>
     </section>
+    {(item.validationIssues?.length ?? 0) > 0 && (
+      <section>
+        <strong>{locale === 'zh-CN' ? '协议拒绝记录' : 'Protocol rejections'}</strong>
+        <pre>{JSON.stringify(item.validationIssues, null, 2)}</pre>
+      </section>
+    )}
     {item.requestMessage && (
       <section>
         <strong>{locale === 'zh-CN' ? '发送给 LLM' : 'Request to LLM'}</strong>
@@ -431,6 +438,7 @@ export const WorldStoryDock = ({
     let requestMessage = ''
     let responseMessage = ''
     let contextStats: WorldDirectorTurn['contextStats']
+    let validationIssues: WorldDirectorTurn['validationIssues']
     let progressFrame = 0
     const flushProgress = () => {
       progressFrame = 0
@@ -468,6 +476,7 @@ export const WorldStoryDock = ({
       requestMessage = result.requestMessage
       responseMessage = result.responseMessage
       contextStats = result.contextStats
+      validationIssues = result.validationIssues
     } catch (error) {
       errorMessage = error instanceof Error ? error.message : (locale === 'zh-CN' ? '导演请求失败' : 'Director request failed')
       status = /取消|canceled/i.test(errorMessage) ? 'stopped' : 'failed'
@@ -480,6 +489,7 @@ export const WorldStoryDock = ({
         ...(reasoning.trim() ? { reasoning: reasoning.trim() } : {}),
         ...(requestMessage ? { requestMessage } : {}),
         ...(responseMessage ? { responseMessage } : {}),
+        ...(validationIssues?.length ? { validationIssues } : {}),
         ...(contextStats ? { contextStats } : {}),
         createdAtSeconds,
         status,
