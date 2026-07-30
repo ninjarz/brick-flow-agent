@@ -251,6 +251,60 @@ describe('world scenario runtime', () => {
     expect(world.entities[1].commandQueue[0]?.type).toBe('attack')
   })
 
+  it('plays delayed scene actions on a timeline before completing the stage', () => {
+    const actor = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'actor', factionId: 'blue' })
+    const envoy = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'envoy', factionId: 'red' })
+    const scenario: WorldScenarioRuntime = {
+      id: 'timeline-runtime',
+      assetId: 'asset',
+      title: 'Retreat',
+      description: 'Retreat in order',
+      processedEventIds: [],
+      stages: [{
+        id: 'retreat',
+        title: 'Retreat',
+        description: 'Retreat',
+        status: 'active',
+        trigger: { eventType: 'defeated', targetId: actor.id },
+        dialogue: [{ id: 'truce', speakerId: envoy.id, text: 'We withdraw.', durationSeconds: 1 }],
+        actions: [
+          { type: 'set-faction', entityId: envoy.id, factionId: 'neutral' },
+          { type: 'add-story', title: 'A brief truce', body: 'The envoy backs away.' },
+          {
+            type: 'set-visibility',
+            target: { kind: 'entity', id: envoy.id },
+            visible: false,
+            delaySeconds: 2.5,
+          },
+        ],
+      }],
+    }
+    let world = advanceWorldScenarios({
+      ...createEmptyWorldState('timeline'),
+      elapsedSeconds: 10,
+      entities: [actor, envoy],
+      scenarios: [scenario],
+      events: [{ id: 'defeat', timeSeconds: 10, type: 'defeated', actorId: envoy.id, targetId: actor.id }],
+    })
+    expect(world.scenarios[0].activeDialogue?.stageId).toBe('retreat')
+
+    world = advanceWorldScenarios({ ...world, elapsedSeconds: 11 })
+    expect(world.scenarios[0].activeTimeline?.actionIndex).toBe(2)
+    expect(world.scenarios[0].stages[0].status).toBe('active')
+    expect(world.entities[1].factionId).toBe('neutral')
+    expect(world.narrative.stories.at(-1)?.title).toBe('A brief truce')
+    expect(world.hiddenTargets).not.toContainEqual({ kind: 'entity', id: envoy.id })
+
+    world = advanceWorldScenarios({ ...world, elapsedSeconds: 13.4 })
+    expect(world.scenarios[0].stages[0].status).toBe('active')
+    expect(world.hiddenTargets).not.toContainEqual({ kind: 'entity', id: envoy.id })
+
+    world = advanceWorldScenarios({ ...world, elapsedSeconds: 13.5 })
+    expect(world.scenarios[0].activeTimeline).toBeUndefined()
+    expect(world.scenarios[0].stages[0].status).toBe('completed')
+    expect(world.hiddenTargets).toContainEqual({ kind: 'entity', id: envoy.id })
+  })
+
   it('defers a new scenario stage while another narrative lane is playing', () => {
     const scenario: WorldScenarioRuntime = {
       id: 'deferred-runtime',

@@ -95,6 +95,34 @@ const upgradeGrayRavenScenarioStages = (
           : branch),
       }
     : stage)
+  if (authoringVersion < 6) upgraded = upgraded.map((stage) => stage.id.endsWith('defend')
+    ? {
+        ...stage,
+        branches: stage.branches?.map((branch) => {
+          if (branch.id !== 'gray-raven-retreat') return branch
+          const storyActions = (branch.actions ?? []).filter((action) => action.type === 'add-story')
+          const otherActions = (branch.actions ?? []).filter((action) => (
+            action.type !== 'add-story'
+            && action.type !== 'set-visibility'
+            && action.type !== 'issue-command'
+          ))
+          return {
+            ...branch,
+            actions: [
+              ...otherActions,
+              { type: 'issue-command' as const, entityId: envoyId, command: { type: 'wander' as const } },
+              ...storyActions,
+              {
+                type: 'set-visibility' as const,
+                target: { kind: 'entity' as const, id: envoyId },
+                visible: false,
+                delaySeconds: 2.5,
+              },
+            ],
+          }
+        }),
+      }
+    : stage)
   return upgraded.map((stage) => ({
     ...stage,
     description: stage.description
@@ -569,6 +597,12 @@ const parseStoredScenarioConditions = (
   }
 }
 
+const parseStoredScenarioActionTiming = (value: Record<string, unknown>) => (
+  isFiniteNumber(value.delaySeconds) && value.delaySeconds > 0
+    ? { delaySeconds: Math.min(120, value.delaySeconds) }
+    : {}
+)
+
 const parseStoredCommand = (value: unknown): WorldEntityCommand | undefined => {
   if (!isRecord(value) || typeof value.type !== 'string') return undefined
   if (value.type === 'stop') return { type: 'stop' }
@@ -875,7 +909,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
           const actions = Array.isArray(stage.actions) ? stage.actions.flatMap((action): WorldScenarioAction[] => {
             if (!isRecord(action) || typeof action.type !== 'string') return []
             if (action.type === 'set-faction' && typeof action.entityId === 'string' && typeof action.factionId === 'string') {
-              return [{ type: 'set-faction' as const, entityId: action.entityId, factionId: action.factionId }]
+              return [{ type: 'set-faction' as const, entityId: action.entityId, factionId: action.factionId, ...parseStoredScenarioActionTiming(action) }]
             }
             if (action.type === 'join-party' && typeof action.entityId === 'string' && typeof action.leaderId === 'string') {
               return [{
@@ -886,18 +920,19 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
                   ? { partyName: action.partyName.trim().slice(0, 120) }
                   : {}),
                 ...(action.status === 'reserve' ? { status: 'reserve' as const } : {}),
+                ...parseStoredScenarioActionTiming(action),
               }]
             }
             if (action.type === 'leave-party' && typeof action.entityId === 'string') {
-              return [{ type: 'leave-party' as const, entityId: action.entityId }]
+              return [{ type: 'leave-party' as const, entityId: action.entityId, ...parseStoredScenarioActionTiming(action) }]
             }
             if (action.type === 'issue-command' && typeof action.entityId === 'string') {
               const command = parseStoredCommand(action.command)
-              return command ? [{ type: 'issue-command' as const, entityId: action.entityId, command }] : []
+              return command ? [{ type: 'issue-command' as const, entityId: action.entityId, command, ...parseStoredScenarioActionTiming(action) }] : []
             }
             if (action.type === 'set-visibility' && typeof action.visible === 'boolean') {
               const target = parseTargetRef(action.target)
-              return target && target.kind !== 'waypoint' ? [{ type: 'set-visibility' as const, target, visible: action.visible }] : []
+              return target && target.kind !== 'waypoint' ? [{ type: 'set-visibility' as const, target, visible: action.visible, ...parseStoredScenarioActionTiming(action) }] : []
             }
             if (action.type === 'add-story' && typeof action.title === 'string' && typeof action.body === 'string') {
               return [{
@@ -907,6 +942,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
                 characterIds: Array.isArray(action.characterIds)
                   ? action.characterIds.filter((id): id is string => typeof id === 'string')
                   : undefined,
+                ...parseStoredScenarioActionTiming(action),
               }]
             }
             return []
@@ -926,7 +962,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
               !isRecord(branch.trigger) || !eventTypes.has(branch.trigger.eventType as WorldState['events'][number]['type'])) return []
             const branchActions = Array.isArray(branch.actions) ? branch.actions.flatMap((action): WorldScenarioAction[] => {
               if (!isRecord(action) || typeof action.type !== 'string') return []
-              if (action.type === 'set-faction' && typeof action.entityId === 'string' && typeof action.factionId === 'string') return [{ type: 'set-faction', entityId: action.entityId, factionId: action.factionId }]
+              if (action.type === 'set-faction' && typeof action.entityId === 'string' && typeof action.factionId === 'string') return [{ type: 'set-faction', entityId: action.entityId, factionId: action.factionId, ...parseStoredScenarioActionTiming(action) }]
               if (action.type === 'join-party' && typeof action.entityId === 'string' && typeof action.leaderId === 'string') return [{
                 type: 'join-party',
                 entityId: action.entityId,
@@ -935,22 +971,25 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
                   ? { partyName: action.partyName.trim().slice(0, 120) }
                   : {}),
                 ...(action.status === 'reserve' ? { status: 'reserve' as const } : {}),
+                ...parseStoredScenarioActionTiming(action),
               }]
               if (action.type === 'leave-party' && typeof action.entityId === 'string') return [{
                 type: 'leave-party',
                 entityId: action.entityId,
+                ...parseStoredScenarioActionTiming(action),
               }]
               if (action.type === 'issue-command' && typeof action.entityId === 'string') {
                 const command = parseStoredCommand(action.command)
-                return command ? [{ type: 'issue-command', entityId: action.entityId, command }] : []
+                return command ? [{ type: 'issue-command', entityId: action.entityId, command, ...parseStoredScenarioActionTiming(action) }] : []
               }
               if (action.type === 'set-visibility' && typeof action.visible === 'boolean') {
                 const target = parseTargetRef(action.target)
-                return target && target.kind !== 'waypoint' ? [{ type: 'set-visibility', target, visible: action.visible }] : []
+                return target && target.kind !== 'waypoint' ? [{ type: 'set-visibility', target, visible: action.visible, ...parseStoredScenarioActionTiming(action) }] : []
               }
               if (action.type === 'add-story' && typeof action.title === 'string' && typeof action.body === 'string') return [{
                 type: 'add-story', title: action.title, body: action.body,
                 characterIds: Array.isArray(action.characterIds) ? action.characterIds.filter((id): id is string => typeof id === 'string') : undefined,
+                ...parseStoredScenarioActionTiming(action),
               }]
               return []
             }) : undefined
@@ -1080,6 +1119,38 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
               requestedAtSeconds: Math.max(0, scenario.pendingAi.requestedAtSeconds),
             }
           : undefined
+        const activeTimeline = isRecord(scenario.activeTimeline)
+          && typeof scenario.activeTimeline.stageId === 'string'
+          && typeof scenario.activeTimeline.eventId === 'string'
+          && isFiniteNumber(scenario.activeTimeline.actionIndex)
+          && isFiniteNumber(scenario.activeTimeline.nextActionAtSeconds)
+          ? {
+              stageId: scenario.activeTimeline.stageId.slice(0, 180),
+              eventId: scenario.activeTimeline.eventId.slice(0, 180),
+              ...(typeof scenario.activeTimeline.branchId === 'string'
+                ? { branchId: scenario.activeTimeline.branchId.slice(0, 180) }
+                : {}),
+              ...(Array.isArray(scenario.activeTimeline.generatedDialogue)
+                ? {
+                    generatedDialogue: scenario.activeTimeline.generatedDialogue.flatMap((line) => {
+                      if (!isRecord(line) || typeof line.id !== 'string' || typeof line.speakerId !== 'string' ||
+                        typeof line.text !== 'string' || !line.text.trim() || !isFiniteNumber(line.durationSeconds)) return []
+                      return [{
+                        id: line.id.slice(0, 180),
+                        speakerId: line.speakerId.slice(0, 180),
+                        text: line.text.trim().slice(0, 500),
+                        durationSeconds: Math.max(0.5, Math.min(30, line.durationSeconds)),
+                      }]
+                    }).slice(0, 6),
+                  }
+                : {}),
+              ...(scenario.activeTimeline.source === 'ai' || scenario.activeTimeline.source === 'authored'
+                ? { source: scenario.activeTimeline.source as 'ai' | 'authored' }
+                : {}),
+              actionIndex: Math.max(0, Math.floor(scenario.activeTimeline.actionIndex)),
+              nextActionAtSeconds: Math.max(0, scenario.activeTimeline.nextActionAtSeconds),
+            }
+          : undefined
         const queuedTransition = isRecord(scenario.queuedTransition)
           && typeof scenario.queuedTransition.stageId === 'string'
           && typeof scenario.queuedTransition.eventId === 'string'
@@ -1138,6 +1209,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
           } : {}),
           ...(pendingAi ? { pendingAi } : {}),
           ...(activeDialogue ? { activeDialogue } : {}),
+          ...(activeTimeline ? { activeTimeline } : {}),
           ...(queuedTransition ? { queuedTransition } : {}),
           ...(typeof scenario.outcomeId === 'string' ? { outcomeId: scenario.outcomeId } : {}),
           ...(scenario.assetId === 'scenario-border-tavern'
@@ -1170,7 +1242,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
     }
   }
   scenarios = scenarios.map((scenario) => scenario.assetId === 'scenario-border-tavern'
-    ? { ...scenario, authoringVersion: 5 }
+    ? { ...scenario, authoringVersion: 6 }
     : scenario)
 
   const completedJoinActions = scenarios.flatMap((scenario) => scenario.stages.flatMap((stage) => (

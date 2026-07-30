@@ -232,13 +232,17 @@ export type WorldScenarioConditionGroup = {
   conditions: WorldScenarioCondition[]
 }
 
-export type WorldScenarioAction =
-  | { type: 'set-faction'; entityId: string; factionId: string }
+export type WorldScenarioAction = (
+  { type: 'set-faction'; entityId: string; factionId: string }
   | { type: 'join-party'; entityId: string; leaderId: string; partyName?: string; status?: 'active' | 'reserve' }
   | { type: 'leave-party'; entityId: string }
   | { type: 'issue-command'; entityId: string; command: WorldEntityCommand }
   | { type: 'add-story'; title: string; body: string; characterIds?: string[] }
   | { type: 'set-visibility'; target: Extract<WorldTargetRef, { kind: 'entity' | 'brick' | 'structure' }>; visible: boolean }
+) & {
+  /** Delay after the previous action before this action is applied. */
+  delaySeconds?: number
+}
 
 export type WorldScenarioDialogueLine = {
   id: string
@@ -255,6 +259,16 @@ export type WorldScenarioDialogueState = {
   source?: 'authored' | 'ai'
   lineIndex: number
   lineEndsAtSeconds: number
+}
+
+export type WorldScenarioTimelineState = {
+  stageId: string
+  eventId: string
+  branchId?: string
+  generatedDialogue?: WorldScenarioDialogueLine[]
+  source?: 'authored' | 'ai'
+  actionIndex: number
+  nextActionAtSeconds: number
 }
 
 export type WorldScenarioBranch = {
@@ -310,6 +324,7 @@ export type WorldScenarioRuntime = {
   claimedEventIds?: string[]
   pendingAi?: WorldScenarioAiPendingState
   activeDialogue?: WorldScenarioDialogueState
+  activeTimeline?: WorldScenarioTimelineState
   queuedTransition?: {
     stageId: string
     eventId: string

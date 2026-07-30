@@ -342,6 +342,7 @@ const remapScenarioWorld = (
       claimedEventIds: [],
       pendingAi: undefined,
       activeDialogue: undefined,
+      activeTimeline: undefined,
       queuedTransition: undefined,
     }
     return importedScenario.stages.length ? [importedScenario] : []

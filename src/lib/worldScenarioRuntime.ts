@@ -243,6 +243,7 @@ const completeStage = (
   branch?: WorldScenarioBranch,
   dialogueOverride?: WorldScenarioDialogueLine[],
   source: 'authored' | 'ai' = 'authored',
+  applyActions = true,
 ) => {
   const activeStage = scenario.stages[activeStageIndex]
   const nextStageIndex = branch
@@ -262,6 +263,7 @@ const completeStage = (
     stages,
     pendingAi: undefined,
     activeDialogue: undefined,
+    activeTimeline: undefined,
     ...(branch ? { outcomeId: branch.id } : nextStageIndex < 0 || nextStageIndex >= stages.length ? { outcomeId: 'completed' } : {}),
   }
   let nextWorld = persistScenarioDialogue(
@@ -273,10 +275,97 @@ const completeStage = (
     dialogueOverride,
     source,
   )
-  for (const action of branch?.actions ?? activeStage.actions ?? []) {
-    nextWorld = applyScenarioAction(nextWorld, updatedScenario, action, event)
+  if (applyActions) {
+    for (const action of branch?.actions ?? activeStage.actions ?? []) {
+      nextWorld = applyScenarioAction(nextWorld, updatedScenario, action, event)
+    }
   }
   return { world: nextWorld, scenario: updatedScenario }
+}
+
+const startTimelineOrCompleteStage = (
+  world: WorldState,
+  scenario: WorldScenarioRuntime,
+  activeStageIndex: number,
+  event: WorldEvent,
+  branch?: WorldScenarioBranch,
+  dialogueOverride?: WorldScenarioDialogueLine[],
+  source: 'authored' | 'ai' = 'authored',
+): { world: WorldState; scenario: WorldScenarioRuntime } => {
+  const activeStage = scenario.stages[activeStageIndex]
+  const actions = branch?.actions ?? activeStage.actions ?? []
+  if (!actions.some((action) => (action.delaySeconds ?? 0) > 0)) {
+    return completeStage(world, scenario, activeStageIndex, event, branch, dialogueOverride, source)
+  }
+  const stagedScenario: WorldScenarioRuntime = {
+    ...scenario,
+    pendingAi: undefined,
+    activeDialogue: undefined,
+    activeTimeline: {
+      stageId: activeStage.id,
+      eventId: event.id,
+      ...(branch ? { branchId: branch.id } : {}),
+      ...(dialogueOverride?.length ? { generatedDialogue: dialogueOverride } : {}),
+      source,
+      actionIndex: 0,
+      nextActionAtSeconds: world.elapsedSeconds + Math.max(0, actions[0]?.delaySeconds ?? 0),
+    },
+  }
+  return advanceScenarioTimeline(
+    clearDialogueSpeech(world, activeStage, dialogueOverride),
+    stagedScenario,
+    activeStageIndex,
+    event,
+    branch,
+  )
+}
+
+const advanceScenarioTimeline = (
+  world: WorldState,
+  scenario: WorldScenarioRuntime,
+  activeStageIndex: number,
+  event: WorldEvent,
+  branch?: WorldScenarioBranch,
+): { world: WorldState; scenario: WorldScenarioRuntime } => {
+  const timeline = scenario.activeTimeline
+  const activeStage = scenario.stages[activeStageIndex]
+  if (!timeline || timeline.stageId !== activeStage.id) {
+    return { world, scenario: { ...scenario, activeTimeline: undefined } }
+  }
+  const actions = branch?.actions ?? activeStage.actions ?? []
+  let nextWorld = world
+  let actionIndex = timeline.actionIndex
+  let nextActionAtSeconds = timeline.nextActionAtSeconds
+  while (actionIndex < actions.length && world.elapsedSeconds >= nextActionAtSeconds) {
+    nextWorld = applyScenarioAction(nextWorld, scenario, actions[actionIndex], event)
+    actionIndex += 1
+    if (actionIndex < actions.length) {
+      nextActionAtSeconds += Math.max(0, actions[actionIndex].delaySeconds ?? 0)
+    }
+  }
+  if (actionIndex >= actions.length) {
+    return completeStage(
+      nextWorld,
+      scenario,
+      activeStageIndex,
+      event,
+      branch,
+      timeline.generatedDialogue,
+      timeline.source,
+      false,
+    )
+  }
+  return {
+    world: nextWorld,
+    scenario: {
+      ...scenario,
+      activeTimeline: {
+        ...timeline,
+        actionIndex,
+        nextActionAtSeconds,
+      },
+    },
+  }
 }
 
 export type WorldScenarioAiResolution = {
@@ -373,7 +462,7 @@ export const resolveWorldScenarioAi = (
     }
   }
 
-  const completed = completeStage(world, clearedScenario, activeStageIndex, event, branch, undefined, source)
+  const completed = startTimelineOrCompleteStage(world, clearedScenario, activeStageIndex, event, branch, undefined, source)
   return {
     ...completed.world,
     scenarios: completed.world.scenarios.map((candidate, index) => index === scenarioIndex ? completed.scenario : candidate),
@@ -386,7 +475,9 @@ export const advanceWorldScenarios = (
 ): WorldState => {
   let nextWorld = world
   let scenariosChanged = false
-  let dialogueLaneOccupied = world.scenarios.some((scenario) => Boolean(scenario.activeDialogue || scenario.pendingAi))
+  let dialogueLaneOccupied = world.scenarios.some((scenario) => Boolean(
+    scenario.activeDialogue || scenario.activeTimeline || scenario.pendingAi,
+  ))
   const claimedEventIdsByMutexGroup = new Map<string, Set<string>>()
   for (const scenario of world.scenarios) {
     if (!scenario.mutexGroup) continue
@@ -408,6 +499,23 @@ export const advanceWorldScenarios = (
     const activeStageIndex = scenario.stages.findIndex((stage) => stage.status === 'active')
     if (activeStageIndex < 0) return scenario
     const activeStage = scenario.stages[activeStageIndex]
+    if (scenario.activeTimeline?.stageId === activeStage.id) {
+      const activeBranch = scenario.activeTimeline.branchId
+        ? activeStage.branches?.find((branch) => branch.id === scenario.activeTimeline?.branchId)
+        : undefined
+      const event = world.events.find((candidate) => candidate.id === scenario.activeTimeline?.eventId) ?? {
+        id: scenario.activeTimeline.eventId,
+        timeSeconds: world.elapsedSeconds,
+        type: activeStage.trigger.eventType,
+        actorId: activeStage.trigger.actorId ?? 'scenario',
+        targetId: activeStage.trigger.targetId,
+        commandType: activeStage.trigger.commandType,
+      }
+      const advanced = advanceScenarioTimeline(nextWorld, scenario, activeStageIndex, event, activeBranch)
+      if (advanced.world !== nextWorld || advanced.scenario !== scenario) scenariosChanged = true
+      nextWorld = advanced.world
+      return advanced.scenario
+    }
     if (scenario.activeDialogue?.stageId === activeStage.id) {
       const activeBranch = scenario.activeDialogue.branchId
         ? activeStage.branches?.find((branch) => branch.id === scenario.activeDialogue?.branchId)
@@ -441,7 +549,7 @@ export const advanceWorldScenarios = (
         targetId: activeStage.trigger.targetId,
         commandType: activeStage.trigger.commandType,
       }
-      const completed = completeStage(
+      const completed = startTimelineOrCompleteStage(
         nextWorld,
         scenario,
         activeStageIndex,
@@ -488,7 +596,12 @@ export const advanceWorldScenarios = (
       : matched.branch
 
     const dialogue = branch?.dialogue ?? activeStage.dialogue
-    const needsDialogueLane = Boolean(dialogue?.length || (activeStage.ai && options.enableAi))
+    const actions = branch?.actions ?? activeStage.actions ?? []
+    const needsDialogueLane = Boolean(
+      dialogue?.length
+      || (activeStage.ai && options.enableAi)
+      || actions.some((action) => (action.delaySeconds ?? 0) > 0),
+    )
     if (needsDialogueLane && dialogueLaneOccupied) {
       if (scenario.queuedTransition?.eventId === event.id) return scenario
       scenariosChanged = true
@@ -544,7 +657,7 @@ export const advanceWorldScenarios = (
       nextWorld = stopDialogueParticipants(nextWorld, updatedScenario, dialogue, 0, updatedScenario.activeDialogue!.lineEndsAtSeconds)
       return updatedScenario
     }
-    const completed = completeStage(nextWorld, consumedScenario, activeStageIndex, event, branch)
+    const completed = startTimelineOrCompleteStage(nextWorld, consumedScenario, activeStageIndex, event, branch)
     nextWorld = completed.world
     return completed.scenario
   })

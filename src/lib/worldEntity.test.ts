@@ -259,7 +259,7 @@ describe('WorldEntity foundation', () => {
     }
 
     const restored = parseStoredWorldState(world, world.planId)!
-    expect(restored.scenarios[0].authoringVersion).toBe(5)
+    expect(restored.scenarios[0].authoringVersion).toBe(6)
     expect(restored.scenarios[0].stages[0].trigger).toMatchObject({ eventType: 'interaction', actorId: 'roland', targetId: 'eileen' })
     expect(restored.scenarios[0].stages[0].trigger.commandType).toBeUndefined()
     expect(restored.scenarios[0].stages[0].dialogue).toHaveLength(3)
@@ -324,11 +324,12 @@ describe('WorldEntity foundation', () => {
 
     const restored = parseStoredWorldState(world, world.planId)!
     const restoredEnvoy = restored.entities.find((entity) => entity.id === envoy.id)!
-    expect(restored.scenarios[0].authoringVersion).toBe(5)
+    expect(restored.scenarios[0].authoringVersion).toBe(6)
     expect(restored.scenarios[0].stages[2].branches?.[0].actions).toContainEqual({
       type: 'set-visibility',
       target: { kind: 'entity', id: envoy.id },
       visible: false,
+      delaySeconds: 2.5,
     })
     expect(restored.hiddenTargets).toContainEqual({ kind: 'entity', id: envoy.id })
     expect(restoredEnvoy.activeCommand).toBeUndefined()

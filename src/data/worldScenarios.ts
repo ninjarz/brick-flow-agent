@@ -193,7 +193,7 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
       processedEventIds: [],
       priority: 100,
       mutexGroup: 'gray-raven-story',
-      authoringVersion: 5,
+      authoringVersion: 6,
       stages: [
         {
           id: 'scenario-border-tavern-investigate',
@@ -283,8 +283,7 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
             trigger: { eventType: 'defeated', targetId: knight.id },
             actions: [
               { type: 'set-faction', entityId: stranger.id, factionId: 'neutral' },
-              { type: 'issue-command', entityId: stranger.id, command: { type: 'stop' } },
-              { type: 'set-visibility', target: { kind: 'entity', id: stranger.id }, visible: false },
+              { type: 'issue-command', entityId: stranger.id, command: { type: 'wander' } },
               {
                 type: 'add-story',
                 title: zh ? '败局 · 灰鸦暂熄' : 'Defeat · The Gray Raven Dims',
@@ -292,6 +291,12 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
                   ? '罗兰倒下后，玛拉举起白布换来短暂停战。黑岩使者带伤撤退，酒馆保住了性命，却失去了追查商队的最佳时机。'
                   : 'When Roland falls, Mara raises a white cloth and wins a brief truce. The wounded envoy retreats; the tavern survives, but the best chance to find the caravan is lost.',
                 characterIds: [knight.id, archer.id, stranger.id],
+              },
+              {
+                type: 'set-visibility',
+                target: { kind: 'entity', id: stranger.id },
+                visible: false,
+                delaySeconds: 2.5,
               },
             ],
           }],

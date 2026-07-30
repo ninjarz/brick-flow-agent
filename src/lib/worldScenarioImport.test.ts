@@ -122,6 +122,7 @@ describe('world scenario import', () => {
       type: 'set-visibility',
       target: { kind: 'entity', id: result.importedEntityIds[3] },
       visible: false,
+      delaySeconds: 2.5,
     })
     expect(result.plan.bricks).toHaveLength(1 + createDefaultWorldScenarios('zh-CN')[0].plan.bricks.length)
     expect(getBlockingBuildPlanIssues(validateBuildPlan(result.plan))).toEqual([])
@@ -172,7 +173,7 @@ describe('world scenario import', () => {
         status: stage.id.endsWith('defend') ? 'active' as const : 'completed' as const,
       })),
     }
-    const world = advanceWorldScenarios({
+    let world = advanceWorldScenarios({
       ...result.world,
       paused: false,
       scenarios: [scenario],
@@ -186,6 +187,8 @@ describe('world scenario import', () => {
         : entity),
       events: [{ id: 'roland-fell', timeSeconds: 9, type: 'defeated', actorId: envoyId, targetId: rolandId }],
     })
+    expect(world.scenarios[0].activeTimeline?.actionIndex).toBe(3)
+    world = advanceWorldScenarios({ ...world, elapsedSeconds: 2.5 })
 
     const envoy = world.entities.find((entity) => entity.id === envoyId)!
     expect(world.scenarios[0].outcomeId).toBe('gray-raven-retreat')

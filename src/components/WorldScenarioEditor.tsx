@@ -250,6 +250,21 @@ const ScenarioBranchContentEditor = ({
               <input value={action.title} placeholder={zh ? '段落标题' : 'Passage title'} onChange={(event) => patchAction(actionIndex, { ...action, title: event.target.value })} />
               <textarea rows={2} value={action.body} placeholder={zh ? '段落内容' : 'Passage body'} onChange={(event) => patchAction(actionIndex, { ...action, body: event.target.value })} />
             </>}
+            <label title={zh ? '等待上一行为完成后再执行' : 'Wait after the previous action'}>
+              {zh ? '等待' : 'Delay'}
+              <input
+                type="number"
+                min="0"
+                max="120"
+                step="0.5"
+                value={action.delaySeconds ?? 0}
+                onChange={(event) => patchAction(actionIndex, {
+                  ...action,
+                  delaySeconds: Math.max(0, Math.min(120, Number(event.target.value) || 0)) || undefined,
+                })}
+              />
+              {zh ? '秒' : 's'}
+            </label>
             <button type="button" className="icon-button" title={zh ? '删除行为' : 'Delete action'} onClick={() => onChange({ ...branch, actions: branch.actions?.filter((_, index) => index !== actionIndex) })}><Trash2 size={14} /></button>
           </div>
         ))}
@@ -611,6 +626,23 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
                     <input value={action.title} placeholder={zh ? '段落标题' : 'Passage title'} onChange={(event) => patchStage(stageIndex, { actions: stage.actions?.map((item, index) => index === actionIndex ? { ...action, title: event.target.value } : item) })} />
                     <textarea rows={2} value={action.body} placeholder={zh ? '段落内容' : 'Passage body'} onChange={(event) => patchStage(stageIndex, { actions: stage.actions?.map((item, index) => index === actionIndex ? { ...action, body: event.target.value } : item) })} />
                   </>}
+                  <label title={zh ? '等待上一行为完成后再执行' : 'Wait after the previous action'}>
+                    {zh ? '等待' : 'Delay'}
+                    <input
+                      type="number"
+                      min="0"
+                      max="120"
+                      step="0.5"
+                      value={action.delaySeconds ?? 0}
+                      onChange={(event) => patchStage(stageIndex, {
+                        actions: stage.actions?.map((item, index) => index === actionIndex ? {
+                          ...action,
+                          delaySeconds: Math.max(0, Math.min(120, Number(event.target.value) || 0)) || undefined,
+                        } : item),
+                      })}
+                    />
+                    {zh ? '秒' : 's'}
+                  </label>
                   <button type="button" className="icon-button" title={zh ? '删除行为' : 'Delete action'} onClick={() => patchStage(stageIndex, { actions: stage.actions?.filter((_, index) => index !== actionIndex) })}><Trash2 size={14} /></button>
                 </div>
               ))}

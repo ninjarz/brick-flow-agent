@@ -89,6 +89,7 @@ export const duplicateWorldScenarioFlow = (
     claimedEventIds: [],
     pendingAi: undefined,
     activeDialogue: undefined,
+    activeTimeline: undefined,
     queuedTransition: undefined,
     outcomeId: undefined,
     authoringVersion: 3,
@@ -109,6 +110,7 @@ export const resetWorldScenarioFlow = (
   claimedEventIds: [],
   pendingAi: undefined,
   activeDialogue: undefined,
+  activeTimeline: undefined,
   queuedTransition: undefined,
   outcomeId: undefined,
 })
@@ -136,7 +138,7 @@ export const addWorldScenarioStage = (
     trigger: { eventType: 'interaction' },
   }
   return {
-    scenario: { ...scenario, stages: [...scenario.stages, stage], pendingAi: undefined, activeDialogue: undefined, queuedTransition: undefined, outcomeId: undefined },
+    scenario: { ...scenario, stages: [...scenario.stages, stage], pendingAi: undefined, activeDialogue: undefined, activeTimeline: undefined, queuedTransition: undefined, outcomeId: undefined },
     stageId,
   }
 }
@@ -165,7 +167,7 @@ export const duplicateWorldScenarioStage = (
   if (source.nextStageId !== undefined) stages[sourceIndex] = { ...source, nextStageId: stageId }
   stages.splice(sourceIndex + 1, 0, copied)
   return {
-    scenario: { ...scenario, stages, pendingAi: undefined, activeDialogue: undefined, queuedTransition: undefined, outcomeId: undefined },
+    scenario: { ...scenario, stages, pendingAi: undefined, activeDialogue: undefined, activeTimeline: undefined, queuedTransition: undefined, outcomeId: undefined },
     stageId,
   }
 }
