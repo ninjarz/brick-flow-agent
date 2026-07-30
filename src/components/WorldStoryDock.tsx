@@ -11,6 +11,7 @@ import {
   type WorldNarrativeFeedBlock,
   type WorldNarrativeFeedItem,
 } from '../lib/worldNarrativeFeed'
+import { inspectWorldScenarioRuntime } from '../lib/worldScenarioDiagnostics'
 import type { TavernDirectorEntry, TavernDirectorStreamPreview } from '../lib/worldTavernDirector'
 import type { TavernActivityKind, TavernActivityResult } from '../lib/worldTavernActivities'
 import type { BrickStructure } from '../types/bricks'
@@ -318,6 +319,7 @@ export const WorldStoryDock = ({
   const latestContextStats = useMemo(() => (
     [...world.narrative.directorTurns].reverse().find((turn) => turn.contextStats)?.contextStats
   ), [world.narrative.directorTurns])
+  const scenarioRuntimeIssues = useMemo(() => inspectWorldScenarioRuntime(world), [world])
   const displayedInputTokens = latestContextStats?.inputTokens ?? latestContextStats?.estimatedInputTokens
   const isScenarioDialoguePlaying = world.scenarios.some((scenario) => Boolean(scenario.activeDialogue || scenario.pendingAi))
   const feedVersion = feed.reduce((total, item) => total + item.blocks.length, 0)
@@ -593,6 +595,12 @@ export const WorldStoryDock = ({
                   ) : (
                     <p>{locale === 'zh-CN' ? '尚未达到自动压缩阈值，当前仍使用原始对话历史。' : 'The automatic compaction threshold has not been reached; raw turns are still in use.'}</p>
                   )}
+                </details>
+                <details className="world-story-debug-memory">
+                  <summary><Bug size={11} />{locale === 'zh-CN' ? '剧情运行诊断' : 'Story runtime diagnostics'}</summary>
+                  {scenarioRuntimeIssues.length > 0
+                    ? <pre>{JSON.stringify(scenarioRuntimeIssues, null, 2)}</pre>
+                    : <p>{locale === 'zh-CN' ? '未发现悬空对白、时间轴或等待事件。' : 'No dangling dialogue, timeline, or queued event detected.'}</p>}
                 </details>
               </aside>
             )}

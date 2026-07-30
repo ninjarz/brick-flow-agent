@@ -52,6 +52,7 @@ describe('world scenario import', () => {
     expect(result.world.scenarios[0].stages[0].trigger.targetId).toBe(result.importedEntityIds[2])
     expect(result.world.entities[1].controller).toBe('player')
     expect(result.world.entities[3].factionId).toBe('neutral')
+    expect(result.world.entities[3]).toMatchObject({ health: 180, maxHealth: 180 })
     expect(result.world.hiddenTargets).toHaveLength(2)
     expect(result.world.hiddenTargets.every((target) => target.kind === 'structure')).toBe(true)
     expect(result.plan.structures).toHaveLength(4)

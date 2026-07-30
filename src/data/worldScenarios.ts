@@ -127,6 +127,8 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
     factionId: 'neutral',
     transform: { x: 19, z: -3, rotationRadians: Math.PI },
   })
+  stranger.health = 180
+  stranger.maxHealth = 180
   innkeeper.commandQueue = [{ type: 'wander', seed: 31 }]
   archer.commandQueue = [{ type: 'follow', target: { kind: 'entity', id: knight.id } }]
   stranger.commandQueue = [{ type: 'wander', seed: 73 }]

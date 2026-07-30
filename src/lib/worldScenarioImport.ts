@@ -152,6 +152,8 @@ const remapScenarioWorld = (
     if (!availablePoint) continue
     importedEntities.push({
       ...entity,
+      maxHealth: Math.max(1, template.maxHealth),
+      health: Math.max(0, Math.min(template.maxHealth, template.health)),
       ...(importedStorylineId ? { storylineId: importedStorylineId } : {}),
       transform: { ...entity.transform, ...availablePoint },
       commandQueue: template.commandQueue
