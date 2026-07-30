@@ -432,6 +432,45 @@ const findBestEnemy = (
   return best
 }
 
+const findPartyCombatTarget = (
+  entity: WorldEntity,
+  entities: WorldEntity[],
+  parties: WorldState['parties'],
+  timeSeconds: number,
+) => {
+  if (!entity.partyId) return undefined
+  const party = parties.find((candidate) => candidate.id === entity.partyId)
+  if (!party || !party.members.some((member) => member.entityId === entity.id && member.status === 'active')) return undefined
+  const orderedMemberIds = [
+    party.leaderId,
+    ...party.members.filter((member) => member.status === 'active' && member.entityId !== party.leaderId)
+      .map((member) => member.entityId),
+  ]
+  const targetId = orderedMemberIds.flatMap((memberId) => {
+    const member = entities.find((candidate) => candidate.id === memberId)
+    if (!member || member.health <= 0) return []
+    if (member.activeCommand?.type === 'attack' && member.activeCommand.target.kind === 'entity') {
+      return [member.activeCommand.target.id]
+    }
+    if (
+      member.combat.lastAttackerId
+      && (member.combat.lastDamagedAtSeconds ?? -Infinity) + 8 >= timeSeconds
+    ) return [member.combat.lastAttackerId]
+    return []
+  })[0]
+  if (!targetId) return undefined
+  const target = entities.find((candidate) => candidate.id === targetId)
+  const detectionRange = worldEntityDefinitionById.get(entity.definitionId)?.perception.detectionRangeStuds ?? 0
+  return target
+    && target.health > 0
+    && target.factionId !== 'neutral'
+    && target.factionId !== entity.factionId
+    && sharesAutonomousStoryline(entity, target)
+    && distance2d(entity.transform, target.transform) <= detectionRange * 1.5
+    ? target
+    : undefined
+}
+
 const findNearestGuardEnemy = (entity: WorldEntity, entities: WorldEntity[], guardPoint: Point) => {
   if (entity.factionId === 'neutral') return undefined
   return findNearestEntity(entity, entities, (candidate) => (
@@ -1085,7 +1124,8 @@ export const stepWorldSimulation = (
     if (!activeCommand && entity.controller !== 'player' && !options.suspendAutomaticControllers) {
       const definition = worldEntityDefinitionById.get(entity.definitionId)
       const reviveTarget = definition?.support ? findNearestReviveTarget(entity, entities) : undefined
-      const enemy = reviveTarget ? undefined : findBestEnemy(entity, entities, targetLookup.entityById, timeSeconds)
+      const partyTarget = reviveTarget ? undefined : findPartyCombatTarget(entity, entities, world.parties, timeSeconds)
+      const enemy = reviveTarget ? undefined : partyTarget ?? findBestEnemy(entity, entities, targetLookup.entityById, timeSeconds)
       if (reviveTarget) {
         activeCommand = { type: 'revive', target: { kind: 'entity', id: reviveTarget.id } }
         commandStarted = true

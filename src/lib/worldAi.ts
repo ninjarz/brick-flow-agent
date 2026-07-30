@@ -46,7 +46,14 @@ export type WorldAiSnapshot = {
     nearbyHostileIds: string[]
     nearbyFriendlyIds: string[]
     recentMemories: Array<{ type: string; otherId?: string; otherName?: string; importance: number }>
-    relationships: Array<{ targetEntityId: string; affinity: number; encounters: number }>
+    relationships: Array<{
+      targetEntityId: string
+      affinity: number
+      trust: number
+      hostility: number
+      fear: number
+      encounters: number
+    }>
   }>
   bricks: Array<{ id: string; brickId: string; position: { x: number; y: number; z: number } }>
   structures: Array<{
@@ -194,6 +201,9 @@ export const createWorldAiSnapshot = (
     relationships: Object.values(world.narrative.relationshipsByEntityId[entity.id] ?? {}).map((relationship) => ({
       targetEntityId: relationship.targetEntityId,
       affinity: relationship.affinity,
+      trust: relationship.trust ?? Math.max(0, relationship.affinity),
+      hostility: relationship.hostility ?? Math.max(0, -relationship.affinity),
+      fear: relationship.fear ?? 0,
       encounters: relationship.encounters,
     })),
   })}),

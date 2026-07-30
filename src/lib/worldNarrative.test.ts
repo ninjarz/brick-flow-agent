@@ -134,4 +134,35 @@ describe('world narrative', () => {
     expect(afterDamage.relationshipsByEntityId.a.b).toMatchObject({ affinity: 2, encounters: 2 })
     expect(afterDamage.relationshipsByEntityId.b.a).toMatchObject({ affinity: -5, encounters: 2 })
   })
+
+  it('diminishes repeated small talk while tracking trust, hostility, and fear', () => {
+    const world = createEmptyWorldState('plan-1')
+    const events: WorldEvent[] = Array.from({ length: 4 }, (_, index) => ({
+      id: `talk-${index}`,
+      timeSeconds: index + 1,
+      type: 'interaction',
+      actorId: 'a',
+      targetId: 'b',
+    }))
+    const afterTalk = ingestWorldEvents(world.narrative, events, new Set(['a', 'b']))
+    expect(afterTalk.relationshipsByEntityId.a.b).toMatchObject({
+      affinity: 14,
+      trust: 12,
+      hostility: 0,
+      fear: 0,
+      repeatedInteractionCount: 3,
+    })
+
+    const afterAttack = ingestWorldEvents(afterTalk, [{
+      id: 'attack',
+      timeSeconds: 6,
+      type: 'damage',
+      actorId: 'a',
+      targetId: 'b',
+      amount: 12,
+    }], new Set(['a', 'b']))
+    expect(afterAttack.relationshipsByEntityId.b.a.hostility).toBeGreaterThan(0)
+    expect(afterAttack.relationshipsByEntityId.b.a.fear).toBeGreaterThan(0)
+    expect(afterAttack.relationshipsByEntityId.b.a.trust).toBeLessThan(12)
+  })
 })

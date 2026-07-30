@@ -337,6 +337,10 @@ export const applyTavernDirectorEvent = (
     const next: WorldRelationship = {
       targetEntityId: to.id,
       affinity: after,
+      trust: Math.max(0, Math.min(100, (current?.trust ?? Math.max(0, before)) + Math.max(0, event.delta))),
+      hostility: Math.max(0, Math.min(100, (current?.hostility ?? Math.max(0, -before)) + Math.max(0, -event.delta))),
+      fear: current?.fear ?? 0,
+      repeatedInteractionCount: 0,
       encounters: (current?.encounters ?? 0) + 1,
       lastEventType: 'interaction',
       updatedAtSeconds: world.elapsedSeconds,

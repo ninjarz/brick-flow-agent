@@ -143,6 +143,10 @@ export type WorldStoryBlock =
 export type WorldRelationship = {
   targetEntityId: string
   affinity: number
+  trust?: number
+  hostility?: number
+  fear?: number
+  repeatedInteractionCount?: number
   encounters: number
   lastEventType: WorldEvent['type']
   updatedAtSeconds: number

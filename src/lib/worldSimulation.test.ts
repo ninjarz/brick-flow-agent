@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
-import { createEmptyWorldState, createWorldEntity, issueWorldEntityCommand } from './worldEntity'
+import { createEmptyWorldState, createWorldEntity, issueWorldEntityCommand, joinWorldParty } from './worldEntity'
 import { findWorldPath, hasWorldLineOfSight, isWorldEntityGroundPointBlockedByBricks, stepWorldSimulation } from './worldSimulation'
 import { getWorldEntityCollisionRadius } from './worldEntityCollision'
 import { makeBrick } from './planUtils'
@@ -32,6 +32,39 @@ describe('WorldEntity simulation', () => {
 
     expect(world.entities.every((entity) => entity.activeCommand?.type !== 'attack')).toBe(true)
     expect(world.events.some((event) => event.type === 'attack')).toBe(false)
+  })
+
+  it('lets active rule-controlled party members support the leader attack target', () => {
+    const knight = createWorldEntity(worldEntityDefinitionById.get('knight')!, {
+      id: 'party-leader',
+      controller: 'player',
+      factionId: 'blue',
+      transform: { x: 0, z: 0 },
+    })
+    const archer = createWorldEntity(worldEntityDefinitionById.get('archer')!, {
+      id: 'party-archer',
+      controller: 'rule',
+      factionId: 'blue',
+      transform: { x: 0, z: 2 },
+    })
+    const enemy = createWorldEntity(worldEntityDefinitionById.get('knight')!, {
+      id: 'party-enemy',
+      controller: 'player',
+      factionId: 'red',
+      transform: { x: 8, z: 0 },
+    })
+    knight.activeCommand = { type: 'attack', target: { kind: 'entity', id: enemy.id } }
+    let world = {
+      ...createEmptyWorldState('party-combat'),
+      entities: [knight, archer, enemy],
+    }
+    world = joinWorldParty(world, archer.id, knight.id)
+    world = stepWorldSimulation(world, [], 0.1)
+
+    expect(world.entities.find((entity) => entity.id === archer.id)?.activeCommand).toEqual({
+      type: 'attack',
+      target: { kind: 'entity', id: enemy.id },
+    })
   })
 
   it('locks the full cast while scenario dialogue is playing', () => {

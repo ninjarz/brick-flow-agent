@@ -736,6 +736,18 @@ const normalizeRelationships = (value: unknown): WorldState['narrative']['relati
       return [[targetId, {
         targetEntityId: typeof relationship.targetEntityId === 'string' ? relationship.targetEntityId : targetId,
         affinity: Math.max(-100, Math.min(100, relationship.affinity)),
+        trust: isFiniteNumber(relationship.trust)
+          ? Math.max(0, Math.min(100, relationship.trust))
+          : Math.max(0, Math.min(100, relationship.affinity)),
+        hostility: isFiniteNumber(relationship.hostility)
+          ? Math.max(0, Math.min(100, relationship.hostility))
+          : Math.max(0, Math.min(100, -relationship.affinity)),
+        fear: isFiniteNumber(relationship.fear)
+          ? Math.max(0, Math.min(100, relationship.fear))
+          : 0,
+        repeatedInteractionCount: isFiniteNumber(relationship.repeatedInteractionCount)
+          ? Math.max(0, Math.min(20, Math.floor(relationship.repeatedInteractionCount)))
+          : 0,
         encounters: Math.max(0, Math.floor(relationship.encounters)),
         lastEventType: relationship.lastEventType as WorldState['events'][number]['type'],
         updatedAtSeconds: isFiniteNumber(relationship.updatedAtSeconds) ? Math.max(0, relationship.updatedAtSeconds) : 0,

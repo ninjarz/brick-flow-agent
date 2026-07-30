@@ -20,14 +20,54 @@ const appendMemory = (
 })
 
 const clampAffinity = (value: number) => Math.max(-100, Math.min(100, value))
+const clampRelationshipDimension = (value: number) => Math.max(0, Math.min(100, value))
 
-const relationshipDelta = (event: WorldEvent, observerId: string) => {
-  if (event.type === 'interaction') return 5
+const relationshipDelta = (
+  event: WorldEvent,
+  observerId: string,
+  current?: WorldRelationship,
+) => {
+  if (event.type === 'interaction') {
+    const repeated = current?.lastEventType === 'interaction'
+      && event.timeSeconds - current.updatedAtSeconds <= 30
+    const repetition = repeated ? (current.repeatedInteractionCount ?? 0) + 1 : 0
+    return Math.max(1, 5 - repetition)
+  }
   if (event.type === 'revive') return observerId === event.targetId ? 18 : 10
   if (event.type === 'defeated') return observerId === event.targetId ? -24 : -5
   if (event.type === 'damage') return observerId === event.targetId ? -10 : -3
   if (event.type === 'attack') return observerId === event.targetId ? -4 : -1
   return 0
+}
+
+const relationshipDimensions = (
+  event: WorldEvent,
+  observerId: string,
+  current?: WorldRelationship,
+) => {
+  const trust = current?.trust ?? Math.max(0, current?.affinity ?? 0)
+  const hostility = current?.hostility ?? Math.max(0, -(current?.affinity ?? 0))
+  const fear = current?.fear ?? 0
+  if (event.type === 'interaction') return {
+    trust: clampRelationshipDimension(trust + 3),
+    hostility: clampRelationshipDimension(hostility - 1),
+    fear: clampRelationshipDimension(fear - 1),
+  }
+  if (event.type === 'revive') return {
+    trust: clampRelationshipDimension(trust + (observerId === event.targetId ? 16 : 8)),
+    hostility: clampRelationshipDimension(hostility - 8),
+    fear: clampRelationshipDimension(fear - 4),
+  }
+  if (event.type === 'attack' || event.type === 'damage' || event.type === 'defeated') {
+    const isVictim = observerId === event.targetId
+    const severity = event.type === 'defeated' ? 18 : event.type === 'damage' ? 9 : 4
+    return {
+      trust: clampRelationshipDimension(trust - (isVictim ? severity : Math.ceil(severity / 2))),
+      hostility: clampRelationshipDimension(hostility + (isVictim ? severity : Math.ceil(severity / 2))),
+      fear: clampRelationshipDimension(fear + (isVictim ? severity : Math.ceil(severity / 3))),
+    }
+  }
+  return { trust, hostility, fear }
 }
 
 const updateRelationship = (
@@ -37,9 +77,16 @@ const updateRelationship = (
   event: WorldEvent,
 ) => {
   const current = relationships[observerId]?.[targetEntityId]
+  const repeatedInteractionCount = event.type === 'interaction'
+    ? current?.lastEventType === 'interaction' && event.timeSeconds - current.updatedAtSeconds <= 30
+      ? (current.repeatedInteractionCount ?? 0) + 1
+      : 0
+    : 0
   const next: WorldRelationship = {
     targetEntityId,
-    affinity: clampAffinity((current?.affinity ?? 0) + relationshipDelta(event, observerId)),
+    affinity: clampAffinity((current?.affinity ?? 0) + relationshipDelta(event, observerId, current)),
+    ...relationshipDimensions(event, observerId, current),
+    repeatedInteractionCount,
     encounters: (current?.encounters ?? 0) + 1,
     lastEventType: event.type,
     updatedAtSeconds: event.timeSeconds,

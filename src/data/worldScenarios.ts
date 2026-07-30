@@ -9,6 +9,10 @@ import { worldEntityDefinitionById } from './worldEntityDefinitions'
 const relationship = (targetEntityId: string, affinity: number): WorldRelationship => ({
   targetEntityId,
   affinity,
+  trust: Math.max(0, affinity),
+  hostility: Math.max(0, -affinity),
+  fear: 0,
+  repeatedInteractionCount: 0,
   encounters: 1,
   lastEventType: 'interaction',
   updatedAtSeconds: 0,

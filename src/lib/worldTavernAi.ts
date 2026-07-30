@@ -79,6 +79,9 @@ export const buildTavernAiPrompt = (
         .map((relationship) => ({
           targetEntityId: relationship.targetEntityId,
           affinity: relationship.affinity,
+          trust: relationship.trust ?? Math.max(0, relationship.affinity),
+          hostility: relationship.hostility ?? Math.max(0, -relationship.affinity),
+          fear: relationship.fear ?? 0,
           encounters: relationship.encounters,
         })),
     }]
