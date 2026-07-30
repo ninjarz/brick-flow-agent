@@ -387,8 +387,17 @@ export const advanceWorldScenarios = (
   let nextWorld = world
   let scenariosChanged = false
   let dialogueLaneOccupied = world.scenarios.some((scenario) => Boolean(scenario.activeDialogue || scenario.pendingAi))
-  const claimedEventIds = new Set(world.scenarios.flatMap((scenario) => scenario.claimedEventIds ?? []))
-  const nextScenarios = world.scenarios.map((scenario) => {
+  const claimedEventIdsByMutexGroup = new Map<string, Set<string>>()
+  for (const scenario of world.scenarios) {
+    if (!scenario.mutexGroup) continue
+    const claimed = claimedEventIdsByMutexGroup.get(scenario.mutexGroup) ?? new Set<string>()
+    for (const eventId of scenario.claimedEventIds ?? []) claimed.add(eventId)
+    claimedEventIdsByMutexGroup.set(scenario.mutexGroup, claimed)
+  }
+  const orderedScenarios = world.scenarios
+    .map((scenario, index) => ({ scenario, index }))
+    .sort((left, right) => (right.scenario.priority ?? 0) - (left.scenario.priority ?? 0) || left.index - right.index)
+  const evaluatedScenarios = orderedScenarios.map(({ scenario }) => {
     if (scenario.enabled === false) return scenario
     if (scenario.pendingAi) {
       if (options.enableAi !== false) return scenario
@@ -445,17 +454,32 @@ export const advanceWorldScenarios = (
       return completed.scenario
     }
 
-    const consumedEventIds = new Set([...scenario.processedEventIds, ...claimedEventIds])
+    const mutexClaimedEventIds = scenario.mutexGroup
+      ? claimedEventIdsByMutexGroup.get(scenario.mutexGroup) ?? new Set<string>()
+      : new Set<string>()
+    const consumedEventIds = new Set([...scenario.processedEventIds, ...mutexClaimedEventIds])
     const transitions = activeStage.ai?.mode === 'choice'
       ? [{ branch: undefined, trigger: activeStage.trigger }]
       : [
           ...(activeStage.branches ?? []).map((branch) => ({ branch, trigger: branch.trigger })),
           { branch: undefined, trigger: activeStage.trigger },
         ]
-    const matched = transitions
-      .map((transition) => ({ ...transition, event: findLatestMatchingEvent(world, world.events, consumedEventIds, transition.trigger) }))
-      .filter((transition): transition is typeof transition & { event: WorldEvent } => Boolean(transition.event))
-      .sort((left, right) => right.event.timeSeconds - left.event.timeSeconds)[0]
+    const queuedEvent = scenario.queuedTransition?.stageId === activeStage.id
+      ? world.events.find((candidate) => candidate.id === scenario.queuedTransition?.eventId)
+      : undefined
+    const queuedBranch = scenario.queuedTransition?.branchId
+      ? activeStage.branches?.find((branch) => branch.id === scenario.queuedTransition?.branchId)
+      : undefined
+    const matched = queuedEvent
+      ? {
+          branch: queuedBranch,
+          trigger: queuedBranch?.trigger ?? activeStage.trigger,
+          event: queuedEvent,
+        }
+      : transitions
+          .map((transition) => ({ ...transition, event: findLatestMatchingEvent(world, world.events, consumedEventIds, transition.trigger) }))
+          .filter((transition): transition is typeof transition & { event: WorldEvent } => Boolean(transition.event))
+          .sort((left, right) => right.event.timeSeconds - left.event.timeSeconds)[0]
     if (!matched) return scenario
     if (options.allowNewStages === false) return scenario
     const { event } = matched
@@ -464,12 +488,28 @@ export const advanceWorldScenarios = (
       : matched.branch
 
     const dialogue = branch?.dialogue ?? activeStage.dialogue
-    if (dialogue?.length && dialogueLaneOccupied) return scenario
+    const needsDialogueLane = Boolean(dialogue?.length || (activeStage.ai && options.enableAi))
+    if (needsDialogueLane && dialogueLaneOccupied) {
+      if (scenario.queuedTransition?.eventId === event.id) return scenario
+      scenariosChanged = true
+      if (scenario.mutexGroup) mutexClaimedEventIds.add(event.id)
+      return {
+        ...scenario,
+        claimedEventIds: Array.from(new Set([...(scenario.claimedEventIds ?? []), event.id])).slice(-500),
+        queuedTransition: {
+          stageId: activeStage.id,
+          eventId: event.id,
+          ...(branch ? { branchId: branch.id } : {}),
+          queuedAtSeconds: world.elapsedSeconds,
+        },
+      }
+    }
 
     scenariosChanged = true
-    claimedEventIds.add(event.id)
+    if (scenario.mutexGroup) mutexClaimedEventIds.add(event.id)
     const consumedScenario = {
       ...scenario,
+      queuedTransition: undefined,
       claimedEventIds: Array.from(new Set([...(scenario.claimedEventIds ?? []), event.id])).slice(-500),
       processedEventIds: Array.from(new Set([
         ...scenario.processedEventIds,
@@ -509,6 +549,8 @@ export const advanceWorldScenarios = (
     return completed.scenario
   })
 
+  const evaluatedById = new Map(evaluatedScenarios.map((scenario) => [scenario.id, scenario]))
+  const nextScenarios = world.scenarios.map((scenario) => evaluatedById.get(scenario.id) ?? scenario)
   const worldChanged = nextWorld !== world
   return scenariosChanged || worldChanged ? { ...nextWorld, scenarios: nextScenarios } : nextWorld
 }

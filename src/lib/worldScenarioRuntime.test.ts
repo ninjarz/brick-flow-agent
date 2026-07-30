@@ -288,6 +288,7 @@ describe('world scenario runtime', () => {
       title: id,
       description: id,
       processedEventIds: [],
+      mutexGroup: 'shared-conversation',
       stages: [{
         id: 'talk',
         title: 'Talk',
@@ -324,6 +325,46 @@ describe('world scenario runtime', () => {
     expect(secondStarted.scenarios[1].activeDialogue?.eventId).toBe('fresh-event')
     expect(secondStarted.scenarios[0].claimedEventIds).toEqual(['shared-event'])
     expect(secondStarted.scenarios[1].claimedEventIds).toEqual(['fresh-event'])
+  })
+
+  it('prioritizes independent flows and queues the lower priority dialogue without losing its event', () => {
+    const makeScenario = (id: string, priority: number, mutexGroup: string): WorldScenarioRuntime => ({
+      id,
+      assetId: 'asset',
+      title: id,
+      description: id,
+      priority,
+      mutexGroup,
+      processedEventIds: [],
+      stages: [{
+        id: 'talk',
+        title: 'Talk',
+        description: 'Talk',
+        status: 'active',
+        trigger: { eventType: 'interaction', actorId: 'hero', targetId: 'guide' },
+        dialogue: [{ id: `${id}-line`, speakerId: 'guide', text: id, durationSeconds: 2 }],
+      }],
+    })
+    const world = {
+      ...createEmptyWorldState('priority-dialogue'),
+      scenarios: [
+        makeScenario('low', 10, 'optional'),
+        makeScenario('high', 90, 'main'),
+      ],
+      events: [{ id: 'shared-event', timeSeconds: 1, type: 'interaction' as const, actorId: 'hero', targetId: 'guide' }],
+    }
+
+    const started = advanceWorldScenarios(world)
+    expect(started.scenarios[1].activeDialogue?.eventId).toBe('shared-event')
+    expect(started.scenarios[0].queuedTransition?.eventId).toBe('shared-event')
+
+    const highFinished = advanceWorldScenarios({ ...started, elapsedSeconds: 2 })
+    expect(highFinished.scenarios[1].outcomeId).toBe('completed')
+    expect(highFinished.scenarios[0].queuedTransition?.eventId).toBe('shared-event')
+
+    const lowStarted = advanceWorldScenarios(highFinished)
+    expect(lowStarted.scenarios[0].queuedTransition).toBeUndefined()
+    expect(lowStarted.scenarios[0].activeDialogue?.eventId).toBe('shared-event')
   })
 
   it('resolves a persisted pending AI node through its authored fallback when AI is disabled', () => {

@@ -296,6 +296,8 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
       <div className="scenario-editor-grid">
         <label>{zh ? '流程名称' : 'Flow title'}<input value={scenario.title} onChange={(event) => patchScenario({ title: event.target.value })} /></label>
         <label>{zh ? '流程简介' : 'Description'}<input value={scenario.description} onChange={(event) => patchScenario({ description: event.target.value })} /></label>
+        <label>{zh ? '演出优先级' : 'Playback priority'}<input type="number" min="-100" max="100" value={scenario.priority ?? 0} onChange={(event) => patchScenario({ priority: Math.max(-100, Math.min(100, Math.floor(Number(event.target.value) || 0))) })} /></label>
+        <label>{zh ? '互斥组（可选）' : 'Mutex group (optional)'}<input value={scenario.mutexGroup ?? ''} placeholder={zh ? '同组流程不会重复消费同一事件' : 'Same group shares event claims'} onChange={(event) => patchScenario({ mutexGroup: event.target.value || undefined })} /></label>
       </div>
       <div className="scenario-editor-mode" role="group" aria-label={zh ? '剧情编辑模式' : 'Scenario editor mode'}>
         <button type="button" className={editorMode === 'flow' ? 'active' : ''} aria-pressed={editorMode === 'flow'} onClick={() => setEditorMode('flow')}><GitBranch size={14} />{zh ? '流程图' : 'Flowchart'}</button>

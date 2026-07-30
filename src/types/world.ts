@@ -302,12 +302,20 @@ export type WorldScenarioRuntime = {
   title: string
   description: string
   enabled?: boolean
+  priority?: number
+  mutexGroup?: string
   castEntityIds?: string[]
   stages: WorldScenarioStage[]
   processedEventIds: string[]
   claimedEventIds?: string[]
   pendingAi?: WorldScenarioAiPendingState
   activeDialogue?: WorldScenarioDialogueState
+  queuedTransition?: {
+    stageId: string
+    eventId: string
+    branchId?: string
+    queuedAtSeconds: number
+  }
   outcomeId?: string
   authoringVersion?: number
 }

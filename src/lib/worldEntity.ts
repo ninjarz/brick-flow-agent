@@ -172,6 +172,8 @@ const createGrayRavenEileenCompanionScenario = (
     castEntityIds: [rolandId, eileenId],
     processedEventIds: [],
     claimedEventIds: [],
+    priority: 60,
+    mutexGroup: 'gray-raven-story',
     authoringVersion: 3,
     stages: [{
       id: 'scenario-border-tavern-recruit-eileen',
@@ -1078,6 +1080,19 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
               requestedAtSeconds: Math.max(0, scenario.pendingAi.requestedAtSeconds),
             }
           : undefined
+        const queuedTransition = isRecord(scenario.queuedTransition)
+          && typeof scenario.queuedTransition.stageId === 'string'
+          && typeof scenario.queuedTransition.eventId === 'string'
+          && isFiniteNumber(scenario.queuedTransition.queuedAtSeconds)
+          ? {
+              stageId: scenario.queuedTransition.stageId.slice(0, 180),
+              eventId: scenario.queuedTransition.eventId.slice(0, 180),
+              ...(typeof scenario.queuedTransition.branchId === 'string'
+                ? { branchId: scenario.queuedTransition.branchId.slice(0, 180) }
+                : {}),
+              queuedAtSeconds: Math.max(0, scenario.queuedTransition.queuedAtSeconds),
+            }
+          : undefined
         const inferredCastEntityIds = Array.from(new Set(upgradedStages.flatMap((stage) => [
           stage.trigger.actorId,
           stage.trigger.targetId,
@@ -1107,6 +1122,10 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
           title: scenario.title,
           description: scenario.description,
           ...(typeof scenario.enabled === 'boolean' ? { enabled: scenario.enabled } : {}),
+          ...(isFiniteNumber(scenario.priority) ? { priority: Math.max(-100, Math.min(100, Math.floor(scenario.priority))) } : {}),
+          ...(typeof scenario.mutexGroup === 'string' && scenario.mutexGroup.trim()
+            ? { mutexGroup: scenario.mutexGroup.trim().slice(0, 120) }
+            : {}),
           ...(castEntityIds.length ? { castEntityIds } : {}),
           stages: upgradedStages,
           processedEventIds: Array.isArray(scenario.processedEventIds)
@@ -1119,6 +1138,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
           } : {}),
           ...(pendingAi ? { pendingAi } : {}),
           ...(activeDialogue ? { activeDialogue } : {}),
+          ...(queuedTransition ? { queuedTransition } : {}),
           ...(typeof scenario.outcomeId === 'string' ? { outcomeId: scenario.outcomeId } : {}),
           ...(scenario.assetId === 'scenario-border-tavern'
             ? { authoringVersion: Math.max(4, authoringVersion) }

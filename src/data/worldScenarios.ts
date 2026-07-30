@@ -191,6 +191,8 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
         ? '由罗兰调查北路的断箭线索，揭开黑岩使者的真实目的，并守住灰鸦酒馆。'
         : 'Guide Roland through the broken-arrow clue, expose the Blackrock Envoy, and defend the Gray Raven Tavern.',
       processedEventIds: [],
+      priority: 100,
+      mutexGroup: 'gray-raven-story',
       authoringVersion: 5,
       stages: [
         {
@@ -313,6 +315,8 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
         : 'Optional story: earn Eileen’s trust, then talk again and invite her to join the investigation. Ignoring this flow never blocks the main story.',
       castEntityIds: [knight.id, archer.id],
       processedEventIds: [],
+      priority: 60,
+      mutexGroup: 'gray-raven-story',
       authoringVersion: 3,
       stages: [{
         id: 'scenario-border-tavern-recruit-eileen',
