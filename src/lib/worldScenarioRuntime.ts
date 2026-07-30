@@ -2,21 +2,33 @@ import type { WorldEvent, WorldScenarioAction, WorldScenarioBranch, WorldScenari
 import { issueWorldEntityCommand } from './worldEntity'
 import { makeScenarioDialogueStoryId } from './worldNarrativeFeed'
 
-const eventMatchesTrigger = (event: WorldEvent, trigger: WorldScenarioTrigger) => (
-  event.type === trigger.eventType &&
-  (!trigger.actorId || event.actorId === trigger.actorId) &&
-  (!trigger.targetId || event.targetId === trigger.targetId) &&
-  (!trigger.commandType || event.commandType === trigger.commandType)
-)
+const eventMatchesTrigger = (
+  world: WorldState,
+  event: WorldEvent,
+  trigger: WorldScenarioTrigger,
+) => {
+  if (
+    event.type !== trigger.eventType
+    || (trigger.actorId && event.actorId !== trigger.actorId)
+    || (trigger.targetId && event.targetId !== trigger.targetId)
+    || (trigger.commandType && event.commandType !== trigger.commandType)
+  ) return false
+  if (trigger.minimumAffinity === undefined) return true
+  const actorId = trigger.actorId ?? event.actorId
+  const targetId = trigger.targetId ?? event.targetId
+  if (!targetId) return false
+  return (world.narrative.relationshipsByEntityId[actorId]?.[targetId]?.affinity ?? 0) >= trigger.minimumAffinity
+}
 
 const findLatestMatchingEvent = (
+  world: WorldState,
   events: WorldEvent[],
   consumedEventIds: Set<string>,
   trigger: WorldScenarioTrigger,
 ) => {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index]
-    if (!consumedEventIds.has(event.id) && eventMatchesTrigger(event, trigger)) return event
+    if (!consumedEventIds.has(event.id) && eventMatchesTrigger(world, event, trigger)) return event
   }
   return undefined
 }
@@ -386,7 +398,7 @@ export const advanceWorldScenarios = (
           { branch: undefined, trigger: activeStage.trigger },
         ]
     const matched = transitions
-      .map((transition) => ({ ...transition, event: findLatestMatchingEvent(world.events, consumedEventIds, transition.trigger) }))
+      .map((transition) => ({ ...transition, event: findLatestMatchingEvent(world, world.events, consumedEventIds, transition.trigger) }))
       .filter((transition): transition is typeof transition & { event: WorldEvent } => Boolean(transition.event))
       .sort((left, right) => right.event.timeSeconds - left.event.timeSeconds)[0]
     if (!matched) return scenario

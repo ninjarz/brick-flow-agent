@@ -222,12 +222,75 @@ describe('WorldEntity foundation', () => {
     }
 
     const restored = parseStoredWorldState(world, world.planId)!
-    expect(restored.scenarios[0].authoringVersion).toBe(2)
+    expect(restored.scenarios[0].authoringVersion).toBe(5)
     expect(restored.scenarios[0].stages[0].trigger).toMatchObject({ eventType: 'interaction', actorId: 'roland', targetId: 'eileen' })
     expect(restored.scenarios[0].stages[0].trigger.commandType).toBeUndefined()
     expect(restored.scenarios[0].stages[0].dialogue).toHaveLength(3)
     expect(restored.scenarios[0].stages[1].dialogue?.at(-1)?.speakerId).toBe('envoy')
     expect(restored.scenarios[0].stages[1].branches).toBeUndefined()
+    expect(restored.scenarios[1]).toMatchObject({
+      assetId: 'scenario-border-tavern-eileen-companion',
+      castEntityIds: ['roland', 'eileen'],
+    })
+    expect(restored.scenarios[1].stages[0].trigger.minimumAffinity).toBe(45)
+  })
+
+  it('repairs a completed Gray Raven retreat so the envoy exits and stops fighting', () => {
+    const definition = worldEntityDefinitionById.get('knight')!
+    const roland = createWorldEntity(definition, { id: 'roland', name: '罗兰' })
+    const eileen = createWorldEntity(definition, { id: 'eileen', name: '艾琳' })
+    const envoy = {
+      ...createWorldEntity(definition, { id: 'envoy', name: '黑岩使者', factionId: 'neutral' }),
+      activeCommand: { type: 'attack', target: { kind: 'entity', id: eileen.id } } as const,
+      commandQueue: [{ type: 'attack', target: { kind: 'entity', id: eileen.id } } as const],
+      behaviorState: 'attacking' as const,
+    }
+    const world = {
+      ...createEmptyWorldState('gray-raven-retreat-plan'),
+      entities: [roland, eileen, envoy],
+      scenarios: [{
+        id: 'legacy-runtime',
+        assetId: 'scenario-border-tavern',
+        title: '没有归来的商队',
+        description: '旧存档',
+        processedEventIds: [],
+        authoringVersion: 3,
+        outcomeId: 'gray-raven-retreat',
+        stages: [
+          { id: 'scenario-border-tavern-investigate', title: '询问', description: '询问', status: 'completed' as const, trigger: { eventType: 'interaction' as const, actorId: roland.id, targetId: eileen.id } },
+          { id: 'scenario-border-tavern-confront', title: '对质', description: '对质', status: 'completed' as const, trigger: { eventType: 'interaction' as const, actorId: roland.id, targetId: envoy.id } },
+          {
+            id: 'scenario-border-tavern-defend',
+            title: '守卫',
+            description: '守卫',
+            status: 'completed' as const,
+            trigger: { eventType: 'defeated' as const, targetId: envoy.id },
+            branches: [{
+              id: 'gray-raven-retreat',
+              title: '撤退',
+              trigger: { eventType: 'defeated' as const, targetId: roland.id },
+              actions: [
+                { type: 'set-faction' as const, entityId: envoy.id, factionId: 'neutral' },
+                { type: 'issue-command' as const, entityId: envoy.id, command: { type: 'stop' as const } },
+              ],
+            }],
+          },
+        ],
+      }],
+    }
+
+    const restored = parseStoredWorldState(world, world.planId)!
+    const restoredEnvoy = restored.entities.find((entity) => entity.id === envoy.id)!
+    expect(restored.scenarios[0].authoringVersion).toBe(5)
+    expect(restored.scenarios[0].stages[2].branches?.[0].actions).toContainEqual({
+      type: 'set-visibility',
+      target: { kind: 'entity', id: envoy.id },
+      visible: false,
+    })
+    expect(restored.hiddenTargets).toContainEqual({ kind: 'entity', id: envoy.id })
+    expect(restoredEnvoy.activeCommand).toBeUndefined()
+    expect(restoredEnvoy.commandQueue).toEqual([])
+    expect(restoredEnvoy.behaviorState).toBe('idle')
   })
 
   it('migrates matching stored director dialogue into a pending conversation fact', () => {

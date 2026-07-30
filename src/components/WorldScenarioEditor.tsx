@@ -293,6 +293,23 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
                   {entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}
                 </select>
               </label>
+              <label>{zh ? '最低好感（可选）' : 'Minimum affinity (optional)'}
+                <input
+                  type="number"
+                  min="-100"
+                  max="100"
+                  value={stage.trigger.minimumAffinity ?? ''}
+                  placeholder={zh ? '不限制' : 'No limit'}
+                  onChange={(event) => patchStage(stageIndex, {
+                    trigger: {
+                      ...stage.trigger,
+                      minimumAffinity: event.target.value === ''
+                        ? undefined
+                        : Math.max(-100, Math.min(100, Number(event.target.value) || 0)),
+                    },
+                  })}
+                />
+              </label>
             </div>
 
             <div className={`scenario-editor-section scenario-ai-editor${stage.ai ? ' enabled' : ''}`}>
@@ -486,6 +503,27 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
                         <select value={branch.trigger.targetId ?? ''} aria-label={zh ? '分支目标' : 'Branch target'} onChange={(event) => patchStage(stageIndex, { branches: stage.branches?.map((item, index) => index === branchIndex ? { ...item, trigger: { ...item.trigger, targetId: event.target.value || undefined } } : item) })}>
                           <option value="">{zh ? '任意目标' : 'Any target'}</option>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}
                         </select>
+                        <input
+                          type="number"
+                          min="-100"
+                          max="100"
+                          value={branch.trigger.minimumAffinity ?? ''}
+                          aria-label={zh ? '分支最低好感' : 'Branch minimum affinity'}
+                          placeholder={zh ? '最低好感（可选）' : 'Minimum affinity'}
+                          onChange={(event) => patchStage(stageIndex, {
+                            branches: stage.branches?.map((item, index) => index === branchIndex
+                              ? {
+                                  ...item,
+                                  trigger: {
+                                    ...item.trigger,
+                                    minimumAffinity: event.target.value === ''
+                                      ? undefined
+                                      : Math.max(-100, Math.min(100, Number(event.target.value) || 0)),
+                                  },
+                                }
+                              : item),
+                          })}
+                        />
                       </>}
                   <select value={branch.nextStageId ?? ''} aria-label={zh ? '分支下一节点' : 'Branch next node'} onChange={(event) => patchStage(stageIndex, { branches: stage.branches?.map((item, index) => index === branchIndex ? { ...item, nextStageId: event.target.value || undefined } : item) })}>
                     <option value="">{zh ? '结束这条流程' : 'End this flow'}</option>{scenario.stages.filter((candidate) => candidate.id !== stage.id).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.title}</option>)}

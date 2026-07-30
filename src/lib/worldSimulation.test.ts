@@ -4,6 +4,7 @@ import { createEmptyWorldState, createWorldEntity, issueWorldEntityCommand } fro
 import { findWorldPath, hasWorldLineOfSight, isWorldEntityGroundPointBlockedByBricks, stepWorldSimulation } from './worldSimulation'
 import { getWorldEntityCollisionRadius } from './worldEntityCollision'
 import { makeBrick } from './planUtils'
+import { advanceWorldScenarios } from './worldScenarioRuntime'
 
 describe('WorldEntity simulation', () => {
   it('does not create autonomous orders while directed playback owns the scene', () => {
@@ -683,6 +684,46 @@ describe('WorldEntity simulation', () => {
     expect(next.narrative.relationshipsByEntityId[target.id][actor.id].affinity).toBe(5)
     expect(next.entities[0].speech).toMatchObject({ targetName: target.name })
     expect(next.entities[1].speech).toMatchObject({ targetName: actor.name })
+  })
+
+  it('normalizes a distant director reply to the active story trigger direction', () => {
+    const knight = worldEntityDefinitionById.get('knight')!
+    const roland = createWorldEntity(knight, { id: 'roland', controller: 'player', transform: { x: 0, z: 0 } })
+    const eileen = createWorldEntity(knight, { id: 'eileen', controller: 'player', transform: { x: 0.1, z: 0 } })
+    eileen.activeCommand = {
+      type: 'interact',
+      target: { kind: 'entity', id: roland.id },
+      speechText: '断箭上的石粉来自旧采石场。',
+    }
+    const world = {
+      ...createEmptyWorldState('story-plan'),
+      entities: [roland, eileen],
+      scenarios: [{
+        id: 'story',
+        assetId: 'story',
+        title: '断箭',
+        description: '断箭',
+        processedEventIds: [],
+        stages: [{
+          id: 'ask-eileen',
+          title: '询问艾琳',
+          description: '询问艾琳',
+          status: 'active' as const,
+          trigger: { eventType: 'interaction' as const, actorId: roland.id, targetId: eileen.id },
+          dialogue: [{ id: 'reply', speakerId: eileen.id, text: '旧采石场。', durationSeconds: 2 }],
+          nextStageId: null,
+        }],
+      }],
+    }
+
+    const interacted = stepWorldSimulation(world, [], 0.1)
+    expect(interacted.events.at(-1)).toMatchObject({
+      type: 'interaction',
+      actorId: roland.id,
+      targetId: eileen.id,
+    })
+    const advanced = advanceWorldScenarios(interacted, { enableAi: false })
+    expect(advanced.scenarios[0].activeDialogue?.stageId).toBe('ask-eileen')
   })
 
   it('keeps follow orders active after reaching a safe following distance', () => {

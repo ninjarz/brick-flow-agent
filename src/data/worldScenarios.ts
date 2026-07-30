@@ -113,7 +113,7 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
     id: 'scenario-scout',
     name: zh ? '艾琳' : 'Eileen',
     description: zh ? '刚从北方山路归来的斥候，带回了不祥的线索。' : 'A scout newly returned from the northern road with an ominous clue.',
-    factionId: 'blue',
+    factionId: 'neutral',
     transform: { x: 10, z: -3, rotationRadians: 0 },
   })
   const stranger = createWorldEntityDefinition('knight', {
@@ -191,7 +191,7 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
         ? '由罗兰调查北路的断箭线索，揭开黑岩使者的真实目的，并守住灰鸦酒馆。'
         : 'Guide Roland through the broken-arrow clue, expose the Blackrock Envoy, and defend the Gray Raven Tavern.',
       processedEventIds: [],
-      authoringVersion: 3,
+      authoringVersion: 5,
       stages: [
         {
           id: 'scenario-border-tavern-investigate',
@@ -271,8 +271,8 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
           id: 'scenario-border-tavern-defend',
           title: zh ? '守住灰鸦酒馆' : 'Defend the Gray Raven Tavern',
           description: zh
-            ? '击败黑岩使者。罗兰可直接攻击，艾琳和玛拉会按各自职责支援。'
-            : 'Defeat the Blackrock Envoy. Roland can attack directly while Eileen and Mara support according to their roles.',
+            ? '击败黑岩使者。罗兰可直接攻击；若此前邀请艾琳入队，她会以弓箭支援，玛拉则负责救治。'
+            : 'Defeat the Blackrock Envoy. Roland can attack directly; if Eileen joined earlier, she provides ranged support while Mara heals.',
           status: 'locked',
           trigger: { eventType: 'defeated', targetId: stranger.id },
           branches: [{
@@ -282,6 +282,7 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
             actions: [
               { type: 'set-faction', entityId: stranger.id, factionId: 'neutral' },
               { type: 'issue-command', entityId: stranger.id, command: { type: 'stop' } },
+              { type: 'set-visibility', target: { kind: 'entity', id: stranger.id }, visible: false },
               {
                 type: 'add-story',
                 title: zh ? '败局 · 灰鸦暂熄' : 'Defeat · The Gray Raven Dims',
@@ -303,6 +304,76 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
         },
       ],
     },
+    additionalScenarios: [{
+      id: 'scenario-border-tavern-eileen-companion-runtime',
+      assetId: 'scenario-border-tavern-eileen-companion',
+      title: zh ? '北路同行者' : 'Companion of the Northern Road',
+      description: zh
+        ? '可选剧情：与艾琳建立足够信任后再次交谈，邀请她作为同伴加入调查。忽略这条流程不会阻碍主线。'
+        : 'Optional story: earn Eileen’s trust, then talk again and invite her to join the investigation. Ignoring this flow never blocks the main story.',
+      castEntityIds: [knight.id, archer.id],
+      processedEventIds: [],
+      authoringVersion: 1,
+      stages: [{
+        id: 'scenario-border-tavern-recruit-eileen',
+        title: zh ? '邀请艾琳同行' : 'Invite Eileen to Join',
+        description: zh
+          ? '罗兰对艾琳的好感达到 45 后，再与她交谈。'
+          : 'Talk to Eileen again after Roland’s affinity toward her reaches 45.',
+        status: 'active',
+        trigger: {
+          eventType: 'interaction',
+          actorId: knight.id,
+          targetId: archer.id,
+          minimumAffinity: 45,
+        },
+        dialogue: [
+          {
+            id: 'recruit-eileen-roland',
+            speakerId: knight.id,
+            durationSeconds: 4.8,
+            text: zh
+              ? '北路不会太平。你愿意和我一起查下去吗？不是作为向导，是作为能把后背交给彼此的同伴。'
+              : 'The northern road will not be quiet. Will you investigate it with me—not as a guide, but as a companion I can trust at my back?',
+          },
+          {
+            id: 'recruit-eileen-reason',
+            speakerId: archer.id,
+            durationSeconds: 5.2,
+            text: zh
+              ? '失踪商队里有教我认路的人。我本来就没打算袖手旁观，只是不想把命交给一个还不信任的人。'
+              : 'Someone in that caravan taught me these roads. I never meant to stand aside; I simply would not trust my life to a stranger.',
+          },
+          {
+            id: 'recruit-eileen-promise',
+            speakerId: knight.id,
+            durationSeconds: 3.8,
+            text: zh
+              ? '那就一起把他们带回来。我走在前面，你替我看住身后。'
+              : 'Then we bring them home together. I will take the front; you watch my back.',
+          },
+          {
+            id: 'recruit-eileen-accept',
+            speakerId: archer.id,
+            durationSeconds: 3.6,
+            text: zh ? '说定了。从现在起，我的箭和你走同一条路。' : 'Agreed. From now on, my arrows travel the same road as you.',
+          },
+        ],
+        actions: [
+          { type: 'set-faction', entityId: archer.id, factionId: 'blue' },
+          { type: 'issue-command', entityId: archer.id, command: { type: 'stop' } },
+          {
+            type: 'add-story',
+            title: zh ? '同伴 · 北路的约定' : 'Companion · A Promise on the Northern Road',
+            body: zh
+              ? '几次交谈后，艾琳确认罗兰愿意倾听，也不会把同伴当作棋子。她系紧箭囊，正式加入调查；若战斗爆发，她会从后方以弓箭掩护罗兰。'
+              : 'After several conversations, Eileen sees that Roland listens and does not treat companions as pieces on a board. She tightens her quiver and joins the investigation, ready to cover Roland with her bow.',
+            characterIds: [knight.id, archer.id],
+          },
+        ],
+        nextStageId: null,
+      }],
+    }],
   }
 }
 

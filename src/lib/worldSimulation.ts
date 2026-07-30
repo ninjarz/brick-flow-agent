@@ -806,6 +806,35 @@ const makeEvent = (
   ...details,
 })
 
+const makeScenarioAwareInteractionEvent = (
+  world: WorldState,
+  timeSeconds: number,
+  actorId: string,
+  targetId: string,
+) => {
+  const activeTriggers = world.scenarios.flatMap((scenario) => {
+    if (scenario.enabled === false || scenario.activeDialogue || scenario.pendingAi) return []
+    const stage = scenario.stages.find((candidate) => candidate.status === 'active')
+    if (!stage) return []
+    return [stage.trigger, ...(stage.branches ?? []).map((branch) => branch.trigger)]
+  }).filter((trigger) => (
+    trigger.eventType === 'interaction'
+    && trigger.actorId
+    && trigger.targetId
+  ))
+  const trigger = activeTriggers.find((candidate) => (
+    candidate.actorId === actorId && candidate.targetId === targetId
+  )) ?? activeTriggers.find((candidate) => (
+    candidate.actorId === targetId && candidate.targetId === actorId
+  ))
+  return makeEvent(
+    timeSeconds,
+    'interaction',
+    trigger?.actorId ?? actorId,
+    trigger?.targetId ?? targetId,
+  )
+}
+
 const commandTarget = (command: WorldEntityCommand) => 'target' in command ? command.target : undefined
 
 const getCommandTargetName = (
@@ -1314,7 +1343,7 @@ export const stepWorldSimulation = (
       && targetEntity
       && centerDistance <= combinedBodyRadius + arrivalDistanceStuds
     if (isInteractionInReach) {
-      events.push(makeEvent(timeSeconds, 'interaction', entity.id, target.id))
+      events.push(makeScenarioAwareInteractionEvent(world, timeSeconds, entity.id, target.id))
       const listenerIndex = targetLookup.entityIndexById.get(target.id)
       const listener = listenerIndex === undefined ? undefined : entities[listenerIndex]
       const scriptedSpeech = activeCommand.type === 'interact' ? activeCommand.speechText?.trim() : undefined
@@ -1464,7 +1493,7 @@ export const stepWorldSimulation = (
       } else if (activeCommand.type === 'guard') {
         entity = { ...entity, behaviorState: 'guarding' }
       } else if (activeCommand.type === 'interact' && target.kind === 'entity') {
-        events.push(makeEvent(timeSeconds, 'interaction', entity.id, target.id))
+        events.push(makeScenarioAwareInteractionEvent(world, timeSeconds, entity.id, target.id))
         const listenerIndex = targetLookup.entityIndexById.get(target.id)
         const listener = listenerIndex === undefined ? undefined : entities[listenerIndex]
         const scriptedSpeech = activeCommand.speechText?.trim()

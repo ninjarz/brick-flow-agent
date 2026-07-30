@@ -201,6 +201,7 @@ export type WorldScenarioTrigger = {
   actorId?: string
   targetId?: string
   commandType?: WorldEntityCommand['type']
+  minimumAffinity?: number
 }
 
 export type WorldScenarioAction =

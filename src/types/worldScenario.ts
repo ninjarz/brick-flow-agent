@@ -9,6 +9,7 @@ export type WorldScenarioAsset = {
   plan: BuildPlan
   world: WorldState
   scenario?: WorldScenarioRuntime
+  additionalScenarios?: WorldScenarioRuntime[]
 }
 
 export type WorldScenarioLoadResult = {

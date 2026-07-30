@@ -135,7 +135,10 @@ export const WorldScenarioFlowEditor = ({
                 <small>{stage.description}</small>
                 <em>{stage.ai
                   ? `${stage.ai.mode === 'choice' ? (zh ? 'AI 抉择' : 'AI choice') : (zh ? 'AI 对白' : 'AI dialogue')} · `
-                  : ''}{triggerLabel(stage.trigger.eventType, zh)} · {stage.dialogue?.length ?? 0} {zh ? '句台词' : 'lines'} · {stage.branches?.length ?? 0} {zh ? '个分支' : 'branches'}</em>
+                  : ''}{triggerLabel(stage.trigger.eventType, zh)}
+                {stage.trigger.minimumAffinity !== undefined
+                  ? ` · ${zh ? '好感' : 'affinity'} ≥ ${stage.trigger.minimumAffinity}`
+                  : ''} · {stage.dialogue?.length ?? 0} {zh ? '句台词' : 'lines'} · {stage.branches?.length ?? 0} {zh ? '个分支' : 'branches'}</em>
                 {stage.ai && <b className="ai-badge"><Bot size={9} />AI</b>}
                 {stageIssues.length > 0 && <i>{stageIssues.length}</i>}
               </button>

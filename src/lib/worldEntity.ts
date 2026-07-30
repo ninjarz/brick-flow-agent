@@ -63,6 +63,7 @@ const upgradeGrayRavenScenarioStages = (
           actions: [
             { type: 'set-faction' as const, entityId: envoyId, factionId: 'neutral' },
             { type: 'issue-command' as const, entityId: envoyId, command: { type: 'stop' as const } },
+            { type: 'set-visibility' as const, target: { kind: 'entity' as const, id: envoyId }, visible: false },
             {
               type: 'add-story' as const,
               title: zh ? '败局 · 灰鸦暂熄' : 'Defeat · The Gray Raven Dims',
@@ -73,6 +74,27 @@ const upgradeGrayRavenScenarioStages = (
         }],
       }
     : stage)
+  if (authoringVersion < 4) upgraded = upgraded.map((stage) => stage.id.endsWith('defend')
+    ? {
+        ...stage,
+        branches: stage.branches?.map((branch) => branch.id === 'gray-raven-retreat'
+          && !branch.actions?.some((action) => (
+            action.type === 'set-visibility'
+            && action.target.kind === 'entity'
+            && action.target.id === envoyId
+            && !action.visible
+          ))
+          ? {
+              ...branch,
+              actions: [
+                ...(branch.actions ?? []).filter((action) => action.type !== 'add-story'),
+                { type: 'set-visibility' as const, target: { kind: 'entity' as const, id: envoyId }, visible: false },
+                ...(branch.actions ?? []).filter((action) => action.type === 'add-story'),
+              ],
+            }
+          : branch),
+      }
+    : stage)
   return upgraded.map((stage) => ({
     ...stage,
     description: stage.description
@@ -80,6 +102,90 @@ const upgradeGrayRavenScenarioStages = (
       .replace(/与(.+?)交互/g, '与$1交谈')
       .replace(/\binteract with\b/gi, 'talk with'),
   }))
+}
+
+const createGrayRavenEileenCompanionScenario = (
+  primaryScenarioId: string,
+  existingScenarioIds: Set<string>,
+  rolandId: string,
+  eileenId: string,
+  zh: boolean,
+): WorldState['scenarios'][number] => {
+  let id = `${primaryScenarioId}-eileen-companion`
+  for (let suffix = 2; existingScenarioIds.has(id); suffix += 1) {
+    id = `${primaryScenarioId}-eileen-companion-${suffix}`
+  }
+  return {
+    id,
+    assetId: 'scenario-border-tavern-eileen-companion',
+    title: zh ? '北路同行者' : 'Companion of the Northern Road',
+    description: zh
+      ? '可选剧情：与艾琳建立足够信任后再次交谈，邀请她作为同伴加入调查。忽略这条流程不会阻碍主线。'
+      : 'Optional story: earn Eileen’s trust, then talk again and invite her to join the investigation. Ignoring this flow never blocks the main story.',
+    castEntityIds: [rolandId, eileenId],
+    processedEventIds: [],
+    claimedEventIds: [],
+    authoringVersion: 1,
+    stages: [{
+      id: 'scenario-border-tavern-recruit-eileen',
+      title: zh ? '邀请艾琳同行' : 'Invite Eileen to Join',
+      description: zh
+        ? '罗兰对艾琳的好感达到 45 后，再与她交谈。'
+        : 'Talk to Eileen again after Roland’s affinity toward her reaches 45.',
+      status: 'active',
+      trigger: {
+        eventType: 'interaction',
+        actorId: rolandId,
+        targetId: eileenId,
+        minimumAffinity: 45,
+      },
+      dialogue: [
+        {
+          id: 'recruit-eileen-roland',
+          speakerId: rolandId,
+          durationSeconds: 4.8,
+          text: zh
+            ? '北路不会太平。你愿意和我一起查下去吗？不是作为向导，是作为能把后背交给彼此的同伴。'
+            : 'The northern road will not be quiet. Will you investigate it with me—not as a guide, but as a companion I can trust at my back?',
+        },
+        {
+          id: 'recruit-eileen-reason',
+          speakerId: eileenId,
+          durationSeconds: 5.2,
+          text: zh
+            ? '失踪商队里有教我认路的人。我本来就没打算袖手旁观，只是不想把命交给一个还不信任的人。'
+            : 'Someone in that caravan taught me these roads. I never meant to stand aside; I simply would not trust my life to a stranger.',
+        },
+        {
+          id: 'recruit-eileen-promise',
+          speakerId: rolandId,
+          durationSeconds: 3.8,
+          text: zh
+            ? '那就一起把他们带回来。我走在前面，你替我看住身后。'
+            : 'Then we bring them home together. I will take the front; you watch my back.',
+        },
+        {
+          id: 'recruit-eileen-accept',
+          speakerId: eileenId,
+          durationSeconds: 3.6,
+          text: zh ? '说定了。从现在起，我的箭和你走同一条路。' : 'Agreed. From now on, my arrows travel the same road as you.',
+        },
+      ],
+      actions: [
+        { type: 'set-faction', entityId: eileenId, factionId: 'blue' },
+        { type: 'issue-command', entityId: eileenId, command: { type: 'stop' } },
+        {
+          type: 'add-story',
+          title: zh ? '同伴 · 北路的约定' : 'Companion · A Promise on the Northern Road',
+          body: zh
+            ? '几次交谈后，艾琳确认罗兰愿意倾听，也不会把同伴当作棋子。她系紧箭囊，正式加入调查；若战斗爆发，她会从后方以弓箭掩护罗兰。'
+            : 'After several conversations, Eileen sees that Roland listens and does not treat companions as pieces on a board. She tightens her quiver and joins the investigation, ready to cover Roland with her bow.',
+          characterIds: [rolandId, eileenId],
+        },
+      ],
+      nextStageId: null,
+    }],
+  }
 }
 
 const makeUniqueName = (baseName: string, existingNames: Iterable<string>) => {
@@ -501,7 +607,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
   )).slice(-100) : []
   const narrative = isRecord(value.narrative) ? value.narrative : {}
 
-  const scenarios: WorldState['scenarios'] = Array.isArray(value.scenarios)
+  let scenarios: WorldState['scenarios'] = Array.isArray(value.scenarios)
     ? value.scenarios.flatMap((scenario) => {
         if (!isRecord(scenario) || typeof scenario.id !== 'string' || typeof scenario.assetId !== 'string' ||
           typeof scenario.title !== 'string' || typeof scenario.description !== 'string' || !Array.isArray(scenario.stages)) return []
@@ -580,6 +686,9 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
                 ...(typeof branch.trigger.actorId === 'string' ? { actorId: branch.trigger.actorId } : {}),
                 ...(typeof branch.trigger.targetId === 'string' ? { targetId: branch.trigger.targetId } : {}),
                 ...(typeof branch.trigger.commandType === 'string' ? { commandType: branch.trigger.commandType as WorldEntityCommand['type'] } : {}),
+                ...(isFiniteNumber(branch.trigger.minimumAffinity)
+                  ? { minimumAffinity: Math.max(-100, Math.min(100, branch.trigger.minimumAffinity)) }
+                  : {}),
               },
               ...(typeof branch.nextStageId === 'string' ? { nextStageId: branch.nextStageId } : {}),
               ...(branchDialogue?.length ? { dialogue: branchDialogue } : {}),
@@ -617,6 +726,9 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
               ...(typeof stage.trigger.actorId === 'string' ? { actorId: stage.trigger.actorId } : {}),
               ...(typeof stage.trigger.targetId === 'string' ? { targetId: stage.trigger.targetId } : {}),
               ...(typeof stage.trigger.commandType === 'string' ? { commandType: stage.trigger.commandType as WorldEntityCommand['type'] } : {}),
+              ...(isFiniteNumber(stage.trigger.minimumAffinity)
+                ? { minimumAffinity: Math.max(-100, Math.min(100, stage.trigger.minimumAffinity)) }
+                : {}),
             },
             ...(ai ? { ai } : {}),
             ...(dialogue?.length ? { dialogue } : {}),
@@ -718,11 +830,57 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
           ...(pendingAi ? { pendingAi } : {}),
           ...(activeDialogue ? { activeDialogue } : {}),
           ...(typeof scenario.outcomeId === 'string' ? { outcomeId: scenario.outcomeId } : {}),
-          ...(scenario.assetId === 'scenario-border-tavern' ? { authoringVersion: 2 } : authoringVersion ? { authoringVersion } : {}),
+          ...(scenario.assetId === 'scenario-border-tavern'
+            ? { authoringVersion: Math.max(4, authoringVersion) }
+            : authoringVersion ? { authoringVersion } : {}),
         }]
       }).slice(-20)
     : []
 
+  let migratedGrayRavenEileenId: string | undefined
+  const legacyGrayRaven = scenarios.find((scenario) => (
+    scenario.assetId === 'scenario-border-tavern'
+    && (scenario.authoringVersion ?? 0) < 5
+  ))
+  if (legacyGrayRaven && !scenarios.some((scenario) => scenario.assetId === 'scenario-border-tavern-eileen-companion')) {
+    const investigate = legacyGrayRaven.stages.find((stage) => stage.id.endsWith('investigate'))
+    const rolandId = investigate?.trigger.actorId
+    const eileenId = investigate?.trigger.targetId
+    if (rolandId && eileenId) {
+      migratedGrayRavenEileenId = eileenId
+      scenarios.push(createGrayRavenEileenCompanionScenario(
+        legacyGrayRaven.id,
+        new Set(scenarios.map((scenario) => scenario.id)),
+        rolandId,
+        eileenId,
+        /[\u3400-\u9fff]/.test(legacyGrayRaven.title),
+      ))
+    }
+  }
+  scenarios = scenarios.map((scenario) => scenario.assetId === 'scenario-border-tavern'
+    ? { ...scenario, authoringVersion: 5 }
+    : scenario)
+
+  const storedHiddenTargets = Array.isArray(value.hiddenTargets) ? value.hiddenTargets.flatMap((target) => {
+    const parsed = parseTargetRef(target)
+    return parsed && parsed.kind !== 'waypoint' ? [parsed] : []
+  }).slice(-500) : []
+  const terminalHiddenTargets = scenarios.flatMap((scenario) => {
+    if (!scenario.outcomeId) return []
+    const branch = scenario.stages
+      .flatMap((stage) => stage.branches ?? [])
+      .find((candidate) => candidate.id === scenario.outcomeId)
+    return (branch?.actions ?? []).flatMap((action) => (
+      action.type === 'set-visibility' && !action.visible ? [action.target] : []
+    ))
+  })
+  const hiddenTargets = [...storedHiddenTargets]
+  for (const target of terminalHiddenTargets) {
+    if (!hiddenTargets.some((candidate) => candidate.kind === target.kind && candidate.id === target.id)) {
+      hiddenTargets.push(target)
+    }
+  }
+  const hiddenEntityIds = new Set(hiddenTargets.flatMap((target) => target.kind === 'entity' ? [target.id] : []))
   const storylineMemberships = new Map<string, string[]>()
   for (const scenario of scenarios) {
     for (const entityId of scenario.castEntityIds ?? []) {
@@ -730,9 +888,22 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
     }
   }
   const restoredEntities = safeEntities.map((entity) => {
-    if (entity.storylineId) return entity
     const memberships = storylineMemberships.get(entity.id) ?? []
-    return memberships.length === 1 ? { ...entity, storylineId: memberships[0] } : entity
+    const restoredWithStoryline = entity.storylineId || memberships.length !== 1
+      ? entity
+      : { ...entity, storylineId: memberships[0] }
+    const restored = entity.id === migratedGrayRavenEileenId
+      ? { ...restoredWithStoryline, factionId: 'neutral' }
+      : restoredWithStoryline
+    if (!hiddenEntityIds.has(entity.id)) return restored
+    return {
+      ...restored,
+      activeCommand: undefined,
+      commandQueue: [],
+      speech: undefined,
+      behaviorState: 'idle' as const,
+      navigation: { status: 'idle' as const, path: [], pathIndex: 0 },
+    }
   })
   const directorTurns = parseStoredDirectorTurns(narrative.directorTurns, planId)
   const storedDirectorMemory = isRecord(narrative.directorMemory) ? narrative.directorMemory : undefined
@@ -806,10 +977,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
     events: migratedEvents,
     pendingImpacts,
     scenarios,
-    hiddenTargets: Array.isArray(value.hiddenTargets) ? value.hiddenTargets.flatMap((target) => {
-      const parsed = parseTargetRef(target)
-      return parsed && parsed.kind !== 'waypoint' ? [parsed] : []
-    }).slice(-500) : [],
+    hiddenTargets,
     narrative: {
       processedEventIds: Array.isArray(narrative.processedEventIds)
         ? narrative.processedEventIds.filter((id): id is string => typeof id === 'string').slice(-1_000)

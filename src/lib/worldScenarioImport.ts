@@ -67,8 +67,17 @@ const remapScenarioWorld = (
   },
   idFactory: IdFactory,
 ) => {
-  const importedScenarioId = asset.scenario
-    ? makeUniqueId('scenario', new Set(currentWorld.scenarios.map((scenario) => scenario.id)), idFactory)
+  const sourceScenarios = [
+    ...(asset.scenario ? [asset.scenario] : []),
+    ...(asset.additionalScenarios ?? []),
+  ]
+  const usedScenarioIds = new Set(currentWorld.scenarios.map((scenario) => scenario.id))
+  const importedScenarioIdBySourceId = Object.fromEntries(sourceScenarios.map((scenario) => [
+    scenario.id,
+    makeUniqueId('scenario', usedScenarioIds, idFactory),
+  ]))
+  const importedStorylineId = sourceScenarios[0]
+    ? importedScenarioIdBySourceId[sourceScenarios[0].id]
     : undefined
   const usedEntityIds = new Set(currentWorld.entities.map((entity) => entity.id))
   const entityIdMap = Object.fromEntries(asset.world.entities.map((entity) => [
@@ -109,7 +118,7 @@ const remapScenarioWorld = (
     if (!availablePoint) continue
     importedEntities.push({
       ...entity,
-      ...(importedScenarioId ? { storylineId: importedScenarioId } : {}),
+      ...(importedStorylineId ? { storylineId: importedStorylineId } : {}),
       transform: { ...entity.transform, ...availablePoint },
       commandQueue: template.commandQueue
         .map((command) => remapCommand(command, entityIdMap, maps.brickIdMap, maps.structureIdMap))
@@ -170,11 +179,16 @@ const remapScenarioWorld = (
     const remapped = remapTarget(target, entityIdMap, maps.brickIdMap, maps.structureIdMap)
     return remapped && remapped.kind !== 'waypoint' ? [remapped] : []
   })
-  const importedScenario = asset.scenario ? {
-    ...asset.scenario,
-    id: importedScenarioId!,
-    castEntityIds: [...importedEntityIdSet],
-    stages: asset.scenario.stages.flatMap((stage): WorldScenarioStage[] => {
+  const importedScenarios = sourceScenarios.flatMap((sourceScenario) => {
+    const importedScenario = {
+      ...sourceScenario,
+      id: importedScenarioIdBySourceId[sourceScenario.id],
+      castEntityIds: (sourceScenario.castEntityIds?.length
+        ? sourceScenario.castEntityIds
+        : asset.world.entities.map((entity) => entity.id))
+        .map((id) => entityIdMap[id])
+        .filter((id): id is string => Boolean(id) && importedEntityIdSet.has(id)),
+      stages: sourceScenario.stages.flatMap((stage): WorldScenarioStage[] => {
       const actorId = stage.trigger.actorId ? entityIdMap[stage.trigger.actorId] : undefined
       const targetId = stage.trigger.targetId ? remapKnownId(stage.trigger.targetId) : undefined
       if ((stage.trigger.actorId && !actorId) || (stage.trigger.targetId && !targetId)) return []
@@ -249,20 +263,22 @@ const remapScenarioWorld = (
         branches,
         actions,
       }]
-    }),
-    processedEventIds: [],
-    claimedEventIds: [],
-    pendingAi: undefined,
-    activeDialogue: undefined,
-  } : undefined
+      }),
+      processedEventIds: [],
+      claimedEventIds: [],
+      pendingAi: undefined,
+      activeDialogue: undefined,
+    }
+    return importedScenario.stages.length ? [importedScenario] : []
+  })
 
   return {
     ...currentWorld,
     planId: nextPlan.id,
     entities: [...currentWorld.entities, ...safeImportedEntities],
     hiddenTargets: [...currentWorld.hiddenTargets, ...importedHiddenTargets],
-    scenarios: importedScenario?.stages.length
-      ? [...currentWorld.scenarios, importedScenario]
+    scenarios: importedScenarios.length
+      ? [...currentWorld.scenarios, ...importedScenarios]
       : currentWorld.scenarios,
     narrative: {
       ...currentWorld.narrative,
