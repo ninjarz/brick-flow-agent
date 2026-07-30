@@ -59,9 +59,11 @@ export const validateWorldScenario = (
     }
   }
   const validateAction = (action: WorldScenarioAction, stageIndex: number, branchIndex?: number) => {
-    if (action.type === 'set-faction' || action.type === 'issue-command') {
+    if (action.type === 'set-faction' || action.type === 'issue-command' ||
+      action.type === 'join-party' || action.type === 'leave-party') {
       addMissingEntity(action.entityId, stageIndex, branchIndex)
     }
+    if (action.type === 'join-party') addMissingEntity(action.leaderId, stageIndex, branchIndex)
     if (action.type === 'issue-command') {
       const target = commandTarget(action.command)
       if (target?.kind === 'entity') addMissingEntity(target.id, stageIndex, branchIndex)

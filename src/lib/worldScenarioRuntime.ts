@@ -1,5 +1,5 @@
 import type { WorldEvent, WorldScenarioAction, WorldScenarioBranch, WorldScenarioDialogueLine, WorldScenarioRuntime, WorldScenarioStage, WorldScenarioTrigger, WorldState } from '../types/world'
-import { issueWorldEntityCommand } from './worldEntity'
+import { issueWorldEntityCommand, joinWorldParty, leaveWorldParty } from './worldEntity'
 import { makeScenarioDialogueStoryId } from './worldNarrativeFeed'
 
 const eventMatchesTrigger = (
@@ -46,6 +46,15 @@ const applyScenarioAction = (
         ? { ...entity, factionId: action.factionId }
         : entity),
     }
+  }
+  if (action.type === 'join-party') {
+    return joinWorldParty(world, action.entityId, action.leaderId, {
+      partyName: action.partyName,
+      status: action.status,
+    })
+  }
+  if (action.type === 'leave-party') {
+    return leaveWorldParty(world, action.entityId)
   }
   if (action.type === 'issue-command') {
     if (world.hiddenTargets.some((target) => target.kind === 'entity' && target.id === action.entityId)) return world

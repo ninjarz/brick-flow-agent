@@ -113,6 +113,15 @@ const ScenarioBranchContentEditor = ({
               <select value={action.entityId} onChange={(event) => patchAction(actionIndex, { ...action, entityId: event.target.value })}>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}</select>
               <select value={action.factionId} onChange={(event) => patchAction(actionIndex, { ...action, factionId: event.target.value })}>{factions.map((faction) => <option key={faction} value={faction}>{faction}</option>)}</select>
             </>}
+            {action.type === 'join-party' && <>
+              <select value={action.entityId} onChange={(event) => patchAction(actionIndex, { ...action, entityId: event.target.value })}>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}</select>
+              <select value={action.leaderId} onChange={(event) => patchAction(actionIndex, { ...action, leaderId: event.target.value })}>{entities.map((entity) => <option key={entity.id} value={entity.id}>{zh ? `队长：${entity.name}` : `Leader: ${entity.name}`}</option>)}</select>
+              <select value={action.status ?? 'active'} onChange={(event) => patchAction(actionIndex, { ...action, status: event.target.value as 'active' | 'reserve' })}><option value="active">{zh ? '正式成员' : 'Active'}</option><option value="reserve">{zh ? '候补成员' : 'Reserve'}</option></select>
+              <input value={action.partyName ?? ''} placeholder={zh ? '队伍名称（可选）' : 'Party name (optional)'} onChange={(event) => patchAction(actionIndex, { ...action, partyName: event.target.value || undefined })} />
+            </>}
+            {action.type === 'leave-party' && (
+              <select value={action.entityId} onChange={(event) => patchAction(actionIndex, { ...action, entityId: event.target.value })}>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}</select>
+            )}
             {action.type === 'issue-command' && <>
               <select value={action.entityId} onChange={(event) => patchAction(actionIndex, { ...action, entityId: event.target.value })}>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}</select>
               <select value={action.command.type} onChange={(event) => patchAction(actionIndex, { ...action, command: makeCommand(event.target.value as WorldEntityCommand['type'], getCommandTargetId(action.command) || firstEntityId) })}>{commandTypes.map((type) => <option key={type} value={type}>{commandLabel(type, zh)}</option>)}</select>
@@ -137,6 +146,8 @@ const ScenarioBranchContentEditor = ({
         ))}
         <div className="scenario-add-actions">
           <button type="button" disabled={!firstEntityId} onClick={() => addAction({ type: 'set-faction', entityId: firstEntityId, factionId: 'red' })}><Plus size={13} />{zh ? '阵营变化' : 'Faction'}</button>
+          <button type="button" disabled={!firstEntityId} onClick={() => addAction({ type: 'join-party', entityId: firstEntityId, leaderId: firstEntityId })}><Plus size={13} />{zh ? '加入队伍' : 'Join party'}</button>
+          <button type="button" disabled={!firstEntityId} onClick={() => addAction({ type: 'leave-party', entityId: firstEntityId })}><Plus size={13} />{zh ? '离开队伍' : 'Leave party'}</button>
           <button type="button" disabled={!firstEntityId} onClick={() => addAction({ type: 'issue-command', entityId: firstEntityId, command: { type: 'wander' } })}><Plus size={13} />{zh ? '单位命令' : 'Command'}</button>
           <button type="button" onClick={() => addAction({ type: 'add-story', title: zh ? '分支段落' : 'Branch passage', body: '' })}><Plus size={13} />{zh ? '剧情段落' : 'Passage'}</button>
           <button type="button" disabled={!firstEntityId} onClick={() => addAction({ type: 'set-visibility', target: { kind: 'entity', id: firstEntityId }, visible: true })}><Plus size={13} />{zh ? '显示/隐藏' : 'Visibility'}</button>
@@ -451,6 +462,15 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
                     <select value={action.entityId} onChange={(event) => patchStage(stageIndex, { actions: stage.actions?.map((item, index) => index === actionIndex ? { ...action, entityId: event.target.value } : item) })}>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}</select>
                     <select value={action.factionId} onChange={(event) => patchStage(stageIndex, { actions: stage.actions?.map((item, index) => index === actionIndex ? { ...action, factionId: event.target.value } : item) })}>{factions.map((faction) => <option key={faction} value={faction}>{faction}</option>)}</select>
                   </>}
+                  {action.type === 'join-party' && <>
+                    <select value={action.entityId} onChange={(event) => patchStage(stageIndex, { actions: stage.actions?.map((item, index) => index === actionIndex ? { ...action, entityId: event.target.value } : item) })}>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}</select>
+                    <select value={action.leaderId} onChange={(event) => patchStage(stageIndex, { actions: stage.actions?.map((item, index) => index === actionIndex ? { ...action, leaderId: event.target.value } : item) })}>{entities.map((entity) => <option key={entity.id} value={entity.id}>{zh ? `队长：${entity.name}` : `Leader: ${entity.name}`}</option>)}</select>
+                    <select value={action.status ?? 'active'} onChange={(event) => patchStage(stageIndex, { actions: stage.actions?.map((item, index) => index === actionIndex ? { ...action, status: event.target.value as 'active' | 'reserve' } : item) })}><option value="active">{zh ? '正式成员' : 'Active'}</option><option value="reserve">{zh ? '候补成员' : 'Reserve'}</option></select>
+                    <input value={action.partyName ?? ''} placeholder={zh ? '队伍名称（可选）' : 'Party name (optional)'} onChange={(event) => patchStage(stageIndex, { actions: stage.actions?.map((item, index) => index === actionIndex ? { ...action, partyName: event.target.value || undefined } : item) })} />
+                  </>}
+                  {action.type === 'leave-party' && (
+                    <select value={action.entityId} onChange={(event) => patchStage(stageIndex, { actions: stage.actions?.map((item, index) => index === actionIndex ? { ...action, entityId: event.target.value } : item) })}>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}</select>
+                  )}
                   {action.type === 'set-visibility' && <>
                     <select value={action.target.kind} onChange={(event) => {
                       const kind = event.target.value as 'entity' | 'structure'
@@ -476,6 +496,8 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
               ))}
               <div className="scenario-add-actions">
                 <button type="button" onClick={() => addAction(stageIndex, { type: 'set-faction', entityId: firstEntityId, factionId: 'red' })}><Plus size={13} />{zh ? '阵营变化' : 'Faction'}</button>
+                <button type="button" disabled={!firstEntityId} onClick={() => addAction(stageIndex, { type: 'join-party', entityId: firstEntityId, leaderId: firstEntityId })}><Plus size={13} />{zh ? '加入队伍' : 'Join party'}</button>
+                <button type="button" disabled={!firstEntityId} onClick={() => addAction(stageIndex, { type: 'leave-party', entityId: firstEntityId })}><Plus size={13} />{zh ? '离开队伍' : 'Leave party'}</button>
                 <button type="button" onClick={() => addAction(stageIndex, { type: 'issue-command', entityId: firstEntityId, command: { type: 'wander' } })}><Plus size={13} />{zh ? '单位命令' : 'Command'}</button>
                 <button type="button" onClick={() => addAction(stageIndex, { type: 'add-story', title: zh ? '新段落' : 'New passage', body: '' })}><Plus size={13} />{zh ? '剧情段落' : 'Passage'}</button>
                 <button type="button" disabled={!firstEntityId} onClick={() => addAction(stageIndex, { type: 'set-visibility', target: { kind: 'entity', id: firstEntityId }, visible: true })}><Plus size={13} />{zh ? '显示/隐藏' : 'Visibility'}</button>

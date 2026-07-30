@@ -51,6 +51,7 @@ export type WorldEntity = {
   name: string
   description: string
   factionId: string
+  partyId?: string
   storylineId?: string
   controller: WorldEntityControllerKind
   health: number
@@ -73,6 +74,17 @@ export type WorldEntity = {
     nextDecisionAtSeconds: number
     home: { x: number; z: number }
   }
+}
+
+export type WorldParty = {
+  id: string
+  name: string
+  leaderId: string
+  members: Array<{
+    entityId: string
+    status: 'active' | 'reserve'
+    joinedAtSeconds: number
+  }>
 }
 
 export type WorldEvent = {
@@ -206,6 +218,8 @@ export type WorldScenarioTrigger = {
 
 export type WorldScenarioAction =
   | { type: 'set-faction'; entityId: string; factionId: string }
+  | { type: 'join-party'; entityId: string; leaderId: string; partyName?: string; status?: 'active' | 'reserve' }
+  | { type: 'leave-party'; entityId: string }
   | { type: 'issue-command'; entityId: string; command: WorldEntityCommand }
   | { type: 'add-story'; title: string; body: string; characterIds?: string[] }
   | { type: 'set-visibility'; target: Extract<WorldTargetRef, { kind: 'entity' | 'brick' | 'structure' }>; visible: boolean }
@@ -345,6 +359,7 @@ export type WorldState = {
   elapsedSeconds: number
   paused: boolean
   entities: WorldEntity[]
+  parties: WorldParty[]
   events: WorldEvent[]
   pendingImpacts: WorldPendingImpact[]
   narrative: WorldNarrativeState

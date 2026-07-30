@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { worldEntityDefinitionById, worldEntityDefinitions } from '../data/worldEntityDefinitions'
 import type { WorldState } from '../types/world'
-import { changeAllWorldEntityControllers, changeWorldEntityController, createEmptyWorldState, createWorldEntity, generateWorldEntityName, issueWorldEntityCommand, parseStoredWorldState } from './worldEntity'
+import { changeAllWorldEntityControllers, changeWorldEntityController, createEmptyWorldState, createWorldEntity, generateWorldEntityName, issueWorldEntityCommand, issueWorldPartyOrder, joinWorldParty, leaveWorldParty, parseStoredWorldState, setWorldPartyMemberStatus } from './worldEntity'
 import { getWorldEntityCollisionRadius } from './worldEntityCollision'
 
 describe('WorldEntity foundation', () => {
@@ -160,6 +160,43 @@ describe('WorldEntity foundation', () => {
     expect(changed.entities.map((entity) => entity.controller)).toEqual(['ai', 'ai'])
     expect(changed.entities.every((entity) => entity.commandQueue.length === 0 && entity.behaviorState === 'idle')).toBe(true)
     expect(changeAllWorldEntityControllers(changed, 'ai')).toBe(changed)
+  })
+
+  it('creates a formal party, manages reserves, and issues group orders', () => {
+    const definition = worldEntityDefinitionById.get('knight')!
+    const leader = createWorldEntity(definition, { id: 'party-leader', controller: 'player' })
+    const member = createWorldEntity(definition, { id: 'party-member', controller: 'player' })
+    let world = {
+      ...createEmptyWorldState('party-plan'),
+      entities: [leader, member],
+    }
+
+    world = joinWorldParty(world, member.id, leader.id, { partyName: '灰鸦调查队' })
+    expect(world.parties[0]).toMatchObject({
+      name: '灰鸦调查队',
+      leaderId: leader.id,
+      members: [
+        { entityId: leader.id, status: 'active' },
+        { entityId: member.id, status: 'active' },
+      ],
+    })
+    expect(world.entities.map((entity) => entity.partyId)).toEqual([
+      `party-${leader.id}`,
+      `party-${leader.id}`,
+    ])
+
+    world = issueWorldPartyOrder(world, world.parties[0].id, 'follow-leader')
+    expect(world.entities[0].commandQueue).toEqual([{ type: 'stop' }])
+    expect(world.entities[1].commandQueue).toEqual([{
+      type: 'follow',
+      target: { kind: 'entity', id: leader.id },
+    }])
+
+    world = setWorldPartyMemberStatus(world, world.parties[0].id, member.id, 'reserve')
+    expect(world.parties[0].members[1].status).toBe('reserve')
+    world = leaveWorldParty(world, member.id)
+    expect(world.parties[0].members).toHaveLength(1)
+    expect(world.entities[1].partyId).toBeUndefined()
   })
 
   it('can replace the active order without directly changing the transform', () => {

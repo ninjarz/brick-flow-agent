@@ -1129,6 +1129,68 @@ button.status-pill:hover {
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.16);
 }
 
+.world-party-list {
+  display: grid;
+  gap: 6px;
+  max-height: 150px;
+  overflow-y: auto;
+  padding: 7px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f0f9ff;
+}
+
+.world-party-list > section {
+  display: grid;
+  gap: 6px;
+  padding: 7px;
+  border: 1px solid #bae6fd;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.world-party-list header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.world-party-list header > div {
+  display: flex;
+  gap: 4px;
+}
+
+.world-party-list button {
+  min-height: 24px;
+  padding: 2px 7px;
+  border-color: #bae6fd;
+  background: #f8fafc;
+  color: #075985;
+  font-size: 10px;
+}
+
+.world-party-list > section > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.world-party-list > section > div button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.world-party-list > section > div button.reserve {
+  opacity: 0.58;
+  border-style: dashed;
+}
+
+.world-party-list > section > div button small {
+  color: #64748b;
+  font-size: 9px;
+}
+
 .world-entity-roster i {
   width: 9px;
   height: 9px;

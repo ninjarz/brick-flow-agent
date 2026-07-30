@@ -25,7 +25,7 @@ import { prepareReferenceImage } from './lib/referenceImage'
 import { simplifiedBrickThreshold } from './lib/scenePerformance'
 import { toggleBrickSelection } from './lib/brickSelection'
 import { dissolveBrickStructure, getBrickStructure, getExactSelectionStructure, pruneBrickStructures, solidifyBrickSelection, updateBrickStructure } from './lib/brickStructures'
-import { changeAllWorldEntityControllers, createEmptyWorldState, createWorldEntity, issueWorldEntityCommand } from './lib/worldEntity'
+import { changeAllWorldEntityControllers, createEmptyWorldState, createWorldEntity, issueWorldEntityCommand, issueWorldPartyOrder, leaveWorldParty, setWorldPartyMemberStatus } from './lib/worldEntity'
 import { isWorldEntityGroundPointBlockedByBricks } from './lib/worldSimulation'
 import { findNearestAvailableWorldEntityPoint } from './lib/worldEntityCollision'
 import { applyWorldDirectorPlaybackEvent, getWorldDirectorPlaybackOutcomeDetail, isWorldDirectorDialogueVisible, isWorldDirectorPlaybackSettledIgnoringSpeech, waitForWorldDirectorDialoguePlayback } from './lib/worldDirectorPlayback'
@@ -1526,10 +1526,13 @@ function App() {
   }, [])
 
   const deleteWorldEntity = useCallback((entityId: string) => {
-    setWorld((current) => ({
-      ...current,
-      entities: current.entities.filter((entity) => entity.id !== entityId),
-    }))
+    setWorld((current) => {
+      const withoutPartyMembership = leaveWorldParty(current, entityId)
+      return {
+        ...withoutPartyMembership,
+        entities: withoutPartyMembership.entities.filter((entity) => entity.id !== entityId),
+      }
+    })
     setSelectedWorldEntityId((current) => current === entityId ? '' : current)
   }, [])
 
@@ -2737,6 +2740,55 @@ function App() {
                       ))}
                     </div>
                   </div>
+                  {world.parties.length > 0 && (
+                    <div className="world-party-list">
+                      {world.parties.map((party) => (
+                        <section key={party.id}>
+                          <header>
+                            <span>
+                              <strong>{party.name}</strong>
+                              <small>{locale === 'zh-CN'
+                                ? `${party.members.filter((member) => member.status === 'active').length} 名正式成员`
+                                : `${party.members.filter((member) => member.status === 'active').length} active members`}</small>
+                            </span>
+                            <div>
+                              <button type="button" onClick={() => setWorld((current) => issueWorldPartyOrder(current, party.id, 'follow-leader'))}>{locale === 'zh-CN' ? '集合' : 'Follow'}</button>
+                              <button type="button" onClick={() => setWorld((current) => issueWorldPartyOrder(current, party.id, 'hold'))}>{locale === 'zh-CN' ? '原地' : 'Hold'}</button>
+                            </div>
+                          </header>
+                          <div>
+                            {party.members.map((member) => {
+                              const entity = world.entities.find((candidate) => candidate.id === member.entityId)
+                              if (!entity) return null
+                              const isLeader = member.entityId === party.leaderId
+                              return (
+                                <button
+                                  type="button"
+                                  key={member.entityId}
+                                  disabled={isLeader}
+                                  className={member.status}
+                                  title={isLeader
+                                    ? (locale === 'zh-CN' ? '队长始终为正式成员' : 'The leader is always active')
+                                    : (locale === 'zh-CN' ? '切换正式/候补' : 'Toggle active/reserve')}
+                                  onClick={() => setWorld((current) => setWorldPartyMemberStatus(
+                                    current,
+                                    party.id,
+                                    member.entityId,
+                                    member.status === 'active' ? 'reserve' : 'active',
+                                  ))}
+                                >
+                                  {isLeader ? '★ ' : ''}{entity.name}
+                                  <small>{member.status === 'active'
+                                    ? (locale === 'zh-CN' ? '正式' : 'Active')
+                                    : (locale === 'zh-CN' ? '候补' : 'Reserve')}</small>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </section>
+                      ))}
+                    </div>
+                  )}
                   <div className="world-entity-roster-list">
                     {visibleWorldEntities.map((entity) => (
                       <button
@@ -2751,7 +2803,9 @@ function App() {
                         <i className={`faction-${entity.factionId}`} />
                         <span>
                           <strong>{entity.name}</strong>
-                          <small>{t(`worldEntity.controller.${entity.controller}`)} · {entity.health}/{entity.maxHealth}</small>
+                          <small>{t(`worldEntity.controller.${entity.controller}`)} · {entity.health}/{entity.maxHealth}{entity.partyId
+                            ? ` · ${world.parties.find((party) => party.id === entity.partyId)?.name ?? (locale === 'zh-CN' ? '队伍' : 'Party')}`
+                            : ''}</small>
                         </span>
                       </button>
                     ))}

@@ -125,7 +125,7 @@ const createGrayRavenEileenCompanionScenario = (
     castEntityIds: [rolandId, eileenId],
     processedEventIds: [],
     claimedEventIds: [],
-    authoringVersion: 1,
+    authoringVersion: 2,
     stages: [{
       id: 'scenario-border-tavern-recruit-eileen',
       title: zh ? '邀请艾琳同行' : 'Invite Eileen to Join',
@@ -173,6 +173,12 @@ const createGrayRavenEileenCompanionScenario = (
       ],
       actions: [
         { type: 'set-faction', entityId: eileenId, factionId: 'blue' },
+        {
+          type: 'join-party',
+          entityId: eileenId,
+          leaderId: rolandId,
+          partyName: zh ? '灰鸦调查队' : 'Gray Raven Investigators',
+        },
         { type: 'issue-command', entityId: eileenId, command: { type: 'stop' } },
         {
           type: 'add-story',
@@ -285,6 +291,7 @@ export const createEmptyWorldState = (planId: string): WorldState => ({
   elapsedSeconds: 0,
   paused: false,
   entities: [],
+  parties: [],
   events: [],
   pendingImpacts: [],
   scenarios: [],
@@ -325,6 +332,123 @@ export const changeAllWorldEntityControllers = (
     return nextEntity
   })
   return changed ? { ...world, entities } : world
+}
+
+const reconcileWorldPartyMembership = (
+  world: WorldState,
+  parties: WorldState['parties'],
+): WorldState => {
+  const partyIdByEntityId = new Map(parties.flatMap((party) => (
+    party.members.map((member) => [member.entityId, party.id] as const)
+  )))
+  let entitiesChanged = false
+  const entities = world.entities.map((entity) => {
+    const partyId = partyIdByEntityId.get(entity.id)
+    if (partyId === entity.partyId) return entity
+    entitiesChanged = true
+    return { ...entity, partyId }
+  })
+  return parties === world.parties && !entitiesChanged ? world : { ...world, parties, entities }
+}
+
+export const joinWorldParty = (
+  world: WorldState,
+  entityId: string,
+  leaderId: string,
+  options: { partyName?: string; status?: 'active' | 'reserve' } = {},
+): WorldState => {
+  const entity = world.entities.find((candidate) => candidate.id === entityId)
+  const leader = world.entities.find((candidate) => candidate.id === leaderId)
+  if (!entity || !leader) return world
+  const status = entityId === leaderId ? 'active' : options.status ?? 'active'
+  let parties = world.parties
+    .map((party) => ({
+      ...party,
+      members: party.members.filter((member) => member.entityId !== entityId && (
+        entityId !== leaderId || member.entityId !== leaderId
+      )),
+    }))
+    .flatMap((party) => {
+      if (party.members.length === 0) return []
+      const leaderStillPresent = party.members.some((member) => member.entityId === party.leaderId)
+      return [{
+        ...party,
+        leaderId: leaderStillPresent
+          ? party.leaderId
+          : party.members.find((member) => member.status === 'active')?.entityId ?? party.members[0].entityId,
+      }]
+    })
+  const leaderParty = parties.find((party) => party.members.some((member) => member.entityId === leaderId))
+  if (leaderParty) {
+    parties = parties.map((party) => party.id === leaderParty.id
+      ? {
+          ...party,
+          name: options.partyName?.trim() || party.name,
+          members: [
+            ...party.members,
+            { entityId, status, joinedAtSeconds: world.elapsedSeconds },
+          ],
+        }
+      : party)
+  } else {
+    const id = `party-${leaderId}`
+    parties = [
+      ...parties,
+      {
+        id,
+        name: options.partyName?.trim() || `${leader.name}的小队`,
+        leaderId,
+        members: [
+          { entityId: leaderId, status: 'active' as const, joinedAtSeconds: world.elapsedSeconds },
+          ...(entityId === leaderId
+            ? []
+            : [{ entityId, status, joinedAtSeconds: world.elapsedSeconds }]),
+        ],
+      },
+    ]
+  }
+  return reconcileWorldPartyMembership(world, parties)
+}
+
+export const leaveWorldParty = (
+  world: WorldState,
+  entityId: string,
+): WorldState => {
+  if (!world.entities.some((entity) => entity.id === entityId && entity.partyId)) return world
+  const parties = world.parties.flatMap((party) => {
+    const members = party.members.filter((member) => member.entityId !== entityId)
+    if (members.length === 0) return []
+    return [{
+      ...party,
+      members,
+      leaderId: party.leaderId === entityId
+        ? members.find((member) => member.status === 'active')?.entityId ?? members[0].entityId
+        : party.leaderId,
+    }]
+  })
+  return reconcileWorldPartyMembership(world, parties)
+}
+
+export const setWorldPartyMemberStatus = (
+  world: WorldState,
+  partyId: string,
+  entityId: string,
+  status: 'active' | 'reserve',
+): WorldState => {
+  const party = world.parties.find((candidate) => candidate.id === partyId)
+  if (!party || party.leaderId === entityId) return world
+  let changed = false
+  const parties = world.parties.map((candidate) => candidate.id === partyId
+    ? {
+        ...candidate,
+        members: candidate.members.map((member) => {
+          if (member.entityId !== entityId || member.status === status) return member
+          changed = true
+          return { ...member, status }
+        }),
+      }
+    : candidate)
+  return changed ? { ...world, parties } : world
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -596,6 +720,34 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
   if (entities.some((entity) => !entity)) return undefined
   const safeEntities = resolveOverlappingWorldEntities(entities as WorldEntity[])
   const entityIds = new Set(safeEntities.map((entity) => entity.id))
+  const claimedPartyMemberIds = new Set<string>()
+  const parties: WorldState['parties'] = Array.isArray(value.parties)
+    ? value.parties.flatMap((party) => {
+        if (!isRecord(party) || typeof party.id !== 'string' || typeof party.name !== 'string' ||
+          typeof party.leaderId !== 'string' || !entityIds.has(party.leaderId) || !Array.isArray(party.members)) return []
+        const members = party.members.flatMap((member) => {
+          if (!isRecord(member) || typeof member.entityId !== 'string' || !entityIds.has(member.entityId) ||
+            claimedPartyMemberIds.has(member.entityId)) return []
+          claimedPartyMemberIds.add(member.entityId)
+          return [{
+            entityId: member.entityId,
+            status: member.entityId === party.leaderId || member.status !== 'reserve'
+              ? 'active' as const
+              : 'reserve' as const,
+            joinedAtSeconds: isFiniteNumber(member.joinedAtSeconds)
+              ? Math.max(0, member.joinedAtSeconds)
+              : 0,
+          }]
+        }).slice(0, 24)
+        if (!members.some((member) => member.entityId === party.leaderId)) return []
+        return [{
+          id: party.id.trim().slice(0, 160),
+          name: party.name.trim().slice(0, 120) || '未命名队伍',
+          leaderId: party.leaderId,
+          members,
+        }]
+      }).slice(0, 20)
+    : []
   const events = parseStoredEvents(value.events)
   const pendingImpacts = Array.isArray(value.pendingImpacts) ? value.pendingImpacts.filter((impact): impact is WorldState['pendingImpacts'][number] => (
     isRecord(impact) && typeof impact.id === 'string' && typeof impact.actorId === 'string' && entityIds.has(impact.actorId) &&
@@ -619,6 +771,20 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
             if (!isRecord(action) || typeof action.type !== 'string') return []
             if (action.type === 'set-faction' && typeof action.entityId === 'string' && typeof action.factionId === 'string') {
               return [{ type: 'set-faction' as const, entityId: action.entityId, factionId: action.factionId }]
+            }
+            if (action.type === 'join-party' && typeof action.entityId === 'string' && typeof action.leaderId === 'string') {
+              return [{
+                type: 'join-party' as const,
+                entityId: action.entityId,
+                leaderId: action.leaderId,
+                ...(typeof action.partyName === 'string' && action.partyName.trim()
+                  ? { partyName: action.partyName.trim().slice(0, 120) }
+                  : {}),
+                ...(action.status === 'reserve' ? { status: 'reserve' as const } : {}),
+              }]
+            }
+            if (action.type === 'leave-party' && typeof action.entityId === 'string') {
+              return [{ type: 'leave-party' as const, entityId: action.entityId }]
             }
             if (action.type === 'issue-command' && typeof action.entityId === 'string') {
               const command = parseStoredCommand(action.command)
@@ -656,6 +822,19 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
             const branchActions = Array.isArray(branch.actions) ? branch.actions.flatMap((action): WorldScenarioAction[] => {
               if (!isRecord(action) || typeof action.type !== 'string') return []
               if (action.type === 'set-faction' && typeof action.entityId === 'string' && typeof action.factionId === 'string') return [{ type: 'set-faction', entityId: action.entityId, factionId: action.factionId }]
+              if (action.type === 'join-party' && typeof action.entityId === 'string' && typeof action.leaderId === 'string') return [{
+                type: 'join-party',
+                entityId: action.entityId,
+                leaderId: action.leaderId,
+                ...(typeof action.partyName === 'string' && action.partyName.trim()
+                  ? { partyName: action.partyName.trim().slice(0, 120) }
+                  : {}),
+                ...(action.status === 'reserve' ? { status: 'reserve' as const } : {}),
+              }]
+              if (action.type === 'leave-party' && typeof action.entityId === 'string') return [{
+                type: 'leave-party',
+                entityId: action.entityId,
+              }]
               if (action.type === 'issue-command' && typeof action.entityId === 'string') {
                 const command = parseStoredCommand(action.command)
                 return command ? [{ type: 'issue-command', entityId: action.entityId, command }] : []
@@ -744,7 +923,26 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
         const authoringVersion = isFiniteNumber(scenario.authoringVersion) ? Math.max(0, Math.floor(scenario.authoringVersion)) : 0
         const upgradedStages = scenario.assetId === 'scenario-border-tavern'
           ? upgradeGrayRavenScenarioStages(stages, scenario.title, authoringVersion)
-          : stages
+          : scenario.assetId === 'scenario-border-tavern-eileen-companion' && authoringVersion < 2
+            ? stages.map((stage) => {
+                const rolandId = stage.trigger.actorId
+                const eileenId = stage.trigger.targetId
+                if (!rolandId || !eileenId || stage.actions?.some((action) => action.type === 'join-party')) return stage
+                return {
+                  ...stage,
+                  actions: [
+                    ...(stage.actions ?? []).filter((action) => action.type !== 'add-story'),
+                    {
+                      type: 'join-party' as const,
+                      entityId: eileenId,
+                      leaderId: rolandId,
+                      partyName: /[\u3400-\u9fff]/.test(String(scenario.title)) ? '灰鸦调查队' : 'Gray Raven Investigators',
+                    },
+                    ...(stage.actions ?? []).filter((action) => action.type === 'add-story'),
+                  ],
+                }
+              })
+            : stages
         const activeDialogue = isRecord(scenario.activeDialogue) &&
           typeof scenario.activeDialogue.stageId === 'string' &&
           typeof scenario.activeDialogue.eventId === 'string' &&
@@ -796,7 +994,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
             ? action.characterIds ?? []
             : action.type === 'set-visibility'
               ? action.target.kind === 'entity' ? [action.target.id] : []
-              : [action.entityId]),
+              : action.type === 'join-party' ? [action.entityId, action.leaderId] : [action.entityId]),
           ...(stage.branches ?? []).flatMap((branch) => [
             branch.trigger.actorId,
             branch.trigger.targetId,
@@ -805,7 +1003,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
               ? action.characterIds ?? []
               : action.type === 'set-visibility'
                 ? action.target.kind === 'entity' ? [action.target.id] : []
-                : [action.entityId]),
+                : action.type === 'join-party' ? [action.entityId, action.leaderId] : [action.entityId]),
           ]),
         ].filter((id): id is string => Boolean(id) && entityIds.has(id)))))
         const castEntityIds = Array.isArray(scenario.castEntityIds)
@@ -832,7 +1030,9 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
           ...(typeof scenario.outcomeId === 'string' ? { outcomeId: scenario.outcomeId } : {}),
           ...(scenario.assetId === 'scenario-border-tavern'
             ? { authoringVersion: Math.max(4, authoringVersion) }
-            : authoringVersion ? { authoringVersion } : {}),
+            : scenario.assetId === 'scenario-border-tavern-eileen-companion'
+              ? { authoringVersion: Math.max(2, authoringVersion) }
+              : authoringVersion ? { authoringVersion } : {}),
         }]
       }).slice(-20)
     : []
@@ -860,6 +1060,39 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
   scenarios = scenarios.map((scenario) => scenario.assetId === 'scenario-border-tavern'
     ? { ...scenario, authoringVersion: 5 }
     : scenario)
+
+  const completedJoinActions = scenarios.flatMap((scenario) => scenario.stages.flatMap((stage) => (
+    stage.status === 'completed'
+      ? (stage.actions ?? []).filter((action): action is Extract<WorldScenarioAction, { type: 'join-party' }> => action.type === 'join-party')
+      : []
+  )))
+  for (const action of completedJoinActions) {
+    if (parties.some((party) => party.members.some((member) => member.entityId === action.entityId))) continue
+    const leader = safeEntities.find((entity) => entity.id === action.leaderId)
+    if (!leader) continue
+    const party = parties.find((candidate) => candidate.members.some((member) => member.entityId === action.leaderId))
+    if (party) {
+      party.members.push({
+        entityId: action.entityId,
+        status: action.status ?? 'active',
+        joinedAtSeconds: value.elapsedSeconds && isFiniteNumber(value.elapsedSeconds) ? value.elapsedSeconds : 0,
+      })
+    } else {
+      parties.push({
+        id: `party-${action.leaderId}`,
+        name: action.partyName?.trim() || `${leader.name}的小队`,
+        leaderId: action.leaderId,
+        members: [
+          { entityId: action.leaderId, status: 'active', joinedAtSeconds: 0 },
+          {
+            entityId: action.entityId,
+            status: action.status ?? 'active',
+            joinedAtSeconds: value.elapsedSeconds && isFiniteNumber(value.elapsedSeconds) ? value.elapsedSeconds : 0,
+          },
+        ],
+      })
+    }
+  }
 
   const storedHiddenTargets = Array.isArray(value.hiddenTargets) ? value.hiddenTargets.flatMap((target) => {
     const parsed = parseTargetRef(target)
@@ -892,9 +1125,13 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
     const restoredWithStoryline = entity.storylineId || memberships.length !== 1
       ? entity
       : { ...entity, storylineId: memberships[0] }
-    const restored = entity.id === migratedGrayRavenEileenId
+    const restoredFaction = entity.id === migratedGrayRavenEileenId
       ? { ...restoredWithStoryline, factionId: 'neutral' }
       : restoredWithStoryline
+    const partyId = parties.find((party) => party.members.some((member) => member.entityId === entity.id))?.id
+    const restored = partyId === restoredFaction.partyId
+      ? restoredFaction
+      : { ...restoredFaction, partyId }
     if (!hiddenEntityIds.has(entity.id)) return restored
     return {
       ...restored,
@@ -974,6 +1211,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
     elapsedSeconds: isFiniteNumber(value.elapsedSeconds) ? Math.max(0, value.elapsedSeconds) : 0,
     paused: typeof value.paused === 'boolean' ? value.paused : false,
     entities: restoredEntities,
+    parties,
     events: migratedEvents,
     pendingImpacts,
     scenarios,
@@ -1100,4 +1338,25 @@ export const issueWorldEntityCommand = (
       events: [...world.events, commandEvent].slice(-500),
     },
   }
+}
+
+export const issueWorldPartyOrder = (
+  world: WorldState,
+  partyId: string,
+  order: 'follow-leader' | 'hold',
+): WorldState => {
+  const party = world.parties.find((candidate) => candidate.id === partyId)
+  if (!party) return world
+  let nextWorld = world
+  for (const member of party.members) {
+    if (member.status !== 'active') continue
+    const command: WorldEntityCommand = order === 'hold' || member.entityId === party.leaderId
+      ? { type: 'stop' }
+      : { type: 'follow', target: { kind: 'entity', id: party.leaderId } }
+    const result = issueWorldEntityCommand(nextWorld, member.entityId, command, (target) => (
+      target.kind === 'entity' && nextWorld.entities.some((entity) => entity.id === target.id)
+    ), 'replace')
+    if (result.ok) nextWorld = result.world
+  }
+  return nextWorld
 }

@@ -234,6 +234,15 @@ describe('world scenario import', () => {
     const eileen = recruited.entities.find((entity) => entity.id === eileenId)!
     expect(recruited.scenarios[0].outcomeId).toBe('completed')
     expect(eileen.factionId).toBe('blue')
+    expect(eileen.partyId).toBe(`party-${rolandId}`)
+    expect(recruited.parties[0]).toMatchObject({
+      name: '灰鸦调查队',
+      leaderId: rolandId,
+      members: [
+        { entityId: rolandId, status: 'active' },
+        { entityId: eileenId, status: 'active' },
+      ],
+    })
     expect(eileen.commandQueue).toEqual([{ type: 'stop' }])
     expect(recruited.narrative.stories.at(-1)?.title).toContain('北路的约定')
 

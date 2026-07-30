@@ -197,6 +197,15 @@ const remapScenarioWorld = (
           const entityId = entityIdMap[action.entityId]
           return entityId ? [{ ...action, entityId }] : []
         }
+        if (action.type === 'join-party') {
+          const entityId = entityIdMap[action.entityId]
+          const leaderId = entityIdMap[action.leaderId]
+          return entityId && leaderId ? [{ ...action, entityId, leaderId }] : []
+        }
+        if (action.type === 'leave-party') {
+          const entityId = entityIdMap[action.entityId]
+          return entityId ? [{ ...action, entityId }] : []
+        }
         if (action.type === 'issue-command') {
           const entityId = entityIdMap[action.entityId]
           const command = remapCommand(action.command, entityIdMap, maps.brickIdMap, maps.structureIdMap)
@@ -223,6 +232,15 @@ const remapScenarioWorld = (
         if ((branch.trigger.actorId && !branchActorId) || (branch.trigger.targetId && !branchTargetId)) return []
         const branchActions = (branch.actions ?? []).flatMap((action): WorldScenarioAction[] => {
           if (action.type === 'set-faction') {
+            const entityId = entityIdMap[action.entityId]
+            return entityId ? [{ ...action, entityId }] : []
+          }
+          if (action.type === 'join-party') {
+            const entityId = entityIdMap[action.entityId]
+            const leaderId = entityIdMap[action.leaderId]
+            return entityId && leaderId ? [{ ...action, entityId, leaderId }] : []
+          }
+          if (action.type === 'leave-party') {
             const entityId = entityIdMap[action.entityId]
             return entityId ? [{ ...action, entityId }] : []
           }

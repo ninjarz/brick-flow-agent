@@ -934,6 +934,9 @@ export const stepWorldSimulation = (
     const dialogue = activeBranch?.dialogue ?? activeStage?.dialogue ?? []
     return [...(scenario.castEntityIds ?? []), ...dialogue.map((line) => line.speakerId)]
   }))
+  const reservePartyMemberIds = new Set(world.parties.flatMap((party) => (
+    party.members.flatMap((member) => member.status === 'reserve' ? [member.entityId] : [])
+  )))
   const targetLookup: WorldTargetLookup = {
     entityIndexById: new Map(entities.map((entity, index) => [entity.id, index])),
     entityById: new Map(entities.map((entity) => [entity.id, entity])),
@@ -1050,6 +1053,17 @@ export const stepWorldSimulation = (
       continue
     }
     if (narrativeLockedEntityIds.has(entity.id)) {
+      entities[index] = {
+        ...entity,
+        activeCommand: undefined,
+        commandQueue: [],
+        behaviorState: 'idle',
+        navigation: { status: 'idle', path: [], pathIndex: 0 },
+        combat: { ...entity.combat, attackTargetId: undefined },
+      }
+      continue
+    }
+    if (reservePartyMemberIds.has(entity.id)) {
       entities[index] = {
         ...entity,
         activeCommand: undefined,
