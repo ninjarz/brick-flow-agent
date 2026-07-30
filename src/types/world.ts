@@ -214,6 +214,22 @@ export type WorldScenarioTrigger = {
   targetId?: string
   commandType?: WorldEntityCommand['type']
   minimumAffinity?: number
+  conditions?: WorldScenarioConditionGroup
+}
+
+export type WorldScenarioCondition =
+  | { type: 'affinity'; actorId: string; targetId: string; comparison: 'gte' | 'lte'; value: number }
+  | { type: 'health-ratio'; entityId: string; comparison: 'gte' | 'lte'; value: number }
+  | { type: 'faction'; entityId: string; factionId: string }
+  | { type: 'party-member'; entityId: string; leaderId?: string; status?: 'active' | 'reserve' }
+  | { type: 'scenario-outcome'; scenarioId: string; outcomeId?: string }
+  | { type: 'visibility'; target: Extract<WorldTargetRef, { kind: 'entity' | 'brick' | 'structure' }>; visible: boolean }
+  | { type: 'entity-alive'; entityId: string; alive: boolean }
+
+export type WorldScenarioConditionGroup = {
+  mode: 'all' | 'any'
+  negate?: boolean
+  conditions: WorldScenarioCondition[]
 }
 
 export type WorldScenarioAction =

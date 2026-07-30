@@ -138,6 +138,9 @@ export const WorldScenarioFlowEditor = ({
                   : ''}{triggerLabel(stage.trigger.eventType, zh)}
                 {stage.trigger.minimumAffinity !== undefined
                   ? ` · ${zh ? '好感' : 'affinity'} ≥ ${stage.trigger.minimumAffinity}`
+                  : ''}
+                {(stage.trigger.conditions?.conditions.length ?? 0) > 0
+                  ? ` · ${stage.trigger.conditions?.conditions.length} ${zh ? '项条件' : 'conditions'}`
                   : ''} · {stage.dialogue?.length ?? 0} {zh ? '句台词' : 'lines'} · {stage.branches?.length ?? 0} {zh ? '个分支' : 'branches'}</em>
                 {stage.ai && <b className="ai-badge"><Bot size={9} />AI</b>}
                 {stageIssues.length > 0 && <i>{stageIssues.length}</i>}

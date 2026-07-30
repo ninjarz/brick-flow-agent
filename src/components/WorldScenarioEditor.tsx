@@ -1,6 +1,6 @@
 import { Bot, GitBranch, ListTree, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import type { WorldEntity, WorldEntityCommand, WorldEvent, WorldScenarioAction, WorldScenarioBranch, WorldScenarioRuntime, WorldScenarioStage } from '../types/world'
+import type { WorldEntity, WorldEntityCommand, WorldEvent, WorldScenarioAction, WorldScenarioBranch, WorldScenarioCondition, WorldScenarioConditionGroup, WorldScenarioRuntime, WorldScenarioStage } from '../types/world'
 import type { BrickStructure } from '../types/bricks'
 import { validateWorldScenario, type WorldScenarioValidationIssue } from '../lib/worldScenarioValidation'
 import {
@@ -55,6 +55,115 @@ const makeCommand = (type: WorldEntityCommand['type'], targetId?: string): World
 const getCommandTargetId = (command: WorldEntityCommand) => 'target' in command && command.target.kind === 'entity'
   ? command.target.id
   : ''
+
+const makeCondition = (
+  type: WorldScenarioCondition['type'],
+  firstEntityId: string,
+  secondEntityId: string,
+  firstStructureId: string,
+): WorldScenarioCondition => {
+  if (type === 'affinity') return { type, actorId: firstEntityId, targetId: secondEntityId || firstEntityId, comparison: 'gte', value: 45 }
+  if (type === 'health-ratio') return { type, entityId: firstEntityId, comparison: 'lte', value: 0.4 }
+  if (type === 'faction') return { type, entityId: firstEntityId, factionId: 'blue' }
+  if (type === 'party-member') return { type, entityId: firstEntityId, status: 'active' }
+  if (type === 'scenario-outcome') return { type, scenarioId: '' }
+  if (type === 'visibility') return { type, target: firstStructureId ? { kind: 'structure', id: firstStructureId } : { kind: 'entity', id: firstEntityId }, visible: true }
+  return { type, entityId: firstEntityId, alive: true }
+}
+
+const ScenarioConditionEditor = ({
+  group,
+  entities,
+  structures,
+  zh,
+  onChange,
+}: {
+  group?: WorldScenarioConditionGroup
+  entities: WorldEntity[]
+  structures: BrickStructure[]
+  zh: boolean
+  onChange: (group: WorldScenarioConditionGroup | undefined) => void
+}) => {
+  const firstEntityId = entities[0]?.id ?? ''
+  const secondEntityId = entities[1]?.id ?? firstEntityId
+  const firstStructureId = structures[0]?.id ?? ''
+  const conditions = group?.conditions ?? []
+  const patchCondition = (index: number, condition: WorldScenarioCondition) => onChange({
+    mode: group?.mode ?? 'all',
+    ...(group?.negate ? { negate: true } : {}),
+    conditions: conditions.map((item, itemIndex) => itemIndex === index ? condition : item),
+  })
+  return (
+    <details className="scenario-condition-editor" open={conditions.length > 0}>
+      <summary>{zh ? `组合条件（${conditions.length}）` : `Combined conditions (${conditions.length})`}</summary>
+      <div className="scenario-condition-toolbar">
+        <select value={group?.mode ?? 'all'} onChange={(event) => onChange({
+          mode: event.target.value as 'all' | 'any',
+          ...(group?.negate ? { negate: true } : {}),
+          conditions,
+        })}>
+          <option value="all">{zh ? '全部满足' : 'Match all'}</option>
+          <option value="any">{zh ? '任一满足' : 'Match any'}</option>
+        </select>
+        <label><input type="checkbox" checked={group?.negate ?? false} onChange={(event) => onChange({ mode: group?.mode ?? 'all', negate: event.target.checked || undefined, conditions })} />{zh ? '结果取反' : 'Negate'}</label>
+      </div>
+      {conditions.map((condition, index) => (
+        <div className="scenario-condition-row" key={`${condition.type}-${index}`}>
+          <select value={condition.type} onChange={(event) => patchCondition(index, makeCondition(event.target.value as WorldScenarioCondition['type'], firstEntityId, secondEntityId, firstStructureId))}>
+            <option value="affinity">{zh ? '角色好感' : 'Affinity'}</option>
+            <option value="health-ratio">{zh ? '生命比例' : 'Health ratio'}</option>
+            <option value="faction">{zh ? '所属阵营' : 'Faction'}</option>
+            <option value="party-member">{zh ? '队伍成员' : 'Party member'}</option>
+            <option value="entity-alive">{zh ? '存活状态' : 'Alive state'}</option>
+            <option value="visibility">{zh ? '显隐状态' : 'Visibility'}</option>
+            <option value="scenario-outcome">{zh ? '流程结果' : 'Flow outcome'}</option>
+          </select>
+          {condition.type === 'affinity' && <>
+            <select value={condition.actorId} onChange={(event) => patchCondition(index, { ...condition, actorId: event.target.value })}>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}</select>
+            <select value={condition.targetId} onChange={(event) => patchCondition(index, { ...condition, targetId: event.target.value })}>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}</select>
+            <select value={condition.comparison} onChange={(event) => patchCondition(index, { ...condition, comparison: event.target.value as 'gte' | 'lte' })}><option value="gte">≥</option><option value="lte">≤</option></select>
+            <input type="number" min="-100" max="100" value={condition.value} onChange={(event) => patchCondition(index, { ...condition, value: Math.max(-100, Math.min(100, Number(event.target.value) || 0)) })} />
+          </>}
+          {condition.type === 'health-ratio' && <>
+            <select value={condition.entityId} onChange={(event) => patchCondition(index, { ...condition, entityId: event.target.value })}>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}</select>
+            <select value={condition.comparison} onChange={(event) => patchCondition(index, { ...condition, comparison: event.target.value as 'gte' | 'lte' })}><option value="gte">≥</option><option value="lte">≤</option></select>
+            <input type="number" min="0" max="1" step="0.05" value={condition.value} onChange={(event) => patchCondition(index, { ...condition, value: Math.max(0, Math.min(1, Number(event.target.value) || 0)) })} />
+          </>}
+          {(condition.type === 'faction' || condition.type === 'party-member' || condition.type === 'entity-alive') && (
+            <select value={condition.entityId} onChange={(event) => patchCondition(index, { ...condition, entityId: event.target.value })}>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}</select>
+          )}
+          {condition.type === 'faction' && <select value={condition.factionId} onChange={(event) => patchCondition(index, { ...condition, factionId: event.target.value })}>{factions.map((faction) => <option key={faction} value={faction}>{faction}</option>)}</select>}
+          {condition.type === 'party-member' && <>
+            <select value={condition.leaderId ?? ''} onChange={(event) => patchCondition(index, { ...condition, leaderId: event.target.value || undefined })}><option value="">{zh ? '任意队长' : 'Any leader'}</option>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}</select>
+            <select value={condition.status ?? ''} onChange={(event) => patchCondition(index, { ...condition, status: event.target.value ? event.target.value as 'active' | 'reserve' : undefined })}><option value="">{zh ? '任意身份' : 'Any status'}</option><option value="active">{zh ? '正式' : 'Active'}</option><option value="reserve">{zh ? '候补' : 'Reserve'}</option></select>
+          </>}
+          {condition.type === 'entity-alive' && <select value={condition.alive ? 'alive' : 'dead'} onChange={(event) => patchCondition(index, { ...condition, alive: event.target.value === 'alive' })}><option value="alive">{zh ? '存活' : 'Alive'}</option><option value="dead">{zh ? '已倒下' : 'Defeated'}</option></select>}
+          {condition.type === 'visibility' && <>
+            <select value={condition.target.kind} onChange={(event) => {
+              const kind = event.target.value as 'entity' | 'structure'
+              patchCondition(index, { ...condition, target: { kind, id: kind === 'entity' ? firstEntityId : firstStructureId } })
+            }}><option value="entity">{zh ? '单位' : 'Entity'}</option><option value="structure">{zh ? '建筑' : 'Structure'}</option></select>
+            <select value={condition.target.id} onChange={(event) => patchCondition(index, { ...condition, target: { ...condition.target, id: event.target.value } })}>{(condition.target.kind === 'entity' ? entities : structures).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+            <select value={condition.visible ? 'visible' : 'hidden'} onChange={(event) => patchCondition(index, { ...condition, visible: event.target.value === 'visible' })}><option value="visible">{zh ? '已显示' : 'Visible'}</option><option value="hidden">{zh ? '已隐藏' : 'Hidden'}</option></select>
+          </>}
+          {condition.type === 'scenario-outcome' && <>
+            <input value={condition.scenarioId} placeholder={zh ? '流程 ID' : 'Flow ID'} onChange={(event) => patchCondition(index, { ...condition, scenarioId: event.target.value })} />
+            <input value={condition.outcomeId ?? ''} placeholder={zh ? '结果 ID（可选）' : 'Outcome ID (optional)'} onChange={(event) => patchCondition(index, { ...condition, outcomeId: event.target.value || undefined })} />
+          </>}
+          <button type="button" className="icon-button" onClick={() => {
+            const next = conditions.filter((_, itemIndex) => itemIndex !== index)
+            onChange(next.length ? { mode: group?.mode ?? 'all', ...(group?.negate ? { negate: true } : {}), conditions: next } : undefined)
+          }}><Trash2 size={13} /></button>
+        </div>
+      ))}
+      <button type="button" disabled={!firstEntityId} onClick={() => onChange({
+        mode: group?.mode ?? 'all',
+        ...(group?.negate ? { negate: true } : {}),
+        conditions: [...conditions, makeCondition('affinity', firstEntityId, secondEntityId, firstStructureId)],
+      })}><Plus size={13} />{zh ? '添加条件' : 'Add condition'}</button>
+    </details>
+  )
+}
 
 const ScenarioBranchContentEditor = ({
   branch,
@@ -321,6 +430,15 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
                   })}
                 />
               </label>
+              <ScenarioConditionEditor
+                group={stage.trigger.conditions}
+                entities={entities}
+                structures={structures}
+                zh={zh}
+                onChange={(conditions) => patchStage(stageIndex, {
+                  trigger: { ...stage.trigger, conditions },
+                })}
+              />
             </div>
 
             <div className={`scenario-editor-section scenario-ai-editor${stage.ai ? ' enabled' : ''}`}>
@@ -547,6 +665,19 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
                           })}
                         />
                       </>}
+                  {stage.ai?.mode !== 'choice' && (
+                    <ScenarioConditionEditor
+                      group={branch.trigger.conditions}
+                      entities={entities}
+                      structures={structures}
+                      zh={zh}
+                      onChange={(conditions) => patchStage(stageIndex, {
+                        branches: stage.branches?.map((item, index) => index === branchIndex
+                          ? { ...item, trigger: { ...item.trigger, conditions } }
+                          : item),
+                      })}
+                    />
+                  )}
                   <select value={branch.nextStageId ?? ''} aria-label={zh ? '分支下一节点' : 'Branch next node'} onChange={(event) => patchStage(stageIndex, { branches: stage.branches?.map((item, index) => index === branchIndex ? { ...item, nextStageId: event.target.value || undefined } : item) })}>
                     <option value="">{zh ? '结束这条流程' : 'End this flow'}</option>{scenario.stages.filter((candidate) => candidate.id !== stage.id).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.title}</option>)}
                   </select>

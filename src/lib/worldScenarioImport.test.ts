@@ -39,7 +39,13 @@ describe('world scenario import', () => {
     expect(result.world.scenarios[1].stages[0].trigger).toMatchObject({
       actorId: result.importedEntityIds[1],
       targetId: result.importedEntityIds[2],
-      minimumAffinity: 45,
+    })
+    expect(result.world.scenarios[1].stages[0].trigger.conditions?.mode).toBe('all')
+    expect(result.world.scenarios[1].stages[0].trigger.conditions?.conditions[0]).toMatchObject({
+      type: 'affinity',
+      actorId: result.importedEntityIds[1],
+      targetId: result.importedEntityIds[2],
+      value: 45,
     })
     expect(result.world.scenarios[0].stages.map((stage) => stage.status)).toEqual(['active', 'locked', 'locked'])
     expect(result.world.scenarios[0].stages[0].trigger.actorId).toBe(result.importedEntityIds[1])

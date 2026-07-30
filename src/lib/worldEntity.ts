@@ -104,6 +104,53 @@ const upgradeGrayRavenScenarioStages = (
   }))
 }
 
+const upgradeGrayRavenCompanionStages = (
+  stages: WorldScenarioStage[],
+  title: string,
+  authoringVersion: number,
+) => {
+  let upgraded = stages
+  if (authoringVersion < 2) upgraded = upgraded.map((stage) => {
+    const rolandId = stage.trigger.actorId
+    const eileenId = stage.trigger.targetId
+    if (!rolandId || !eileenId || stage.actions?.some((action) => action.type === 'join-party')) return stage
+    return {
+      ...stage,
+      actions: [
+        ...(stage.actions ?? []).filter((action) => action.type !== 'add-story'),
+        {
+          type: 'join-party' as const,
+          entityId: eileenId,
+          leaderId: rolandId,
+          partyName: /[\u3400-\u9fff]/.test(title) ? '灰鸦调查队' : 'Gray Raven Investigators',
+        },
+        ...(stage.actions ?? []).filter((action) => action.type === 'add-story'),
+      ],
+    }
+  })
+  if (authoringVersion < 3) upgraded = upgraded.map((stage) => {
+    const rolandId = stage.trigger.actorId
+    const eileenId = stage.trigger.targetId
+    if (!rolandId || !eileenId || stage.trigger.conditions) return stage
+    return {
+      ...stage,
+      trigger: {
+        ...stage.trigger,
+        minimumAffinity: undefined,
+        conditions: {
+          mode: 'all' as const,
+          conditions: [
+            { type: 'affinity' as const, actorId: rolandId, targetId: eileenId, comparison: 'gte' as const, value: 45 },
+            { type: 'entity-alive' as const, entityId: rolandId, alive: true },
+            { type: 'entity-alive' as const, entityId: eileenId, alive: true },
+          ],
+        },
+      },
+    }
+  })
+  return upgraded
+}
+
 const createGrayRavenEileenCompanionScenario = (
   primaryScenarioId: string,
   existingScenarioIds: Set<string>,
@@ -125,7 +172,7 @@ const createGrayRavenEileenCompanionScenario = (
     castEntityIds: [rolandId, eileenId],
     processedEventIds: [],
     claimedEventIds: [],
-    authoringVersion: 2,
+    authoringVersion: 3,
     stages: [{
       id: 'scenario-border-tavern-recruit-eileen',
       title: zh ? '邀请艾琳同行' : 'Invite Eileen to Join',
@@ -137,7 +184,14 @@ const createGrayRavenEileenCompanionScenario = (
         eventType: 'interaction',
         actorId: rolandId,
         targetId: eileenId,
-        minimumAffinity: 45,
+        conditions: {
+          mode: 'all',
+          conditions: [
+            { type: 'affinity', actorId: rolandId, targetId: eileenId, comparison: 'gte', value: 45 },
+            { type: 'entity-alive', entityId: rolandId, alive: true },
+            { type: 'entity-alive', entityId: eileenId, alive: true },
+          ],
+        },
       },
       dialogue: [
         {
@@ -462,6 +516,55 @@ const parseTargetRef = (value: unknown): WorldTargetRef | undefined => {
   if (!isRecord(value) || typeof value.id !== 'string' || !value.id.trim()) return undefined
   if (!['entity', 'brick', 'structure', 'waypoint'].includes(String(value.kind))) return undefined
   return { kind: value.kind as WorldTargetRef['kind'], id: value.id.trim() } as WorldTargetRef
+}
+
+const parseStoredScenarioConditions = (
+  value: unknown,
+): NonNullable<WorldScenarioStage['trigger']['conditions']> | undefined => {
+  if (!isRecord(value) || (value.mode !== 'all' && value.mode !== 'any') || !Array.isArray(value.conditions)) return undefined
+  const conditions = value.conditions.flatMap((condition): NonNullable<WorldScenarioStage['trigger']['conditions']>['conditions'] => {
+    if (!isRecord(condition) || typeof condition.type !== 'string') return []
+    if (condition.type === 'affinity' && typeof condition.actorId === 'string' && typeof condition.targetId === 'string' &&
+      (condition.comparison === 'gte' || condition.comparison === 'lte') && isFiniteNumber(condition.value)) {
+      return [{ type: 'affinity', actorId: condition.actorId, targetId: condition.targetId, comparison: condition.comparison, value: Math.max(-100, Math.min(100, condition.value)) }]
+    }
+    if (condition.type === 'health-ratio' && typeof condition.entityId === 'string' &&
+      (condition.comparison === 'gte' || condition.comparison === 'lte') && isFiniteNumber(condition.value)) {
+      return [{ type: 'health-ratio', entityId: condition.entityId, comparison: condition.comparison, value: Math.max(0, Math.min(1, condition.value)) }]
+    }
+    if (condition.type === 'faction' && typeof condition.entityId === 'string' && typeof condition.factionId === 'string') {
+      return [{ type: 'faction', entityId: condition.entityId, factionId: condition.factionId.slice(0, 80) }]
+    }
+    if (condition.type === 'party-member' && typeof condition.entityId === 'string') {
+      return [{
+        type: 'party-member',
+        entityId: condition.entityId,
+        ...(typeof condition.leaderId === 'string' ? { leaderId: condition.leaderId } : {}),
+        ...(condition.status === 'active' || condition.status === 'reserve' ? { status: condition.status } : {}),
+      }]
+    }
+    if (condition.type === 'scenario-outcome' && typeof condition.scenarioId === 'string') {
+      return [{
+        type: 'scenario-outcome',
+        scenarioId: condition.scenarioId,
+        ...(typeof condition.outcomeId === 'string' ? { outcomeId: condition.outcomeId.slice(0, 180) } : {}),
+      }]
+    }
+    if (condition.type === 'visibility' && typeof condition.visible === 'boolean') {
+      const target = parseTargetRef(condition.target)
+      return target && target.kind !== 'waypoint' ? [{ type: 'visibility', target, visible: condition.visible }] : []
+    }
+    if (condition.type === 'entity-alive' && typeof condition.entityId === 'string' && typeof condition.alive === 'boolean') {
+      return [{ type: 'entity-alive', entityId: condition.entityId, alive: condition.alive }]
+    }
+    return []
+  }).slice(0, 20)
+  if (conditions.length === 0) return undefined
+  return {
+    mode: value.mode,
+    ...(value.negate === true ? { negate: true } : {}),
+    conditions,
+  }
 }
 
 const parseStoredCommand = (value: unknown): WorldEntityCommand | undefined => {
@@ -868,6 +971,9 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
                 ...(isFiniteNumber(branch.trigger.minimumAffinity)
                   ? { minimumAffinity: Math.max(-100, Math.min(100, branch.trigger.minimumAffinity)) }
                   : {}),
+                ...(parseStoredScenarioConditions(branch.trigger.conditions)
+                  ? { conditions: parseStoredScenarioConditions(branch.trigger.conditions) }
+                  : {}),
               },
               ...(typeof branch.nextStageId === 'string' ? { nextStageId: branch.nextStageId } : {}),
               ...(branchDialogue?.length ? { dialogue: branchDialogue } : {}),
@@ -908,6 +1014,9 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
               ...(isFiniteNumber(stage.trigger.minimumAffinity)
                 ? { minimumAffinity: Math.max(-100, Math.min(100, stage.trigger.minimumAffinity)) }
                 : {}),
+              ...(parseStoredScenarioConditions(stage.trigger.conditions)
+                ? { conditions: parseStoredScenarioConditions(stage.trigger.conditions) }
+                : {}),
             },
             ...(ai ? { ai } : {}),
             ...(dialogue?.length ? { dialogue } : {}),
@@ -923,25 +1032,8 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
         const authoringVersion = isFiniteNumber(scenario.authoringVersion) ? Math.max(0, Math.floor(scenario.authoringVersion)) : 0
         const upgradedStages = scenario.assetId === 'scenario-border-tavern'
           ? upgradeGrayRavenScenarioStages(stages, scenario.title, authoringVersion)
-          : scenario.assetId === 'scenario-border-tavern-eileen-companion' && authoringVersion < 2
-            ? stages.map((stage) => {
-                const rolandId = stage.trigger.actorId
-                const eileenId = stage.trigger.targetId
-                if (!rolandId || !eileenId || stage.actions?.some((action) => action.type === 'join-party')) return stage
-                return {
-                  ...stage,
-                  actions: [
-                    ...(stage.actions ?? []).filter((action) => action.type !== 'add-story'),
-                    {
-                      type: 'join-party' as const,
-                      entityId: eileenId,
-                      leaderId: rolandId,
-                      partyName: /[\u3400-\u9fff]/.test(String(scenario.title)) ? '灰鸦调查队' : 'Gray Raven Investigators',
-                    },
-                    ...(stage.actions ?? []).filter((action) => action.type === 'add-story'),
-                  ],
-                }
-              })
+          : scenario.assetId === 'scenario-border-tavern-eileen-companion'
+            ? upgradeGrayRavenCompanionStages(stages, String(scenario.title), authoringVersion)
             : stages
         const activeDialogue = isRecord(scenario.activeDialogue) &&
           typeof scenario.activeDialogue.stageId === 'string' &&
@@ -1031,7 +1123,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
           ...(scenario.assetId === 'scenario-border-tavern'
             ? { authoringVersion: Math.max(4, authoringVersion) }
             : scenario.assetId === 'scenario-border-tavern-eileen-companion'
-              ? { authoringVersion: Math.max(2, authoringVersion) }
+              ? { authoringVersion: Math.max(3, authoringVersion) }
               : authoringVersion ? { authoringVersion } : {}),
         }]
       }).slice(-20)

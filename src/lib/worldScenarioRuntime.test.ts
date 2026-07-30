@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
-import type { WorldEvent, WorldScenarioRuntime } from '../types/world'
-import { createEmptyWorldState, createWorldEntity } from './worldEntity'
-import { advanceWorldScenarios, getActiveWorldScenarioStages, resolveWorldScenarioAi } from './worldScenarioRuntime'
+import type { WorldEvent, WorldScenarioRuntime, WorldState } from '../types/world'
+import { createEmptyWorldState, createWorldEntity, joinWorldParty } from './worldEntity'
+import { advanceWorldScenarios, evaluateWorldScenarioConditions, getActiveWorldScenarioStages, resolveWorldScenarioAi } from './worldScenarioRuntime'
 
 const commandEvent = (id: string, actorId: string, targetId: string): WorldEvent => ({
   id,
@@ -15,6 +15,53 @@ const commandEvent = (id: string, actorId: string, targetId: string): WorldEvent
 })
 
 describe('world scenario runtime', () => {
+  it('evaluates composable world conditions with all, any, and negation', () => {
+    const definition = worldEntityDefinitionById.get('knight')!
+    const leader = createWorldEntity(definition, { id: 'condition-leader', factionId: 'blue' })
+    const companion = {
+      ...createWorldEntity(definition, { id: 'condition-companion', factionId: 'blue' }),
+      health: 30,
+    }
+    let world: WorldState = {
+      ...createEmptyWorldState('conditions'),
+      entities: [leader, companion],
+      hiddenTargets: [{ kind: 'structure' as const, id: 'secret-door' }],
+      narrative: {
+        ...createEmptyWorldState('conditions').narrative,
+        relationshipsByEntityId: {
+          [leader.id]: {
+            [companion.id]: {
+              targetEntityId: companion.id,
+              affinity: 55,
+              encounters: 3,
+              lastEventType: 'interaction' as const,
+              updatedAtSeconds: 1,
+            },
+          },
+        },
+      },
+    }
+    world = joinWorldParty(world, companion.id, leader.id)
+    expect(evaluateWorldScenarioConditions(world, {
+      mode: 'all',
+      conditions: [
+        { type: 'affinity', actorId: leader.id, targetId: companion.id, comparison: 'gte', value: 45 },
+        { type: 'health-ratio', entityId: companion.id, comparison: 'lte', value: 0.5 },
+        { type: 'party-member', entityId: companion.id, leaderId: leader.id, status: 'active' },
+        { type: 'visibility', target: { kind: 'structure', id: 'secret-door' }, visible: false },
+        { type: 'entity-alive', entityId: companion.id, alive: true },
+      ],
+    })).toBe(true)
+    expect(evaluateWorldScenarioConditions(world, {
+      mode: 'any',
+      negate: true,
+      conditions: [
+        { type: 'faction', entityId: companion.id, factionId: 'red' },
+        { type: 'entity-alive', entityId: companion.id, alive: false },
+      ],
+    })).toBe(true)
+  })
+
   it('keeps multiple story flows active and advances them independently', () => {
     const first: WorldScenarioRuntime = {
       id: 'first-flow',

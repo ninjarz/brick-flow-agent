@@ -4516,6 +4516,47 @@ button:disabled {
   gap: 8px;
 }
 
+.scenario-condition-editor {
+  grid-column: 1 / -1;
+  padding: 7px;
+  border: 1px dashed #c4b5fd;
+  border-radius: 8px;
+  background: #faf5ff;
+}
+
+.scenario-condition-editor > summary {
+  color: #6d28d9;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.scenario-condition-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 7px 0;
+}
+
+.scenario-condition-toolbar > select { width: 130px; }
+.scenario-condition-toolbar > label {
+  display: flex;
+  grid-template-columns: none;
+  align-items: center;
+  gap: 5px;
+}
+.scenario-condition-toolbar input { width: auto; }
+
+.scenario-condition-row {
+  display: grid;
+  grid-template-columns: 120px repeat(4, minmax(80px, 1fr)) 30px;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 5px;
+}
+
+.scenario-condition-row > .icon-button { grid-column: -2 / -1; }
+
 .scenario-editor label,
 .scenario-editor-section > header {
   min-width: 0;

@@ -2,6 +2,50 @@ import type { WorldEvent, WorldScenarioAction, WorldScenarioBranch, WorldScenari
 import { issueWorldEntityCommand, joinWorldParty, leaveWorldParty } from './worldEntity'
 import { makeScenarioDialogueStoryId } from './worldNarrativeFeed'
 
+export const evaluateWorldScenarioConditions = (
+  world: WorldState,
+  group: NonNullable<WorldScenarioTrigger['conditions']>,
+) => {
+  const hiddenTargetKeys = new Set(world.hiddenTargets.map((target) => `${target.kind}:${target.id}`))
+  const matches = group.conditions.map((condition) => {
+    if (condition.type === 'affinity') {
+      const affinity = world.narrative.relationshipsByEntityId[condition.actorId]?.[condition.targetId]?.affinity ?? 0
+      return condition.comparison === 'gte' ? affinity >= condition.value : affinity <= condition.value
+    }
+    if (condition.type === 'health-ratio') {
+      const entity = world.entities.find((candidate) => candidate.id === condition.entityId)
+      if (!entity) return false
+      const ratio = entity.health / Math.max(1, entity.maxHealth)
+      return condition.comparison === 'gte' ? ratio >= condition.value : ratio <= condition.value
+    }
+    if (condition.type === 'faction') {
+      return world.entities.some((entity) => entity.id === condition.entityId && entity.factionId === condition.factionId)
+    }
+    if (condition.type === 'party-member') {
+      const entity = world.entities.find((candidate) => candidate.id === condition.entityId)
+      const party = entity?.partyId ? world.parties.find((candidate) => candidate.id === entity.partyId) : undefined
+      const membership = party?.members.find((member) => member.entityId === condition.entityId)
+      return Boolean(
+        party
+        && membership
+        && (!condition.leaderId || party.leaderId === condition.leaderId)
+        && (!condition.status || membership.status === condition.status),
+      )
+    }
+    if (condition.type === 'scenario-outcome') {
+      const scenario = world.scenarios.find((candidate) => candidate.id === condition.scenarioId)
+      return Boolean(scenario?.outcomeId && (!condition.outcomeId || scenario.outcomeId === condition.outcomeId))
+    }
+    if (condition.type === 'visibility') {
+      return hiddenTargetKeys.has(`${condition.target.kind}:${condition.target.id}`) !== condition.visible
+    }
+    const entity = world.entities.find((candidate) => candidate.id === condition.entityId)
+    return Boolean(entity && (entity.health > 0) === condition.alive)
+  })
+  const result = group.mode === 'any' ? matches.some(Boolean) : matches.every(Boolean)
+  return group.negate ? !result : result
+}
+
 const eventMatchesTrigger = (
   world: WorldState,
   event: WorldEvent,
@@ -13,11 +57,13 @@ const eventMatchesTrigger = (
     || (trigger.targetId && event.targetId !== trigger.targetId)
     || (trigger.commandType && event.commandType !== trigger.commandType)
   ) return false
-  if (trigger.minimumAffinity === undefined) return true
-  const actorId = trigger.actorId ?? event.actorId
-  const targetId = trigger.targetId ?? event.targetId
-  if (!targetId) return false
-  return (world.narrative.relationshipsByEntityId[actorId]?.[targetId]?.affinity ?? 0) >= trigger.minimumAffinity
+  if (trigger.minimumAffinity !== undefined) {
+    const actorId = trigger.actorId ?? event.actorId
+    const targetId = trigger.targetId ?? event.targetId
+    if (!targetId) return false
+    if ((world.narrative.relationshipsByEntityId[actorId]?.[targetId]?.affinity ?? 0) < trigger.minimumAffinity) return false
+  }
+  return !trigger.conditions || evaluateWorldScenarioConditions(world, trigger.conditions)
 }
 
 const findLatestMatchingEvent = (

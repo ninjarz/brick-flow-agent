@@ -313,7 +313,7 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
         : 'Optional story: earn Eileen’s trust, then talk again and invite her to join the investigation. Ignoring this flow never blocks the main story.',
       castEntityIds: [knight.id, archer.id],
       processedEventIds: [],
-      authoringVersion: 2,
+      authoringVersion: 3,
       stages: [{
         id: 'scenario-border-tavern-recruit-eileen',
         title: zh ? '邀请艾琳同行' : 'Invite Eileen to Join',
@@ -325,7 +325,14 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
           eventType: 'interaction',
           actorId: knight.id,
           targetId: archer.id,
-          minimumAffinity: 45,
+          conditions: {
+            mode: 'all',
+            conditions: [
+              { type: 'affinity', actorId: knight.id, targetId: archer.id, comparison: 'gte', value: 45 },
+              { type: 'entity-alive', entityId: knight.id, alive: true },
+              { type: 'entity-alive', entityId: archer.id, alive: true },
+            ],
+          },
         },
         dialogue: [
           {

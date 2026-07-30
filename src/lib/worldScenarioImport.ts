@@ -1,6 +1,6 @@
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import type { BuildPlan } from '../types/bricks'
-import type { WorldEntity, WorldEntityCommand, WorldRelationship, WorldScenarioAction, WorldScenarioStage, WorldState, WorldStoryBlock, WorldTargetRef } from '../types/world'
+import type { WorldEntity, WorldEntityCommand, WorldRelationship, WorldScenarioAction, WorldScenarioConditionGroup, WorldScenarioStage, WorldState, WorldStoryBlock, WorldTargetRef } from '../types/world'
 import type { WorldScenarioAsset, WorldScenarioLoadResult } from '../types/worldScenario'
 import { importAssetPlanIncrementally } from './incrementalAssetImport'
 import { createId } from './planUtils'
@@ -54,6 +54,40 @@ const remapCommand = (
   if (command.type === 'attack' && target.kind !== 'entity' && target.kind !== 'brick' && target.kind !== 'structure') return undefined
   if ((command.type === 'follow' || command.type === 'revive') && target.kind !== 'entity') return undefined
   return { ...command, target } as WorldEntityCommand
+}
+
+const remapScenarioConditions = (
+  group: WorldScenarioConditionGroup | undefined,
+  entityIdMap: Record<string, string>,
+  brickIdMap: Record<string, string>,
+  structureIdMap: Record<string, string>,
+  scenarioIdMap: Record<string, string>,
+): WorldScenarioConditionGroup | undefined => {
+  if (!group) return undefined
+  const conditions = group.conditions.flatMap((condition): WorldScenarioConditionGroup['conditions'] => {
+    if (condition.type === 'affinity') {
+      const actorId = entityIdMap[condition.actorId]
+      const targetId = entityIdMap[condition.targetId]
+      return actorId && targetId ? [{ ...condition, actorId, targetId }] : []
+    }
+    if (condition.type === 'health-ratio' || condition.type === 'faction' || condition.type === 'entity-alive') {
+      const entityId = entityIdMap[condition.entityId]
+      return entityId ? [{ ...condition, entityId }] : []
+    }
+    if (condition.type === 'party-member') {
+      const entityId = entityIdMap[condition.entityId]
+      const leaderId = condition.leaderId ? entityIdMap[condition.leaderId] : undefined
+      if (!entityId || (condition.leaderId && !leaderId)) return []
+      return [{ ...condition, entityId, ...(leaderId ? { leaderId } : {}) }]
+    }
+    if (condition.type === 'scenario-outcome') {
+      const scenarioId = scenarioIdMap[condition.scenarioId]
+      return scenarioId ? [{ ...condition, scenarioId }] : []
+    }
+    const target = remapTarget(condition.target, entityIdMap, brickIdMap, structureIdMap)
+    return target && target.kind !== 'waypoint' ? [{ ...condition, target }] : []
+  })
+  return conditions.length ? { ...group, conditions } : undefined
 }
 
 const remapScenarioWorld = (
@@ -260,7 +294,18 @@ const remapScenarioWorld = (
         })
         return [{
           ...branch,
-          trigger: { ...branch.trigger, ...(branchActorId ? { actorId: branchActorId } : {}), ...(branchTargetId ? { targetId: branchTargetId } : {}) },
+          trigger: {
+            ...branch.trigger,
+            ...(branchActorId ? { actorId: branchActorId } : {}),
+            ...(branchTargetId ? { targetId: branchTargetId } : {}),
+            conditions: remapScenarioConditions(
+              branch.trigger.conditions,
+              entityIdMap,
+              maps.brickIdMap,
+              maps.structureIdMap,
+              importedScenarioIdBySourceId,
+            ),
+          },
           dialogue: (branch.dialogue ?? []).flatMap((line) => {
             const speakerId = entityIdMap[line.speakerId]
             return speakerId ? [{ ...line, speakerId }] : []
@@ -270,7 +315,18 @@ const remapScenarioWorld = (
       })
       return [{
         ...stage,
-        trigger: { ...stage.trigger, ...(actorId ? { actorId } : {}), ...(targetId ? { targetId } : {}) },
+        trigger: {
+          ...stage.trigger,
+          ...(actorId ? { actorId } : {}),
+          ...(targetId ? { targetId } : {}),
+          conditions: remapScenarioConditions(
+            stage.trigger.conditions,
+            entityIdMap,
+            maps.brickIdMap,
+            maps.structureIdMap,
+            importedScenarioIdBySourceId,
+          ),
+        },
         ai: stage.ai ? {
           ...stage.ai,
           speakerIds: stage.ai.speakerIds

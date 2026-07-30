@@ -269,7 +269,13 @@ describe('WorldEntity foundation', () => {
       assetId: 'scenario-border-tavern-eileen-companion',
       castEntityIds: ['roland', 'eileen'],
     })
-    expect(restored.scenarios[1].stages[0].trigger.minimumAffinity).toBe(45)
+    expect(restored.scenarios[1].stages[0].trigger.conditions?.mode).toBe('all')
+    expect(restored.scenarios[1].stages[0].trigger.conditions?.conditions[0]).toMatchObject({
+      type: 'affinity',
+      actorId: 'roland',
+      targetId: 'eileen',
+      value: 45,
+    })
   })
 
   it('repairs a completed Gray Raven retreat so the envoy exits and stops fighting', () => {

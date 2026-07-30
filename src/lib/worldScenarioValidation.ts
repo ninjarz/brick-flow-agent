@@ -57,6 +57,21 @@ export const validateWorldScenario = (
     if (trigger.targetId && !entityIds.has(trigger.targetId) && !structureIds.has(trigger.targetId)) {
       issues.push({ code: 'missing-entity', severity: 'error', stageIndex, branchIndex, referenceId: trigger.targetId })
     }
+    for (const condition of trigger.conditions?.conditions ?? []) {
+      if (condition.type === 'affinity') {
+        addMissingEntity(condition.actorId, stageIndex, branchIndex)
+        addMissingEntity(condition.targetId, stageIndex, branchIndex)
+      } else if (condition.type === 'health-ratio' || condition.type === 'faction' ||
+        condition.type === 'party-member' || condition.type === 'entity-alive') {
+        addMissingEntity(condition.entityId, stageIndex, branchIndex)
+        if (condition.type === 'party-member') addMissingEntity(condition.leaderId, stageIndex, branchIndex)
+      } else if (condition.type === 'visibility') {
+        if (condition.target.kind === 'entity') addMissingEntity(condition.target.id, stageIndex, branchIndex)
+        if (condition.target.kind === 'structure' && !structureIds.has(condition.target.id)) {
+          issues.push({ code: 'missing-structure', severity: 'error', stageIndex, branchIndex, referenceId: condition.target.id })
+        }
+      }
+    }
   }
   const validateAction = (action: WorldScenarioAction, stageIndex: number, branchIndex?: number) => {
     if (action.type === 'set-faction' || action.type === 'issue-command' ||
