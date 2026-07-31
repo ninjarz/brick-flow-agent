@@ -9,7 +9,11 @@ type WorldSimulationLoopOptions = {
   active: boolean
   enableAi: boolean
   readPlan: () => Pick<BuildPlan, 'bricks' | 'structures'>
-  readDirectorPlayback: () => { active: boolean; simulationStarted: boolean }
+  readDirectorPlayback: () => {
+    active: boolean
+    simulationStarted: boolean
+    suspendAutomaticControllers?: boolean
+  }
   setWorld: Dispatch<SetStateAction<WorldState>>
 }
 
@@ -48,6 +52,7 @@ export const useWorldSimulationLoop = ({
             enableAi: source.enableAi,
             directorPlaybackActive: directorPlayback.active,
             directorSimulationStarted: directorPlayback.simulationStarted,
+            suspendAutomaticControllers: directorPlayback.suspendAutomaticControllers,
           },
         ))
       }

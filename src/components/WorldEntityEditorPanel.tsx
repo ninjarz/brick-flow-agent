@@ -1,4 +1,4 @@
-import { Bot, CircleStop, Send, Trash2, X } from 'lucide-react'
+import { Bot, CircleStop, Send, Sparkles, Trash2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { useI18n } from '../lib/i18n'
@@ -115,6 +115,70 @@ export const WorldEntityEditorPanel = ({ entity, commandTargets, onUpdate, onIss
         <span>{t(`worldEntity.behavior.${entity.behaviorState}`)}</span>
         {visibleCommand && <span>{t('worldEntity.currentOrder', { order: t(`worldEntity.order.${visibleCommand.type}`) })}</span>}
       </div>
+      <section className="world-character-spark" aria-label={t('worldEntity.spark')}>
+        <div className="section-title">
+          <Sparkles size={15} />
+          <h3>{t('worldEntity.spark')}</h3>
+        </div>
+        <small>{t('worldEntity.sparkHint')}</small>
+        <label>
+          {t('worldEntity.motive')}
+          <input
+            value={entity.mind.spark.motive}
+            maxLength={180}
+            onChange={(event) => onUpdate({
+              ...entity,
+              mind: { ...entity.mind, spark: { ...entity.mind.spark, motive: event.target.value } },
+            })}
+          />
+        </label>
+        <div className="world-character-spark-grid">
+          <label>
+            {t('worldEntity.temperament')}
+            <textarea
+              rows={2}
+              value={entity.mind.spark.temperament}
+              maxLength={180}
+              onChange={(event) => onUpdate({
+                ...entity,
+                mind: { ...entity.mind, spark: { ...entity.mind.spark, temperament: event.target.value } },
+              })}
+            />
+          </label>
+          <label>
+            {t('worldEntity.voice')}
+            <textarea
+              rows={2}
+              value={entity.mind.spark.voice}
+              maxLength={180}
+              onChange={(event) => onUpdate({
+                ...entity,
+                mind: { ...entity.mind, spark: { ...entity.mind.spark, voice: event.target.value } },
+              })}
+            />
+          </label>
+        </div>
+        <label className="world-character-initiative">
+          <span>{t('worldEntity.initiative')} <strong>{Math.round(entity.mind.spark.initiative * 100)}%</strong></span>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value={entity.mind.spark.initiative}
+            onChange={(event) => onUpdate({
+              ...entity,
+              mind: { ...entity.mind, spark: { ...entity.mind.spark, initiative: Number(event.target.value) } },
+            })}
+          />
+        </label>
+        {entity.mind.focus && (
+          <p className="world-character-focus">
+            <strong>{t('worldEntity.focus')}</strong>
+            <span>{entity.mind.focus.summary}</span>
+          </p>
+        )}
+      </section>
       <section className="world-command-panel" aria-label={t('worldEntity.orders')}>
         <div className="section-title">
           <Send size={15} />

@@ -21,6 +21,8 @@ const cloneStage = (stage: WorldScenarioStage): WorldScenarioStage => ({
       ? { ...action, command: { ...action.command } }
       : action.type === 'set-visibility'
         ? { ...action, target: { ...action.target } }
+        : action.type === 'grant-clue'
+          ? { ...action, clue: { ...action.clue, tags: [...action.clue.tags] } }
         : { ...action }
   )),
   branches: stage.branches?.map((branch) => ({
@@ -32,6 +34,8 @@ const cloneStage = (stage: WorldScenarioStage): WorldScenarioStage => ({
         ? { ...action, command: { ...action.command } }
         : action.type === 'set-visibility'
           ? { ...action, target: { ...action.target } }
+          : action.type === 'grant-clue'
+            ? { ...action, clue: { ...action.clue, tags: [...action.clue.tags] } }
           : { ...action }
     )),
   })),

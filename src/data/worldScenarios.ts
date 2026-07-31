@@ -129,6 +129,30 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
   })
   stranger.health = 180
   stranger.maxHealth = 180
+  innkeeper.mind.spark = {
+    motive: zh ? '守住灰鸦酒馆，也守住每个投宿者活着离开的机会' : 'Keep the Gray Raven safe and give every guest a chance to leave alive.',
+    temperament: zh ? '沉着、善于观察、不会轻易泄露客人的隐私' : 'Calm, observant, and discreet with guests.',
+    voice: zh ? '温和但不含糊，常用酒馆里的细节提醒别人' : 'Warm but precise, often pointing to small details from the tavern.',
+    initiative: 0.58,
+  }
+  knight.mind.spark = {
+    motive: zh ? '找到失踪商队，并保护灰鸦酒馆不被牵连' : 'Find the missing caravan without sacrificing the Gray Raven.',
+    temperament: zh ? '正直、坚决、愿意先求证再拔剑' : 'Honorable and determined, seeking proof before drawing steel.',
+    voice: zh ? '直接而克制，提问时会说出证据' : 'Direct and restrained, naming evidence when asking questions.',
+    initiative: 0.76,
+  }
+  archer.mind.spark = {
+    motive: zh ? '查明北路异常，让可靠的线索落到能行动的人手中' : 'Explain the northern-road disturbance and put reliable clues in capable hands.',
+    temperament: zh ? '敏锐、谨慎，信任需要通过共同承担风险来建立' : 'Perceptive and cautious; trust grows through shared risk.',
+    voice: zh ? '用观察到的痕迹说话，不夸大没有证实的结论' : 'Speaks through observed traces without overstating conclusions.',
+    initiative: 0.64,
+  }
+  stranger.mind.spark = {
+    motive: zh ? '掩盖旧采石场的用途，拖延调查直到同伴撤走' : 'Hide the quarry operation and delay the investigation until his allies withdraw.',
+    temperament: zh ? '多疑、冷硬，被证据逼到角落时会转为威胁' : 'Suspicious and severe, turning threatening when cornered by proof.',
+    voice: zh ? '短促、讥讽，尽量反问而不主动透露事实' : 'Curt and sardonic, deflecting with questions instead of volunteering facts.',
+    initiative: 0.46,
+  }
   innkeeper.commandQueue = [{ type: 'wander', seed: 31 }]
   archer.commandQueue = [{ type: 'follow', target: { kind: 'entity', id: knight.id } }]
   stranger.commandQueue = [{ type: 'wander', seed: 73 }]
@@ -145,6 +169,35 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
     narrative: {
       processedEventIds: [],
       memoriesByEntityId: {},
+      cluesByEntityId: {
+        [innkeeper.id]: [{
+          id: 'gray-raven-envoy-reaction',
+          holderId: innkeeper.id,
+          text: zh ? '黑岩使者听见“断箭”后便不再碰酒杯，并一直观察北门。' : 'The envoy stopped touching his drink after hearing “broken arrow” and kept watching the north door.',
+          kind: 'rumor',
+          confidence: 0.82,
+          tags: zh ? ['黑岩使者', '断箭', '酒杯'] : ['envoy', 'broken arrow', 'drink'],
+          learnedAtSeconds: 0,
+        }],
+        [archer.id]: [{
+          id: 'gray-raven-broken-arrow',
+          holderId: archer.id,
+          text: zh ? '断箭带有黑岩军用切口和旧采石场独有的灰白石粉；使者靴边也有同样石粉。' : 'The arrow has a Blackrock military cut and pale old-quarry dust; the envoy carries the same dust on his boots.',
+          kind: 'fact',
+          confidence: 0.96,
+          tags: zh ? ['断箭', '黑岩纹章', '旧采石场', '石粉', '黑岩使者'] : ['broken arrow', 'Blackrock', 'old quarry', 'dust', 'envoy'],
+          learnedAtSeconds: 0,
+        }],
+        [stranger.id]: [{
+          id: 'gray-raven-caravan-location',
+          holderId: stranger.id,
+          text: zh ? '失踪商队被扣在旧采石场，作为引诱北境巡逻队的诱饵。' : 'The missing caravan is held in the old quarry as bait for the northern patrol.',
+          kind: 'secret',
+          confidence: 1,
+          tags: zh ? ['失踪商队', '旧采石场', '巡逻队', '诱饵'] : ['missing caravan', 'old quarry', 'patrol', 'bait'],
+          learnedAtSeconds: 0,
+        }],
+      },
       directorTurns: [],
       relationshipsByEntityId: {
         [innkeeper.id]: {
@@ -224,6 +277,17 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
             },
           ],
           actions: [
+            {
+              type: 'grant-clue',
+              entityId: knight.id,
+              clue: {
+                id: 'gray-raven-broken-arrow',
+                text: zh ? '断箭带有黑岩军用切口和旧采石场独有的灰白石粉；使者靴边也有同样石粉。' : 'The arrow has a Blackrock military cut and pale old-quarry dust; the envoy carries the same dust on his boots.',
+                kind: 'fact',
+                confidence: 0.94,
+                tags: zh ? ['断箭', '黑岩纹章', '旧采石场', '石粉', '黑岩使者'] : ['broken arrow', 'Blackrock', 'old quarry', 'dust', 'envoy'],
+              },
+            },
             {
               type: 'add-story',
               title: zh ? '第 2 章 · 断箭上的新伤' : 'Chapter 2 · Fresh Marks on the Broken Arrow',

@@ -70,7 +70,7 @@ const remapScenarioConditions = (
       const targetId = entityIdMap[condition.targetId]
       return actorId && targetId ? [{ ...condition, actorId, targetId }] : []
     }
-    if (condition.type === 'health-ratio' || condition.type === 'faction' || condition.type === 'entity-alive') {
+    if (condition.type === 'health-ratio' || condition.type === 'faction' || condition.type === 'entity-alive' || condition.type === 'clue') {
       const entityId = entityIdMap[condition.entityId]
       return entityId ? [{ ...condition, entityId }] : []
     }
@@ -166,6 +166,20 @@ const remapScenarioWorld = (
           z: template.autonomy.home.z + maps.placementOffset.z,
         },
       },
+      mind: {
+        spark: { ...template.mind.spark },
+        ...(template.mind.focus
+          ? {
+              focus: {
+                ...template.mind.focus,
+                target: template.mind.focus.target
+                  ? remapTarget(template.mind.focus.target, entityIdMap, maps.brickIdMap, maps.structureIdMap)
+                  : undefined,
+                updatedAtSeconds: currentWorld.elapsedSeconds,
+              },
+            }
+          : {}),
+      },
     })
   }
   const importedEntityIdSet = new Set(importedEntities.map((entity) => entity.id))
@@ -209,6 +223,18 @@ const remapScenarioWorld = (
       }),
     )
   }
+  const cluesByEntityId = { ...currentWorld.narrative.cluesByEntityId }
+  for (const [sourceId, clues] of Object.entries(asset.world.narrative.cluesByEntityId)) {
+    const holderId = entityIdMap[sourceId]
+    if (!holderId || !importedEntityIdSet.has(holderId)) continue
+    cluesByEntityId[holderId] = clues.map((clue) => ({
+      ...clue,
+      holderId,
+      learnedAtSeconds: currentWorld.elapsedSeconds,
+      sourceEntityId: clue.sourceEntityId ? entityIdMap[clue.sourceEntityId] : undefined,
+      sourceEventId: undefined,
+    }))
+  }
 
   const remapKnownId = (id: string) => entityIdMap[id] ?? maps.brickIdMap[id] ?? maps.structureIdMap[id]
   const importedHiddenTargets = asset.world.hiddenTargets.flatMap((target) => {
@@ -239,6 +265,10 @@ const remapScenarioWorld = (
           return entityId && leaderId ? [{ ...action, entityId, leaderId }] : []
         }
         if (action.type === 'leave-party') {
+          const entityId = entityIdMap[action.entityId]
+          return entityId ? [{ ...action, entityId }] : []
+        }
+        if (action.type === 'grant-clue') {
           const entityId = entityIdMap[action.entityId]
           return entityId ? [{ ...action, entityId }] : []
         }
@@ -277,6 +307,10 @@ const remapScenarioWorld = (
             return entityId && leaderId ? [{ ...action, entityId, leaderId }] : []
           }
           if (action.type === 'leave-party') {
+            const entityId = entityIdMap[action.entityId]
+            return entityId ? [{ ...action, entityId }] : []
+          }
+          if (action.type === 'grant-clue') {
             const entityId = entityIdMap[action.entityId]
             return entityId ? [{ ...action, entityId }] : []
           }
@@ -360,6 +394,7 @@ const remapScenarioWorld = (
       : currentWorld.scenarios,
     narrative: {
       ...currentWorld.narrative,
+      cluesByEntityId,
       relationshipsByEntityId,
       stories: [...currentWorld.narrative.stories, ...importedStories],
     },

@@ -29,4 +29,34 @@ describe('world simulation runtime', () => {
       directorSimulationStarted: false,
     })).toBe(world)
   })
+
+  it('suspends rule decisions while continuous direction owns autonomous behavior', () => {
+    const actor = createWorldEntity(worldEntityDefinitionById.get('knight')!, {
+      id: 'runtime-rule-actor',
+      controller: 'rule',
+    })
+    actor.autonomy.nextDecisionAtSeconds = 0
+    const world = {
+      ...createEmptyWorldState('continuous-director-plan'),
+      paused: false,
+      entities: [actor],
+    }
+    const suspended = advanceWorldSimulationSteps(world, { bricks: [], structures: [] }, 1, {
+      enableAi: true,
+      directorPlaybackActive: false,
+      directorSimulationStarted: false,
+      suspendAutomaticControllers: true,
+    })
+    const localRules = advanceWorldSimulationSteps(world, { bricks: [], structures: [] }, 1, {
+      enableAi: true,
+      directorPlaybackActive: false,
+      directorSimulationStarted: false,
+      suspendAutomaticControllers: false,
+    })
+
+    expect(suspended.elapsedSeconds).toBeGreaterThan(world.elapsedSeconds)
+    expect(suspended.entities[0]?.activeCommand).toBeUndefined()
+    expect(suspended.entities[0]?.commandQueue).toHaveLength(0)
+    expect(localRules.entities[0]?.activeCommand?.type).toBe('wander')
+  })
 })

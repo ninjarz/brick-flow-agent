@@ -481,6 +481,7 @@ describe('WorldEntity foundation', () => {
         directorTurns: [{
           id: 'turn-1',
           playerText: '让罗兰停下来。',
+          origin: 'autonomous',
           createdAtSeconds: 12,
           status: 'completed',
           contextStats: {
@@ -503,6 +504,7 @@ describe('WorldEntity foundation', () => {
     expect(restored?.narrative.directorTurns).toEqual([{
       id: 'turn-1',
       playerText: '让罗兰停下来。',
+      origin: 'autonomous',
       createdAtSeconds: 12,
       status: 'completed',
       contextStats: {

@@ -28,7 +28,7 @@ import { dissolveBrickStructure, getBrickStructure, getExactSelectionStructure, 
 import { changeAllWorldEntityControllers, createEmptyWorldState, createWorldEntity, issueWorldEntityCommand, issueWorldPartyOrder, leaveWorldParty, setWorldPartyMemberStatus } from './lib/worldEntity'
 import { isWorldEntityGroundPointBlockedByBricks } from './lib/worldSimulation'
 import { findNearestAvailableWorldEntityPoint } from './lib/worldEntityCollision'
-import { applyWorldDirectorPlaybackEvent, getWorldDirectorPlaybackOutcomeDetail, isWorldDirectorDialogueVisible, isWorldDirectorPlaybackSettledIgnoringSpeech, waitForWorldDirectorDialoguePlayback } from './lib/worldDirectorPlayback'
+import { applyWorldDirectorPlaybackEvent, getWorldDirectorPlaybackOutcomeDetail, isWorldDirectorDialogueVisible, isWorldDirectorPlaybackSettledIgnoringSpeech, prepareWorldForDirectorPlayback, waitForWorldDirectorDialoguePlayback } from './lib/worldDirectorPlayback'
 import { getWorldDirectorReplayEntries, replaceWorldDirectorTurnEntry, restoreWorldDirectorCheckpoint } from './lib/worldDirectorReplay'
 import { buildDirectorCompactionPrompt, buildDirectorMessages, createDirectorMemoryCheckpoint, createFallbackDirectorSummary, estimateDirectorMessagesTokens, getDirectorTurnsAfterMemory, parseDirectorCompactionSummary, planDirectorCompaction } from './lib/worldDirectorContext'
 import { addWorldStory, createLocalTavernStory } from './lib/worldNarrative'
@@ -216,6 +216,7 @@ function App() {
   const [isWorldRosterOpen, setIsWorldRosterOpen] = useState(false)
   const [isTavernAiThinking, setIsTavernAiThinking] = useState(false)
   const [isTavernDirectorThinking, setIsTavernDirectorThinking] = useState(false)
+  const [isContinuousAiDirectorEnabled, setIsContinuousAiDirectorEnabled] = useState(false)
   const tavernAiAbortRef = useRef<AbortController>()
   const tavernDirectorAbortRef = useRef<AbortController>()
   const worldScenarioAiAbortRef = useRef<AbortController>()
@@ -699,6 +700,19 @@ function App() {
     return () => window.clearInterval(intervalId)
   }, [isWorkspaceStorageHydrated])
 
+  useEffect(() => {
+    if (isWorldStoryDockOpen && llmConfigComplete && world.entities.length > 0) return
+    setIsContinuousAiDirectorEnabled(false)
+  }, [isWorldStoryDockOpen, llmConfigComplete, world.entities.length])
+
+  useEffect(() => {
+    if (!isContinuousAiDirectorEnabled) return
+    const prepared = prepareWorldForDirectorPlayback(worldRef.current)
+    if (prepared === worldRef.current) return
+    worldRef.current = prepared
+    setWorld(prepared)
+  }, [isContinuousAiDirectorEnabled])
+
   useWorldSimulationLoop({
     active: world.entities.length > 0 && !world.paused && !placementSession && !worldEntityPlacement,
     enableAi: llmConfigComplete,
@@ -706,6 +720,7 @@ function App() {
     readDirectorPlayback: () => ({
       active: Boolean(tavernDirectorPlaybackRef.current),
       simulationStarted: Boolean(tavernDirectorPlaybackRef.current?.simulationStarted),
+      suspendAutomaticControllers: isContinuousAiDirectorEnabled,
     }),
     setWorld,
   })
@@ -2056,7 +2071,7 @@ function App() {
       const next = {
         ...current,
         events: [],
-        narrative: { processedEventIds: [], memoriesByEntityId: {}, relationshipsByEntityId: {}, stories: [], directorTurns: [] },
+        narrative: { processedEventIds: [], memoriesByEntityId: {}, cluesByEntityId: {}, relationshipsByEntityId: {}, stories: [], directorTurns: [] },
       }
       worldRef.current = next
       return next
@@ -2650,7 +2665,13 @@ function App() {
                           type="button"
                           className={isWorldStoryDockOpen ? 'active' : ''}
                           aria-pressed={isWorldStoryDockOpen}
-                          onClick={() => setIsWorldStoryDockOpen((current) => !current)}
+                          onClick={() => setIsWorldStoryDockOpen((current) => {
+                            if (current) {
+                              setIsContinuousAiDirectorEnabled(false)
+                              stopTavernDirector()
+                            }
+                            return !current
+                          })}
                         >
                           <MessageCircle size={14} />
                           {locale === 'zh-CN' ? '剧情' : 'Story'}
@@ -2884,17 +2905,23 @@ function App() {
                 llmConfigured={llmConfigComplete}
                 isLlmTesting={isTestingLlmConfig}
                 isDirectorThinking={isTavernDirectorThinking}
+                continuousAiDirectorEnabled={isContinuousAiDirectorEnabled}
                 isAiActivityThinking={isTavernAiThinking}
                 onGenerateStory={() => generateTavernStory()}
                 onPlayActivity={runTavernActivity}
                 onPlayAiActivity={runAiTavernActivity}
                 onDirectWorld={runTavernDirectorTurn}
+                onSetContinuousAiDirectorEnabled={setIsContinuousAiDirectorEnabled}
                 onStopDirector={stopTavernDirector}
                 onCommitDirectorTurn={commitTavernDirectorTurn}
                 onReplayDirectorTurn={replayTavernDirectorTurn}
                 onReplayDirectorEntry={replayTavernDirectorTurn}
                 onSelectEntity={selectWorldEntity}
-                onClose={() => setIsWorldStoryDockOpen(false)}
+                onClose={() => {
+                  setIsContinuousAiDirectorEnabled(false)
+                  stopTavernDirector()
+                  setIsWorldStoryDockOpen(false)
+                }}
               />
             </Suspense>
           )}

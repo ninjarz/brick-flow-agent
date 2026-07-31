@@ -7,6 +7,7 @@ export type WorldSimulationRuntimeOptions = {
   enableAi: boolean
   directorPlaybackActive: boolean
   directorSimulationStarted: boolean
+  suspendAutomaticControllers?: boolean
 }
 
 export const advanceWorldSimulationSteps = (
@@ -23,7 +24,12 @@ export const advanceWorldSimulationSteps = (
         plan.bricks,
         worldSimulationStepSeconds,
         plan.structures ?? [],
-        { suspendAutomaticControllers: options.directorSimulationStarted },
+        {
+          suspendAutomaticControllers: (
+            options.directorSimulationStarted
+            || options.suspendAutomaticControllers === true
+          ),
+        },
       ),
       {
         allowNewStages: !options.directorPlaybackActive,

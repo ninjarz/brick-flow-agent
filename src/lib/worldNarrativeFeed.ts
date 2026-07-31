@@ -18,6 +18,7 @@ export type WorldNarrativeFeedItem = {
   blocks: WorldNarrativeFeedBlock[]
   title?: string
   playerText?: string
+  origin?: WorldDirectorTurn['origin']
   source?: WorldStory['source']
   status?: WorldDirectorTurn['status'] | 'streaming'
   error?: string
@@ -84,6 +85,7 @@ const directorFeedItem = (turn: ActiveWorldDirectorTurn): WorldNarrativeFeedItem
   createdAtSeconds: turn.createdAtSeconds,
   blocks: turn.entries,
   playerText: turn.playerText,
+  origin: turn.origin,
   status: turn.status,
   error: turn.error,
   reasoning: turn.reasoning,

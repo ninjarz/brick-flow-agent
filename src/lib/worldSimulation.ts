@@ -3,6 +3,7 @@ import { brickById } from '../data/basicBricks'
 import type { BrickStructure, PlacedBrick } from '../types/bricks'
 import type { WorldEntity, WorldEntityCommand, WorldEvent, WorldPendingImpact, WorldState, WorldTargetRef } from '../types/world'
 import { getBrickBounds } from './planUtils'
+import { propagateWorldClueFromDialogue } from './worldClues'
 import { ingestWorldEvents } from './worldNarrative'
 import { getWorldProjectileFlightSeconds } from './worldProjectiles'
 import { createWorldObstacleIndex, queryWorldObstacleBounds, type WorldObstacleBounds, type WorldObstacleIndex } from './worldObstacleIndex'
@@ -505,10 +506,10 @@ const findNearestReviveTarget = (entity: WorldEntity, entities: WorldEntity[]) =
   ))
 }
 
-const nextSocialDecisionDelay = (entityId: string, elapsedSeconds: number) => {
-  const key = `${entityId}:${Math.floor(elapsedSeconds)}`
+const nextSocialDecisionDelay = (entity: WorldEntity, elapsedSeconds: number) => {
+  const key = `${entity.id}:${Math.floor(elapsedSeconds)}`
   const hash = [...key].reduce((value, character) => Math.imul(value ^ character.charCodeAt(0), 16777619) >>> 0, 2166136261)
-  return 7 + (hash % 6)
+  return 7 + (hash % 6) + (1 - entity.mind.spark.initiative) * 8
 }
 
 const deterministicChoice = <T,>(values: readonly T[], key: string) => {
@@ -1137,13 +1138,17 @@ export const stepWorldSimulation = (
         const decisionSeed = Math.floor(timeSeconds * 10)
         const socialTargetIsClose = socialTarget && distance2d(entity.transform, socialTarget.transform)
           <= getWorldEntityCollisionRadius(entity) + getWorldEntityCollisionRadius(socialTarget) + arrivalDistanceStuds
+        const socialRoll = Math.abs(stableDirectionRadians(`${entity.id}:${decisionSeed}`)) / Math.PI
         const shouldSocialize = socialTarget
-          && (socialTargetIsClose || Math.floor(stableDirectionRadians(`${entity.id}:${decisionSeed}`) * 1_000) % 3 === 0)
+          && (
+            (socialTargetIsClose && entity.mind.spark.initiative >= 0.35)
+            || socialRoll <= 0.18 + entity.mind.spark.initiative * 0.42
+          )
         entity = {
           ...entity,
           autonomy: {
             ...entity.autonomy,
-            nextDecisionAtSeconds: timeSeconds + nextSocialDecisionDelay(entity.id, timeSeconds),
+            nextDecisionAtSeconds: timeSeconds + nextSocialDecisionDelay(entity, timeSeconds),
           },
         }
         if (socialTarget && shouldSocialize) {
@@ -1397,10 +1402,17 @@ export const stepWorldSimulation = (
       && targetEntity
       && centerDistance <= combinedBodyRadius + arrivalDistanceStuds
     if (isInteractionInReach) {
-      events.push(makeScenarioAwareInteractionEvent(world, timeSeconds, entity.id, target.id))
       const listenerIndex = targetLookup.entityIndexById.get(target.id)
       const listener = listenerIndex === undefined ? undefined : entities[listenerIndex]
       const scriptedSpeech = activeCommand.type === 'interact' ? activeCommand.speechText?.trim() : undefined
+      events.push({
+        ...makeScenarioAwareInteractionEvent(world, timeSeconds, entity.id, target.id),
+        ...(scriptedSpeech ? {
+          dialogueText: scriptedSpeech,
+          dialogueSpeakerId: entity.id,
+          dialogueListenerId: target.id,
+        } : {}),
+      })
       const speechDurationSeconds = scriptedSpeech
         ? Math.min(14, Math.max(5, scriptedSpeech.length / 5))
         : conversationSpeechDurationSeconds
@@ -1547,10 +1559,17 @@ export const stepWorldSimulation = (
       } else if (activeCommand.type === 'guard') {
         entity = { ...entity, behaviorState: 'guarding' }
       } else if (activeCommand.type === 'interact' && target.kind === 'entity') {
-        events.push(makeScenarioAwareInteractionEvent(world, timeSeconds, entity.id, target.id))
         const listenerIndex = targetLookup.entityIndexById.get(target.id)
         const listener = listenerIndex === undefined ? undefined : entities[listenerIndex]
         const scriptedSpeech = activeCommand.speechText?.trim()
+        events.push({
+          ...makeScenarioAwareInteractionEvent(world, timeSeconds, entity.id, target.id),
+          ...(scriptedSpeech ? {
+            dialogueText: scriptedSpeech,
+            dialogueSpeakerId: entity.id,
+            dialogueListenerId: target.id,
+          } : {}),
+        })
         const speechDurationSeconds = scriptedSpeech
           ? Math.min(14, Math.max(5, scriptedSpeech.length / 5))
           : conversationSpeechDurationSeconds
@@ -1604,12 +1623,29 @@ export const stepWorldSimulation = (
   const pendingExistingEvents = world.events.filter((event) => !processedEventIds.has(event.id))
   const simulatedEntityById = new Map(entities.map((entity) => [entity.id, entity]))
   const mergedEntities = world.entities.map((entity) => simulatedEntityById.get(entity.id) ?? entity)
-  return {
+  const unprocessedEvents = [...pendingExistingEvents, ...enrichedEvents]
+  let nextWorld: WorldState = {
     ...world,
     elapsedSeconds: timeSeconds,
     entities: mergedEntities,
     events: [...world.events, ...enrichedEvents].slice(-maxEventHistory),
     pendingImpacts,
-    narrative: ingestWorldEvents(world.narrative, [...pendingExistingEvents, ...enrichedEvents], new Set(mergedEntities.map((entity) => entity.id))),
+    narrative: ingestWorldEvents(world.narrative, unprocessedEvents, new Set(mergedEntities.map((entity) => entity.id))),
   }
+  for (const event of unprocessedEvents) {
+    if (
+      event.type === 'interaction'
+      && event.targetId
+      && event.dialogueText
+      && !processedEventIds.has(event.id)
+    ) {
+      nextWorld = propagateWorldClueFromDialogue(
+        nextWorld,
+        event.dialogueSpeakerId ?? event.actorId,
+        event.dialogueListenerId ?? event.targetId,
+        event.dialogueText,
+      )
+    }
+  }
+  return nextWorld
 }

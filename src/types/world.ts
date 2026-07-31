@@ -44,6 +44,24 @@ export type WorldEntitySpeech = {
   expiresAtSeconds: number
 }
 
+export type WorldCharacterSpark = {
+  /** A durable motivation. The simulation and director may pursue it, but never treat it as a command. */
+  motive: string
+  /** A few stable behavioral traits used to break ties between otherwise valid actions. */
+  temperament: string
+  /** A concise style guide for authored or AI-generated speech. */
+  voice: string
+  /** 0 = reactive, 1 = very likely to volunteer an action or line. */
+  initiative: number
+}
+
+export type WorldEntityFocus = {
+  summary: string
+  source: 'seed' | 'player' | 'scenario' | 'ai'
+  target?: WorldTargetRef
+  updatedAtSeconds: number
+}
+
 export type WorldEntity = {
   id: string
   definitionId: string
@@ -74,6 +92,10 @@ export type WorldEntity = {
     nextDecisionAtSeconds: number
     home: { x: number; z: number }
   }
+  mind: {
+    spark: WorldCharacterSpark
+    focus?: WorldEntityFocus
+  }
 }
 
 export type WorldParty = {
@@ -98,6 +120,9 @@ export type WorldEvent = {
   amount?: number
   commandType?: WorldEntityCommand['type']
   commandSource?: WorldEntityControllerKind
+  dialogueText?: string
+  dialogueSpeakerId?: string
+  dialogueListenerId?: string
   projectileKind?: 'arrow' | 'stone'
   origin?: { x: number; y: number; z: number }
   impactPoint?: { x: number; y: number; z: number }
@@ -122,6 +147,22 @@ export type WorldMemory = {
   otherId?: string
   otherName?: string
   importance: 1 | 2 | 3
+  /** Human-readable event residue used by local relevance retrieval. */
+  content?: string
+  tags?: string[]
+}
+
+export type WorldClue = {
+  /** Shared semantic ID. Copies passed between characters keep the same ID. */
+  id: string
+  holderId: string
+  text: string
+  kind: 'fact' | 'rumor' | 'secret'
+  confidence: number
+  tags: string[]
+  learnedAtSeconds: number
+  sourceEntityId?: string
+  sourceEventId?: string
 }
 
 export type WorldStory = {
@@ -171,6 +212,7 @@ export type WorldDirectorEntry = WorldDirectorEvent & {
 export type WorldDirectorTurn = {
   id: string
   playerText: string
+  origin?: 'player' | 'autonomous'
   entries: WorldDirectorEntry[]
   reasoning?: string
   requestMessage?: string
@@ -211,6 +253,7 @@ export type WorldDirectorMemory = {
 export type WorldNarrativeState = {
   processedEventIds: string[]
   memoriesByEntityId: Record<string, WorldMemory[]>
+  cluesByEntityId: Record<string, WorldClue[]>
   relationshipsByEntityId: Record<string, Record<string, WorldRelationship>>
   stories: WorldStory[]
   directorTurns: WorldDirectorTurn[]
@@ -231,6 +274,7 @@ export type WorldScenarioCondition =
   | { type: 'health-ratio'; entityId: string; comparison: 'gte' | 'lte'; value: number }
   | { type: 'faction'; entityId: string; factionId: string }
   | { type: 'party-member'; entityId: string; leaderId?: string; status?: 'active' | 'reserve' }
+  | { type: 'clue'; entityId: string; clueId: string; minimumConfidence?: number }
   | { type: 'scenario-outcome'; scenarioId: string; outcomeId?: string }
   | { type: 'visibility'; target: Extract<WorldTargetRef, { kind: 'entity' | 'brick' | 'structure' }>; visible: boolean }
   | { type: 'entity-alive'; entityId: string; alive: boolean }
@@ -247,6 +291,11 @@ export type WorldScenarioAction = (
   | { type: 'leave-party'; entityId: string }
   | { type: 'issue-command'; entityId: string; command: WorldEntityCommand }
   | { type: 'add-story'; title: string; body: string; characterIds?: string[] }
+  | {
+      type: 'grant-clue'
+      entityId: string
+      clue: Pick<WorldClue, 'id' | 'text' | 'kind' | 'confidence' | 'tags'>
+    }
   | { type: 'set-visibility'; target: Extract<WorldTargetRef, { kind: 'entity' | 'brick' | 'structure' }>; visible: boolean }
 ) & {
   /** Delay after the previous action before this action is applied. */

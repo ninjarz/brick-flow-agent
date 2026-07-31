@@ -19,6 +19,21 @@ const appendMemory = (
   [entityId]: [...(memories[entityId] ?? []), memory].slice(-maxMemoriesPerEntity),
 })
 
+const eventMemoryContent = (event: WorldEvent) => {
+  if (event.dialogueText?.trim()) return event.dialogueText.trim().slice(0, 500)
+  const actor = event.actorName ?? event.actorId
+  const target = event.targetName ?? event.targetId
+  return [actor, event.type, target].filter(Boolean).join(' ').slice(0, 500)
+}
+
+const eventMemoryTags = (event: WorldEvent) => Array.from(new Set([
+  event.type,
+  event.commandType,
+  event.actorName,
+  event.targetName,
+].filter((value): value is string => Boolean(value?.trim()))
+  .map((value) => value.trim().toLocaleLowerCase().slice(0, 40)))).slice(0, 10)
+
 const clampAffinity = (value: number) => Math.max(-100, Math.min(100, value))
 const clampRelationshipDimension = (value: number) => Math.max(0, Math.min(100, value))
 
@@ -120,6 +135,8 @@ export const ingestWorldEvents = (
       otherId: event.targetId,
       otherName: event.targetName,
       importance: eventImportance(event.type),
+      content: eventMemoryContent(event),
+      tags: eventMemoryTags(event),
     })
     if (event.targetId && entityIds.has(event.targetId)) {
       memories = appendMemory(memories, event.targetId, {
@@ -131,6 +148,8 @@ export const ingestWorldEvents = (
         otherId: event.actorId,
         otherName: event.actorName,
         importance: eventImportance(event.type),
+        content: eventMemoryContent(event),
+        tags: eventMemoryTags(event),
       })
       relationships = updateRelationship(relationships, event.actorId, event.targetId, event)
       relationships = updateRelationship(relationships, event.targetId, event.actorId, event)

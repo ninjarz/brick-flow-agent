@@ -66,6 +66,7 @@ const makeCondition = (
   if (type === 'health-ratio') return { type, entityId: firstEntityId, comparison: 'lte', value: 0.4 }
   if (type === 'faction') return { type, entityId: firstEntityId, factionId: 'blue' }
   if (type === 'party-member') return { type, entityId: firstEntityId, status: 'active' }
+  if (type === 'clue') return { type, entityId: firstEntityId, clueId: '', minimumConfidence: 0.5 }
   if (type === 'scenario-outcome') return { type, scenarioId: '' }
   if (type === 'visibility') return { type, target: firstStructureId ? { kind: 'structure', id: firstStructureId } : { kind: 'entity', id: firstEntityId }, visible: true }
   return { type, entityId: firstEntityId, alive: true }
@@ -114,6 +115,7 @@ const ScenarioConditionEditor = ({
             <option value="health-ratio">{zh ? '生命比例' : 'Health ratio'}</option>
             <option value="faction">{zh ? '所属阵营' : 'Faction'}</option>
             <option value="party-member">{zh ? '队伍成员' : 'Party member'}</option>
+            <option value="clue">{zh ? '持有线索' : 'Known clue'}</option>
             <option value="entity-alive">{zh ? '存活状态' : 'Alive state'}</option>
             <option value="visibility">{zh ? '显隐状态' : 'Visibility'}</option>
             <option value="scenario-outcome">{zh ? '流程结果' : 'Flow outcome'}</option>
@@ -129,7 +131,7 @@ const ScenarioConditionEditor = ({
             <select value={condition.comparison} onChange={(event) => patchCondition(index, { ...condition, comparison: event.target.value as 'gte' | 'lte' })}><option value="gte">≥</option><option value="lte">≤</option></select>
             <input type="number" min="0" max="1" step="0.05" value={condition.value} onChange={(event) => patchCondition(index, { ...condition, value: Math.max(0, Math.min(1, Number(event.target.value) || 0)) })} />
           </>}
-          {(condition.type === 'faction' || condition.type === 'party-member' || condition.type === 'entity-alive') && (
+          {(condition.type === 'faction' || condition.type === 'party-member' || condition.type === 'entity-alive' || condition.type === 'clue') && (
             <select value={condition.entityId} onChange={(event) => patchCondition(index, { ...condition, entityId: event.target.value })}>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}</select>
           )}
           {condition.type === 'faction' && <select value={condition.factionId} onChange={(event) => patchCondition(index, { ...condition, factionId: event.target.value })}>{factions.map((faction) => <option key={faction} value={faction}>{faction}</option>)}</select>}
@@ -138,6 +140,10 @@ const ScenarioConditionEditor = ({
             <select value={condition.status ?? ''} onChange={(event) => patchCondition(index, { ...condition, status: event.target.value ? event.target.value as 'active' | 'reserve' : undefined })}><option value="">{zh ? '任意身份' : 'Any status'}</option><option value="active">{zh ? '正式' : 'Active'}</option><option value="reserve">{zh ? '候补' : 'Reserve'}</option></select>
           </>}
           {condition.type === 'entity-alive' && <select value={condition.alive ? 'alive' : 'dead'} onChange={(event) => patchCondition(index, { ...condition, alive: event.target.value === 'alive' })}><option value="alive">{zh ? '存活' : 'Alive'}</option><option value="dead">{zh ? '已倒下' : 'Defeated'}</option></select>}
+          {condition.type === 'clue' && <>
+            <input value={condition.clueId} placeholder={zh ? '线索 ID' : 'Clue ID'} onChange={(event) => patchCondition(index, { ...condition, clueId: event.target.value })} />
+            <label>{zh ? '可信度 ≥' : 'Confidence ≥'}<input type="number" min="0" max="1" step="0.05" value={condition.minimumConfidence ?? 0} onChange={(event) => patchCondition(index, { ...condition, minimumConfidence: Math.max(0, Math.min(1, Number(event.target.value) || 0)) })} /></label>
+          </>}
           {condition.type === 'visibility' && <>
             <select value={condition.target.kind} onChange={(event) => {
               const kind = event.target.value as 'entity' | 'structure'
@@ -231,6 +237,13 @@ const ScenarioBranchContentEditor = ({
             {action.type === 'leave-party' && (
               <select value={action.entityId} onChange={(event) => patchAction(actionIndex, { ...action, entityId: event.target.value })}>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}</select>
             )}
+            {action.type === 'grant-clue' && <>
+              <select value={action.entityId} onChange={(event) => patchAction(actionIndex, { ...action, entityId: event.target.value })}>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}</select>
+              <select value={action.clue.kind} onChange={(event) => patchAction(actionIndex, { ...action, clue: { ...action.clue, kind: event.target.value as 'fact' | 'rumor' | 'secret' } })}><option value="fact">{zh ? '事实' : 'Fact'}</option><option value="rumor">{zh ? '传闻' : 'Rumor'}</option><option value="secret">{zh ? '秘密' : 'Secret'}</option></select>
+              <input type="number" min="0.05" max="1" step="0.05" value={action.clue.confidence} title={zh ? '可信度' : 'Confidence'} onChange={(event) => patchAction(actionIndex, { ...action, clue: { ...action.clue, confidence: Math.max(0.05, Math.min(1, Number(event.target.value) || 0.05)) } })} />
+              <textarea rows={2} value={action.clue.text} placeholder={zh ? '角色获得的线索' : 'Clue learned by this character'} onChange={(event) => patchAction(actionIndex, { ...action, clue: { ...action.clue, text: event.target.value } })} />
+              <input value={action.clue.tags.join(', ')} placeholder={zh ? '标签，用逗号分隔' : 'Comma-separated tags'} onChange={(event) => patchAction(actionIndex, { ...action, clue: { ...action.clue, tags: event.target.value.split(/[,，]/).map((tag) => tag.trim()).filter(Boolean) } })} />
+            </>}
             {action.type === 'issue-command' && <>
               <select value={action.entityId} onChange={(event) => patchAction(actionIndex, { ...action, entityId: event.target.value })}>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}</select>
               <select value={action.command.type} onChange={(event) => patchAction(actionIndex, { ...action, command: makeCommand(event.target.value as WorldEntityCommand['type'], getCommandTargetId(action.command) || firstEntityId) })}>{commandTypes.map((type) => <option key={type} value={type}>{commandLabel(type, zh)}</option>)}</select>
@@ -272,6 +285,7 @@ const ScenarioBranchContentEditor = ({
           <button type="button" disabled={!firstEntityId} onClick={() => addAction({ type: 'set-faction', entityId: firstEntityId, factionId: 'red' })}><Plus size={13} />{zh ? '阵营变化' : 'Faction'}</button>
           <button type="button" disabled={!firstEntityId} onClick={() => addAction({ type: 'join-party', entityId: firstEntityId, leaderId: firstEntityId })}><Plus size={13} />{zh ? '加入队伍' : 'Join party'}</button>
           <button type="button" disabled={!firstEntityId} onClick={() => addAction({ type: 'leave-party', entityId: firstEntityId })}><Plus size={13} />{zh ? '离开队伍' : 'Leave party'}</button>
+          <button type="button" disabled={!firstEntityId} onClick={() => addAction({ type: 'grant-clue', entityId: firstEntityId, clue: { id: `clue-${Date.now()}`, text: '', kind: 'fact', confidence: 1, tags: [] } })}><Plus size={13} />{zh ? '授予线索' : 'Grant clue'}</button>
           <button type="button" disabled={!firstEntityId} onClick={() => addAction({ type: 'issue-command', entityId: firstEntityId, command: { type: 'wander' } })}><Plus size={13} />{zh ? '单位命令' : 'Command'}</button>
           <button type="button" onClick={() => addAction({ type: 'add-story', title: zh ? '分支段落' : 'Branch passage', body: '' })}><Plus size={13} />{zh ? '剧情段落' : 'Passage'}</button>
           <button type="button" disabled={!firstEntityId} onClick={() => addAction({ type: 'set-visibility', target: { kind: 'entity', id: firstEntityId }, visible: true })}><Plus size={13} />{zh ? '显示/隐藏' : 'Visibility'}</button>
@@ -606,6 +620,13 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
                   {action.type === 'leave-party' && (
                     <select value={action.entityId} onChange={(event) => patchStage(stageIndex, { actions: stage.actions?.map((item, index) => index === actionIndex ? { ...action, entityId: event.target.value } : item) })}>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}</select>
                   )}
+                  {action.type === 'grant-clue' && <>
+                    <select value={action.entityId} onChange={(event) => patchStage(stageIndex, { actions: stage.actions?.map((item, index) => index === actionIndex ? { ...action, entityId: event.target.value } : item) })}>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}</select>
+                    <select value={action.clue.kind} onChange={(event) => patchStage(stageIndex, { actions: stage.actions?.map((item, index) => index === actionIndex ? { ...action, clue: { ...action.clue, kind: event.target.value as 'fact' | 'rumor' | 'secret' } } : item) })}><option value="fact">{zh ? '事实' : 'Fact'}</option><option value="rumor">{zh ? '传闻' : 'Rumor'}</option><option value="secret">{zh ? '秘密' : 'Secret'}</option></select>
+                    <input type="number" min="0.05" max="1" step="0.05" value={action.clue.confidence} title={zh ? '可信度' : 'Confidence'} onChange={(event) => patchStage(stageIndex, { actions: stage.actions?.map((item, index) => index === actionIndex ? { ...action, clue: { ...action.clue, confidence: Math.max(0.05, Math.min(1, Number(event.target.value) || 0.05)) } } : item) })} />
+                    <textarea rows={2} value={action.clue.text} placeholder={zh ? '角色获得的线索' : 'Clue learned by this character'} onChange={(event) => patchStage(stageIndex, { actions: stage.actions?.map((item, index) => index === actionIndex ? { ...action, clue: { ...action.clue, text: event.target.value } } : item) })} />
+                    <input value={action.clue.tags.join(', ')} placeholder={zh ? '标签，用逗号分隔' : 'Comma-separated tags'} onChange={(event) => patchStage(stageIndex, { actions: stage.actions?.map((item, index) => index === actionIndex ? { ...action, clue: { ...action.clue, tags: event.target.value.split(/[,，]/).map((tag) => tag.trim()).filter(Boolean) } } : item) })} />
+                  </>}
                   {action.type === 'set-visibility' && <>
                     <select value={action.target.kind} onChange={(event) => {
                       const kind = event.target.value as 'entity' | 'structure'
@@ -650,6 +671,7 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
                 <button type="button" onClick={() => addAction(stageIndex, { type: 'set-faction', entityId: firstEntityId, factionId: 'red' })}><Plus size={13} />{zh ? '阵营变化' : 'Faction'}</button>
                 <button type="button" disabled={!firstEntityId} onClick={() => addAction(stageIndex, { type: 'join-party', entityId: firstEntityId, leaderId: firstEntityId })}><Plus size={13} />{zh ? '加入队伍' : 'Join party'}</button>
                 <button type="button" disabled={!firstEntityId} onClick={() => addAction(stageIndex, { type: 'leave-party', entityId: firstEntityId })}><Plus size={13} />{zh ? '离开队伍' : 'Leave party'}</button>
+                <button type="button" disabled={!firstEntityId} onClick={() => addAction(stageIndex, { type: 'grant-clue', entityId: firstEntityId, clue: { id: `clue-${Date.now()}`, text: '', kind: 'fact', confidence: 1, tags: [] } })}><Plus size={13} />{zh ? '授予线索' : 'Grant clue'}</button>
                 <button type="button" onClick={() => addAction(stageIndex, { type: 'issue-command', entityId: firstEntityId, command: { type: 'wander' } })}><Plus size={13} />{zh ? '单位命令' : 'Command'}</button>
                 <button type="button" onClick={() => addAction(stageIndex, { type: 'add-story', title: zh ? '新段落' : 'New passage', body: '' })}><Plus size={13} />{zh ? '剧情段落' : 'Passage'}</button>
                 <button type="button" disabled={!firstEntityId} onClick={() => addAction(stageIndex, { type: 'set-visibility', target: { kind: 'entity', id: firstEntityId }, visible: true })}><Plus size={13} />{zh ? '显示/隐藏' : 'Visibility'}</button>

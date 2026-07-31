@@ -62,7 +62,7 @@ export const validateWorldScenario = (
         addMissingEntity(condition.actorId, stageIndex, branchIndex)
         addMissingEntity(condition.targetId, stageIndex, branchIndex)
       } else if (condition.type === 'health-ratio' || condition.type === 'faction' ||
-        condition.type === 'party-member' || condition.type === 'entity-alive') {
+        condition.type === 'party-member' || condition.type === 'entity-alive' || condition.type === 'clue') {
         addMissingEntity(condition.entityId, stageIndex, branchIndex)
         if (condition.type === 'party-member') addMissingEntity(condition.leaderId, stageIndex, branchIndex)
       } else if (condition.type === 'visibility') {
@@ -75,7 +75,7 @@ export const validateWorldScenario = (
   }
   const validateAction = (action: WorldScenarioAction, stageIndex: number, branchIndex?: number) => {
     if (action.type === 'set-faction' || action.type === 'issue-command' ||
-      action.type === 'join-party' || action.type === 'leave-party') {
+      action.type === 'join-party' || action.type === 'leave-party' || action.type === 'grant-clue') {
       addMissingEntity(action.entityId, stageIndex, branchIndex)
     }
     if (action.type === 'join-party') addMissingEntity(action.leaderId, stageIndex, branchIndex)

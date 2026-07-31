@@ -1,6 +1,7 @@
 import type { BrickStructure, LlmConfig, PlacedBrick } from '../types/bricks'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import type {
+  WorldEntity,
   WorldEntityCommand,
   WorldState,
   WorldStory,
@@ -8,6 +9,7 @@ import type {
   WorldTargetRef,
 } from '../types/world'
 import { issueWorldEntityCommand } from './worldEntity'
+import { deriveWorldReflections, rankWorldCognitionCandidates, rankWorldSpeakers, retrieveWorldClues, retrieveWorldMemories } from './worldCognition'
 import { requestLlmJsonContent } from './llmGenerator'
 
 type WorldAiLocale = 'zh-CN' | 'en-US'
@@ -17,6 +19,15 @@ export type WorldAiSnapshot = {
   elapsedSeconds: number
   brickCount: number
   brickSnapshotTruncated: boolean
+  cognitionCandidates: Array<{
+    entityId: string
+    score: number
+    reasons: string[]
+  }>
+  speakerCandidates: Array<{
+    entityId: string
+    score: number
+  }>
   entities: Array<{
     id: string
     name: string
@@ -45,7 +56,31 @@ export type WorldAiSnapshot = {
     queuedOrderCount: number
     nearbyHostileIds: string[]
     nearbyFriendlyIds: string[]
-    recentMemories: Array<{ type: string; otherId?: string; otherName?: string; importance: number }>
+    mind: {
+      motive: string
+      temperament: string
+      voice: string
+      initiative: number
+      focus?: WorldEntity['mind']['focus']
+    }
+    focusedMemories: Array<{
+      type: string
+      otherId?: string
+      otherName?: string
+      importance: number
+      content?: string
+      score: number
+      reasons: string[]
+    }>
+    knownClues: Array<{
+      id: string
+      text: string
+      kind: string
+      confidence: number
+      sourceEntityId?: string
+      score: number
+    }>
+    reflections: ReturnType<typeof deriveWorldReflections>
     relationships: Array<{
       targetEntityId: string
       affinity: number
@@ -142,11 +177,24 @@ export const createWorldAiSnapshot = (
   const selectedBricks = selectRelevantBricks({ ...world, entities: visibleEntities }, visibleBricks)
   const bricksById = new Map(visibleBricks.map((brick) => [brick.id, brick]))
   const visibleEntityNameById = new Map(visibleEntities.map((entity) => [entity.id, entity.name]))
+  const protagonist = visibleEntities.find((entity) => entity.controller === 'player')
+  const speakerContext = [
+    ...world.narrative.stories.slice(-2).map((story) => story.body),
+    ...world.events.slice(-4).flatMap((event) => [event.actorName, event.targetName, event.dialogueText].filter(Boolean) as string[]),
+  ].join(' ')
   return {
   worldId: world.id,
   elapsedSeconds: Number(world.elapsedSeconds.toFixed(2)),
   brickCount: visibleBricks.length,
   brickSnapshotTruncated: selectedBricks.length < visibleBricks.length,
+  cognitionCandidates: rankWorldCognitionCandidates({ ...world, entities: visibleEntities }).map((candidate) => ({
+    entityId: candidate.entityId,
+    score: candidate.score,
+    reasons: candidate.reasons,
+  })),
+  speakerCandidates: protagonist
+    ? rankWorldSpeakers({ ...world, entities: visibleEntities }, protagonist, speakerContext)
+    : [],
   entities: visibleEntities.map((entity) => {
     const definition = worldEntityDefinitionById.get(entity.definitionId)
     const nearbyEntities = visibleEntities.filter((candidate) => (
@@ -156,6 +204,13 @@ export const createWorldAiSnapshot = (
         <= (definition?.perception.detectionRangeStuds ?? 0)
     ))
     const activeTarget = entity.activeCommand && 'target' in entity.activeCommand ? entity.activeCommand.target : undefined
+    const recentContext = world.events
+      .filter((event) => event.actorId === entity.id || event.targetId === entity.id)
+      .slice(-4)
+      .map((event) => [event.actorName, event.targetName, event.dialogueText, event.type].filter(Boolean).join(' '))
+      .join(' ')
+    const focusedMemories = retrieveWorldMemories(world, entity.id, recentContext)
+    const knownClues = retrieveWorldClues(world, entity.id, recentContext)
     return ({
     id: entity.id,
     name: entity.name,
@@ -192,12 +247,28 @@ export const createWorldAiSnapshot = (
     nearbyFriendlyIds: nearbyEntities
       .filter((candidate) => entity.factionId === 'neutral' || candidate.factionId === 'neutral' || candidate.factionId === entity.factionId)
       .map((candidate) => candidate.id),
-    recentMemories: (world.narrative.memoriesByEntityId[entity.id] ?? []).slice(-8).map((memory) => ({
+    mind: {
+      ...entity.mind.spark,
+      ...(entity.mind.focus ? { focus: entity.mind.focus } : {}),
+    },
+    focusedMemories: focusedMemories.map(({ memory, score, reasons }) => ({
       type: memory.type,
       otherId: memory.otherId,
       otherName: memory.otherName,
       importance: memory.importance,
+      content: memory.content,
+      score,
+      reasons,
     })),
+    knownClues: knownClues.map(({ clue, score }) => ({
+      id: clue.id,
+      text: clue.text,
+      kind: clue.kind,
+      confidence: clue.confidence,
+      sourceEntityId: clue.sourceEntityId,
+      score,
+    })),
+    reflections: deriveWorldReflections(world, entity.id),
     relationships: Object.values(world.narrative.relationshipsByEntityId[entity.id] ?? {}).map((relationship) => ({
       targetEntityId: relationship.targetEntityId,
       affinity: relationship.affinity,
@@ -250,7 +321,9 @@ export const createWorldAiSnapshot = (
 export const worldAiSystemPrompt = `You direct AI-controlled characters in a brick world. Return one compact JSON object only.
 You may only issue high-level commands using IDs from the supplied snapshot. Never invent IDs.
 Never return coordinates, transforms, health, damage, cooldowns, or any other direct state mutation.
-Only entities whose controller is "ai" may receive commands.`
+Only entities whose controller is "ai" may receive commands.
+Each character has a small durable mind. Respect its motive, temperament, voice, current focus, focused memories, and known clues.
+A character may not act on facts it does not know. Low-confidence rumors are suspicions, not world truth.`
 
 export const buildWorldAiTurnPrompt = (snapshot: WorldAiSnapshot) => `World snapshot:
 ${JSON.stringify(snapshot)}
@@ -269,6 +342,11 @@ Return this exact shape:
 Rules:
 - Return at most one command per AI-controlled entity and at most 12 commands total.
 - AI-controlled units already use local combat and social behavior between model turns. Issue a command only when it improves their current plan.
+- Prefer entities listed in cognitionCandidates. It is valid to issue no command when nobody needs to reconsider.
+- focusedMemories are locally ranked for the current situation; do not assume omitted memories were forgotten.
+- knownClues are private to that character. Never transfer one character's clue into another character's knowledge without an actual conversation or authored scenario action.
+- reflections are deterministic patterns distilled from repeated experiences. They guide interpretation but never override current facts or simulation outcomes.
+- Use motive as a long-term tie-breaker, focus as the current intention, and commands only as local executable steps.
 - Respect role and range: melee units close distance, ranged units preserve minimum range, and siege units prefer valuable distant targets.
 - Protect threatened allies and prioritize enemies already attacking the unit or its faction.
 - Priests should revive defeated allies before taking ordinary social or combat actions.

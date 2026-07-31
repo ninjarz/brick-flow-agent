@@ -3,6 +3,7 @@ import type {
   WorldEntityCommand,
   WorldEntityControllerKind,
   WorldEntityDefinition,
+  WorldEntityFocus,
   WorldEntityTransform,
   WorldDirectorEntry,
   WorldDirectorEvent,
@@ -13,6 +14,8 @@ import type {
   WorldTargetRef,
 } from '../types/world'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
+import { createDefaultWorldCharacterSpark, createWorldEntityFocus, normalizeWorldCharacterSpark } from './worldCharacter'
+import { normalizeWorldClue } from './worldClues'
 import { resolveOverlappingWorldEntities } from './worldEntityCollision'
 
 const normalizeName = (value: string) => value.trim().replace(/\s+/g, ' ')
@@ -365,6 +368,9 @@ export const createWorldEntity = (
         z: options.transform?.z ?? 0,
       },
     },
+    mind: {
+      spark: createDefaultWorldCharacterSpark(definition),
+    },
   }
 }
 
@@ -380,10 +386,11 @@ export const createEmptyWorldState = (planId: string): WorldState => ({
   pendingImpacts: [],
   scenarios: [],
   hiddenTargets: [],
-  narrative: {
-    processedEventIds: [],
-    memoriesByEntityId: {},
-    relationshipsByEntityId: {},
+    narrative: {
+      processedEventIds: [],
+      memoriesByEntityId: {},
+      cluesByEntityId: {},
+      relationshipsByEntityId: {},
     stories: [],
     directorTurns: [],
   },
@@ -573,6 +580,16 @@ const parseStoredScenarioConditions = (
         ...(condition.status === 'active' || condition.status === 'reserve' ? { status: condition.status } : {}),
       }]
     }
+    if (condition.type === 'clue' && typeof condition.entityId === 'string' && typeof condition.clueId === 'string') {
+      return [{
+        type: 'clue',
+        entityId: condition.entityId,
+        clueId: condition.clueId.trim().slice(0, 160),
+        ...(isFiniteNumber(condition.minimumConfidence)
+          ? { minimumConfidence: Math.max(0, Math.min(1, condition.minimumConfidence)) }
+          : {}),
+      }]
+    }
     if (condition.type === 'scenario-outcome' && typeof condition.scenarioId === 'string') {
       return [{
         type: 'scenario-outcome',
@@ -649,6 +666,19 @@ const parseStoredEntity = (value: unknown): WorldEntity | undefined => {
     ? value.commandQueue.map(parseStoredCommand).filter((command): command is WorldEntityCommand => Boolean(command)).slice(0, 20)
     : []
   const activeCommand = parseStoredCommand(value.activeCommand)
+  const storedMind = isRecord(value.mind) ? value.mind : undefined
+  const storedSpark = storedMind && isRecord(storedMind.spark) ? storedMind.spark : undefined
+  const storedFocus = storedMind && isRecord(storedMind.focus)
+    && typeof storedMind.focus.summary === 'string'
+    && ['seed', 'player', 'scenario', 'ai'].includes(String(storedMind.focus.source))
+    && isFiniteNumber(storedMind.focus.updatedAtSeconds)
+    ? createWorldEntityFocus(
+        storedMind.focus.summary,
+        storedMind.focus.source as WorldEntityFocus['source'],
+        storedMind.focus.updatedAtSeconds,
+        parseTargetRef(storedMind.focus.target),
+      )
+    : undefined
   return {
     ...entity,
     ...(typeof value.storylineId === 'string' && value.storylineId.trim() ? { storylineId: value.storylineId.slice(0, 160) } : {}),
@@ -686,6 +716,15 @@ const parseStoredEntity = (value: unknown): WorldEntity | undefined => {
         ? { x: value.autonomy.home.x, z: value.autonomy.home.z }
         : { x: entity.transform.x, z: entity.transform.z },
     },
+    mind: {
+      spark: normalizeWorldCharacterSpark({
+        motive: typeof storedSpark?.motive === 'string' ? storedSpark.motive : undefined,
+        temperament: typeof storedSpark?.temperament === 'string' ? storedSpark.temperament : undefined,
+        voice: typeof storedSpark?.voice === 'string' ? storedSpark.voice : undefined,
+        initiative: isFiniteNumber(storedSpark?.initiative) ? storedSpark.initiative : undefined,
+      }, definition),
+      ...(storedFocus ? { focus: storedFocus } : {}),
+    },
   }
 }
 
@@ -711,7 +750,33 @@ const normalizeArrayRecord = <T>(value: unknown, predicate: (item: unknown) => i
 const isStoredMemory = (value: unknown): value is WorldState['narrative']['memoriesByEntityId'][string][number] =>
   isRecord(value) && typeof value.id === 'string' && typeof value.eventId === 'string' &&
   typeof value.entityId === 'string' && isFiniteNumber(value.timeSeconds) && eventTypes.has(value.type as never) &&
-  [1, 2, 3].includes(Number(value.importance))
+  [1, 2, 3].includes(Number(value.importance)) &&
+  (value.content === undefined || typeof value.content === 'string') &&
+  (value.tags === undefined || (Array.isArray(value.tags) && value.tags.every((tag) => typeof tag === 'string')))
+
+const isStoredClue = (value: unknown): value is WorldState['narrative']['cluesByEntityId'][string][number] =>
+  isRecord(value)
+  && typeof value.id === 'string'
+  && typeof value.holderId === 'string'
+  && typeof value.text === 'string'
+  && ['fact', 'rumor', 'secret'].includes(String(value.kind))
+  && isFiniteNumber(value.confidence)
+  && Array.isArray(value.tags)
+  && value.tags.every((tag) => typeof tag === 'string')
+  && isFiniteNumber(value.learnedAtSeconds)
+
+const normalizeStoredClues = (value: unknown): WorldState['narrative']['cluesByEntityId'] => {
+  if (!isRecord(value)) return {}
+  return Object.fromEntries(Object.entries(value).map(([holderId, clues]) => [
+    holderId,
+    Array.isArray(clues)
+      ? clues
+          .filter(isStoredClue)
+          .map((clue) => normalizeWorldClue({ ...clue, holderId }))
+          .slice(-32)
+      : [],
+  ]))
+}
 
 const isStoredStory = (value: unknown): value is WorldState['narrative']['stories'][number] =>
   isRecord(value) && typeof value.id === 'string' && typeof value.title === 'string' && typeof value.body === 'string' &&
@@ -847,6 +912,7 @@ const parseStoredDirectorTurns = (value: unknown, planId: string): WorldState['n
     return [{
       id: turn.id.slice(0, 180),
       playerText,
+      ...(turn.origin === 'autonomous' ? { origin: 'autonomous' as const } : {}),
       entries: Array.isArray(turn.entries)
         ? turn.entries.flatMap((entry) => {
             const parsed = parseStoredDirectorEntry(entry)
@@ -952,6 +1018,23 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
             if (action.type === 'leave-party' && typeof action.entityId === 'string') {
               return [{ type: 'leave-party' as const, entityId: action.entityId, ...parseStoredScenarioActionTiming(action) }]
             }
+            if (action.type === 'grant-clue' && typeof action.entityId === 'string' && isRecord(action.clue)
+              && typeof action.clue.id === 'string' && typeof action.clue.text === 'string'
+              && ['fact', 'rumor', 'secret'].includes(String(action.clue.kind))
+              && isFiniteNumber(action.clue.confidence) && Array.isArray(action.clue.tags)) {
+              return [{
+                type: 'grant-clue' as const,
+                entityId: action.entityId,
+                clue: {
+                  id: action.clue.id.trim().slice(0, 160),
+                  text: action.clue.text.trim().slice(0, 500),
+                  kind: action.clue.kind as 'fact' | 'rumor' | 'secret',
+                  confidence: Math.max(0.05, Math.min(1, action.clue.confidence)),
+                  tags: action.clue.tags.filter((tag): tag is string => typeof tag === 'string').slice(0, 12),
+                },
+                ...parseStoredScenarioActionTiming(action),
+              }]
+            }
             if (action.type === 'issue-command' && typeof action.entityId === 'string') {
               const command = parseStoredCommand(action.command)
               return command ? [{ type: 'issue-command' as const, entityId: action.entityId, command, ...parseStoredScenarioActionTiming(action) }] : []
@@ -1004,6 +1087,21 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
                 entityId: action.entityId,
                 ...parseStoredScenarioActionTiming(action),
               }]
+              if (action.type === 'grant-clue' && typeof action.entityId === 'string' && isRecord(action.clue)
+                && typeof action.clue.id === 'string' && typeof action.clue.text === 'string'
+                && ['fact', 'rumor', 'secret'].includes(String(action.clue.kind))
+                && isFiniteNumber(action.clue.confidence) && Array.isArray(action.clue.tags)) return [{
+                  type: 'grant-clue',
+                  entityId: action.entityId,
+                  clue: {
+                    id: action.clue.id.trim().slice(0, 160),
+                    text: action.clue.text.trim().slice(0, 500),
+                    kind: action.clue.kind as 'fact' | 'rumor' | 'secret',
+                    confidence: Math.max(0.05, Math.min(1, action.clue.confidence)),
+                    tags: action.clue.tags.filter((tag): tag is string => typeof tag === 'string').slice(0, 12),
+                  },
+                  ...parseStoredScenarioActionTiming(action),
+                }]
               if (action.type === 'issue-command' && typeof action.entityId === 'string') {
                 const command = parseStoredCommand(action.command)
                 return command ? [{ type: 'issue-command', entityId: action.entityId, command, ...parseStoredScenarioActionTiming(action) }] : []
@@ -1431,6 +1529,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
         ? narrative.processedEventIds.filter((id): id is string => typeof id === 'string').slice(-1_000)
         : [],
       memoriesByEntityId: normalizeArrayRecord(narrative.memoriesByEntityId, isStoredMemory),
+      cluesByEntityId: normalizeStoredClues(narrative.cluesByEntityId),
       relationshipsByEntityId: normalizeRelationships(narrative.relationshipsByEntityId),
       stories: Array.isArray(narrative.stories) ? narrative.stories.filter(isStoredStory).slice(-80) : [],
       directorTurns,
@@ -1529,6 +1628,14 @@ export const issueWorldEntityCommand = (
     commandType: command.type,
     commandSource: entity.controller,
   }
+  const focus = command.type === 'stop'
+    ? undefined
+    : createWorldEntityFocus(
+        `${command.type}${targetEntity?.name ? ` ${targetEntity.name}` : target?.id ? ` ${target.id}` : ''}`,
+        entity.controller === 'player' ? 'player' : 'seed',
+        world.elapsedSeconds,
+        target,
+      )
 
   return {
     ok: true,
@@ -1538,12 +1645,17 @@ export const issueWorldEntityCommand = (
         ? queueMode === 'replace'
           ? {
               ...candidate,
+              mind: { ...candidate.mind, focus },
               activeCommand: undefined,
               commandQueue: [command],
               behaviorState: candidate.health > 0 ? 'idle' : 'dead',
               navigation: { status: 'idle', path: [], pathIndex: 0 },
             }
-          : { ...candidate, commandQueue: [...candidate.commandQueue, command] }
+          : {
+              ...candidate,
+              mind: { ...candidate.mind, focus },
+              commandQueue: [...candidate.commandQueue, command],
+            }
         : candidate),
       events: [...world.events, commandEvent].slice(-500),
     },

@@ -1,5 +1,6 @@
 import type { WorldEvent, WorldScenarioAction, WorldScenarioBranch, WorldScenarioDialogueLine, WorldScenarioRuntime, WorldScenarioStage, WorldScenarioTrigger, WorldState } from '../types/world'
 import { issueWorldEntityCommand, joinWorldParty, leaveWorldParty } from './worldEntity'
+import { grantWorldClue } from './worldClues'
 import { makeScenarioDialogueStoryId } from './worldNarrativeFeed'
 
 export const evaluateWorldScenarioConditions = (
@@ -31,6 +32,12 @@ export const evaluateWorldScenarioConditions = (
         && (!condition.leaderId || party.leaderId === condition.leaderId)
         && (!condition.status || membership.status === condition.status),
       )
+    }
+    if (condition.type === 'clue') {
+      return world.narrative.cluesByEntityId[condition.entityId]?.some((clue) => (
+        clue.id === condition.clueId
+        && clue.confidence >= (condition.minimumConfidence ?? 0)
+      )) ?? false
     }
     if (condition.type === 'scenario-outcome') {
       const scenario = world.scenarios.find((candidate) => candidate.id === condition.scenarioId)
@@ -101,6 +108,18 @@ const applyScenarioAction = (
   }
   if (action.type === 'leave-party') {
     return leaveWorldParty(world, action.entityId)
+  }
+  if (action.type === 'grant-clue') {
+    if (!world.entities.some((entity) => entity.id === action.entityId)) return world
+    return {
+      ...world,
+      narrative: grantWorldClue(world.narrative, {
+        ...action.clue,
+        holderId: action.entityId,
+        learnedAtSeconds: world.elapsedSeconds,
+        sourceEventId: event.id,
+      }),
+    }
   }
   if (action.type === 'issue-command') {
     if (world.hiddenTargets.some((target) => target.kind === 'entity' && target.id === action.entityId)) return world

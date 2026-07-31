@@ -3,6 +3,13 @@ import { type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useM
 import { resizeBottomDockHeight, resizeBottomDockWidth } from '../lib/bottomDockResize'
 import { isDebugModeEnabled } from '../lib/debugMode'
 import { useI18n } from '../lib/i18n'
+import {
+  buildContinuousDirectorIntent,
+  continuousDirectorPollIntervalMs,
+  getContinuousDirectorBackoffMs,
+  getContinuousDirectorCadenceMs,
+  shouldRunContinuousDirectorPulse,
+} from '../lib/worldContinuousDirector'
 import { createWorldDirectorCheckpoint } from '../lib/worldDirectorReplay'
 import {
   buildWorldNarrativeFeed,
@@ -12,6 +19,7 @@ import {
   type WorldNarrativeFeedItem,
 } from '../lib/worldNarrativeFeed'
 import { inspectWorldScenarioRuntime } from '../lib/worldScenarioDiagnostics'
+import { deriveWorldReflections, rankWorldCognitionCandidates, retrieveWorldClues, retrieveWorldMemories } from '../lib/worldCognition'
 import type { TavernDirectorEntry, TavernDirectorStreamPreview } from '../lib/worldTavernDirector'
 import type { TavernActivityKind, TavernActivityResult } from '../lib/worldTavernActivities'
 import type { BrickStructure } from '../types/bricks'
@@ -23,6 +31,7 @@ type WorldStoryDockProps = {
   llmConfigured: boolean
   isLlmTesting: boolean
   isDirectorThinking: boolean
+  continuousAiDirectorEnabled: boolean
   isAiActivityThinking: boolean
   onGenerateStory: () => void
   onPlayActivity: (activity: TavernActivityKind, focusEntityId?: string) => TavernActivityResult | undefined
@@ -38,6 +47,7 @@ type WorldStoryDockProps = {
     contextStats?: WorldDirectorTurn['contextStats']
     validationIssues?: WorldDirectorTurn['validationIssues']
   }>
+  onSetContinuousAiDirectorEnabled: (enabled: boolean) => void
   onStopDirector: () => void
   onCommitDirectorTurn: (turn: WorldDirectorTurn) => void
   onReplayDirectorTurn: (turn: WorldDirectorTurn) => Promise<void>
@@ -256,11 +266,13 @@ export const WorldStoryDock = ({
   llmConfigured,
   isLlmTesting,
   isDirectorThinking,
+  continuousAiDirectorEnabled,
   isAiActivityThinking,
   onGenerateStory,
   onPlayActivity,
   onPlayAiActivity,
   onDirectWorld,
+  onSetContinuousAiDirectorEnabled,
   onStopDirector,
   onCommitDirectorTurn,
   onReplayDirectorTurn,
@@ -284,6 +296,30 @@ export const WorldStoryDock = ({
   const feedRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const shouldAutoScrollRef = useRef(true)
+  const continuousPulseInFlightRef = useRef(false)
+  const continuousNextAllowedAtRef = useRef(performance.now())
+  const continuousFailureCountRef = useRef(0)
+  const mountedRef = useRef(true)
+  const continuousRuntimeRef = useRef({
+    world,
+    llmConfigured,
+    isLlmTesting,
+    isDirectorThinking,
+    continuousAiDirectorEnabled,
+    input,
+    onDirectWorld,
+    onCommitDirectorTurn,
+  })
+  continuousRuntimeRef.current = {
+    world,
+    llmConfigured,
+    isLlmTesting,
+    isDirectorThinking,
+    continuousAiDirectorEnabled,
+    input,
+    onDirectWorld,
+    onCommitDirectorTurn,
+  }
   const feed = useMemo(() => buildWorldNarrativeFeed(world, activeTurn).slice(-40), [activeTurn, world])
   const protagonist = useMemo(() => (
     world.scenarios
@@ -502,6 +538,143 @@ export const WorldStoryDock = ({
     }
   }
 
+  useEffect(() => {
+    if (continuousAiDirectorEnabled) {
+      continuousFailureCountRef.current = 0
+      continuousNextAllowedAtRef.current = performance.now()
+      return
+    }
+    if (continuousPulseInFlightRef.current) onStopDirector()
+  }, [continuousAiDirectorEnabled, onStopDirector])
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      if (continuousPulseInFlightRef.current) onStopDirector()
+    }
+  }, [onStopDirector])
+
+  useEffect(() => {
+    const runPulse = async () => {
+      const runtime = continuousRuntimeRef.current
+      const scenarioPerformanceActive = runtime.world.scenarios.some((scenario) => Boolean(
+        scenario.activeDialogue || scenario.activeTimeline || scenario.pendingAi,
+      ))
+      if (
+        continuousPulseInFlightRef.current
+        || !shouldRunContinuousDirectorPulse({
+          enabled: runtime.continuousAiDirectorEnabled,
+          llmConfigured: runtime.llmConfigured,
+          worldPaused: runtime.world.paused,
+          directorThinking: runtime.isDirectorThinking,
+          llmTesting: runtime.isLlmTesting,
+          scenarioPerformanceActive,
+          inputInProgress: Boolean(runtime.input.trim()) || document.activeElement === inputRef.current,
+          now: performance.now(),
+          nextAllowedAt: continuousNextAllowedAtRef.current,
+        })
+      ) return
+
+      continuousPulseInFlightRef.current = true
+      const playerText = buildContinuousDirectorIntent(locale, runtime.world.elapsedSeconds)
+      const id = `director-auto-${Date.now().toString(36)}`
+      const createdAtSeconds = runtime.world.elapsedSeconds
+      const checkpoint = createWorldDirectorCheckpoint(runtime.world)
+      const entries: TavernDirectorEntry[] = []
+      let reasoning = ''
+      let streamPreview: TavernDirectorStreamPreview | undefined
+      let requestMessage = ''
+      let responseMessage = ''
+      let contextStats: WorldDirectorTurn['contextStats']
+      let validationIssues: WorldDirectorTurn['validationIssues']
+      let status: WorldDirectorTurn['status'] = 'completed'
+      let errorMessage: string | undefined
+      let progressFrame = 0
+      const flushProgress = () => {
+        progressFrame = 0
+        setActiveTurn((current) => current?.id === id
+          ? {
+              ...current,
+              ...(reasoning ? { reasoning } : {}),
+              ...(streamPreview ? { streamPreview } : { streamPreview: undefined }),
+            }
+          : current)
+      }
+      const scheduleProgress = () => {
+        if (progressFrame) return
+        progressFrame = window.requestAnimationFrame(flushProgress)
+      }
+
+      shouldAutoScrollRef.current = true
+      setActiveTurn({
+        id,
+        playerText,
+        origin: 'autonomous',
+        entries: [],
+        createdAtSeconds,
+        status: 'streaming',
+      })
+      try {
+        const result = await runtime.onDirectWorld(
+          playerText,
+          runtime.world.narrative.directorTurns.flatMap((turn) => turn.entries).slice(-12),
+          (entry) => {
+            entries.splice(0, entries.length, ...upsertWorldDirectorEntry(entries, entry))
+            setActiveTurn((current) => current?.id === id ? { ...current, entries: [...entries] } : current)
+          },
+          (progress) => {
+            if (progress.reasoningDelta) reasoning += progress.reasoningDelta
+            if ('preview' in progress) streamPreview = progress.preview
+            scheduleProgress()
+          },
+        )
+        requestMessage = result.requestMessage
+        responseMessage = result.responseMessage
+        contextStats = result.contextStats
+        validationIssues = result.validationIssues
+        continuousFailureCountRef.current = 0
+      } catch (error) {
+        errorMessage = error instanceof Error
+          ? error.message
+          : (locale === 'zh-CN' ? '持续世界导演请求失败' : 'Continuous world director request failed')
+        status = /取消|canceled/i.test(errorMessage) ? 'stopped' : 'failed'
+        if (status === 'failed') continuousFailureCountRef.current += 1
+      } finally {
+        if (progressFrame) window.cancelAnimationFrame(progressFrame)
+        runtime.onCommitDirectorTurn({
+          id,
+          playerText,
+          origin: 'autonomous',
+          entries,
+          ...(reasoning.trim() ? { reasoning: reasoning.trim() } : {}),
+          ...(requestMessage ? { requestMessage } : {}),
+          ...(responseMessage ? { responseMessage } : {}),
+          ...(validationIssues?.length ? { validationIssues } : {}),
+          ...(contextStats ? { contextStats } : {}),
+          createdAtSeconds,
+          status,
+          checkpoint,
+          ...(errorMessage ? { error: errorMessage } : {}),
+        })
+        if (mountedRef.current) setActiveTurn(undefined)
+        continuousPulseInFlightRef.current = false
+        continuousNextAllowedAtRef.current = performance.now() + (
+          status === 'failed'
+            ? getContinuousDirectorBackoffMs(continuousFailureCountRef.current)
+            : getContinuousDirectorCadenceMs(continuousRuntimeRef.current.world)
+        )
+      }
+    }
+    const intervalId = window.setInterval(() => {
+      void runPulse()
+    }, continuousDirectorPollIntervalMs)
+    void runPulse()
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [locale])
+
   const playActivity = async (activity: TavernActivityKind) => {
     shouldAutoScrollRef.current = true
     if (activityHost === 'ai') await onPlayAiActivity(activity, focusEntityId)
@@ -544,6 +717,28 @@ export const WorldStoryDock = ({
           {debugMode && <em className="world-story-debug-badge"><Bug size={10} />DEBUG</em>}
         </div>
         <span>
+          <button
+            className={`world-story-auto-director${continuousAiDirectorEnabled ? ' active' : ''}`}
+            type="button"
+            aria-pressed={continuousAiDirectorEnabled}
+            disabled={!llmConfigured}
+            title={locale === 'zh-CN'
+              ? '继续世界时，由 LLM 持续编排所有角色的自主行为'
+              : 'Let the LLM continuously direct autonomous character behavior while the world runs'}
+            onClick={() => onSetContinuousAiDirectorEnabled(!continuousAiDirectorEnabled)}
+          >
+            <Bot size={12} />
+            <b>{locale === 'zh-CN' ? 'AI 导演' : 'AI director'}</b>
+            <i>
+              {continuousAiDirectorEnabled
+                ? (world.paused
+                    ? (locale === 'zh-CN' ? '等待世界' : 'Waiting')
+                    : (isDirectorThinking
+                        ? (locale === 'zh-CN' ? '编排中' : 'Directing')
+                        : (locale === 'zh-CN' ? '运行中' : 'Running')))
+                : (locale === 'zh-CN' ? '关闭' : 'Off')}
+            </i>
+          </button>
           <button className="icon-button" type="button" aria-label={collapsed ? (locale === 'zh-CN' ? '展开' : 'Expand') : (locale === 'zh-CN' ? '折叠' : 'Collapse')} onClick={() => setCollapsed((current) => !current)}>
             <ChevronDown size={14} />
           </button>
@@ -602,6 +797,32 @@ export const WorldStoryDock = ({
                     ? <pre>{JSON.stringify(scenarioRuntimeIssues, null, 2)}</pre>
                     : <p>{locale === 'zh-CN' ? '未发现悬空对白、时间轴或等待事件。' : 'No dangling dialogue, timeline, or queued event detected.'}</p>}
                 </details>
+                <details className="world-story-debug-memory">
+                  <summary><Sparkles size={11} />{locale === 'zh-CN' ? '角色认知聚焦' : 'Character cognition focus'}</summary>
+                  <pre>{JSON.stringify({
+                    candidates: rankWorldCognitionCandidates(world),
+                    entities: world.entities.map((entity) => ({
+                      id: entity.id,
+                      name: entity.name,
+                      spark: entity.mind.spark,
+                      focus: entity.mind.focus,
+                      memories: retrieveWorldMemories(world, entity.id).map(({ memory, score, reasons }) => ({
+                        id: memory.id,
+                        content: memory.content,
+                        score,
+                        reasons,
+                      })),
+                      clues: retrieveWorldClues(world, entity.id).map(({ clue, score }) => ({
+                        id: clue.id,
+                        kind: clue.kind,
+                        confidence: clue.confidence,
+                        text: clue.text,
+                        score,
+                      })),
+                      reflections: deriveWorldReflections(world, entity.id),
+                    })),
+                  }, null, 2)}</pre>
+                </details>
               </aside>
             )}
             {feed.map((item) => (
@@ -628,7 +849,14 @@ export const WorldStoryDock = ({
                     {item.title ? ` · ${item.title}` : ''}
                   </p>
                 )}
-                {item.playerText && <p className="player"><strong>{locale === 'zh-CN' ? `你（${protagonist?.name ?? '玩家'}）` : `You (${protagonist?.name ?? 'Player'})`}</strong><AnnotatedText text={item.playerText} references={references} onSelectEntity={onSelectEntity} /></p>}
+                {item.origin === 'autonomous'
+                  ? (
+                      <p className="narrative-phase">
+                        <Bot size={11} />
+                        {locale === 'zh-CN' ? 'AI 世界导演观察并编排角色' : 'AI world director observes and directs the cast'}
+                      </p>
+                    )
+                  : item.playerText && <p className="player"><strong>{locale === 'zh-CN' ? `你（${protagonist?.name ?? '玩家'}）` : `You (${protagonist?.name ?? 'Player'})`}</strong><AnnotatedText text={item.playerText} references={references} onSelectEntity={onSelectEntity} /></p>}
                 {item.reasoning && (
                   <ReasoningPanel text={item.reasoning} streaming={item.status === 'streaming'} locale={locale} />
                 )}
@@ -668,6 +896,8 @@ export const WorldStoryDock = ({
                     <Bot size={12} />
                     {isLlmTesting
                       ? (locale === 'zh-CN' ? '首次使用，正在测试 LLM 连接……' : 'First use: testing the LLM connection…')
+                      : item.origin === 'autonomous'
+                        ? (locale === 'zh-CN' ? 'AI 正在实时编排世界……' : 'AI is directing the live world…')
                       : (locale === 'zh-CN' ? '场景正在演绎……' : 'The scene is unfolding…')}
                   </p>
                 )}

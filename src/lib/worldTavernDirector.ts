@@ -199,7 +199,8 @@ export const createTavernDirectorStreamParser = (
 export const tavernDirectorSystemPrompt = `You are the director of an interactive brick-world tavern.
 Return NDJSON only: exactly one compact JSON event per line, with no markdown or commentary.
 The simulation owns facts and outcomes. You may express intent, dialogue, and high-level commands, but never coordinates or direct state mutation.
-Never invent IDs. Hidden objects are absent from the supplied snapshot and must not be revealed.`
+Never invent IDs. Hidden objects are absent from the supplied snapshot and must not be revealed.
+Character knowledge is bounded: focusedMemories and knownClues belong only to that character. A rumor is not confirmed truth.`
 
 export const buildTavernDirectorPrompt = (
   snapshot: WorldAiSnapshot,
@@ -240,6 +241,10 @@ Rules:
 - Write all visible text in ${locale === 'zh-CN' ? 'Simplified Chinese' : 'English'}.
 - The player-controlled protagonist is the player's identity in the story. Address them by name, not as an unknown "you".
 - Resolve indirect references such as "the stranger", roles, titles, and pronouns from the entity reference glossary and recentNarratives. Prefer the entity whose description explicitly matches the wording; never substitute a merely nearby entity.
+- Keep characterization stable: use each speaker's motive and temperament to decide what they attempt, and their voice to phrase dialogue.
+- speakerCandidates is a soft turn-taking suggestion based on mention, distance, relationship, initiative, and current speech occupancy. Prefer it when several replies are equally valid; it never overrides the player's named addressee.
+- A speaker may only assert facts found in their own focusedMemories, knownClues, or directly visible current events. Other characters' clues remain private until spoken or granted by a scenario.
+- reflections summarize repeated personal experience. Use them for attitude and priorities, never as evidence that a new event occurred.
 - Follow the player's requested intent instead of defaulting every turn to a conversation. Use dialogue only when somebody actually speaks; use commands for requested movement, combat, following, guarding, revival, or wandering.
 - Dialogue text must be the words the character actually says. Never use dialogue merely to announce an upcoming command such as "I will go talk to X".
 - Every dialogue event must identify who is listening. A dialogue is itself a completed conversation fact; do not also emit an interact command for the same exchange.
@@ -327,16 +332,19 @@ export const applyTavernDirectorEvent = (
     return {
       world: {
         ...world,
-        events: interaction ? [...world.events, {
+        events: listener && !world.scenarios.some((scenario) => scenario.activeDialogue) ? [...world.events, {
           id: `director-dialogue-${world.events.length}-${Math.round(world.elapsedSeconds * 1000)}`,
           timeSeconds: world.elapsedSeconds,
           type: 'interaction' as const,
-          actorId: interaction.actorId,
-          actorName: actor?.name,
-          targetId: interaction.targetId,
-          targetName: target?.name,
+          actorId: interaction?.actorId ?? speaker.id,
+          actorName: actor?.name ?? speaker.name,
+          targetId: interaction?.targetId ?? listener.id,
+          targetName: target?.name ?? listener.name,
           commandType: 'interact' as const,
           commandSource: 'player' as const,
+          dialogueText: event.text,
+          dialogueSpeakerId: speaker.id,
+          dialogueListenerId: listener.id,
         }] : world.events,
         entities: world.entities.map((entity) => entity.id === speaker.id ? {
           ...entity,
