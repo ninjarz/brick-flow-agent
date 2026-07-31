@@ -421,6 +421,47 @@ describe('world scenario runtime', () => {
     expect(lowStarted.scenarios[0].activeDialogue?.eventId).toBe('shared-event')
   })
 
+  it('plays an older queued flow before a newly triggered higher-priority flow', () => {
+    const makeScenario = (id: string, priority: number, targetId: string): WorldScenarioRuntime => ({
+      id,
+      assetId: 'asset',
+      title: id,
+      description: id,
+      priority,
+      processedEventIds: [],
+      stages: [{
+        id: 'talk',
+        title: 'Talk',
+        description: 'Talk',
+        status: 'active',
+        trigger: { eventType: 'interaction', actorId: 'hero', targetId },
+        dialogue: [{ id: `${id}-line`, speakerId: targetId, text: id, durationSeconds: 2 }],
+      }],
+    })
+    const queued = {
+      ...makeScenario('queued', 1, 'guide'),
+      queuedTransition: {
+        stageId: 'talk',
+        eventId: 'queued-event',
+        queuedAtSeconds: 2,
+      },
+    }
+    const fresh = makeScenario('fresh-high', 100, 'envoy')
+    const world = {
+      ...createEmptyWorldState('fair-dialogue'),
+      elapsedSeconds: 5,
+      scenarios: [fresh, queued],
+      events: [
+        { id: 'queued-event', timeSeconds: 1, type: 'interaction' as const, actorId: 'hero', targetId: 'guide' },
+        { id: 'fresh-event', timeSeconds: 5, type: 'interaction' as const, actorId: 'hero', targetId: 'envoy' },
+      ],
+    }
+
+    const advanced = advanceWorldScenarios(world)
+    expect(advanced.scenarios[1].activeDialogue?.eventId).toBe('queued-event')
+    expect(advanced.scenarios[0].queuedTransition?.eventId).toBe('fresh-event')
+  })
+
   it('resolves a persisted pending AI node through its authored fallback when AI is disabled', () => {
     const scenario: WorldScenarioRuntime = {
       id: 'pending-offline',

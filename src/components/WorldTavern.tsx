@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useI18n } from '../lib/i18n'
 import { formatWorldEvent } from '../lib/worldNarrative'
 import { createWorldScenarioFlow, duplicateWorldScenarioFlow, resetWorldScenarioFlow } from '../lib/worldScenarioAuthoring'
+import { getWorldScenarioPlaybackLane, getWorldScenarioRuntimeStatus } from '../lib/worldScenarioScheduler'
 import { validateWorldScenario } from '../lib/worldScenarioValidation'
 import type { WorldScenarioRuntime, WorldState } from '../types/world'
 import { WorldScenarioEditor } from './WorldScenarioEditor'
@@ -54,6 +55,7 @@ export const WorldTavern = ({
       })
     : [], [scenarioEditSession, structures, world.entities])
   const scenarioDraftErrorCount = scenarioDraftIssues.filter((issue) => issue.severity === 'error').length
+  const scenarioPlaybackLane = useMemo(() => getWorldScenarioPlaybackLane(world), [world])
   const processedEventIds = () => world.events.map((event) => event.id).slice(-500)
   const beginScenarioEditing = (scenario: WorldScenarioRuntime) => {
     const resumeAfterEditing = scenario.enabled !== false
@@ -196,6 +198,16 @@ export const WorldTavern = ({
                 <small>{locale === 'zh-CN'
                   ? '每条流程地位平等并独立判定；演出统一排队，AI 节点也遵守作者定义的连线。'
                   : 'Every flow is equal and evaluated independently; performances are queued and AI follows authored edges.'}</small>
+                <span className={`tavern-flow-lane${scenarioPlaybackLane.owner ? ' active' : ''}`}>
+                  {scenarioPlaybackLane.owner
+                    ? (locale === 'zh-CN'
+                        ? `演绎：${scenarioPlaybackLane.owner.title}`
+                        : `Playing: ${scenarioPlaybackLane.owner.title}`)
+                    : (locale === 'zh-CN' ? '演绎通道空闲' : 'Performance lane idle')}
+                  {scenarioPlaybackLane.queued.length > 0
+                    ? ` · ${locale === 'zh-CN' ? `排队 ${scenarioPlaybackLane.queued.length}` : `${scenarioPlaybackLane.queued.length} queued`}`
+                    : ''}
+                </span>
               </div>
               <button
                 type="button"
@@ -225,15 +237,25 @@ export const WorldTavern = ({
             {world.scenarios.map((scenario) => {
               const completedCount = scenario.stages.filter((stage) => stage.status === 'completed').length
               const hasActiveNode = scenario.stages.some((stage) => stage.status === 'active')
-              const flowStatus = scenario.enabled === false
-                ? (editingScenarioId === scenario.id
-                    ? (locale === 'zh-CN' ? '创作中' : 'Authoring')
-                    : completedCount === 0 ? (locale === 'zh-CN' ? '草稿' : 'Draft') : (locale === 'zh-CN' ? '已暂停' : 'Paused'))
-                : scenario.pendingAi
-                  ? (locale === 'zh-CN' ? 'AI 编排中' : 'AI directing')
-                  : hasActiveNode
-                  ? (locale === 'zh-CN' ? '探索中' : 'Exploring')
-                  : (locale === 'zh-CN' ? '已结束' : 'Completed')
+              const runtimeStatus = getWorldScenarioRuntimeStatus(scenario, editingScenarioId === scenario.id)
+              const performanceActive = Boolean(scenario.activeDialogue || scenario.activeTimeline || scenario.pendingAi)
+              const flowStatus = runtimeStatus === 'authoring'
+                ? (locale === 'zh-CN' ? '创作中' : 'Authoring')
+                : runtimeStatus === 'paused'
+                  ? completedCount === 0
+                    ? (locale === 'zh-CN' ? '草稿' : 'Draft')
+                    : (locale === 'zh-CN' ? '已暂停' : 'Paused')
+                  : runtimeStatus === 'queued'
+                    ? (locale === 'zh-CN' ? '等待演绎' : 'Queued')
+                    : runtimeStatus === 'dialogue'
+                      ? (locale === 'zh-CN' ? '对白演绎中' : 'Dialogue playing')
+                      : runtimeStatus === 'timeline'
+                        ? (locale === 'zh-CN' ? '动作执行中' : 'Actions playing')
+                        : runtimeStatus === 'ai'
+                          ? (locale === 'zh-CN' ? 'AI 编排中' : 'AI directing')
+                          : runtimeStatus === 'exploring'
+                            ? (locale === 'zh-CN' ? '探索中' : 'Exploring')
+                            : (locale === 'zh-CN' ? '已结束' : 'Completed')
               return (
                 <section className={`tavern-quest${scenario.enabled === false ? ' paused' : ''}`} key={scenario.id}>
                   <header>
@@ -246,8 +268,8 @@ export const WorldTavern = ({
                       <strong>{t('tavern.questProgress', { completed: completedCount, total: scenario.stages.length })}</strong>
                       <button
                         type="button"
-                        disabled={Boolean(scenario.activeDialogue || scenario.pendingAi) || !hasActiveNode || Boolean(scenarioEditSession)}
-                        title={scenario.activeDialogue || scenario.pendingAi
+                        disabled={performanceActive || !hasActiveNode || Boolean(scenarioEditSession)}
+                        title={performanceActive
                           ? (locale === 'zh-CN' ? '演出结束后才能暂停' : 'Pause after the performance')
                           : undefined}
                         onClick={() => onUpdateScenario({
@@ -278,8 +300,8 @@ export const WorldTavern = ({
                       <button
                         type="button"
                         className={editingScenarioId === scenario.id ? 'active' : ''}
-                        disabled={Boolean(scenario.activeDialogue || scenario.pendingAi) || (Boolean(scenarioEditSession) && editingScenarioId !== scenario.id)}
-                        title={scenario.activeDialogue || scenario.pendingAi
+                        disabled={performanceActive || (Boolean(scenarioEditSession) && editingScenarioId !== scenario.id)}
+                        title={performanceActive
                           ? (locale === 'zh-CN' ? '对话演出结束后可编辑' : 'Editable after dialogue finishes')
                           : scenarioEditSession && editingScenarioId !== scenario.id
                             ? (locale === 'zh-CN' ? '请先保存或取消当前编辑' : 'Save or cancel the current edit first')
@@ -318,8 +340,8 @@ export const WorldTavern = ({
                       <button
                         type="button"
                         className={confirmDeleteScenarioId === scenario.id ? 'danger confirm' : 'danger'}
-                        disabled={Boolean(scenario.activeDialogue || scenario.pendingAi) || Boolean(scenarioEditSession)}
-                        title={scenario.activeDialogue || scenario.pendingAi ? (locale === 'zh-CN' ? '演出结束后才能删除' : 'Delete after the performance') : undefined}
+                        disabled={performanceActive || Boolean(scenarioEditSession)}
+                        title={performanceActive ? (locale === 'zh-CN' ? '演出结束后才能删除' : 'Delete after the performance') : undefined}
                         onClick={() => {
                           if (confirmDeleteScenarioId !== scenario.id) {
                             setConfirmDeleteScenarioId(scenario.id)
@@ -364,6 +386,18 @@ export const WorldTavern = ({
                   {scenario.pendingAi && (
                     <div className="tavern-dialogue-progress ai">
                       {locale === 'zh-CN' ? 'AI 正在按节点约束编排对白与分支……' : 'AI is composing within this node’s dialogue and branch constraints…'}
+                    </div>
+                  )}
+                  {scenario.activeTimeline && (
+                    <div className="tavern-dialogue-progress">
+                      {locale === 'zh-CN' ? '剧情动作执行中' : 'Story actions playing'} · {scenario.activeTimeline.actionIndex + 1}
+                    </div>
+                  )}
+                  {scenario.queuedTransition && !performanceActive && (
+                    <div className="tavern-dialogue-progress queued">
+                      {locale === 'zh-CN'
+                        ? `等待演绎通道 · 队列第 ${scenarioPlaybackLane.queued.findIndex((item) => item.scenarioId === scenario.id) + 1} 位`
+                        : `Waiting for performance lane · #${scenarioPlaybackLane.queued.findIndex((item) => item.scenarioId === scenario.id) + 1}`}
                     </div>
                   )}
                   {scenario.outcomeId && <div className="tavern-scenario-outcome">{locale === 'zh-CN' ? '流程结果' : 'Flow result'} · {scenario.stages.flatMap((stage) => stage.branches ?? []).find((branch) => branch.id === scenario.outcomeId)?.title ?? scenario.outcomeId}</div>}

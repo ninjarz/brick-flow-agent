@@ -4131,6 +4131,23 @@ button:disabled {
   line-height: 1.45;
 }
 
+.tavern-flow-lane {
+  width: fit-content;
+  padding: 2px 7px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.74);
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.tavern-flow-lane.active {
+  border-color: #67e8f9;
+  background: #ecfeff;
+  color: #0e7490;
+}
+
 .tavern-flow-toolbar button {
   flex: none;
   min-height: 30px;
@@ -4290,6 +4307,12 @@ button:disabled {
   border-color: #c4b5fd;
   color: #6d28d9;
   background: linear-gradient(90deg, #faf5ff, #eff6ff);
+}
+
+.tavern-dialogue-progress.queued {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #a16207;
 }
 
 .tavern-scenario-outcome {

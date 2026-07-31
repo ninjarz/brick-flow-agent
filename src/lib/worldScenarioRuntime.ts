@@ -2,6 +2,7 @@ import type { WorldEvent, WorldScenarioAction, WorldScenarioBranch, WorldScenari
 import { issueWorldEntityCommand, joinWorldParty, leaveWorldParty } from './worldEntity'
 import { grantWorldClue } from './worldClues'
 import { makeScenarioDialogueStoryId } from './worldNarrativeFeed'
+import { getWorldScenarioPlaybackLane, orderWorldScenariosForEvaluation } from './worldScenarioScheduler'
 
 export const evaluateWorldScenarioConditions = (
   world: WorldState,
@@ -495,9 +496,7 @@ export const advanceWorldScenarios = (
   if (options.suspendActivePlayback) return world
   let nextWorld = world
   let scenariosChanged = false
-  let dialogueLaneOccupied = world.scenarios.some((scenario) => Boolean(
-    scenario.activeDialogue || scenario.activeTimeline || scenario.pendingAi,
-  ))
+  let dialogueLaneOccupied = getWorldScenarioPlaybackLane(world).owners.length > 0
   const claimedEventIdsByMutexGroup = new Map<string, Set<string>>()
   for (const scenario of world.scenarios) {
     if (!scenario.mutexGroup) continue
@@ -505,9 +504,7 @@ export const advanceWorldScenarios = (
     for (const eventId of scenario.claimedEventIds ?? []) claimed.add(eventId)
     claimedEventIdsByMutexGroup.set(scenario.mutexGroup, claimed)
   }
-  const orderedScenarios = world.scenarios
-    .map((scenario, index) => ({ scenario, index }))
-    .sort((left, right) => (right.scenario.priority ?? 0) - (left.scenario.priority ?? 0) || left.index - right.index)
+  const orderedScenarios = orderWorldScenariosForEvaluation(world.scenarios)
   const evaluatedScenarios = orderedScenarios.map(({ scenario }) => {
     if (scenario.enabled === false) return scenario
     if (scenario.pendingAi) {

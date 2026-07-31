@@ -79,6 +79,33 @@ describe('world scenario diagnostics', () => {
     ])
   })
 
+  it('reports corrupted saves with more than one performance-lane owner', () => {
+    const makeScenario = (id: string): WorldScenarioRuntime => ({
+      id,
+      assetId: 'authored',
+      title: id,
+      description: id,
+      processedEventIds: [],
+      pendingAi: { stageId: 'stage', eventId: `${id}-event`, requestedAtSeconds: 0 },
+      stages: [{
+        id: 'stage',
+        title: 'Stage',
+        description: 'Stage',
+        status: 'active',
+        trigger: { eventType: 'interaction' },
+        ai: { mode: 'dialogue', instruction: 'Talk' },
+      }],
+    })
+    const issues = inspectWorldScenarioRuntime({
+      ...createEmptyWorldState('multiple-owners'),
+      scenarios: [makeScenario('first'), makeScenario('second')],
+    })
+
+    expect(issues).toContainEqual(expect.objectContaining({
+      code: 'MULTIPLE_PERFORMANCE_OWNERS',
+    }))
+  })
+
   it('advances the maximum supported flow count against a full event history quickly', () => {
     const scenarios: WorldScenarioRuntime[] = Array.from({ length: 20 }, (_, index) => ({
       id: `flow-${index}`,

@@ -1,6 +1,7 @@
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import type { WorldEvent, WorldState } from '../types/world'
 import { advanceWorldScenarios } from './worldScenarioRuntime'
+import { getWorldScenarioPlaybackLane } from './worldScenarioScheduler'
 
 export type WorldScenarioRuntimeIssue = {
   scenarioId: string
@@ -10,11 +11,12 @@ export type WorldScenarioRuntimeIssue = {
     | 'TIMELINE_STAGE_MISSING'
     | 'TIMELINE_ACTION_MISSING'
     | 'QUEUED_EVENT_MISSING'
+    | 'MULTIPLE_PERFORMANCE_OWNERS'
   detail: string
 }
 
-export const inspectWorldScenarioRuntime = (world: WorldState): WorldScenarioRuntimeIssue[] => (
-  world.scenarios.flatMap((scenario) => {
+export const inspectWorldScenarioRuntime = (world: WorldState): WorldScenarioRuntimeIssue[] => {
+  const issues = world.scenarios.flatMap((scenario) => {
     const issues: WorldScenarioRuntimeIssue[] = []
     const activeStages = scenario.stages.filter((stage) => stage.status === 'active')
     if (activeStages.length > 1) {
@@ -68,7 +70,16 @@ export const inspectWorldScenarioRuntime = (world: WorldState): WorldScenarioRun
     }
     return issues
   })
-)
+  const lane = getWorldScenarioPlaybackLane(world)
+  if (lane.owners.length > 1) {
+    issues.push({
+      scenarioId: lane.owner?.scenarioId ?? 'world',
+      code: 'MULTIPLE_PERFORMANCE_OWNERS',
+      detail: lane.owners.map((owner) => `${owner.scenarioId}:${owner.kind}`).join(','),
+    })
+  }
+  return issues
+}
 
 export type WorldScenarioSimulationResult = {
   world: WorldState
