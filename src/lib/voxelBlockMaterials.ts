@@ -268,13 +268,18 @@ const layerOpacity: Record<VoxelRenderLayer, number> = {
 
 const materialCache = new Map<string, readonly MeshStandardMaterial[]>()
 
+export const getVoxelVisualKey = (visual: VoxelBlockVisual) => {
+  const faceIds = resolveVoxelFaceTextureIds(visual)
+  return `${faceIds.join('|')}:${visual.renderLayer}:${visual.emissiveIntensity ?? 0}`
+}
+
 export const getVoxelBlockMaterials = (
   visual: VoxelBlockVisual,
   opacityMultiplier = 1,
 ): readonly MeshStandardMaterial[] => {
   const faceIds = resolveVoxelFaceTextureIds(visual)
   const opacity = Math.max(0, Math.min(1, layerOpacity[visual.renderLayer] * opacityMultiplier))
-  const cacheKey = `${faceIds.join('|')}:${visual.renderLayer}:${visual.emissiveIntensity ?? 0}:${opacity}`
+  const cacheKey = `${getVoxelVisualKey(visual)}:${opacity}`
   const cached = materialCache.get(cacheKey)
   if (cached) return cached
   const transparent = opacity < 1 || visual.renderLayer === 'translucent'

@@ -1,5 +1,9 @@
 export const shadowBrickThreshold = 800
 export const simplifiedBrickThreshold = 2500
+export const voxelInstanceThreshold = 8
+
+export const shouldInstanceVoxelGroup = (instanceCount: number) =>
+  instanceCount >= voxelInstanceThreshold
 
 export const getSimulationPlaybackFps = (brickCount: number) => {
   if (brickCount >= simplifiedBrickThreshold) return 12

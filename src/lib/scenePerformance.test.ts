@@ -5,6 +5,8 @@ import {
   getWorldAnimationFps,
   shadowBrickThreshold,
   simplifiedBrickThreshold,
+  shouldInstanceVoxelGroup,
+  voxelInstanceThreshold,
 } from './scenePerformance'
 
 describe('scene performance policy', () => {
@@ -35,5 +37,10 @@ describe('scene performance policy', () => {
     expect(getWorldAnimationFps(simplifiedBrickThreshold, 4)).toBe(20)
     expect(getWorldAnimationFps(100, 80)).toBe(20)
     expect(getWorldAnimationFps(100, 0)).toBe(0)
+  })
+
+  it('instances repeated voxel materials only when batching saves draw calls', () => {
+    expect(shouldInstanceVoxelGroup(voxelInstanceThreshold - 1)).toBe(false)
+    expect(shouldInstanceVoxelGroup(voxelInstanceThreshold)).toBe(true)
   })
 })

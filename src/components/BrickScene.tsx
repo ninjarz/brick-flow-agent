@@ -12,7 +12,7 @@ import { normalizeLDrawPartNumber } from '../lib/ldrawPartNumbers'
 import { createLoadedLDrawPartGeometry } from '../lib/ldrawVisualGeometry'
 import { getVisibleBricksDuringPlacement } from '../lib/brickPlacementPreview'
 import { createBuildGraph, getBrickBounds } from '../lib/planUtils'
-import { getScenePerformanceSettings, getWorldAnimationFps } from '../lib/scenePerformance'
+import { getScenePerformanceSettings, getWorldAnimationFps, shouldInstanceVoxelGroup } from '../lib/scenePerformance'
 import { getSceneCameraFrameRequestKey } from '../lib/sceneCamera'
 import { getWorldProjectileVisuals, sampleWorldProjectilePosition, type WorldProjectileVisual } from '../lib/worldProjectiles'
 import { layoutWorldSpeechBubbles } from '../lib/worldSpeechLayout'
@@ -20,7 +20,7 @@ import { analyzeBuildStability, getStabilityRiskColor, type StabilityAnalysis } 
 import { getBrickWorldRenderStructuralCellBoxes, type StructuralCellKind, type WorldStructuralCellBox } from '../lib/structuralGrid'
 import { WORLD_EDIT_STEP_STUDS, getBrickConnectors, getBrickWorldFrame, poseToWorld } from '../lib/brickUnits'
 import { useI18n } from '../lib/i18n'
-import { getVoxelBlockMaterials } from '../lib/voxelBlockMaterials'
+import { getVoxelBlockMaterials, getVoxelVisualKey } from '../lib/voxelBlockMaterials'
 import {
   createCheeseSlopeGeometry,
   createCurvedSlope3x1Geometry,
@@ -1965,6 +1965,227 @@ const SimplifiedBrickScene = ({ bricks, selectedId, highlightedIdSet, showEdges,
   )
 }
 
+type VoxelBoxInstance = {
+  brick: PlacedBrick
+  definition: BrickDefinition
+}
+
+type VoxelBoxInstanceGroup = {
+  definition: BrickDefinition
+  instances: VoxelBoxInstance[]
+}
+
+const VoxelBoxInstances = memo(function VoxelBoxInstances({
+  group,
+  showEdges,
+  draggableIds,
+  placementActive,
+  onSelect,
+  onSelectConnected,
+  onBeginDragSelected,
+  onConfirmPlacement,
+  onCancelPlacement,
+}: {
+  group: VoxelBoxInstanceGroup
+  showEdges: boolean
+  draggableIds: Set<string>
+  placementActive: boolean
+  onSelect: (id: string, options?: BrickSelectionOptions) => void
+  onSelectConnected?: (id: string) => void
+  onBeginDragSelected?: (id: string, point: { x: number; z: number }) => void
+  onConfirmPlacement?: () => void
+  onCancelPlacement?: () => void
+}) {
+  const fillRef = useRef<InstancedMesh>(null)
+  const wireRef = useRef<InstancedMesh>(null)
+  const matrixObject = useMemo(() => new Object3D(), [])
+
+  useLayoutEffect(() => {
+    const writeMatrices = (mesh: InstancedMesh | null) => {
+      if (!mesh) return
+      group.instances.forEach(({ brick, definition }, index) => {
+        const frame = getBrickWorldFrame(definition, brick.pose)
+        matrixObject.position.set(frame.x, frame.y, frame.z)
+        matrixObject.rotation.set(
+          getVerticalRotationRadians(brick.pose.verticalQuarterTurns ?? 0),
+          getHorizontalRotationRadians(brick.pose.rotationQuarterTurns),
+          0,
+          'YXZ',
+        )
+        matrixObject.scale.set(
+          definition.footprint.widthStuds,
+          definition.footprint.heightStuds,
+          definition.footprint.depthStuds,
+        )
+        matrixObject.updateMatrix()
+        mesh.setMatrixAt(index, matrixObject.matrix)
+      })
+      mesh.count = group.instances.length
+      mesh.instanceMatrix.needsUpdate = true
+    }
+    writeMatrices(fillRef.current)
+    writeMatrices(wireRef.current)
+  }, [group.instances, matrixObject])
+
+  const getInstanceBrickId = (event: ThreeEvent<MouseEvent>) => {
+    const instanceId = event.instanceId
+    return typeof instanceId === 'number' ? group.instances[instanceId]?.brick.id : undefined
+  }
+  const interactionHandlers = useBrickInteractionHandlers({
+    resolveBrickId: getInstanceBrickId,
+    canBeginDrag: (id) => draggableIds.has(id),
+    placementActive,
+    onSelect,
+    onSelectConnected,
+    onBeginDragSelected,
+    onConfirmPlacement,
+    onCancelPlacement,
+  })
+  const visual = group.definition.voxelVisual
+  if (!visual || group.instances.length === 0) return null
+
+  return (
+    <>
+      <instancedMesh
+        ref={fillRef}
+        args={[undefined, undefined, group.instances.length]}
+        castShadow={visual.renderLayer !== 'translucent'}
+        receiveShadow={visual.renderLayer === 'opaque'}
+        frustumCulled={false}
+        {...interactionHandlers}
+      >
+        <boxGeometry args={[1, 1, 1]} />
+        <VoxelBlockMaterials definition={group.definition} showEdges={false} />
+      </instancedMesh>
+      {showEdges && (
+        <instancedMesh
+          ref={wireRef}
+          args={[undefined, undefined, group.instances.length]}
+          frustumCulled={false}
+          renderOrder={2}
+          {...interactionHandlers}
+        >
+          <boxGeometry args={[1, 1, 1]} />
+          <meshBasicMaterial color={edgeColor} wireframe transparent opacity={0.2} depthWrite={false} />
+        </instancedMesh>
+      )}
+    </>
+  )
+})
+
+const VoxelOptimizedScene = ({
+  bricks,
+  selectedId,
+  highlightedIdSet,
+  supportedByBrickId,
+  preferDetailedGeometry,
+  showEdges,
+  displayColorByBrickId,
+  transformsByBrickId,
+  hiddenBrickIdSet,
+  placementActive,
+  onSelect,
+  onSelectConnected,
+  onBeginDragSelected,
+  onConfirmPlacement,
+  onCancelPlacement,
+}: {
+  bricks: PlacedBrick[]
+  selectedId?: string
+  highlightedIdSet: Set<string>
+  supportedByBrickId: Map<string, boolean>
+  preferDetailedGeometry: boolean
+  showEdges: boolean
+  displayColorByBrickId?: Map<string, string>
+  transformsByBrickId?: Map<string, BrickSceneTransform>
+  hiddenBrickIdSet: Set<string>
+  placementActive: boolean
+  onSelect: (id: string, options?: BrickSelectionOptions) => void
+  onSelectConnected?: (id: string) => void
+  onBeginDragSelected?: (id: string, point: { x: number; z: number }) => void
+  onConfirmPlacement?: () => void
+  onCancelPlacement?: () => void
+}) => {
+  const { groups, individualBricks } = useMemo(() => {
+    const candidates = new Map<string, VoxelBoxInstanceGroup>()
+    const individual: PlacedBrick[] = []
+
+    for (const brick of bricks) {
+      const definition = brickById.get(brick.brickId)
+      const visual = definition?.voxelVisual
+      const canInstance = Boolean(
+        definition && visual &&
+        (visual.shape === 'cube' || visual.shape === 'slab') &&
+        brick.id !== selectedId &&
+        !highlightedIdSet.has(brick.id) &&
+        supportedByBrickId.get(brick.id) !== false &&
+        !displayColorByBrickId?.has(brick.id) &&
+        !hiddenBrickIdSet.has(brick.id) &&
+        !transformsByBrickId?.has(brick.id),
+      )
+      if (!canInstance || !definition || !visual) {
+        individual.push(brick)
+        continue
+      }
+
+      const key = getVoxelVisualKey(visual)
+      const group = candidates.get(key) ?? { definition, instances: [] }
+      group.instances.push({ brick, definition })
+      candidates.set(key, group)
+    }
+
+    const batchedGroups: VoxelBoxInstanceGroup[] = []
+    for (const group of candidates.values()) {
+      if (shouldInstanceVoxelGroup(group.instances.length)) batchedGroups.push(group)
+      else individual.push(...group.instances.map((instance) => instance.brick))
+    }
+    return { groups: batchedGroups, individualBricks: individual }
+  }, [bricks, displayColorByBrickId, hiddenBrickIdSet, highlightedIdSet, selectedId, supportedByBrickId, transformsByBrickId])
+  const draggableIds = useMemo(
+    () => new Set(selectedId ? [selectedId, ...highlightedIdSet] : highlightedIdSet),
+    [highlightedIdSet, selectedId],
+  )
+
+  return (
+    <>
+      {groups.map((group) => (
+        <VoxelBoxInstances
+          key={getVoxelVisualKey(group.definition.voxelVisual!)}
+          group={group}
+          showEdges={showEdges}
+          draggableIds={draggableIds}
+          placementActive={placementActive}
+          onSelect={onSelect}
+          onSelectConnected={onSelectConnected}
+          onBeginDragSelected={onBeginDragSelected}
+          onConfirmPlacement={onConfirmPlacement}
+          onCancelPlacement={onCancelPlacement}
+        />
+      ))}
+      {individualBricks.map((brick) => (
+        <TransformedBrick key={brick.id} transform={transformsByBrickId?.get(brick.id)}>
+          <BrickMesh
+            brick={brick}
+            selected={brick.id === selectedId}
+            highlighted={highlightedIdSet.has(brick.id)}
+            floating={supportedByBrickId.get(brick.id) === false}
+            preferDetailedGeometry={preferDetailedGeometry}
+            showEdges={showEdges}
+            displayColor={displayColorByBrickId?.get(brick.id)}
+            ghost={hiddenBrickIdSet.has(brick.id)}
+            placementActive={placementActive}
+            onSelect={onSelect}
+            onSelectConnected={onSelectConnected}
+            onBeginDragSelected={onBeginDragSelected}
+            onConfirmPlacement={onConfirmPlacement}
+            onCancelPlacement={onCancelPlacement}
+          />
+        </TransformedBrick>
+      ))}
+    </>
+  )
+}
+
 const WorldEntityMaterial = ({ color, ghost }: { color: string; ghost: boolean }) => (
   <meshStandardMaterial
     color={ghost ? '#22d3ee' : color}
@@ -2760,26 +2981,25 @@ export const BrickScene = ({
             onConfirmPlacement={onConfirmPlacement}
             onCancelPlacement={onCancelPlacement}
           />
-        ) : visibleBricks.map((brick) => (
-          <TransformedBrick key={brick.id} transform={transformsByBrickId?.get(brick.id)}>
-            <BrickMesh
-              brick={brick}
-              selected={brick.id === selectedId}
-              highlighted={highlightedIdSet.has(brick.id)}
-              floating={supportedByBrickId.get(brick.id) === false}
-              preferDetailedGeometry={preferDetailedGeometry}
-              showEdges={showBrickEdges}
-              displayColor={resolvedDisplayColorByBrickId?.get(brick.id)}
-              ghost={hiddenBrickIdSet.has(brick.id)}
-              placementActive={placementActive}
-              onSelect={onSelect}
-              onSelectConnected={onSelectConnected}
-              onBeginDragSelected={onBeginDragSelected}
-              onConfirmPlacement={onConfirmPlacement}
-              onCancelPlacement={onCancelPlacement}
-            />
-          </TransformedBrick>
-        ))}
+        ) : (
+          <VoxelOptimizedScene
+            bricks={visibleBricks}
+            selectedId={selectedId}
+            highlightedIdSet={highlightedIdSet}
+            supportedByBrickId={supportedByBrickId}
+            preferDetailedGeometry={preferDetailedGeometry}
+            showEdges={showBrickEdges}
+            displayColorByBrickId={resolvedDisplayColorByBrickId}
+            transformsByBrickId={transformsByBrickId}
+            hiddenBrickIdSet={hiddenBrickIdSet}
+            placementActive={placementActive}
+            onSelect={onSelect}
+            onSelectConnected={onSelectConnected}
+            onBeginDragSelected={onBeginDragSelected}
+            onConfirmPlacement={onConfirmPlacement}
+            onCancelPlacement={onCancelPlacement}
+          />
+        )}
         {placementActive && (
           <PlacementGhosts
             bricks={placementPreviewBricks}
