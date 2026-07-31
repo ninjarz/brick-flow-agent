@@ -152,9 +152,13 @@ export const ControlPanel = ({
             value: role,
             label: t(`control.npcRole.${role}`),
           }))
-        : Array.from(new Set(packBrickDefinitions.map((brick) => brick.kind))).map((kind) => ({
+        : Array.from(new Set(packBrickDefinitions.map((brick) => (
+            partPackFilter === 'minecraft' ? brick.catalogCategory ?? brick.kind : brick.kind
+          )))).map((kind) => ({
             value: kind,
-            label: t(`control.kind.${kind}`),
+            label: partPackFilter === 'minecraft'
+              ? t(`control.minecraftCategory.${kind}`)
+              : t(`control.kind.${kind}`),
           }))),
     ],
     [packBrickDefinitions, partPackFilter, t],
@@ -164,19 +168,24 @@ export const ControlPanel = ({
 
     return packBrickDefinitions.filter((brick) => {
       const kindLabel = t(`control.kind.${brick.kind}`)
-      const matchesKind = partKindFilter === 'all' || brick.kind === partKindFilter
+      const catalogKind = partPackFilter === 'minecraft' ? brick.catalogCategory ?? brick.kind : brick.kind
+      const categoryLabel = partPackFilter === 'minecraft'
+        ? t(`control.minecraftCategory.${catalogKind}`)
+        : kindLabel
+      const matchesKind = partKindFilter === 'all' || catalogKind === partKindFilter
       const matchesQuery = !query || [
         brick.id,
         brick.partNumber,
         brick.name,
         brick.kind,
         kindLabel,
+        categoryLabel,
         getFootprintLabel(brick.footprint.widthStuds, brick.footprint.depthStuds),
       ].some((value) => value.toLowerCase().includes(query))
 
       return matchesKind && matchesQuery
     })
-  }, [packBrickDefinitions, partKindFilter, partQuery, t])
+  }, [packBrickDefinitions, partKindFilter, partPackFilter, partQuery, t])
   const renderedBrickDefinitions = visibleBrickDefinitions.slice(0, visiblePartLimit)
   const remainingPartCount = Math.max(0, visibleBrickDefinitions.length - renderedBrickDefinitions.length)
 

@@ -6,8 +6,20 @@ import { getVoxelBlockMaterials, getVoxelPixelTexture, resolveVoxelFaceTextureId
 describe('voxel block materials', () => {
   it('gives every built-in Minecraft block an original voxel appearance', () => {
     const minecraftBlocks = brickDefinitions.filter((brick) => brick.pack === 'minecraft')
-    expect(minecraftBlocks.length).toBeGreaterThan(0)
+    expect(minecraftBlocks.length).toBeGreaterThanOrEqual(36)
     expect(minecraftBlocks.every((brick) => Boolean(brick.voxelVisual))).toBe(true)
+    expect(new Set(minecraftBlocks.map((brick) => brick.catalogCategory))).toEqual(new Set([
+      'terrain',
+      'stone',
+      'wood',
+      'ore',
+      'building',
+      'functional',
+    ]))
+    for (const brick of minecraftBlocks) {
+      const textureIds = resolveVoxelFaceTextureIds(brick.voxelVisual!)
+      expect(textureIds.every((textureId) => getVoxelPixelTexture(textureId).image.width === 16)).toBe(true)
+    }
   })
 
   it('resolves independent top, bottom and side textures in BoxGeometry order', () => {

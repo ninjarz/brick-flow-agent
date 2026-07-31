@@ -92,6 +92,7 @@ export type BrickDefinition = {
   connectors: BrickConnector[]
   colors: BrickColor[]
   inventory: number
+  catalogCategory?: string
   voxelVisual?: VoxelBlockVisual
 }
 

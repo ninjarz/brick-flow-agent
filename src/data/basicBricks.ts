@@ -626,6 +626,7 @@ const makeMinecraftBlockDefinition = (
   id: string,
   name: string,
   color: BrickColor,
+  catalogCategory: 'terrain' | 'stone' | 'wood' | 'ore' | 'building' | 'functional',
   voxelVisual: VoxelBlockVisual,
 ): BrickDefinitionDraft => ({
   id,
@@ -637,33 +638,127 @@ const makeMinecraftBlockDefinition = (
   connectors: makeStudSocketFaceConnectors(id, 1, 1, 1),
   colors: [color],
   inventory: 64,
+  catalogCategory,
   voxelVisual,
 })
 
 const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
-  makeMinecraftBlockDefinition('minecraft-grass-block', 'Grass Block', 'green', {
+  makeMinecraftBlockDefinition('minecraft-grass-block', 'Grass Block', 'green', 'terrain', {
     shape: 'cube', textures: { all: 'grass-side', top: 'grass-top', bottom: 'dirt' }, renderLayer: 'opaque',
   }),
-  makeMinecraftBlockDefinition('minecraft-dirt-block', 'Dirt Block', 'brown', {
+  makeMinecraftBlockDefinition('minecraft-dirt-block', 'Dirt Block', 'brown', 'terrain', {
     shape: 'cube', textures: { all: 'dirt' }, renderLayer: 'opaque',
   }),
-  makeMinecraftBlockDefinition('minecraft-stone-block', 'Stone Block', 'gray', {
-    shape: 'cube', textures: { all: 'stone' }, renderLayer: 'opaque',
-  }),
-  makeMinecraftBlockDefinition('minecraft-oak-planks', 'Oak Planks', 'tan', {
-    shape: 'cube', textures: { all: 'oak-planks' }, renderLayer: 'opaque',
-  }),
-  makeMinecraftBlockDefinition('minecraft-sand-block', 'Sand Block', 'yellow', {
+  makeMinecraftBlockDefinition('minecraft-sand-block', 'Sand Block', 'yellow', 'terrain', {
     shape: 'cube', textures: { all: 'sand' }, renderLayer: 'opaque',
   }),
-  makeMinecraftBlockDefinition('minecraft-water-block', 'Water Block', 'cyan', {
+  makeMinecraftBlockDefinition('minecraft-snow-block', 'Snow Block', 'white', 'terrain', {
+    shape: 'cube', textures: { all: 'snow' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-clay-block', 'Clay Block', 'gray', 'terrain', {
+    shape: 'cube', textures: { all: 'clay' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-moss-block', 'Moss Block', 'green', 'terrain', {
+    shape: 'cube', textures: { all: 'moss' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-ice-block', 'Ice Block', 'cyan', 'terrain', {
+    shape: 'cube', textures: { all: 'ice' }, renderLayer: 'translucent',
+  }),
+  makeMinecraftBlockDefinition('minecraft-stone-block', 'Stone Block', 'gray', 'stone', {
+    shape: 'cube', textures: { all: 'stone' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-cobblestone', 'Cobblestone', 'gray', 'stone', {
+    shape: 'cube', textures: { all: 'cobblestone' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-stone-bricks', 'Stone Bricks', 'gray', 'stone', {
+    shape: 'cube', textures: { all: 'stone-bricks' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-sandstone', 'Sandstone', 'tan', 'stone', {
+    shape: 'cube', textures: { all: 'sandstone-side', top: 'sandstone-top', bottom: 'sandstone-top' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-deepslate', 'Deepslate', 'black', 'stone', {
+    shape: 'cube', textures: { all: 'deepslate' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-obsidian', 'Obsidian', 'black', 'stone', {
+    shape: 'cube', textures: { all: 'obsidian' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-oak-planks', 'Oak Planks', 'tan', 'wood', {
+    shape: 'cube', textures: { all: 'oak-planks' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-birch-planks', 'Birch Planks', 'white', 'wood', {
+    shape: 'cube', textures: { all: 'birch-planks' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-spruce-planks', 'Spruce Planks', 'brown', 'wood', {
+    shape: 'cube', textures: { all: 'spruce-planks' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-oak-log', 'Oak Log', 'brown', 'wood', {
+    shape: 'cube', textures: { all: 'oak-log-side', top: 'oak-log-top', bottom: 'oak-log-top' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-birch-log', 'Birch Log', 'white', 'wood', {
+    shape: 'cube', textures: { all: 'birch-log-side', top: 'birch-log-top', bottom: 'birch-log-top' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-spruce-log', 'Spruce Log', 'brown', 'wood', {
+    shape: 'cube', textures: { all: 'spruce-log-side', top: 'spruce-log-top', bottom: 'spruce-log-top' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-oak-leaves', 'Oak Leaves', 'green', 'wood', {
+    shape: 'cube', textures: { all: 'oak-leaves' }, renderLayer: 'cutout',
+  }),
+  makeMinecraftBlockDefinition('minecraft-birch-leaves', 'Birch Leaves', 'lime', 'wood', {
+    shape: 'cube', textures: { all: 'birch-leaves' }, renderLayer: 'cutout',
+  }),
+  makeMinecraftBlockDefinition('minecraft-coal-ore', 'Coal Ore', 'gray', 'ore', {
+    shape: 'cube', textures: { all: 'coal-ore' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-iron-ore', 'Iron Ore', 'tan', 'ore', {
+    shape: 'cube', textures: { all: 'iron-ore' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-copper-ore', 'Copper Ore', 'orange', 'ore', {
+    shape: 'cube', textures: { all: 'copper-ore' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-gold-ore', 'Gold Ore', 'yellow', 'ore', {
+    shape: 'cube', textures: { all: 'gold-ore' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-redstone-ore', 'Redstone Ore', 'red', 'ore', {
+    shape: 'cube', textures: { all: 'redstone-ore' }, renderLayer: 'emissive', emissiveIntensity: 0.08,
+  }),
+  makeMinecraftBlockDefinition('minecraft-lapis-ore', 'Lapis Ore', 'blue', 'ore', {
+    shape: 'cube', textures: { all: 'lapis-ore' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-diamond-ore', 'Diamond Ore', 'cyan', 'ore', {
+    shape: 'cube', textures: { all: 'diamond-ore' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-bricks', 'Brick Block', 'red', 'building', {
+    shape: 'cube', textures: { all: 'bricks' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-white-concrete', 'White Concrete', 'white', 'building', {
+    shape: 'cube', textures: { all: 'white-concrete' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-gray-concrete', 'Gray Concrete', 'gray', 'building', {
+    shape: 'cube', textures: { all: 'gray-concrete' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-red-concrete', 'Red Concrete', 'red', 'building', {
+    shape: 'cube', textures: { all: 'red-concrete' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-bookshelf', 'Bookshelf', 'brown', 'building', {
+    shape: 'cube', textures: { all: 'bookshelf-side', top: 'oak-planks', bottom: 'oak-planks' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-crafting-table', 'Crafting Table', 'brown', 'building', {
+    shape: 'cube', textures: { all: 'crafting-side', top: 'crafting-top', bottom: 'oak-planks' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-furnace', 'Furnace', 'gray', 'building', {
+    shape: 'cube', textures: { all: 'furnace-side', top: 'stone', bottom: 'stone' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-water-block', 'Water Block', 'cyan', 'functional', {
     shape: 'cube', textures: { all: 'water' }, renderLayer: 'translucent',
   }),
-  makeMinecraftBlockDefinition('minecraft-glass-block', 'Glass Block', 'white', {
+  makeMinecraftBlockDefinition('minecraft-glass-block', 'Glass Block', 'white', 'functional', {
     shape: 'cube', textures: { all: 'glass' }, renderLayer: 'translucent',
   }),
-  makeMinecraftBlockDefinition('minecraft-redstone-block', 'Redstone Block', 'red', {
+  makeMinecraftBlockDefinition('minecraft-redstone-block', 'Redstone Block', 'red', 'functional', {
     shape: 'cube', textures: { all: 'redstone' }, renderLayer: 'emissive', emissiveIntensity: 0.18,
+  }),
+  makeMinecraftBlockDefinition('minecraft-glow-lamp', 'Glow Lamp', 'yellow', 'functional', {
+    shape: 'cube', textures: { all: 'glow-lamp' }, renderLayer: 'emissive', emissiveIntensity: 0.42,
   }),
   {
     id: 'minecraft-basic-block',
@@ -675,6 +770,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     connectors: makeStudSocketFaceConnectors('minecraft-basic-block', 1, 1, 1),
     colors: minecraftColors,
     inventory: 64,
+    catalogCategory: 'functional',
     voxelVisual: {
       shape: 'cube', textures: { all: 'basic-grid' }, renderLayer: 'opaque',
     },
