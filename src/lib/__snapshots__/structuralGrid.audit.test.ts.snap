@@ -3,6 +3,27 @@
 exports[`structural voxel audit > preserves every reviewed non-rectangular part shape 1`] = `
 [
   {
+    "compactSolidBoxCount": 2,
+    "fingerprint": "e6a70f48bee0",
+    "id": "minecraft-stone-stairs",
+    "occupiedVoxelCount": 96,
+    "partNumber": "minecraft-stone-stairs",
+  },
+  {
+    "compactSolidBoxCount": 2,
+    "fingerprint": "e6a70f48bee0",
+    "id": "minecraft-oak-stairs",
+    "occupiedVoxelCount": 96,
+    "partNumber": "minecraft-oak-stairs",
+  },
+  {
+    "compactSolidBoxCount": 5,
+    "fingerprint": "99e665c8a02f",
+    "id": "minecraft-oak-fence",
+    "occupiedVoxelCount": 25,
+    "partNumber": "minecraft-oak-fence",
+  },
+  {
     "compactSolidBoxCount": 5,
     "fingerprint": "bf5f9cc4782f",
     "id": "tile-eye-1x1",
