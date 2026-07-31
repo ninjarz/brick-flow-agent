@@ -150,6 +150,26 @@ const texturePixels = (textureId: string) => {
         pixel = transparentGap
           ? hexToPixel('#000000', 0)
           : speckle(x, y, hexToPixel(birch ? '#6e9944' : '#3f763b'), 137, 0.25)
+      } else if (textureId === 'grass-plant') {
+        const leftBlade = x >= 3 && x <= 7 && y >= 5 && x + y >= 12
+        const centerBlade = x >= 7 && x <= 9 && y >= 2
+        const rightBlade = x >= 9 && x <= 13 && y >= 6 && y - x >= -5
+        pixel = leftBlade || centerBlade || rightBlade
+          ? speckle(x, y, hexToPixel('#4f8738'), 138, 0.18)
+          : hexToPixel('#000000', 0)
+      } else if (textureId === 'red-flower' || textureId === 'yellow-flower') {
+        const stem = x >= 7 && x <= 8 && y >= 6
+        const leaf = (y >= 10 && y <= 12) && (x >= 4 && x <= 11)
+        const flowerCenterX = 7.5
+        const flowerCenterY = 4
+        const petalDistance = Math.abs(x - flowerCenterX) + Math.abs(y - flowerCenterY)
+        const petal = petalDistance <= 4 && !(Math.abs(x - flowerCenterX) > 2 && Math.abs(y - flowerCenterY) > 1)
+        const bloomColor = textureId === 'red-flower' ? '#d84b43' : '#e8c73f'
+        pixel = petal
+          ? hexToPixel(bloomColor)
+          : stem || leaf
+            ? hexToPixel('#4f8137')
+            : hexToPixel('#000000', 0)
       } else if (textureId === 'cobblestone') {
         const mortar = x % 5 === 0 || y % 5 === 0 || (x + Math.floor(y / 5) * 2) % 11 === 0
         pixel = mortar

@@ -425,6 +425,104 @@ const VoxelBlockMaterials = ({ definition, opacity = 1, showEdges = true }: {
   </>
 )
 
+const VoxelBlockMesh = ({
+  definition,
+  size,
+  position,
+  rotation,
+  opacity,
+  showEdges,
+}: {
+  definition: BrickDefinition
+  size: [number, number, number]
+  position?: [number, number, number]
+  rotation?: [number, number, number]
+  opacity: number
+  showEdges: boolean
+}) => (
+  <mesh
+    castShadow={definition.voxelVisual?.renderLayer !== 'translucent'}
+    receiveShadow={definition.voxelVisual?.renderLayer === 'opaque'}
+    position={position}
+    rotation={rotation}
+  >
+    <boxGeometry args={size} />
+    <VoxelBlockMaterials definition={definition} opacity={opacity} showEdges={showEdges} />
+  </mesh>
+)
+
+const VoxelBlockBody = ({
+  definition,
+  width,
+  height,
+  depth,
+  opacity,
+  showEdges,
+}: {
+  definition: BrickDefinition
+  width: number
+  height: number
+  depth: number
+  opacity: number
+  showEdges: boolean
+}) => {
+  const shape = definition.voxelVisual?.shape ?? 'cube'
+  if (shape === 'stairs') {
+    return (
+      <group>
+        <VoxelBlockMesh
+          definition={definition}
+          size={[width, height / 2, depth]}
+          position={[0, -height / 4, 0]}
+          opacity={opacity}
+          showEdges={showEdges}
+        />
+        <VoxelBlockMesh
+          definition={definition}
+          size={[width, height / 2, depth / 2]}
+          position={[0, height / 4, depth / 4]}
+          opacity={opacity}
+          showEdges={showEdges}
+        />
+      </group>
+    )
+  }
+
+  if (shape === 'fence') {
+    const postWidth = Math.min(width, depth) * 0.3
+    const railHeight = height * 0.16
+    const railDepth = Math.min(width, depth) * 0.16
+    return (
+      <group>
+        <VoxelBlockMesh definition={definition} size={[postWidth, height, postWidth]} opacity={opacity} showEdges={showEdges} />
+        {[-height * 0.2, height * 0.22].flatMap((y) => [
+          <VoxelBlockMesh key={`x-${y}`} definition={definition} size={[width, railHeight, railDepth]} position={[0, y, 0]} opacity={opacity} showEdges={showEdges} />,
+          <VoxelBlockMesh key={`z-${y}`} definition={definition} size={[railDepth, railHeight, depth]} position={[0, y, 0]} opacity={opacity} showEdges={showEdges} />,
+        ])}
+      </group>
+    )
+  }
+
+  if (shape === 'cross') {
+    const planeWidth = Math.min(width, depth) * 1.08
+    return (
+      <group>
+        <VoxelBlockMesh definition={definition} size={[planeWidth, height, 0.035]} rotation={[0, Math.PI / 4, 0]} opacity={opacity} showEdges={false} />
+        <VoxelBlockMesh definition={definition} size={[planeWidth, height, 0.035]} rotation={[0, -Math.PI / 4, 0]} opacity={opacity} showEdges={false} />
+      </group>
+    )
+  }
+
+  return (
+    <VoxelBlockMesh
+      definition={definition}
+      size={[width, height, depth]}
+      opacity={opacity}
+      showEdges={showEdges}
+    />
+  )
+}
+
 const createSlopeGeometry = (width: number, height: number, depth: number, rotationQuarterTurns: number) => {
   const geometry = new BufferGeometry()
   const y0 = height / -2
@@ -1282,17 +1380,14 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
     <group position={[frame.x, bodyY, frame.z]} {...interactionHandlers}>
       {definition.voxelVisual && !displayColor ? (
         rotateWithPose(
-          <mesh
-            castShadow={definition.voxelVisual.renderLayer !== 'translucent'}
-            receiveShadow={definition.voxelVisual.renderLayer === 'opaque'}
-          >
-            <boxGeometry args={[baseWidth, baseHeight, baseDepth]} />
-            <VoxelBlockMaterials
-              definition={definition}
-              opacity={ghost ? 0.44 : bodyOpacity}
-              showEdges={showEdges || selected || highlighted || floating}
-            />
-          </mesh>,
+          <VoxelBlockBody
+            definition={definition}
+            width={baseWidth}
+            height={baseHeight}
+            depth={baseDepth}
+            opacity={ghost ? 0.44 : bodyOpacity}
+            showEdges={showEdges || selected || highlighted || floating}
+          />,
         )
       ) : isEyeTile ? (
         rotateWithPose(

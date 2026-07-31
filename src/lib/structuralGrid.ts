@@ -300,12 +300,55 @@ const makeMeshStructuralCells = (definition: BrickDefinition, triangles: MeshTri
   )
 }
 
+const makeVoxelShapeStructuralCells = (definition: BrickDefinition): StructuralCell[] => {
+  const { widthStuds: width, heightStuds: height, depthStuds: depth } = definition.footprint
+  const shape = definition.voxelVisual?.shape ?? 'cube'
+  if (shape === 'stairs') {
+    return [
+      makeCell('solid', 0, 0, 0, width, height / 2, depth),
+      makeCell('solid', 0, height / 2, depth / 2, width, height / 2, depth / 2),
+    ]
+  }
+  if (shape === 'fence') {
+    const postWidth = Math.min(width, depth) * 0.3
+    const railHeight = height * 0.16
+    const railDepth = Math.min(width, depth) * 0.16
+    const postX = (width - postWidth) / 2
+    const postZ = (depth - postWidth) / 2
+    return [
+      makeCell('solid', postX, 0, postZ, postWidth, height, postWidth),
+      ...[-height * 0.2, height * 0.22].flatMap((offset) => {
+        const y = height / 2 + offset - railHeight / 2
+        return [
+          makeCell('solid', 0, y, (depth - railDepth) / 2, width, railHeight, railDepth),
+          makeCell('solid', (width - railDepth) / 2, y, 0, railDepth, railHeight, depth),
+        ]
+      }),
+    ]
+  }
+  if (shape === 'cross') {
+    const stemWidth = Math.min(width, depth) * 0.24
+    return [makeCell(
+      'solid',
+      (width - stemWidth) / 2,
+      0,
+      (depth - stemWidth) / 2,
+      stemWidth,
+      height,
+      stemWidth,
+    )]
+  }
+  return makeSolidBlockCells(width, height, depth)
+}
+
 const makeDefaultStructuralCells = (definition: BrickDefinition) => [
-  ...makeSolidBlockCells(
-    definition.footprint.widthStuds,
-    definition.footprint.heightStuds,
-    definition.footprint.depthStuds,
-  ),
+  ...(definition.voxelVisual
+    ? makeVoxelShapeStructuralCells(definition)
+    : makeSolidBlockCells(
+        definition.footprint.widthStuds,
+        definition.footprint.heightStuds,
+        definition.footprint.depthStuds,
+      )),
   ...makeConnectorCells(definition),
 ]
 
@@ -377,7 +420,7 @@ onLDrawGeneratedVisualLoaded((partNumbers) => {
 })
 
 const makeStructuralDefinitionCacheKey = (definition: BrickDefinition) =>
-  `${definition.id}:${definition.partNumber}:${definition.footprint.widthStuds},${definition.footprint.depthStuds},${definition.footprint.heightStuds}`
+  `${definition.id}:${definition.partNumber}:${definition.footprint.widthStuds},${definition.footprint.depthStuds},${definition.footprint.heightStuds}:${definition.voxelVisual?.shape ?? 'standard'}`
 
 export const getBrickStructuralCells = (definition: BrickDefinition): StructuralCell[] => {
   const cacheKey = makeStructuralDefinitionCacheKey(definition)

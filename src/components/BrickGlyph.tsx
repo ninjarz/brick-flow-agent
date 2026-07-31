@@ -19,7 +19,7 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three'
-import type { BrickColor, BrickFootprint, BrickKind } from '../types/bricks'
+import type { BrickColor, BrickFootprint, BrickKind, VoxelBlockVisual } from '../types/bricks'
 import { brickById, colorHex } from '../data/basicBricks'
 import { createRound2x2AxleBodyGeometry, createRound2x2AxleGrilleBodyGeometry } from '../lib/csgBrickGeometry'
 import { createLoadedLDrawPartGeometry, loadLDrawPartGeometry } from '../lib/ldrawVisualGeometry'
@@ -241,6 +241,61 @@ const localBrickPosition = (
   zStud - depthStuds / 2,
 )
 
+const makeVoxelPreviewMesh = (
+  visual: VoxelBlockVisual,
+  size: [number, number, number],
+  position: [number, number, number] = [0, 0, 0],
+  rotationY = 0,
+  showEdges = true,
+) => {
+  const mesh = new Mesh(new BoxGeometry(...size), createVoxelPreviewMaterials(visual))
+  mesh.position.set(...position)
+  mesh.rotation.y = rotationY
+  if (showEdges) addEdges(mesh)
+  return mesh
+}
+
+const addVoxelPreviewBody = (
+  group: Group,
+  visual: VoxelBlockVisual,
+  width: number,
+  height: number,
+  depth: number,
+) => {
+  if (visual.shape === 'stairs') {
+    group.add(
+      makeVoxelPreviewMesh(visual, [width, height / 2, depth], [0, -height / 4, 0]),
+      makeVoxelPreviewMesh(visual, [width, height / 2, depth / 2], [0, height / 4, depth / 4]),
+    )
+    return
+  }
+
+  if (visual.shape === 'fence') {
+    const postWidth = Math.min(width, depth) * 0.3
+    const railHeight = height * 0.16
+    const railDepth = Math.min(width, depth) * 0.16
+    group.add(makeVoxelPreviewMesh(visual, [postWidth, height, postWidth]))
+    for (const y of [-height * 0.2, height * 0.22]) {
+      group.add(
+        makeVoxelPreviewMesh(visual, [width, railHeight, railDepth], [0, y, 0]),
+        makeVoxelPreviewMesh(visual, [railDepth, railHeight, depth], [0, y, 0]),
+      )
+    }
+    return
+  }
+
+  if (visual.shape === 'cross') {
+    const planeWidth = Math.min(width, depth) * 1.08
+    group.add(
+      makeVoxelPreviewMesh(visual, [planeWidth, height, 0.035], [0, 0, 0], Math.PI / 4, false),
+      makeVoxelPreviewMesh(visual, [planeWidth, height, 0.035], [0, 0, 0], -Math.PI / 4, false),
+    )
+    return
+  }
+
+  group.add(makeVoxelPreviewMesh(visual, [width, height, depth]))
+}
+
 const buildPreviewGroup = (kind: BrickKind, footprint: BrickFootprint, brickId?: string, bodyColor = previewColor) => {
   const width = footprint.widthStuds
   const depth = footprint.depthStuds
@@ -250,12 +305,7 @@ const buildPreviewGroup = (kind: BrickKind, footprint: BrickFootprint, brickId?:
 
   const definition = brickId ? brickById.get(brickId) : undefined
   if (definition?.voxelVisual) {
-    const body = new Mesh(
-      new BoxGeometry(width, height, depth),
-      createVoxelPreviewMaterials(definition.voxelVisual),
-    )
-    addEdges(body)
-    group.add(body)
+    addVoxelPreviewBody(group, definition.voxelVisual, width, height, depth)
     return group
   }
 

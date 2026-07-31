@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { NearestFilter } from 'three'
 import { brickDefinitions } from '../data/basicBricks'
+import { getBrickStructuralCells } from './structuralGrid'
 import { getVoxelBlockMaterials, getVoxelPixelTexture, resolveVoxelFaceTextureIds } from './voxelBlockMaterials'
 
 describe('voxel block materials', () => {
@@ -46,5 +47,23 @@ describe('voxel block materials', () => {
     expect(materials).toHaveLength(6)
     expect(materials.every((material) => material.transparent && !material.depthWrite)).toBe(true)
     expect(getVoxelBlockMaterials(visual)).toBe(materials)
+  })
+
+  it('keeps modular block silhouettes in structural collision data', () => {
+    const getDefinition = (id: string) => brickDefinitions.find((brick) => brick.id === id)!
+    const solidCells = (id: string) => getBrickStructuralCells(getDefinition(id))
+      .filter((cell) => cell.kind === 'solid')
+
+    expect(solidCells('minecraft-stone-slab')).toEqual(expect.arrayContaining([
+      expect.objectContaining({ minY: 0, maxY: 0.5 }),
+    ]))
+    expect(solidCells('minecraft-stone-stairs')).toHaveLength(2)
+    expect(solidCells('minecraft-oak-fence')).toHaveLength(5)
+    expect(solidCells('minecraft-tall-grass')).toEqual([
+      expect.objectContaining({ minX: 0.38, maxX: 0.62, maxY: 0.9 }),
+    ])
+    expect(getDefinition('minecraft-tall-grass').connectors.map((connector) => connector.id)).toEqual([
+      'minecraft-tall-grass-studsocket-bottom',
+    ])
   })
 })

@@ -160,6 +160,7 @@ const makeStudSocketFaceConnectors = (
   widthStuds: number,
   depthStuds: number,
   heightStuds: number,
+  faces: Array<'top' | 'bottom' | 'right' | 'left' | 'back' | 'front'> = ['top', 'bottom', 'right', 'left', 'back', 'front'],
 ): BrickConnector[] => {
   const centerXStud = widthStuds / 2 - 0.5
   const centerYStud = heightStuds / 2
@@ -172,7 +173,7 @@ const makeStudSocketFaceConnectors = (
     makeStudSocketConnector(prefix, 'left', 'x', { x: -1, y: 0, z: 0 }, { xStud: 0, yStud: centerYStud, zStud: centerZStud }),
     makeStudSocketConnector(prefix, 'back', 'z', { x: 0, y: 0, z: 1 }, { xStud: centerXStud, yStud: centerYStud, zStud: 0 }),
     makeStudSocketConnector(prefix, 'front', 'z', { x: 0, y: 0, z: -1 }, { xStud: centerXStud, yStud: centerYStud, zStud: 0 }),
-  ]
+  ].filter((connector) => faces.some((face) => connector.id.endsWith(`-${face}`)))
 }
 
 export const colorHex: Record<BrickColor, string> = {
@@ -628,14 +629,18 @@ const makeMinecraftBlockDefinition = (
   color: BrickColor,
   catalogCategory: 'terrain' | 'stone' | 'wood' | 'ore' | 'building' | 'functional',
   voxelVisual: VoxelBlockVisual,
+  options: {
+    heightStuds?: number
+    connectorFaces?: Array<'top' | 'bottom' | 'right' | 'left' | 'back' | 'front'>
+  } = {},
 ): BrickDefinitionDraft => ({
   id,
   pack: 'minecraft',
   partNumber: id,
   name,
   kind: 'block',
-  footprint: { widthStuds: 1, depthStuds: 1, heightStuds: 1 },
-  connectors: makeStudSocketFaceConnectors(id, 1, 1, 1),
+  footprint: { widthStuds: 1, depthStuds: 1, heightStuds: options.heightStuds ?? 1 },
+  connectors: makeStudSocketFaceConnectors(id, 1, 1, options.heightStuds ?? 1, options.connectorFaces),
   colors: [color],
   inventory: 64,
   catalogCategory,
@@ -664,6 +669,15 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
   makeMinecraftBlockDefinition('minecraft-ice-block', 'Ice Block', 'cyan', 'terrain', {
     shape: 'cube', textures: { all: 'ice' }, renderLayer: 'translucent',
   }),
+  makeMinecraftBlockDefinition('minecraft-tall-grass', 'Tall Grass', 'green', 'terrain', {
+    shape: 'cross', textures: { all: 'grass-plant' }, renderLayer: 'cutout',
+  }, { heightStuds: 0.9, connectorFaces: ['bottom'] }),
+  makeMinecraftBlockDefinition('minecraft-red-flower', 'Red Flower', 'red', 'terrain', {
+    shape: 'cross', textures: { all: 'red-flower' }, renderLayer: 'cutout',
+  }, { heightStuds: 0.9, connectorFaces: ['bottom'] }),
+  makeMinecraftBlockDefinition('minecraft-yellow-flower', 'Yellow Flower', 'yellow', 'terrain', {
+    shape: 'cross', textures: { all: 'yellow-flower' }, renderLayer: 'cutout',
+  }, { heightStuds: 0.9, connectorFaces: ['bottom'] }),
   makeMinecraftBlockDefinition('minecraft-stone-block', 'Stone Block', 'gray', 'stone', {
     shape: 'cube', textures: { all: 'stone' }, renderLayer: 'opaque',
   }),
@@ -681,6 +695,12 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
   }),
   makeMinecraftBlockDefinition('minecraft-obsidian', 'Obsidian', 'black', 'stone', {
     shape: 'cube', textures: { all: 'obsidian' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-stone-slab', 'Stone Slab', 'gray', 'stone', {
+    shape: 'slab', textures: { all: 'stone' }, renderLayer: 'opaque',
+  }, { heightStuds: 0.5 }),
+  makeMinecraftBlockDefinition('minecraft-stone-stairs', 'Stone Stairs', 'gray', 'stone', {
+    shape: 'stairs', textures: { all: 'stone-bricks' }, renderLayer: 'opaque',
   }),
   makeMinecraftBlockDefinition('minecraft-oak-planks', 'Oak Planks', 'tan', 'wood', {
     shape: 'cube', textures: { all: 'oak-planks' }, renderLayer: 'opaque',
@@ -705,6 +725,15 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
   }),
   makeMinecraftBlockDefinition('minecraft-birch-leaves', 'Birch Leaves', 'lime', 'wood', {
     shape: 'cube', textures: { all: 'birch-leaves' }, renderLayer: 'cutout',
+  }),
+  makeMinecraftBlockDefinition('minecraft-oak-slab', 'Oak Slab', 'tan', 'wood', {
+    shape: 'slab', textures: { all: 'oak-planks' }, renderLayer: 'opaque',
+  }, { heightStuds: 0.5 }),
+  makeMinecraftBlockDefinition('minecraft-oak-stairs', 'Oak Stairs', 'tan', 'wood', {
+    shape: 'stairs', textures: { all: 'oak-planks' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-oak-fence', 'Oak Fence', 'brown', 'wood', {
+    shape: 'fence', textures: { all: 'oak-planks' }, renderLayer: 'opaque',
   }),
   makeMinecraftBlockDefinition('minecraft-coal-ore', 'Coal Ore', 'gray', 'ore', {
     shape: 'cube', textures: { all: 'coal-ore' }, renderLayer: 'opaque',
