@@ -820,7 +820,8 @@ export const WorldStoryDock = ({
                       id: entity.id,
                       name: entity.name,
                       spark: entity.mind.spark,
-                      focus: entity.mind.focus,
+                      activeGoal: entity.mind.goals[0],
+                      queuedGoals: entity.mind.goals.slice(1),
                       memories: retrieveWorldMemories(world, entity.id).map(({ memory, score, reasons }) => ({
                         id: memory.id,
                         content: memory.content,

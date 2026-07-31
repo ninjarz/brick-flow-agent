@@ -45,7 +45,8 @@ export const retrieveWorldMemories = (
 ): WorldMemoryFocus[] => {
   const entity = world.entities.find((candidate) => candidate.id === entityId)
   if (!entity) return []
-  const focusTokens = tokenizeWorldText([query, entity.mind.focus?.summary, entity.mind.spark.motive].filter(Boolean).join(' '))
+  const activeGoal = entity.mind.goals[0]
+  const focusTokens = tokenizeWorldText([query, activeGoal?.summary, entity.mind.spark.motive].filter(Boolean).join(' '))
   const relationships = world.narrative.relationshipsByEntityId[entityId] ?? {}
   return (world.narrative.memoriesByEntityId[entityId] ?? [])
     .map((memory): WorldMemoryFocus => {
@@ -67,8 +68,8 @@ export const retrieveWorldMemories = (
       if (relationshipWeight >= 0.25) reasons.push('relationship')
       const matchesFocusTarget = Boolean(
         memory.otherId
-        && entity.mind.focus?.target?.kind === 'entity'
-        && entity.mind.focus.target.id === memory.otherId,
+        && activeGoal?.target?.kind === 'entity'
+        && activeGoal.target.id === memory.otherId,
       )
       if (matchesFocusTarget) reasons.push('focus')
       const score = (
@@ -101,7 +102,7 @@ export const retrieveWorldClues = (
 ): WorldClueFocus[] => {
   const entity = world.entities.find((candidate) => candidate.id === entityId)
   if (!entity) return []
-  const queryTokens = tokenizeWorldText([query, entity.mind.focus?.summary, entity.mind.spark.motive].filter(Boolean).join(' '))
+  const queryTokens = tokenizeWorldText([query, entity.mind.goals[0]?.summary, entity.mind.spark.motive].filter(Boolean).join(' '))
   return (world.narrative.cluesByEntityId[entityId] ?? [])
     .map((clue) => {
       const age = Math.max(0, world.elapsedSeconds - clue.learnedAtSeconds)
@@ -228,7 +229,7 @@ export const rankWorldCognitionCandidates = (
         score += 1.25
         reasons.push('recent-event')
       }
-      if (entity.mind.focus) {
+      if (entity.mind.goals[0]) {
         score += 0.75
         reasons.push('active-focus')
       }

@@ -53,6 +53,14 @@ describe('WorldEntity foundation', () => {
     expect(result.world.entities[0].commandQueue).toEqual([
       { type: 'move', target: { kind: 'entity', id: target.id } },
     ])
+    expect(result.world.entities[0].mind.goals).toEqual([
+      expect.objectContaining({
+        summary: `move ${target.name}`,
+        commandType: 'move',
+        status: 'active',
+        target: { kind: 'entity', id: target.id },
+      }),
+    ])
     expect(result.world.events.at(-1)).toMatchObject({
       type: 'command-issued',
       actorId: source.id,
@@ -78,6 +86,9 @@ describe('WorldEntity foundation', () => {
     if (!result.ok) return
     expect(result.world.entities[0].transform).toEqual(source.transform)
     expect(result.world.entities[0].commandQueue).toEqual([{ type: 'wander' }])
+    expect(result.world.entities[0].mind.goals).toEqual([
+      expect.objectContaining({ summary: 'wander', commandType: 'wander', status: 'active' }),
+    ])
     expect(result.world.events.at(-1)).toMatchObject({
       type: 'command-issued',
       actorId: source.id,
@@ -244,6 +255,35 @@ describe('WorldEntity foundation', () => {
     }, 'legacy-controller')
 
     expect(restored?.entities[0].controller).toBe('rule')
+  })
+
+  it('migrates the legacy single focus into a bounded goal agenda', () => {
+    const legacyEntity = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'legacy-focus' })
+    const storedEntity = {
+      ...legacyEntity,
+      mind: {
+        spark: legacyEntity.mind.spark,
+        focus: {
+          summary: '调查旧采石场',
+          source: 'player',
+          updatedAtSeconds: 12,
+          target: { kind: 'structure', id: 'quarry' },
+        },
+      },
+    }
+    const restored = parseStoredWorldState({
+      ...createEmptyWorldState('legacy-focus-plan'),
+      entities: [storedEntity],
+    }, 'legacy-focus-plan')
+
+    expect(restored?.entities[0].mind.goals).toEqual([
+      expect.objectContaining({
+        summary: '调查旧采石场',
+        source: 'player',
+        status: 'active',
+        target: { kind: 'structure', id: 'quarry' },
+      }),
+    ])
   })
 
   it('upgrades legacy Gray Raven stages with contact-triggered dialogue', () => {

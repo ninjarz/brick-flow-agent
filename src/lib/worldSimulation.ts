@@ -4,6 +4,7 @@ import type { BrickStructure, PlacedBrick } from '../types/bricks'
 import type { WorldEntity, WorldEntityCommand, WorldEvent, WorldPendingImpact, WorldState, WorldTargetRef } from '../types/world'
 import { getBrickBounds } from './planUtils'
 import { propagateWorldClueFromDialogue } from './worldClues'
+import { reconcileWorldEntityGoals } from './worldCharacter'
 import { ingestWorldEvents } from './worldNarrative'
 import { getWorldProjectileFlightSeconds } from './worldProjectiles'
 import { createWorldObstacleIndex, queryWorldObstacleBounds, type WorldObstacleBounds, type WorldObstacleIndex } from './worldObstacleIndex'
@@ -1612,6 +1613,21 @@ export const stepWorldSimulation = (
 
   const entityNameById = new Map(entities.map((entity) => [entity.id, entity.name]))
   const structureNameById = new Map(structures.map((structure) => [structure.id, structure.name]))
+  const brickNameById = new Map(bricks.map((brick) => [
+    brick.id,
+    brickById.get(brick.brickId)?.name ?? brick.brickId,
+  ]))
+  const reconciledEntities = entities.map((entity) => reconcileWorldEntityGoals(
+    entity,
+    timeSeconds,
+    (target) => target.kind === 'entity'
+      ? entityNameById.get(target.id)
+      : target.kind === 'structure'
+        ? structureNameById.get(target.id)
+        : target.kind === 'brick'
+          ? brickNameById.get(target.id)
+          : target.id,
+  ))
   const enrichedEvents = events.map((event) => ({
     ...event,
     actorName: entityNameById.get(event.actorId) ?? event.actorName,
@@ -1621,7 +1637,7 @@ export const stepWorldSimulation = (
   }))
   const processedEventIds = new Set(world.narrative.processedEventIds)
   const pendingExistingEvents = world.events.filter((event) => !processedEventIds.has(event.id))
-  const simulatedEntityById = new Map(entities.map((entity) => [entity.id, entity]))
+  const simulatedEntityById = new Map(reconciledEntities.map((entity) => [entity.id, entity]))
   const mergedEntities = world.entities.map((entity) => simulatedEntityById.get(entity.id) ?? entity)
   const unprocessedEvents = [...pendingExistingEvents, ...enrichedEvents]
   let nextWorld: WorldState = {

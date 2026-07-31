@@ -61,7 +61,8 @@ export type WorldAiSnapshot = {
       temperament: string
       voice: string
       initiative: number
-      focus?: WorldEntity['mind']['focus']
+      activeGoal?: WorldEntity['mind']['goals'][number]
+      queuedGoals: WorldEntity['mind']['goals']
     }
     focusedMemories: Array<{
       type: string
@@ -249,7 +250,8 @@ export const createWorldAiSnapshot = (
       .map((candidate) => candidate.id),
     mind: {
       ...entity.mind.spark,
-      ...(entity.mind.focus ? { focus: entity.mind.focus } : {}),
+      activeGoal: entity.mind.goals[0],
+      queuedGoals: entity.mind.goals.slice(1),
     },
     focusedMemories: focusedMemories.map(({ memory, score, reasons }) => ({
       type: memory.type,

@@ -15,11 +15,12 @@ describe('world cognition', () => {
 
   it('retrieves an older relevant memory ahead of unrelated recent noise', () => {
     const actor = createWorldEntity(knightDefinition, { id: 'roland', name: '罗兰' })
-    actor.mind.focus = {
+    actor.mind.goals = [{
       summary: '调查旧采石场',
       source: 'player',
       updatedAtSeconds: 98,
-    }
+      status: 'active',
+    }]
     const world = {
       ...createEmptyWorldState('cognition'),
       elapsedSeconds: 100,

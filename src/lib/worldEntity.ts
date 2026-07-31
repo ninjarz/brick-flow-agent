@@ -3,7 +3,7 @@ import type {
   WorldEntityCommand,
   WorldEntityControllerKind,
   WorldEntityDefinition,
-  WorldEntityFocus,
+  WorldEntityGoal,
   WorldEntityTransform,
   WorldDirectorEntry,
   WorldDirectorEvent,
@@ -14,7 +14,14 @@ import type {
   WorldTargetRef,
 } from '../types/world'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
-import { createDefaultWorldCharacterSpark, createWorldEntityFocus, normalizeWorldCharacterSpark } from './worldCharacter'
+import {
+  createDefaultWorldCharacterSpark,
+  createWorldEntityGoal,
+  normalizeWorldCharacterSpark,
+  normalizeWorldEntityGoals,
+  updateWorldEntityGoals,
+  worldEntityCommandGoalSummary,
+} from './worldCharacter'
 import { normalizeWorldClue } from './worldClues'
 import { resolveOverlappingWorldEntities } from './worldEntityCollision'
 
@@ -370,6 +377,7 @@ export const createWorldEntity = (
     },
     mind: {
       spark: createDefaultWorldCharacterSpark(definition),
+      goals: [],
     },
   }
 }
@@ -399,7 +407,7 @@ export const createEmptyWorldState = (planId: string): WorldState => ({
 export const changeWorldEntityController = (
   entity: WorldEntity,
   controller: WorldEntityControllerKind,
-): WorldEntity => entity.controller === controller ? entity : {
+): WorldEntity => entity.controller === controller ? entity : updateWorldEntityGoals({
   ...entity,
   controller,
   commandQueue: [],
@@ -410,7 +418,7 @@ export const changeWorldEntityController = (
     ...entity.autonomy,
     home: { x: entity.transform.x, z: entity.transform.z },
   },
-}
+}, entity.mind.goals.filter((goal) => !goal.commandType))
 
 export const changeAllWorldEntityControllers = (
   world: WorldState,
@@ -668,17 +676,29 @@ const parseStoredEntity = (value: unknown): WorldEntity | undefined => {
   const activeCommand = parseStoredCommand(value.activeCommand)
   const storedMind = isRecord(value.mind) ? value.mind : undefined
   const storedSpark = storedMind && isRecord(storedMind.spark) ? storedMind.spark : undefined
-  const storedFocus = storedMind && isRecord(storedMind.focus)
-    && typeof storedMind.focus.summary === 'string'
-    && ['seed', 'player', 'scenario', 'ai'].includes(String(storedMind.focus.source))
-    && isFiniteNumber(storedMind.focus.updatedAtSeconds)
-    ? createWorldEntityFocus(
-        storedMind.focus.summary,
-        storedMind.focus.source as WorldEntityFocus['source'],
-        storedMind.focus.updatedAtSeconds,
-        parseTargetRef(storedMind.focus.target),
-      )
-    : undefined
+  const parseStoredGoal = (goal: unknown): WorldEntityGoal | undefined => {
+    if (!isRecord(goal)
+      || typeof goal.summary !== 'string'
+      || !['seed', 'player', 'scenario', 'ai'].includes(String(goal.source))
+      || !isFiniteNumber(goal.updatedAtSeconds)) return undefined
+    const commandTypes: WorldEntityCommand['type'][] = [
+      'stop', 'wander', 'move', 'attack', 'revive', 'guard', 'follow', 'interact', 'patrol',
+    ]
+    return createWorldEntityGoal(
+      goal.summary,
+      goal.source as WorldEntityGoal['source'],
+      goal.updatedAtSeconds,
+      parseTargetRef(goal.target),
+      commandTypes.includes(goal.commandType as WorldEntityCommand['type'])
+        ? goal.commandType as WorldEntityCommand['type']
+        : undefined,
+    )
+  }
+  const storedGoals = normalizeWorldEntityGoals([
+    ...(storedMind && Array.isArray(storedMind.goals) ? storedMind.goals.map(parseStoredGoal) : []),
+    // Backward compatibility: focus was the single-goal format used before agendas.
+    ...(storedMind && isRecord(storedMind.focus) ? [parseStoredGoal(storedMind.focus)] : []),
+  ])
   return {
     ...entity,
     ...(typeof value.storylineId === 'string' && value.storylineId.trim() ? { storylineId: value.storylineId.slice(0, 160) } : {}),
@@ -723,7 +743,7 @@ const parseStoredEntity = (value: unknown): WorldEntity | undefined => {
         voice: typeof storedSpark?.voice === 'string' ? storedSpark.voice : undefined,
         initiative: isFiniteNumber(storedSpark?.initiative) ? storedSpark.initiative : undefined,
       }, definition),
-      ...(storedFocus ? { focus: storedFocus } : {}),
+      goals: storedGoals,
     },
   }
 }
@@ -1628,13 +1648,14 @@ export const issueWorldEntityCommand = (
     commandType: command.type,
     commandSource: entity.controller,
   }
-  const focus = command.type === 'stop'
+  const goal = command.type === 'stop'
     ? undefined
-    : createWorldEntityFocus(
-        `${command.type}${targetEntity?.name ? ` ${targetEntity.name}` : target?.id ? ` ${target.id}` : ''}`,
+    : createWorldEntityGoal(
+        worldEntityCommandGoalSummary(command, targetEntity?.name),
         entity.controller === 'player' ? 'player' : 'seed',
         world.elapsedSeconds,
         target,
+        command.type,
       )
 
   return {
@@ -1643,19 +1664,21 @@ export const issueWorldEntityCommand = (
       ...world,
       entities: world.entities.map((candidate) => candidate.id === entityId
         ? queueMode === 'replace'
-          ? {
+          ? updateWorldEntityGoals({
               ...candidate,
-              mind: { ...candidate.mind, focus },
               activeCommand: undefined,
               commandQueue: [command],
               behaviorState: candidate.health > 0 ? 'idle' : 'dead',
               navigation: { status: 'idle', path: [], pathIndex: 0 },
-            }
-          : {
+            }, goal ? [goal] : [])
+          : updateWorldEntityGoals({
               ...candidate,
-              mind: { ...candidate.mind, focus },
               commandQueue: [...candidate.commandQueue, command],
-            }
+            }, command.type === 'stop'
+              ? []
+              : !candidate.activeCommand && candidate.commandQueue.length === 0
+                ? [goal, ...candidate.mind.goals]
+                : [...candidate.mind.goals, goal])
         : candidate),
       events: [...world.events, commandEvent].slice(-500),
     },

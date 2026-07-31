@@ -55,11 +55,13 @@ export type WorldCharacterSpark = {
   initiative: number
 }
 
-export type WorldEntityFocus = {
+export type WorldEntityGoal = {
   summary: string
   source: 'seed' | 'player' | 'scenario' | 'ai'
   target?: WorldTargetRef
+  commandType?: WorldEntityCommand['type']
   updatedAtSeconds: number
+  status: 'active' | 'queued'
 }
 
 export type WorldEntity = {
@@ -94,7 +96,8 @@ export type WorldEntity = {
   }
   mind: {
     spark: WorldCharacterSpark
-    focus?: WorldEntityFocus
+    /** Ordered short-term agenda. Index 0 is the only active goal; the rest are queued. */
+    goals: WorldEntityGoal[]
   }
 }
 

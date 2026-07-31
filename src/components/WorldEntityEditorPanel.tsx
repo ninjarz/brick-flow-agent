@@ -172,11 +172,18 @@ export const WorldEntityEditorPanel = ({ entity, commandTargets, onUpdate, onIss
             })}
           />
         </label>
-        {entity.mind.focus && (
-          <p className="world-character-focus">
-            <strong>{t('worldEntity.focus')}</strong>
-            <span>{entity.mind.focus.summary}</span>
-          </p>
+        {entity.mind.goals.length > 0 && (
+          <div className="world-character-focus">
+            <strong>{t('worldEntity.goals')}</strong>
+            <ol>
+              {entity.mind.goals.map((goal, index) => (
+                <li key={`${goal.commandType ?? goal.source}-${goal.target?.id ?? goal.summary}-${index}`}>
+                  <span>{goal.summary}</span>
+                  <small>{index === 0 ? t('worldEntity.goal.active') : t('worldEntity.goal.queued')}</small>
+                </li>
+              ))}
+            </ol>
+          </div>
         )}
       </section>
       <section className="world-command-panel" aria-label={t('worldEntity.orders')}>

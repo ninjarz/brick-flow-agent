@@ -168,17 +168,14 @@ const remapScenarioWorld = (
       },
       mind: {
         spark: { ...template.mind.spark },
-        ...(template.mind.focus
-          ? {
-              focus: {
-                ...template.mind.focus,
-                target: template.mind.focus.target
-                  ? remapTarget(template.mind.focus.target, entityIdMap, maps.brickIdMap, maps.structureIdMap)
-                  : undefined,
-                updatedAtSeconds: currentWorld.elapsedSeconds,
-              },
-            }
-          : {}),
+        goals: template.mind.goals.slice(0, 3).map((goal, index) => ({
+          ...goal,
+          target: goal.target
+            ? remapTarget(goal.target, entityIdMap, maps.brickIdMap, maps.structureIdMap)
+            : undefined,
+          updatedAtSeconds: currentWorld.elapsedSeconds,
+          status: index === 0 ? 'active' as const : 'queued' as const,
+        })),
       },
     })
   }
