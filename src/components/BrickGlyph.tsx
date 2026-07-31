@@ -32,6 +32,7 @@ import {
   createInvertedSlope45Geometry,
   createSlope45Geometry,
 } from '../lib/slopeGeometries'
+import { createVoxelPreviewMaterials } from '../lib/voxelBlockMaterials'
 
 type BrickGlyphProps = {
   brickId?: string
@@ -246,6 +247,17 @@ const buildPreviewGroup = (kind: BrickKind, footprint: BrickFootprint, brickId?:
   const height = footprint.heightStuds
   const group = new Group()
   group.rotation.y = modelRotationY
+
+  const definition = brickId ? brickById.get(brickId) : undefined
+  if (definition?.voxelVisual) {
+    const body = new Mesh(
+      new BoxGeometry(width, height, depth),
+      createVoxelPreviewMaterials(definition.voxelVisual),
+    )
+    addEdges(body)
+    group.add(body)
+    return group
+  }
 
   if (kind === 'wheel') {
     const wheel = makeMesh(new CylinderGeometry(0.48, 0.48, 0.34, 36), bodyColor, 18)

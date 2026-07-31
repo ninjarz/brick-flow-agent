@@ -64,6 +64,24 @@ export type BrickFootprint = {
   heightStuds: number
 }
 
+export type VoxelBlockShape = 'cube' | 'slab' | 'stairs' | 'fence' | 'cross'
+
+export type VoxelRenderLayer = 'opaque' | 'cutout' | 'translucent' | 'emissive'
+
+export type VoxelFaceTextures = {
+  all: string
+  side?: string
+  top?: string
+  bottom?: string
+}
+
+export type VoxelBlockVisual = {
+  shape: VoxelBlockShape
+  textures: VoxelFaceTextures
+  renderLayer: VoxelRenderLayer
+  emissiveIntensity?: number
+}
+
 export type BrickDefinition = {
   id: string
   pack: BrickPack
@@ -74,6 +92,7 @@ export type BrickDefinition = {
   connectors: BrickConnector[]
   colors: BrickColor[]
   inventory: number
+  voxelVisual?: VoxelBlockVisual
 }
 
 export type BrickPose = {

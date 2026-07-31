@@ -20,6 +20,7 @@ import { analyzeBuildStability, getStabilityRiskColor, type StabilityAnalysis } 
 import { getBrickWorldRenderStructuralCellBoxes, type StructuralCellKind, type WorldStructuralCellBox } from '../lib/structuralGrid'
 import { WORLD_EDIT_STEP_STUDS, getBrickConnectors, getBrickWorldFrame, poseToWorld } from '../lib/brickUnits'
 import { useI18n } from '../lib/i18n'
+import { getVoxelBlockMaterials } from '../lib/voxelBlockMaterials'
 import {
   createCheeseSlopeGeometry,
   createCurvedSlope3x1Geometry,
@@ -403,6 +404,23 @@ const BrickBodyMaterial = ({
       opacity={opacity}
       depthWrite={opacity >= 1}
     />
+    {showEdges && <Edges color={edgeColor} threshold={15} />}
+  </>
+)
+
+const VoxelBlockMaterials = ({ definition, opacity = 1, showEdges = true }: {
+  definition: BrickDefinition
+  opacity?: number
+  showEdges?: boolean
+}) => (
+  <>
+    {definition.voxelVisual && getVoxelBlockMaterials(definition.voxelVisual, opacity).map((material, index) => (
+      <primitive
+        key={`${material.name}:${index}:${opacity}`}
+        object={material}
+        attach={`material-${index}`}
+      />
+    ))}
     {showEdges && <Edges color={edgeColor} threshold={15} />}
   </>
 )
@@ -1262,7 +1280,21 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
 
   return (
     <group position={[frame.x, bodyY, frame.z]} {...interactionHandlers}>
-      {isEyeTile ? (
+      {definition.voxelVisual && !displayColor ? (
+        rotateWithPose(
+          <mesh
+            castShadow={definition.voxelVisual.renderLayer !== 'translucent'}
+            receiveShadow={definition.voxelVisual.renderLayer === 'opaque'}
+          >
+            <boxGeometry args={[baseWidth, baseHeight, baseDepth]} />
+            <VoxelBlockMaterials
+              definition={definition}
+              opacity={ghost ? 0.44 : bodyOpacity}
+              showEdges={showEdges || selected || highlighted || floating}
+            />
+          </mesh>,
+        )
+      ) : isEyeTile ? (
         rotateWithPose(
           <RoundEyeTileBody variant={brick.brickId} height={baseHeight} />
         )

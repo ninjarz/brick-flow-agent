@@ -1,4 +1,4 @@
-import type { BrickColor, BrickConnector, BrickDefinition } from '../types/bricks'
+import type { BrickColor, BrickConnector, BrickDefinition, VoxelBlockVisual } from '../types/bricks'
 import { getLDrawConnectors } from '../lib/ldrawPartRegistry'
 import { legoPlateFootprint, plateHeightToWorldStud } from '../lib/brickUnits'
 import { getOfficialPartColors } from './officialPartColors'
@@ -626,6 +626,7 @@ const makeMinecraftBlockDefinition = (
   id: string,
   name: string,
   color: BrickColor,
+  voxelVisual: VoxelBlockVisual,
 ): BrickDefinitionDraft => ({
   id,
   pack: 'minecraft',
@@ -636,17 +637,34 @@ const makeMinecraftBlockDefinition = (
   connectors: makeStudSocketFaceConnectors(id, 1, 1, 1),
   colors: [color],
   inventory: 64,
+  voxelVisual,
 })
 
 const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
-  makeMinecraftBlockDefinition('minecraft-grass-block', 'Grass Block', 'green'),
-  makeMinecraftBlockDefinition('minecraft-dirt-block', 'Dirt Block', 'brown'),
-  makeMinecraftBlockDefinition('minecraft-stone-block', 'Stone Block', 'gray'),
-  makeMinecraftBlockDefinition('minecraft-oak-planks', 'Oak Planks', 'tan'),
-  makeMinecraftBlockDefinition('minecraft-sand-block', 'Sand Block', 'yellow'),
-  makeMinecraftBlockDefinition('minecraft-water-block', 'Water Block', 'cyan'),
-  makeMinecraftBlockDefinition('minecraft-glass-block', 'Glass Block', 'white'),
-  makeMinecraftBlockDefinition('minecraft-redstone-block', 'Redstone Block', 'red'),
+  makeMinecraftBlockDefinition('minecraft-grass-block', 'Grass Block', 'green', {
+    shape: 'cube', textures: { all: 'grass-side', top: 'grass-top', bottom: 'dirt' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-dirt-block', 'Dirt Block', 'brown', {
+    shape: 'cube', textures: { all: 'dirt' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-stone-block', 'Stone Block', 'gray', {
+    shape: 'cube', textures: { all: 'stone' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-oak-planks', 'Oak Planks', 'tan', {
+    shape: 'cube', textures: { all: 'oak-planks' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-sand-block', 'Sand Block', 'yellow', {
+    shape: 'cube', textures: { all: 'sand' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-water-block', 'Water Block', 'cyan', {
+    shape: 'cube', textures: { all: 'water' }, renderLayer: 'translucent',
+  }),
+  makeMinecraftBlockDefinition('minecraft-glass-block', 'Glass Block', 'white', {
+    shape: 'cube', textures: { all: 'glass' }, renderLayer: 'translucent',
+  }),
+  makeMinecraftBlockDefinition('minecraft-redstone-block', 'Redstone Block', 'red', {
+    shape: 'cube', textures: { all: 'redstone' }, renderLayer: 'emissive', emissiveIntensity: 0.18,
+  }),
   {
     id: 'minecraft-basic-block',
     pack: 'minecraft',
@@ -657,6 +675,9 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     connectors: makeStudSocketFaceConnectors('minecraft-basic-block', 1, 1, 1),
     colors: minecraftColors,
     inventory: 64,
+    voxelVisual: {
+      shape: 'cube', textures: { all: 'basic-grid' }, renderLayer: 'opaque',
+    },
   },
   {
     id: 'brick-1x1',
