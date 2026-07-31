@@ -490,8 +490,9 @@ export const resolveWorldScenarioAi = (
 
 export const advanceWorldScenarios = (
   world: WorldState,
-  options: { allowNewStages?: boolean; enableAi?: boolean } = {},
+  options: { allowNewStages?: boolean; enableAi?: boolean; suspendActivePlayback?: boolean } = {},
 ): WorldState => {
+  if (options.suspendActivePlayback) return world
   let nextWorld = world
   let scenariosChanged = false
   let dialogueLaneOccupied = world.scenarios.some((scenario) => Boolean(

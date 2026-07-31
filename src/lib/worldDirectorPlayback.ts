@@ -1,5 +1,6 @@
 import type { BrickStructure, PlacedBrick } from '../types/bricks'
 import type { WorldDirectorEvent, WorldEntityCommand, WorldState } from '../types/world'
+import { advanceWorldScenarios } from './worldScenarioRuntime'
 import { applyTavernDirectorEvent } from './worldTavernDirector'
 
 const isFiniteDirectorCommand = (command: WorldEntityCommand) => (
@@ -8,6 +9,75 @@ const isFiniteDirectorCommand = (command: WorldEntityCommand) => (
   || command.type === 'attack'
   || command.type === 'revive'
 )
+
+export type WorldDirectorPlaybackSession = {
+  restorePaused: boolean
+  suspendedAtSeconds: number
+  suspendedScenarioIds: string[]
+}
+
+export const beginWorldDirectorPlayback = (world: WorldState): {
+  world: WorldState
+  session: WorldDirectorPlaybackSession
+} => {
+  const suspendedScenarioIds = world.scenarios
+    .filter((scenario) => Boolean(scenario.activeDialogue || scenario.activeTimeline || scenario.pendingAi))
+    .map((scenario) => scenario.id)
+  const shouldClearScenarioSpeech = suspendedScenarioIds.length > 0
+  const entities = shouldClearScenarioSpeech
+    ? world.entities.map((entity) => entity.speech?.message === 'scenario-dialogue'
+        ? { ...entity, speech: undefined }
+        : entity)
+    : world.entities
+  const nextWorld = world.paused && entities === world.entities
+    ? world
+    : { ...world, paused: true, entities }
+  return {
+    world: nextWorld,
+    session: {
+      restorePaused: world.paused,
+      suspendedAtSeconds: world.elapsedSeconds,
+      suspendedScenarioIds,
+    },
+  }
+}
+
+export const finishWorldDirectorPlayback = (
+  world: WorldState,
+  session: WorldDirectorPlaybackSession,
+  options: { enableAi?: boolean } = {},
+): WorldState => {
+  const suspendedScenarioIds = new Set(session.suspendedScenarioIds)
+  const suspendedDurationSeconds = Math.max(0, world.elapsedSeconds - session.suspendedAtSeconds)
+  const scenarios = suspendedDurationSeconds > 0 && suspendedScenarioIds.size > 0
+    ? world.scenarios.map((scenario) => {
+        if (!suspendedScenarioIds.has(scenario.id)) return scenario
+        return {
+          ...scenario,
+          activeDialogue: scenario.activeDialogue ? {
+            ...scenario.activeDialogue,
+            lineEndsAtSeconds: scenario.activeDialogue.lineEndsAtSeconds + suspendedDurationSeconds,
+          } : undefined,
+          activeTimeline: scenario.activeTimeline ? {
+            ...scenario.activeTimeline,
+            nextActionAtSeconds: scenario.activeTimeline.nextActionAtSeconds + suspendedDurationSeconds,
+          } : undefined,
+          queuedTransition: scenario.queuedTransition ? {
+            ...scenario.queuedTransition,
+            queuedAtSeconds: scenario.queuedTransition.queuedAtSeconds + suspendedDurationSeconds,
+          } : undefined,
+        }
+      })
+    : world.scenarios
+  const restored = world.paused === session.restorePaused && scenarios === world.scenarios
+    ? world
+    : { ...world, paused: session.restorePaused, scenarios }
+  if (suspendedScenarioIds.size === 0) return restored
+  return advanceWorldScenarios(restored, {
+    allowNewStages: false,
+    enableAi: options.enableAi,
+  })
+}
 
 export const getWorldDirectorPlaybackEntityIds = (event: WorldDirectorEvent) => {
   if (event.type === 'command') {
@@ -112,6 +182,7 @@ export const isWorldDirectorDialogueVisible = (
 
 export type WorldDirectorDialoguePlaybackPhase = 'approaching' | 'speaking' | 'completed' | 'missed'
 export type WorldDirectorDialoguePlaybackOutcome = 'played' | 'missed' | 'timed-out' | 'paused' | 'aborted'
+export type WorldDirectorEventPlaybackPhase = WorldDirectorDialoguePlaybackPhase | 'acting'
 
 export const getWorldDirectorPlaybackOutcomeDetail = (
   outcome: WorldDirectorDialoguePlaybackOutcome,
@@ -194,6 +265,126 @@ export const waitForWorldDirectorDialoguePlayback = async ({
     await sleep(pollIntervalMs)
   }
 }
+
+export const waitForWorldDirectorEventPlayback = async ({
+  getWorld,
+  event,
+  entityIds,
+  signal,
+  timeoutMs,
+  finishDialogueWhenVisible,
+  onPhaseChange,
+  pollIntervalMs = 100,
+  now = () => performance.now(),
+  sleep = (delayMs: number) => new Promise<void>((resolve) => setTimeout(resolve, delayMs)),
+}: {
+  getWorld: () => WorldState
+  event: WorldDirectorEvent
+  entityIds: ReadonlySet<string>
+  signal: AbortSignal
+  timeoutMs: number
+  finishDialogueWhenVisible?: () => boolean
+  onPhaseChange?: (phase: WorldDirectorEventPlaybackPhase) => void
+  pollIntervalMs?: number
+  now?: () => number
+  sleep?: (delayMs: number) => Promise<void>
+}): Promise<WorldDirectorDialoguePlaybackOutcome> => {
+  if (event.type === 'dialogue') {
+    return waitForWorldDirectorDialoguePlayback({
+      getWorld,
+      event,
+      entityIds,
+      signal,
+      timeoutMs,
+      finishWhenVisible: finishDialogueWhenVisible,
+      onPhaseChange,
+      pollIntervalMs,
+      now,
+      sleep,
+    })
+  }
+  if (event.type !== 'command' || !isFiniteDirectorCommand(event.command)) return 'played'
+
+  const deadline = now() + timeoutMs
+  let phaseReported = false
+  while (true) {
+    if (signal.aborted) return 'aborted'
+    const world = getWorld()
+    if (isWorldDirectorPlaybackSettled(world, entityIds)) {
+      onPhaseChange?.('completed')
+      return 'played'
+    }
+    if (!phaseReported) {
+      phaseReported = true
+      onPhaseChange?.('acting')
+    }
+    if (world.paused) return 'paused'
+    if (now() >= deadline) return 'timed-out'
+    await sleep(pollIntervalMs)
+  }
+}
+
+export type WorldDirectorEventPlaybackResult = ReturnType<typeof applyWorldDirectorPlaybackEvent> & {
+  outcome?: WorldDirectorDialoguePlaybackOutcome
+}
+
+export const executeWorldDirectorPlaybackEvent = async ({
+  getWorld,
+  setWorld,
+  event,
+  simulationStarted,
+  bricks,
+  structures,
+  signal,
+  timeoutMs,
+  finishDialogueWhenVisible,
+  onPhaseChange,
+  pollIntervalMs,
+  now,
+  sleep,
+}: {
+  getWorld: () => WorldState
+  setWorld: (world: WorldState) => void
+  event: WorldDirectorEvent
+  simulationStarted: boolean
+  bricks: PlacedBrick[]
+  structures: BrickStructure[]
+  signal: AbortSignal
+  timeoutMs: number
+  finishDialogueWhenVisible?: () => boolean
+  onPhaseChange?: (phase: WorldDirectorEventPlaybackPhase) => void
+  pollIntervalMs?: number
+  now?: () => number
+  sleep?: (delayMs: number) => Promise<void>
+}): Promise<WorldDirectorEventPlaybackResult> => {
+  const currentWorld = getWorld()
+  const applied = applyWorldDirectorPlaybackEvent({
+    world: currentWorld,
+    event,
+    simulationStarted,
+    bricks,
+    structures,
+  })
+  if (applied.world !== currentWorld) setWorld(applied.world)
+  if (applied.status === 'rejected' || applied.entityIds.length === 0) return applied
+  const outcome = await waitForWorldDirectorEventPlayback({
+    getWorld,
+    event,
+    entityIds: new Set(applied.entityIds),
+    signal,
+    timeoutMs,
+    finishDialogueWhenVisible,
+    onPhaseChange,
+    pollIntervalMs,
+    now,
+    sleep,
+  })
+  return { ...applied, outcome }
+}
+
+export const isBlockingWorldDirectorPlaybackOutcome = (
+  outcome: WorldDirectorDialoguePlaybackOutcome | undefined,
+) => outcome !== undefined && outcome !== 'played'
 
 export const isWorldDirectorPlaybackSettledIgnoringSpeech = (
   world: WorldState,

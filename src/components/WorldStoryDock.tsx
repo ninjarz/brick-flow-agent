@@ -141,6 +141,8 @@ const FeedBlock = ({
       ? (locale === 'zh-CN' ? '正在接近' : 'approaching')
       : detail === 'PLAYING'
         ? (locale === 'zh-CN' ? '正在说' : 'speaking')
+        : detail === 'BLOCKED_BY_PREVIOUS_EVENT'
+          ? (locale === 'zh-CN' ? '前序动作失败，未播放' : 'skipped after a failed action')
         : detail === 'PLAYBACK_MISSED'
           ? (locale === 'zh-CN' ? '未能说出' : 'not played')
           : detail === 'PLAYBACK_TIMEOUT'
@@ -154,7 +156,7 @@ const FeedBlock = ({
       ? ' queued'
       : detail === 'PLAYING'
         ? ' playing'
-        : detail?.startsWith('PLAYBACK_')
+        : detail?.startsWith('PLAYBACK_') || detail === 'BLOCKED_BY_PREVIOUS_EVENT'
           ? ' interrupted'
           : ''
     return <p className={`dialogue${playbackClass}${'status' in block && block.status === 'rejected' ? ' rejected' : ''}`}><strong><AnnotatedText text={speakerName} references={references} onSelectEntity={onSelectEntity} /></strong><span>{playbackBadge && <em>{playbackBadge}</em>}“<AnnotatedText text={block.text} references={references} onSelectEntity={onSelectEntity} />”</span></p>
@@ -170,7 +172,20 @@ const FeedBlock = ({
     const commandLabel = block.command.type === 'interact'
       ? (locale === 'zh-CN' ? '交谈' : 'talk')
       : block.command.type
-    return <p className={`stage-direction ${block.status ?? ''}`}>〔<AnnotatedText text={actor?.name ?? block.entityId} references={references} onSelectEntity={onSelectEntity} /> · {commandLabel}{target ? <> → <AnnotatedText text={target} references={references} onSelectEntity={onSelectEntity} /></> : ''}{block.detail ? ` · ${block.detail}` : ''}〕</p>
+    const detailLabel = block.detail === 'PLAYING'
+      ? (locale === 'zh-CN' ? '执行中' : 'acting')
+      : block.detail === 'PLAYED'
+        ? (locale === 'zh-CN' ? '已完成' : 'completed')
+        : block.detail === 'PLAYBACK_TIMEOUT'
+          ? (locale === 'zh-CN' ? '执行超时' : 'timed out')
+          : block.detail === 'PLAYBACK_PAUSED'
+            ? (locale === 'zh-CN' ? '已暂停' : 'paused')
+            : block.detail === 'PLAYBACK_STOPPED'
+              ? (locale === 'zh-CN' ? '已停止' : 'stopped')
+              : block.detail === 'BLOCKED_BY_PREVIOUS_EVENT'
+                ? (locale === 'zh-CN' ? '前序动作失败，已跳过' : 'skipped after a failed action')
+                : block.detail
+    return <p className={`stage-direction ${block.status ?? ''}`}>〔<AnnotatedText text={actor?.name ?? block.entityId} references={references} onSelectEntity={onSelectEntity} /> · {commandLabel}{target ? <> → <AnnotatedText text={target} references={references} onSelectEntity={onSelectEntity} /></> : ''}{detailLabel ? ` · ${detailLabel}` : ''}〕</p>
   }
   if (block.type === 'relationship') {
     const from = world.entities.find((entity) => entity.id === block.fromId)?.name ?? block.fromId

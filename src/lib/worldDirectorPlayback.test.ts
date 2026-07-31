@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
+import type { WorldScenarioRuntime } from '../types/world'
 import { createEmptyWorldState, createWorldEntity } from './worldEntity'
 import {
   applyWorldDirectorPlaybackEvent,
+  beginWorldDirectorPlayback,
+  executeWorldDirectorPlaybackEvent,
+  finishWorldDirectorPlayback,
   getWorldDirectorPlaybackEntityIds,
   getWorldDirectorPlaybackOutcomeDetail,
   getWorldDirectorDialoguePlaybackPhase,
@@ -12,6 +16,7 @@ import {
   prepareWorldForDirectorPlayback,
   shouldStartWorldDirectorPlayback,
   waitForWorldDirectorDialoguePlayback,
+  waitForWorldDirectorEventPlayback,
 } from './worldDirectorPlayback'
 
 const createWorld = () => {
@@ -95,6 +100,131 @@ describe('world director playback', () => {
     expect(rejected.world).toBe(pausedWorld)
     expect(rejected.simulationStarted).toBe(false)
     expect(rejected.entityIds).toEqual([])
+  })
+
+  it('pauses while the director is thinking and restores the prior world playback state', () => {
+    const world = createWorld()
+    const dialogue = [{
+      id: 'line-1',
+      speakerId: 'roland',
+      text: '先等我说完。',
+      durationSeconds: 3,
+    }]
+    const scenario: WorldScenarioRuntime = {
+      id: 'active-story',
+      assetId: 'test',
+      title: 'Active story',
+      description: 'Active story',
+      castEntityIds: ['roland'],
+      processedEventIds: [],
+      stages: [{
+        id: 'stage-1',
+        title: 'Stage',
+        description: 'Stage',
+        status: 'active',
+        trigger: { eventType: 'interaction', actorId: 'roland', targetId: 'erin' },
+        dialogue,
+      }],
+      activeDialogue: {
+        stageId: 'stage-1',
+        eventId: 'event-1',
+        lineIndex: 0,
+        lineEndsAtSeconds: 8,
+      },
+    }
+    const playing = {
+      ...world,
+      paused: false,
+      elapsedSeconds: 5,
+      scenarios: [scenario],
+      entities: world.entities.map((entity) => entity.id === 'roland'
+        ? { ...entity, speech: { message: 'scenario-dialogue' as const, text: dialogue[0].text, expiresAtSeconds: 8 } }
+        : entity),
+    }
+
+    const started = beginWorldDirectorPlayback(playing)
+    expect(started.world.paused).toBe(true)
+    expect(started.world.entities.find((entity) => entity.id === 'roland')?.speech).toBeUndefined()
+    expect(started.session).toMatchObject({
+      restorePaused: false,
+      suspendedAtSeconds: 5,
+      suspendedScenarioIds: ['active-story'],
+    })
+
+    const restored = finishWorldDirectorPlayback({
+      ...started.world,
+      paused: false,
+      elapsedSeconds: 9,
+    }, started.session)
+    expect(restored.paused).toBe(false)
+    expect(restored.scenarios[0].activeDialogue?.lineEndsAtSeconds).toBe(12)
+    expect(restored.entities.find((entity) => entity.id === 'roland')?.speech).toMatchObject({
+      text: dialogue[0].text,
+      expiresAtSeconds: 12,
+    })
+  })
+
+  it('waits for a finite command before allowing the next director event', async () => {
+    let current = { ...createWorld(), paused: true }
+    const phases: string[] = []
+    const result = await executeWorldDirectorPlaybackEvent({
+      getWorld: () => current,
+      setWorld: (world) => { current = world },
+      event: {
+        type: 'command',
+        entityId: 'roland',
+        command: { type: 'move', target: { kind: 'entity', id: 'erin' } },
+      },
+      simulationStarted: false,
+      bricks: [],
+      structures: [],
+      signal: new AbortController().signal,
+      timeoutMs: 1_000,
+      now: () => 0,
+      sleep: async () => {
+        current = {
+          ...current,
+          entities: current.entities.map((entity) => entity.id === 'roland' ? {
+            ...entity,
+            activeCommand: undefined,
+            commandQueue: [],
+            behaviorState: 'idle',
+            navigation: { status: 'idle', path: [], pathIndex: 0 },
+          } : entity),
+        }
+      },
+      onPhaseChange: (phase) => phases.push(phase),
+    })
+
+    expect(result.outcome).toBe('played')
+    expect(result.simulationStarted).toBe(true)
+    expect(current.paused).toBe(false)
+    expect(phases).toEqual(['acting', 'completed'])
+  })
+
+  it('reports an interrupted finite command as a blocking playback outcome', async () => {
+    const world = {
+      ...createWorld(),
+      paused: true,
+      entities: createWorld().entities.map((entity) => entity.id === 'roland'
+        ? {
+            ...entity,
+            activeCommand: { type: 'move' as const, target: { kind: 'entity' as const, id: 'erin' } },
+          }
+        : entity),
+    }
+    const outcome = await waitForWorldDirectorEventPlayback({
+      getWorld: () => world,
+      event: {
+        type: 'command',
+        entityId: 'roland',
+        command: { type: 'move', target: { kind: 'entity', id: 'erin' } },
+      },
+      entityIds: new Set(['roland']),
+      signal: new AbortController().signal,
+      timeoutMs: 1_000,
+    })
+    expect(outcome).toBe('paused')
   })
 
   it('tracks an approaching dialogue through speaking and completion', async () => {

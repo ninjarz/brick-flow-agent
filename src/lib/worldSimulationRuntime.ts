@@ -34,6 +34,7 @@ export const advanceWorldSimulationSteps = (
       {
         allowNewStages: !options.directorPlaybackActive,
         enableAi: options.enableAi,
+        suspendActivePlayback: options.directorPlaybackActive,
       },
     )
   }
