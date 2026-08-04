@@ -42,6 +42,7 @@ await writeFile(entry, `
       import(${JSON.stringify(`${workspace}/src/data/worldEntityDefinitions.ts`)}),
       import(${JSON.stringify(`${workspace}/src/lib/worldEntity.ts`)}),
       import(${JSON.stringify(`${workspace}/src/lib/worldSimulation.ts`)}),
+      import(${JSON.stringify(`${workspace}/src/lib/voxelChunking.ts`)}),
     ]);
     const ms = performance.now() - start;
     results.push({ name: 'module import + default asset construction', ms });
@@ -49,7 +50,7 @@ await writeFile(entry, `
     return modules;
   })();
 
-  const [{ brickById, brickDefinitions }, finishedAssets, { generateBuildPlan }, planUtils, structuralGrid, ldrawVisualGeometry, manualSerializer, stabilityAnalysis, disasterSimulation, worldEntityDefinitions, worldEntity, worldSimulation] = imports;
+  const [{ brickById, brickDefinitions }, finishedAssets, { generateBuildPlan }, planUtils, structuralGrid, ldrawVisualGeometry, manualSerializer, stabilityAnalysis, disasterSimulation, worldEntityDefinitions, worldEntity, worldSimulation, voxelChunking] = imports;
   const defaultFinishedAssets = await measureAsync('load all default finished assets', () => finishedAssets.loadAllDefaultFinishedAssets());
   const largestAsset = defaultFinishedAssets.reduce((largest, asset) =>
     asset.plan.bricks.length > largest.plan.bricks.length ? asset : largest
@@ -177,6 +178,13 @@ await writeFile(entry, `
     for (let index = 0; index < 1000; index += 1) {
       brickDefinitions.filter((brick) => brick.name.toLowerCase().includes('slope'));
     }
+  });
+  measure('partition 10,000 voxel blocks into render chunks', () => {
+    const blocks = Array.from({ length: 10_000 }, (_, index) => ({
+      x: index % 100,
+      z: Math.floor(index / 100),
+    }));
+    voxelChunking.partitionVoxelItemsByChunk(blocks, (block) => block);
   });
 
   const max = Math.max(...results.map((result) => result.ms));

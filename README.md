@@ -18,7 +18,7 @@ The app uses React + Three.js for the editor, LDraw data for part rendering, and
 - Prompt- and reference-image-to-build generation through multimodal OpenAI-compatible LLM endpoints
 - Structural validation, local repair, and an optional single LLM feedback retry for invalid generations
 - Static-hosting friendly browser-direct LLM requests, with an optional local proxy for CORS-restricted APIs
-- Part-pack switching, currently with a LEGO-compatible LDraw pack and an early Minecraft pack
+- Part-pack switching, currently with a LEGO-compatible LDraw pack and an original Minecraft-style voxel pack
 - LDraw-derived visual and structural data for part rendering, collision, and support checks
 - Brick-level editing: add, select, move, rotate, recolor, duplicate, delete, import, and export
 - Connector validation for studs, tubes, bars, pins, axles, and bidirectional block faces
@@ -41,7 +41,15 @@ The app uses React + Three.js for the editor, LDraw data for part rendering, and
 ## 🧱 Part Packs
 
 - **LEGO-compatible pack:** the main pack today. It uses bundled LDraw data where possible for visuals and structure, with regression checks for official colors, connector positions, collision, support, and default assets
-- **Minecraft pack:** a voxel-first pack with face-to-face connectivity and semantic `1 x 1 x 1` grass, dirt, stone, oak, sand, water, glass, and redstone blocks, plus a configurable basic block
+- **Minecraft pack:** an original voxel-first pack with 48 terrain, stone, wood, ore, building, and functional blocks. It includes face textures, opaque/cutout/translucent/emissive layers, slabs, stairs, fences, plants, and face-to-face connectivity. It does not bundle or import Minecraft game assets
+
+### Minecraft-style workflow
+
+- Search the catalog with either localized names or aliases; the selected pack, category, and query persist locally
+- Stairs orient from the placement view, slabs distinguish upper and lower halves, and fences connect only toward eligible neighbors
+- Plants require a supporting voxel block; removing that support marks the plant as structurally invalid
+- The asset library includes three original incremental presets: **Valley Waystation**, **Ore Cutaway**, and **Forest Camp**. Loading one preserves the current world and places the preset in nearby free space
+- Repeated cube and slab materials are instanced in stable `16 x 16` spatial chunks. Unchanged chunks reuse their instance groups and each chunk participates in frustum culling
 
 ## 🚀 Quick Start
 

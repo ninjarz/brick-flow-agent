@@ -198,6 +198,9 @@ await writeFile(entry, `
     'finished-robot',
     'finished-tree',
     'finished-duck',
+    'finished-minecraft-waystation',
+    'finished-minecraft-ore-cutaway',
+    'finished-minecraft-forest-camp',
     'finished-obj-stanford-bunny-s',
     'finished-obj-stanford-bunny-m',
     'finished-obj-stanford-bunny-l',
@@ -214,6 +217,9 @@ await writeFile(entry, `
     'finished-robot': 20,
     'finished-tree': 20,
     'finished-duck': 16,
+    'finished-minecraft-waystation': 93,
+    'finished-minecraft-ore-cutaway': 103,
+    'finished-minecraft-forest-camp': 104,
   };
   const retiredDefaultAssetIds = new Set([
     'finished-tiger',
@@ -341,6 +347,7 @@ await writeFile(entry, `
     container.minY <= cell.minY + 0.000001 && container.maxY >= cell.maxY - 0.000001 &&
     container.minZ <= cell.minZ + 0.000001 && container.maxZ >= cell.maxZ - 0.000001;
   const uniqueStructuralDefinitions = brickDefinitions.filter((definition, index, definitions) =>
+    definition.pack === 'lego' &&
     definitions.findIndex((candidate) => candidate.partNumber === definition.partNumber) === index,
   );
   const structuralAudit = uniqueStructuralDefinitions.map((definition) => {
