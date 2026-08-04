@@ -45,6 +45,7 @@ import { addWorldScenario, startWorldScenario } from './lib/worldScenarioImport'
 import { buildWorldScenarioAiPrompt, parseWorldScenarioAiResolution, worldScenarioAiSystemPrompt } from './lib/worldScenarioAi'
 import { advanceWorldScenarios, getActiveWorldScenarioStages, resolveWorldScenarioAi } from './lib/worldScenarioRuntime'
 import { clearWorkspaceDraft, hasIndexedDbWorkspaceDraft, loadWorkspaceDraft, loadWorkspaceDraftFromIndexedDb, saveWorkspaceDraft } from './lib/workspaceDraft'
+import { applyVoxelPlacementSurface, isVoxelPlantSupported, synchronizePlanVoxelBlockStates, synchronizeVoxelBlockStates, type VoxelPlacementSurface } from './lib/voxelBlockState'
 import type { BrickStructure, BuildPlan, FinishedAsset, LlmConfig, PlacedBrick } from './types/bricks'
 import type { WorldDirectorTurn, WorldEntity, WorldEntityCommand, WorldEntityControllerKind, WorldState } from './types/world'
 import './App.css'
@@ -168,7 +169,10 @@ function App() {
     importedPlanTitle: t('manual.importedPlanTitle'),
     importedStepTitle: (stepNumber) => t('manual.importedStepTitle', { step: stepNumber }),
   }), [t])
-  const initialPlan = useMemo(() => workspaceDraft?.plan ?? generateBuildPlan({ prompt: defaultPrompt }), [defaultPrompt, workspaceDraft?.plan])
+  const initialPlan = useMemo(
+    () => synchronizePlanVoxelBlockStates(workspaceDraft?.plan ?? generateBuildPlan({ prompt: defaultPrompt })),
+    [defaultPrompt, workspaceDraft?.plan],
+  )
   const [prompt, setPrompt] = useState(workspaceDraft?.prompt ?? defaultPrompt)
   const [imagePreview, setImagePreview] = useState<string>()
   const [imageName, setImageName] = useState<string>()
@@ -181,7 +185,7 @@ function App() {
   const worldRef = useRef(world)
   const promptRef = useRef(prompt)
   const [historyVersion, setHistoryVersion] = useState(0)
-  const planRef = useRef<BuildPlan>(workspaceDraft?.plan ?? initialPlan)
+  const planRef = useRef<BuildPlan>(initialPlan)
   const planHistoryRef = useRef<{
     past: BuildPlan[]
     future: BuildPlan[]
@@ -305,7 +309,8 @@ function App() {
 
   const setPlan = useCallback((nextPlan: BuildPlan | ((current: BuildPlan) => BuildPlan)) => {
     const current = planRef.current
-    const resolvedPlan = typeof nextPlan === 'function' ? nextPlan(current) : nextPlan
+    const candidatePlan = typeof nextPlan === 'function' ? nextPlan(current) : nextPlan
+    const resolvedPlan = synchronizePlanVoxelBlockStates(candidatePlan)
     if (resolvedPlan === current) return
 
     planHistoryRef.current.past = [...planHistoryRef.current.past.slice(-49), current]
@@ -570,8 +575,9 @@ function App() {
     loadWorkspaceDraftFromIndexedDb().then((storedDraft) => {
       if (isCanceled) return
       if (storedDraft && planRef.current === initialPlan && planHistoryRef.current.past.length === 0) {
-        planRef.current = storedDraft.plan
-        setPlanState(storedDraft.plan)
+        const storedPlan = synchronizePlanVoxelBlockStates(storedDraft.plan)
+        planRef.current = storedPlan
+        setPlanState(storedPlan)
         setPrompt(storedDraft.prompt)
         setWorld(storedDraft.world)
       }
@@ -1114,7 +1120,7 @@ function App() {
     return false
   }
 
-  const canAcceptBrickGroupPose = (
+  const canAcceptBrickGroupPose = useCallback((
     nextBricks: PlacedBrick[],
     bricks: PlacedBrick[],
     context?: Record<string, unknown>,
@@ -1161,7 +1167,7 @@ function App() {
     }
 
     return false
-  }
+  }, [getStationarySpatialState])
 
   const rotateBrickGroupHorizontally = (
     bricks: PlacedBrick[],
@@ -1320,7 +1326,9 @@ function App() {
       setGenerationFailure(t('error.inventoryLimit', { name: definition.name, inventory }))
       return
     }
-    const nextBrick = makeBrick(brickId, getDefaultBrickColor(definition), 0, 0, 0)
+    const nextBrick = synchronizeVoxelBlockStates([
+      makeBrick(brickId, getDefaultBrickColor(definition), 0, 0, 0),
+    ])[0]
     const stationaryData = getStationarySpatialState(planRef.current.bricks, new Set())
     const previewBricks = dropBrickGroupAtPoint(
       [nextBrick],
@@ -1375,8 +1383,8 @@ function App() {
     })
   }, [activeSelectedIds, getStationarySpatialState, placementSession, worldEntityPlacement])
 
-  const updatePlacementPoint = useCallback((point: { x: number; y: number; z: number }) => {
-    const pointerKey = `${normalizeHorizontalStud(point.x)}:${normalizeHorizontalStud(point.z)}`
+  const updatePlacementPoint = useCallback((point: VoxelPlacementSurface) => {
+    const pointerKey = `${normalizeHorizontalStud(point.x)}:${normalizeYStud(point.y)}:${normalizeHorizontalStud(point.z)}:${point.normalX},${point.normalY},${point.normalZ}`
     if (placementPointerKeyRef.current === pointerKey) return
     placementPointerKeyRef.current = pointerKey
     setPlacementSession((current) => {
@@ -1385,14 +1393,35 @@ function App() {
         ? new Set(current.sourceBricks.map((brick) => brick.id))
         : new Set<string>()
       const stationaryData = getStationarySpatialState(planRef.current.bricks, excludedIds)
-      const anchoredPoint = offsetBrickGroupDragPoint(point, current.dragPointerOffset)
-      const previewBricks = dropBrickGroupAtPoint(
+      const sourceShape = current.kind === 'new' && current.sourceBricks.length === 1
+        ? brickById.get(current.sourceBricks[0].brickId)?.voxelVisual?.shape
+        : undefined
+      const surfaceDropPoint = sourceShape === 'slab' && Math.abs(point.normalY) < 0.5
+        ? { ...point, x: point.x + point.normalX * 0.51, z: point.z + point.normalZ * 0.51 }
+        : point
+      const anchoredPoint = offsetBrickGroupDragPoint(surfaceDropPoint, current.dragPointerOffset)
+      const droppedBricks = dropBrickGroupAtPoint(
         current.sourceBricks,
         current.anchorBrickId,
         anchoredPoint,
         stationaryData,
       )
-      return previewBricks ? { ...current, previewBricks } : current
+      if (!droppedBricks) return current
+      const surfaceAdjustedBricks = current.kind === 'new'
+        ? applyVoxelPlacementSurface(droppedBricks, point)
+        : droppedBricks
+      const previewIdSet = new Set(surfaceAdjustedBricks.map((brick) => brick.id))
+      const contextualBricks = synchronizeVoxelBlockStates([
+        ...stationaryData.stationaryBricks,
+        ...surfaceAdjustedBricks,
+      ]).filter((brick) => previewIdSet.has(brick.id))
+      const previewBricks = canAcceptBrickGroupPose(
+        contextualBricks,
+        planRef.current.bricks,
+        { action: 'voxelPlacementContext' },
+        stationaryData,
+      ) ? contextualBricks : droppedBricks
+      return { ...current, previewBricks }
     })
     setWorldEntityPlacement((current) => current ? {
       entity: {
@@ -1409,7 +1438,7 @@ function App() {
         },
       },
     } : current)
-  }, [getStationarySpatialState])
+  }, [canAcceptBrickGroupPose, getStationarySpatialState])
 
   const cancelPlacement = useCallback(() => {
     placementPointerKeyRef.current = ''
@@ -1419,6 +1448,13 @@ function App() {
 
   const confirmPlacement = useCallback(() => {
     if (!placementSession) return
+    const futureBricks = placementSession.kind === 'move'
+      ? planRef.current.bricks.map((brick) => placementSession.previewBricks.find((preview) => preview.id === brick.id) ?? brick)
+      : [...planRef.current.bricks, ...placementSession.previewBricks]
+    if (placementSession.previewBricks.some((brick) => !isVoxelPlantSupported(brick, futureBricks))) {
+      setGenerationFailure(t('error.voxelPlantSupport'))
+      return
+    }
     const placedIds = placementSession.previewBricks.map((brick) => brick.id)
     const placedIdSet = new Set(placedIds)
 
@@ -1445,7 +1481,7 @@ function App() {
     setSelectedGroupIds(placedIdSet.size > 1 ? placedIds : [])
     placementPointerKeyRef.current = ''
     setPlacementSession(undefined)
-  }, [manualStepDescription, manualStepTitle, placementSession, setPlan])
+  }, [manualStepDescription, manualStepTitle, placementSession, setPlan, t])
 
   const confirmActivePlacement = useCallback(() => {
     if (worldEntityPlacement) {

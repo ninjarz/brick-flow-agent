@@ -104,11 +104,24 @@ export type BrickPose = {
   verticalQuarterTurns?: BrickVerticalQuarterTurns
 }
 
+export type VoxelFenceConnections = {
+  north: boolean
+  east: boolean
+  south: boolean
+  west: boolean
+}
+
+export type VoxelBlockState = {
+  slabHalf?: 'bottom' | 'top'
+  fenceConnections?: VoxelFenceConnections
+}
+
 export type PlacedBrick = {
   id: string
   brickId: string
   color: BrickColor
   pose: BrickPose
+  voxelState?: VoxelBlockState
 }
 
 export type BuildStep = {

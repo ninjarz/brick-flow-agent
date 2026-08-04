@@ -21,6 +21,7 @@ import { getBrickWorldRenderStructuralCellBoxes, type StructuralCellKind, type W
 import { WORLD_EDIT_STEP_STUDS, getBrickConnectors, getBrickWorldFrame, poseToWorld } from '../lib/brickUnits'
 import { useI18n } from '../lib/i18n'
 import { getVoxelBlockMaterials, getVoxelVisualKey } from '../lib/voxelBlockMaterials'
+import { isVoxelPlantSupported, type VoxelPlacementSurface } from '../lib/voxelBlockState'
 import {
   createCheeseSlopeGeometry,
   createCurvedSlope3x1Geometry,
@@ -72,7 +73,7 @@ type BrickSceneProps = {
   onSelect: (id: string, options?: BrickSelectionOptions) => void
   onSelectConnected?: (id: string) => void
   onSelectWorldEntity?: (id: string) => void
-  onPlacementPointChange?: (point: { x: number; y: number; z: number }) => void
+  onPlacementPointChange?: (point: VoxelPlacementSurface) => void
   onConfirmPlacement?: () => void
   onCancelPlacement?: () => void
   onBeginDragSelected?: (id: string, point: { x: number; z: number }) => void
@@ -201,7 +202,20 @@ const isPlacementGhostObject = (object: Object3D) => {
 
 const getFirstPlacementSurfacePoint = (event: ThreeEvent<PointerEvent>) => {
   const surfaceHit = event.intersections.find((intersection) => !isPlacementGhostObject(intersection.object))
-  return surfaceHit?.point ?? event.point
+  const point = surfaceHit?.point ?? event.point
+  const normal = surfaceHit?.face?.normal
+    ? surfaceHit.face.normal.clone().transformDirection(surfaceHit.object.matrixWorld)
+    : new Vector3(0, 1, 0)
+  return {
+    x: point.x,
+    y: point.y,
+    z: point.z,
+    normalX: normal.x,
+    normalY: normal.y,
+    normalZ: normal.z,
+    viewDirectionX: event.ray.direction.x,
+    viewDirectionZ: event.ray.direction.z,
+  }
 }
 
 const useBrickInteractionHandlers = ({
@@ -453,6 +467,7 @@ const VoxelBlockMesh = ({
 
 const VoxelBlockBody = ({
   definition,
+  brick,
   width,
   height,
   depth,
@@ -460,6 +475,7 @@ const VoxelBlockBody = ({
   showEdges,
 }: {
   definition: BrickDefinition
+  brick: PlacedBrick
   width: number
   height: number
   depth: number
@@ -492,13 +508,33 @@ const VoxelBlockBody = ({
     const postWidth = Math.min(width, depth) * 0.3
     const railHeight = height * 0.16
     const railDepth = Math.min(width, depth) * 0.16
+    const connections = brick.voxelState?.fenceConnections ?? {
+      north: true,
+      east: true,
+      south: true,
+      west: true,
+    }
+    const arms = [
+      { key: 'north', connected: connections.north, size: [railDepth, railHeight, depth / 2] as [number, number, number], position: [0, 0, -depth / 4] as [number, number, number] },
+      { key: 'east', connected: connections.east, size: [width / 2, railHeight, railDepth] as [number, number, number], position: [width / 4, 0, 0] as [number, number, number] },
+      { key: 'south', connected: connections.south, size: [railDepth, railHeight, depth / 2] as [number, number, number], position: [0, 0, depth / 4] as [number, number, number] },
+      { key: 'west', connected: connections.west, size: [width / 2, railHeight, railDepth] as [number, number, number], position: [-width / 4, 0, 0] as [number, number, number] },
+    ]
     return (
       <group>
         <VoxelBlockMesh definition={definition} size={[postWidth, height, postWidth]} opacity={opacity} showEdges={showEdges} />
-        {[-height * 0.2, height * 0.22].flatMap((y) => [
-          <VoxelBlockMesh key={`x-${y}`} definition={definition} size={[width, railHeight, railDepth]} position={[0, y, 0]} opacity={opacity} showEdges={showEdges} />,
-          <VoxelBlockMesh key={`z-${y}`} definition={definition} size={[railDepth, railHeight, depth]} position={[0, y, 0]} opacity={opacity} showEdges={showEdges} />,
-        ])}
+        {[-height * 0.2, height * 0.22].flatMap((y) => arms
+          .filter((arm) => arm.connected)
+          .map((arm) => (
+            <VoxelBlockMesh
+              key={`${arm.key}-${y}`}
+              definition={definition}
+              size={arm.size}
+              position={[arm.position[0], y, arm.position[2]]}
+              opacity={opacity}
+              showEdges={showEdges}
+            />
+          )))}
       </group>
     )
   }
@@ -1382,6 +1418,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
         rotateWithPose(
           <VoxelBlockBody
             definition={definition}
+            brick={brick}
             width={baseWidth}
             height={baseHeight}
             depth={baseDepth}
@@ -2902,7 +2939,7 @@ export const BrickScene = ({
     const buildGraph = createBuildGraph(deferredSupportBricks)
     return new Map(deferredSupportBricks.map((brick) => [
       brick.id,
-      buildGraph.groundedIds.has(brick.id),
+      buildGraph.groundedIds.has(brick.id) && isVoxelPlantSupported(brick, deferredSupportBricks),
     ]))
   }, [deferredSupportBricks, ldrawBoundsVersion, resolvedStabilityAnalysis])
 
@@ -2933,7 +2970,7 @@ export const BrickScene = ({
         onPointerMove={(event) => {
           if (!placementActive) return
           const surfacePoint = getFirstPlacementSurfacePoint(event)
-          onPlacementPointChange?.({ x: surfacePoint.x, y: surfacePoint.y, z: surfacePoint.z })
+          onPlacementPointChange?.(surfacePoint)
         }}
         onClick={(event) => {
           if (!placementActive) return

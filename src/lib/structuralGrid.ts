@@ -1,5 +1,5 @@
 import { brickById } from '../data/basicBricks'
-import type { BrickConnector, BrickDefinition, PlacedBrick } from '../types/bricks'
+import type { BrickConnector, BrickDefinition, PlacedBrick, VoxelFenceConnections } from '../types/bricks'
 import {
   getLoadedLDrawGeneratedVisualTriangles,
   onLDrawGeneratedVisualLoaded,
@@ -300,7 +300,10 @@ const makeMeshStructuralCells = (definition: BrickDefinition, triangles: MeshTri
   )
 }
 
-const makeVoxelShapeStructuralCells = (definition: BrickDefinition): StructuralCell[] => {
+const makeVoxelShapeStructuralCells = (
+  definition: BrickDefinition,
+  fenceConnections?: VoxelFenceConnections,
+): StructuralCell[] => {
   const { widthStuds: width, heightStuds: height, depthStuds: depth } = definition.footprint
   const shape = definition.voxelVisual?.shape ?? 'cube'
   if (shape === 'stairs') {
@@ -315,15 +318,19 @@ const makeVoxelShapeStructuralCells = (definition: BrickDefinition): StructuralC
     const railDepth = Math.min(width, depth) * 0.16
     const postX = (width - postWidth) / 2
     const postZ = (depth - postWidth) / 2
+    const connections = fenceConnections ?? { north: true, east: true, south: true, west: true }
+    const railArms = [-height * 0.2, height * 0.22].flatMap((offset) => {
+      const y = height / 2 + offset - railHeight / 2
+      return [
+        connections.north ? makeCell('solid', (width - railDepth) / 2, y, 0, railDepth, railHeight, depth / 2) : undefined,
+        connections.east ? makeCell('solid', width / 2, y, (depth - railDepth) / 2, width / 2, railHeight, railDepth) : undefined,
+        connections.south ? makeCell('solid', (width - railDepth) / 2, y, depth / 2, railDepth, railHeight, depth / 2) : undefined,
+        connections.west ? makeCell('solid', 0, y, (depth - railDepth) / 2, width / 2, railHeight, railDepth) : undefined,
+      ].filter((cell): cell is StructuralCell => Boolean(cell))
+    })
     return [
       makeCell('solid', postX, 0, postZ, postWidth, height, postWidth),
-      ...[-height * 0.2, height * 0.22].flatMap((offset) => {
-        const y = height / 2 + offset - railHeight / 2
-        return [
-          makeCell('solid', 0, y, (depth - railDepth) / 2, width, railHeight, railDepth),
-          makeCell('solid', (width - railDepth) / 2, y, 0, railDepth, railHeight, depth),
-        ]
-      }),
+      ...railArms,
     ]
   }
   if (shape === 'cross') {
@@ -675,7 +682,17 @@ const getCellHashKeys = (
 }
 
 const getPlacedBrickCacheKey = (brick: PlacedBrick) =>
-  `${brick.brickId}:${brick.pose.xStud},${brick.pose.yStud},${brick.pose.zStud},${brick.pose.rotationQuarterTurns},${brick.pose.verticalQuarterTurns ?? 0}`
+  `${brick.brickId}:${brick.pose.xStud},${brick.pose.yStud},${brick.pose.zStud},${brick.pose.rotationQuarterTurns},${brick.pose.verticalQuarterTurns ?? 0}:${brick.voxelState?.slabHalf ?? ''}:${brick.voxelState?.fenceConnections ? Object.values(brick.voxelState.fenceConnections).map(Number).join('') : ''}`
+
+const getPlacedBrickStructuralCells = (brick: PlacedBrick, definition: BrickDefinition) => {
+  if (definition.voxelVisual?.shape !== 'fence' || !brick.voxelState?.fenceConnections) {
+    return getBrickStructuralCells(definition)
+  }
+  return [
+    ...makeVoxelShapeStructuralCells(definition, brick.voxelState.fenceConnections),
+    ...makeConnectorCells(definition),
+  ]
+}
 
 export const getBrickWorldStructuralCellBoxes = (brick: PlacedBrick): WorldStructuralCellBox[] => {
   const cacheKey = getPlacedBrickCacheKey(brick)
@@ -685,7 +702,7 @@ export const getBrickWorldStructuralCellBoxes = (brick: PlacedBrick): WorldStruc
   const definition = brickById.get(brick.brickId)
   if (!definition) return []
 
-  const boxes = getBrickStructuralCells(definition).map((cell) =>
+  const boxes = getPlacedBrickStructuralCells(brick, definition).map((cell) =>
     transformStructuralCellBox(definition, brick, cell)
   )
 
@@ -701,7 +718,10 @@ export const getBrickWorldRenderStructuralCellBoxes = (brick: PlacedBrick): Worl
   const definition = brickById.get(brick.brickId)
   if (!definition) return []
 
-  const boxes = getBrickRenderStructuralCells(definition).map((cell) =>
+  const localCells = definition.voxelVisual?.shape === 'fence' && brick.voxelState?.fenceConnections
+    ? getPlacedBrickStructuralCells(brick, definition)
+    : getBrickRenderStructuralCells(definition)
+  const boxes = localCells.map((cell) =>
     transformStructuralCellBox(definition, brick, cell)
   )
 
@@ -748,7 +768,9 @@ export const getBrickWorldSupportCellBoxes = (brick: PlacedBrick): WorldStructur
   const definition = brickById.get(brick.brickId)
   if (!definition) return []
 
-  const boxes = getBrickLocalSupportCellBoxes(definition).map((cell) =>
+  const localCells = getPlacedBrickStructuralCells(brick, definition)
+    .filter((cell) => supportCellCarriesLoad(definition, cell))
+  const boxes = localCells.map((cell) =>
     transformStructuralCellBox(definition, brick, cell)
   )
 
@@ -1017,7 +1039,10 @@ const getBrickWorldCollisionCellBoxes = (brick: PlacedBrick): WorldStructuralCel
   const definition = brickById.get(brick.brickId)
   if (!definition) return []
 
-  const boxes = getBrickInteractionStructuralCells(definition)
+  const localCells = definition.voxelVisual?.shape === 'fence' && brick.voxelState?.fenceConnections
+    ? compactStructuralCells(getPlacedBrickStructuralCells(brick, definition).filter(structuralCellBlocksCollision))
+    : getBrickInteractionStructuralCells(definition)
+  const boxes = localCells
     .filter(structuralCellBlocksCollision)
     .map((cell) => transformStructuralCellBox(definition, brick, cell))
   setLimitedWorldCache(worldCollisionCellBoxCache, cacheKey, boxes)
