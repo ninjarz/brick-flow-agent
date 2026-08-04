@@ -1,4 +1,5 @@
 import type { FinishedAsset } from '../types/bricks'
+import { minecraftSceneAssets } from '../data/minecraftSceneAssets'
 import { indexedDbStorageMarker, isIndexedDbStorageMarker, localStorageComfortLimit, readLargeStoredValue, removeLargeStoredValue, writeLargeStoredValue } from './browserStorage'
 import { generateBuildPlan } from './localGenerator'
 import { tryNormalizeImportedPlan } from './planImport'
@@ -27,6 +28,7 @@ const defaultAssetIds = new Set([
   'finished-robot',
   'finished-tree',
   'finished-duck',
+  ...minecraftSceneAssets.map((asset) => asset.id),
 ])
 let generatedObjAssetsPromise: Promise<FinishedAsset[]> | undefined
 
@@ -77,6 +79,7 @@ export const defaultFinishedAssets: FinishedAsset[] = [
   createDefaultAsset('finished-robot', 'asset.default.robot', '角色', '一个蓝灰色机器人', '带灰色斜面双脚、蓝色躯干、横向肩梁、红色双手、黄色双层头部、正面印刷眼睛、格栅嘴和天线的机器人。'),
   createDefaultAsset('finished-tree', 'asset.default.tree', '自然', '一棵小树', '棕色树干、向中心收拢的四面坡树冠、青绿树顶、红黄橙果实和底部草叶组成的小树。'),
   createDefaultAsset('finished-duck', 'asset.default.duck', '动物', '一只黄色小鸭', '蓝色水面底座、橙色双脚、黄色身体、尾翼和双翅、双层头部、正面橙色嘴与印刷眼睛组成的小鸭。'),
+  ...minecraftSceneAssets,
 ]
 
 const isFinishedAsset = (item: unknown): item is FinishedAsset => {
