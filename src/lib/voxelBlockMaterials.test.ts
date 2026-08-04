@@ -58,7 +58,7 @@ describe('voxel block materials', () => {
       expect.objectContaining({ minY: 0, maxY: 0.5 }),
     ]))
     expect(solidCells('minecraft-stone-stairs')).toHaveLength(2)
-    expect(solidCells('minecraft-oak-fence')).toHaveLength(5)
+    expect(solidCells('minecraft-oak-fence')).toHaveLength(9)
     expect(solidCells('minecraft-tall-grass')).toEqual([
       expect.objectContaining({ minX: 0.38, maxX: 0.62, maxY: 0.9 }),
     ])

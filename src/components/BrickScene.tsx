@@ -21,6 +21,7 @@ import { getBrickWorldRenderStructuralCellBoxes, type StructuralCellKind, type W
 import { WORLD_EDIT_STEP_STUDS, getBrickConnectors, getBrickWorldFrame, poseToWorld } from '../lib/brickUnits'
 import { useI18n } from '../lib/i18n'
 import { getVoxelBlockMaterials, getVoxelVisualKey } from '../lib/voxelBlockMaterials'
+import { partitionVoxelItemsByChunk } from '../lib/voxelChunking'
 import { isVoxelPlantSupported, type VoxelPlacementSurface } from '../lib/voxelBlockState'
 import {
   createCheeseSlopeGeometry,
@@ -2008,6 +2009,7 @@ type VoxelBoxInstance = {
 }
 
 type VoxelBoxInstanceGroup = {
+  key: string
   definition: BrickDefinition
   instances: VoxelBoxInstance[]
 }
@@ -2059,6 +2061,8 @@ const VoxelBoxInstances = memo(function VoxelBoxInstances({
       })
       mesh.count = group.instances.length
       mesh.instanceMatrix.needsUpdate = true
+      mesh.computeBoundingBox()
+      mesh.computeBoundingSphere()
     }
     writeMatrices(fillRef.current)
     writeMatrices(wireRef.current)
@@ -2088,7 +2092,7 @@ const VoxelBoxInstances = memo(function VoxelBoxInstances({
         args={[undefined, undefined, group.instances.length]}
         castShadow={visual.renderLayer !== 'translucent'}
         receiveShadow={visual.renderLayer === 'opaque'}
-        frustumCulled={false}
+        frustumCulled
         {...interactionHandlers}
       >
         <boxGeometry args={[1, 1, 1]} />
@@ -2098,7 +2102,7 @@ const VoxelBoxInstances = memo(function VoxelBoxInstances({
         <instancedMesh
           ref={wireRef}
           args={[undefined, undefined, group.instances.length]}
-          frustumCulled={false}
+          frustumCulled
           renderOrder={2}
           {...interactionHandlers}
         >
@@ -2143,6 +2147,7 @@ const VoxelOptimizedScene = ({
   onConfirmPlacement?: () => void
   onCancelPlacement?: () => void
 }) => {
+  const groupCacheRef = useRef(new Map<string, VoxelBoxInstanceGroup>())
   const { groups, individualBricks } = useMemo(() => {
     const candidates = new Map<string, VoxelBoxInstanceGroup>()
     const individual: PlacedBrick[] = []
@@ -2166,17 +2171,32 @@ const VoxelOptimizedScene = ({
       }
 
       const key = getVoxelVisualKey(visual)
-      const group = candidates.get(key) ?? { definition, instances: [] }
+      const group = candidates.get(key) ?? { key, definition, instances: [] }
       group.instances.push({ brick, definition })
       candidates.set(key, group)
     }
 
-    const batchedGroups: VoxelBoxInstanceGroup[] = []
+    const nextGroups: VoxelBoxInstanceGroup[] = []
     for (const group of candidates.values()) {
-      if (shouldInstanceVoxelGroup(group.instances.length)) batchedGroups.push(group)
-      else individual.push(...group.instances.map((instance) => instance.brick))
+      if (!shouldInstanceVoxelGroup(group.instances.length)) {
+        individual.push(...group.instances.map((instance) => instance.brick))
+        continue
+      }
+      const chunks = partitionVoxelItemsByChunk(
+        group.instances,
+        (instance) => ({ x: instance.brick.pose.xStud, z: instance.brick.pose.zStud }),
+      )
+      for (const [chunkKey, instances] of chunks) {
+        const key = `${group.key}:${chunkKey}`
+        const cached = groupCacheRef.current.get(key)
+        const unchanged = cached?.instances.length === instances.length && instances.every(
+          (instance, index) => cached.instances[index].brick === instance.brick,
+        )
+        nextGroups.push(unchanged ? cached : { key, definition: group.definition, instances })
+      }
     }
-    return { groups: batchedGroups, individualBricks: individual }
+    groupCacheRef.current = new Map(nextGroups.map((group) => [group.key, group]))
+    return { groups: nextGroups, individualBricks: individual }
   }, [bricks, displayColorByBrickId, hiddenBrickIdSet, highlightedIdSet, selectedId, supportedByBrickId, transformsByBrickId])
   const draggableIds = useMemo(
     () => new Set(selectedId ? [selectedId, ...highlightedIdSet] : highlightedIdSet),
@@ -2187,7 +2207,7 @@ const VoxelOptimizedScene = ({
     <>
       {groups.map((group) => (
         <VoxelBoxInstances
-          key={getVoxelVisualKey(group.definition.voxelVisual!)}
+          key={group.key}
           group={group}
           showEdges={showEdges}
           draggableIds={draggableIds}
