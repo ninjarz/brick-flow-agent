@@ -3,10 +3,12 @@ import { BookOpen, Box, Download, ImageUp, Plus, RotateCcw, Sparkles, Upload, X 
 import { brickDefinitions, getDefaultBrickColor } from '../data/basicBricks'
 import { worldEntityDefinitions } from '../data/worldEntityDefinitions'
 import { PLATE_HEIGHT_WORLD } from '../lib/brickUnits'
+import { getBrickCatalogName, getBrickCatalogSearchTerms } from '../lib/brickCatalog'
+import { loadCatalogPreferences, saveCatalogPreferences, type CatalogPackPreference } from '../lib/catalogPreferences'
 import { getBlockingBuildPlanIssues, summarizeBuildPlanIssues, validateBuildPlan, validateBuildPlanBasics } from '../lib/planUtils'
 import { useI18n } from '../lib/i18n'
 import { LazyBrickGlyph } from './LazyBrickGlyph'
-import type { BrickPack, BuildPlan } from '../types/bricks'
+import type { BuildPlan } from '../types/bricks'
 
 type ControlPanelProps = {
   engineStatusLabel?: string
@@ -45,8 +47,7 @@ const getHeightLabel = (brick: (typeof brickDefinitions)[number]) =>
 
 const isInventoryLimited = (inventory: number) => Number.isFinite(inventory)
 const formatInventory = (inventory: number) => isInventoryLimited(inventory) ? String(inventory) : '∞'
-type CatalogPack = BrickPack | 'npc'
-const partPackOptions: CatalogPack[] = ['lego', 'minecraft', 'npc']
+const partPackOptions: CatalogPackPreference[] = ['lego', 'minecraft', 'npc']
 const validationDebounceMs = 120
 const initialVisiblePartCount = 12
 
@@ -78,9 +79,10 @@ export const ControlPanel = ({
   onOpenManual,
 }: ControlPanelProps) => {
   const { locale, t } = useI18n()
-  const [partQuery, setPartQuery] = useState('')
-  const [partKindFilter, setPartKindFilter] = useState('all')
-  const [partPackFilter, setPartPackFilter] = useState<CatalogPack>('lego')
+  const [initialCatalogPreferences] = useState(loadCatalogPreferences)
+  const [partQuery, setPartQuery] = useState(initialCatalogPreferences.query)
+  const [partKindFilter, setPartKindFilter] = useState(initialCatalogPreferences.kind)
+  const [partPackFilter, setPartPackFilter] = useState<CatalogPackPreference>(initialCatalogPreferences.pack)
   const [visiblePartLimit, setVisiblePartLimit] = useState(initialVisiblePartCount)
   const [backgroundValidation, setBackgroundValidation] = useState<{
     plan: BuildPlan
@@ -163,6 +165,15 @@ export const ControlPanel = ({
     ],
     [packBrickDefinitions, partPackFilter, t],
   )
+
+  useEffect(() => {
+    if (!partKindOptions.some((option) => option.value === partKindFilter)) setPartKindFilter('all')
+  }, [partKindFilter, partKindOptions])
+
+  useEffect(() => {
+    saveCatalogPreferences({ pack: partPackFilter, kind: partKindFilter, query: partQuery })
+  }, [partKindFilter, partPackFilter, partQuery])
+
   const visibleBrickDefinitions = useMemo(() => {
     const query = partQuery.trim().toLowerCase()
 
@@ -174,9 +185,7 @@ export const ControlPanel = ({
         : kindLabel
       const matchesKind = partKindFilter === 'all' || catalogKind === partKindFilter
       const matchesQuery = !query || [
-        brick.id,
-        brick.partNumber,
-        brick.name,
+        ...getBrickCatalogSearchTerms(brick, locale),
         brick.kind,
         kindLabel,
         categoryLabel,
@@ -185,7 +194,7 @@ export const ControlPanel = ({
 
       return matchesKind && matchesQuery
     })
-  }, [packBrickDefinitions, partKindFilter, partPackFilter, partQuery, t])
+  }, [locale, packBrickDefinitions, partKindFilter, partPackFilter, partQuery, t])
   const renderedBrickDefinitions = visibleBrickDefinitions.slice(0, visiblePartLimit)
   const remainingPartCount = Math.max(0, visibleBrickDefinitions.length - renderedBrickDefinitions.length)
 
@@ -260,7 +269,7 @@ export const ControlPanel = ({
             aria-label={t('control.partsPackSelect')}
             value={partPackFilter}
             onChange={(event) => {
-              setPartPackFilter(event.target.value as CatalogPack)
+              setPartPackFilter(event.target.value as CatalogPackPreference)
               setPartKindFilter('all')
             }}
           >
@@ -334,27 +343,39 @@ export const ControlPanel = ({
             const hasInventoryOverride = Object.prototype.hasOwnProperty.call(inventoryOverrides, brick.id)
             const inventory = inventoryOverrides[brick.id] ?? brick.inventory
             const isOutOfStock = isInventoryLimited(inventory) && usedCount >= inventory
+            const displayName = getBrickCatalogName(brick, locale)
+            const voxelShape = brick.voxelVisual?.shape
+            const voxelSummary = brick.voxelVisual
+              ? t('control.voxelSummary', {
+                  category: t(`control.minecraftCategory.${brick.catalogCategory ?? 'functional'}`),
+                  shape: t(`control.voxelShape.${brick.voxelVisual.shape}`),
+                  layer: t(`control.voxelLayer.${brick.voxelVisual.renderLayer}`),
+                })
+              : undefined
 
             return (
               <article className="part-list-item" key={brick.id}>
                 <button
                   className="part-add-button"
                   type="button"
-                  title={isOutOfStock ? t('control.partOut', { name: brick.name }) : t('control.addPart', { name: brick.name })}
+                  title={isOutOfStock ? t('control.partOut', { name: displayName }) : t('control.addPart', { name: displayName })}
                   disabled={isOutOfStock}
                   onClick={() => onAddBrick(brick.id)}
                 >
                   <LazyBrickGlyph brickId={brick.id} kind={brick.kind} footprint={brick.footprint} color={getDefaultBrickColor(brick)} className="part-glyph" />
                   <span className="part-copy">
-                    <strong>{brick.name}</strong>
-                    <small>{t('control.partNumber', { number: brick.partNumber })}</small>
+                    <span className="part-name-line">
+                      <strong>{displayName}</strong>
+                      {voxelShape && <em>{t(`control.voxelShape.${voxelShape}`)}</em>}
+                    </span>
+                    <small>{voxelSummary ?? t('control.partNumber', { number: brick.partNumber })}</small>
                     <small>
                       {getFootprintLabel(brick.footprint.widthStuds, brick.footprint.depthStuds)} · {getHeightLabel(brick)} · {usedCount}/{formatInventory(inventory)}
                     </small>
                   </span>
                   <Plus size={15} />
                 </button>
-                <label className="part-inventory-field" title={t('control.inventoryFor', { name: brick.name })}>
+                <label className="part-inventory-field" title={t('control.inventoryFor', { name: displayName })}>
                   <span>{t('control.inventoryShort')}</span>
                   <input
                     type="number"

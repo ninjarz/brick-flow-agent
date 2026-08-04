@@ -5182,6 +5182,31 @@ button:disabled {
   gap: 2px;
 }
 
+.part-name-line {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.part-name-line strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.part-name-line em {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: #e0f2fe;
+  color: #0369a1;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+}
+
 .part-copy strong,
 .part-copy small {
   min-width: 0;
