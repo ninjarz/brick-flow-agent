@@ -35,6 +35,7 @@ export type WorldAiSnapshot = {
     definitionId: string
     factionId: string
     controller: 'rule' | 'player' | 'ai'
+    detail: 'full' | 'summary'
     health: number
     maxHealth: number
     role?: string
@@ -141,6 +142,44 @@ const asCleanString = (value: unknown, maxLength = 120) =>
 
 const maxSnapshotBricks = 240
 
+/** Radius (in studs) around the protagonist inside which NPCs keep full mind context. */
+export const snapshotDetailRadiusStuds = 48
+const snapshotRecentEventWindowSeconds = 12
+const snapshotCognitionRelevantCount = 8
+
+/**
+ * Large worlds only need full mind payloads (focused memories, private clues,
+ * reflections, relationships, nearby scans) for characters the director can
+ * plausibly act on: the player, top cognition candidates, characters touched
+ * by recent events, anyone holding an active goal, and anyone near the
+ * protagonist. Everyone else degrades to a cheap summary entry.
+ */
+const collectSnapshotDetailedEntityIds = (
+  world: WorldState,
+  visibleEntities: WorldEntity[],
+  protagonist: WorldEntity | undefined,
+  cognitionRanking: WorldAiSnapshot['cognitionCandidates'],
+) => {
+  const detailed = new Set<string>()
+  for (const candidate of cognitionRanking.slice(0, snapshotCognitionRelevantCount)) {
+    detailed.add(candidate.entityId)
+  }
+  const recentCutoff = world.elapsedSeconds - snapshotRecentEventWindowSeconds
+  for (const event of world.events) {
+    if (event.timeSeconds < recentCutoff) continue
+    if (event.actorId) detailed.add(event.actorId)
+    if (event.targetId) detailed.add(event.targetId)
+  }
+  for (const entity of visibleEntities) {
+    if (entity.controller === 'player' || entity.mind.goals.length > 0) detailed.add(entity.id)
+    if (protagonist && entity.id !== protagonist.id && Math.hypot(
+      entity.transform.x - protagonist.transform.x,
+      entity.transform.z - protagonist.transform.z,
+    ) <= snapshotDetailRadiusStuds) detailed.add(entity.id)
+  }
+  return detailed
+}
+
 const selectRelevantBricks = (world: WorldState, bricks: PlacedBrick[]) => {
   if (bricks.length <= maxSnapshotBricks) return bricks
   const observers = world.entities.filter((entity) => entity.controller === 'ai' && entity.health > 0)
@@ -179,6 +218,13 @@ export const createWorldAiSnapshot = (
   const bricksById = new Map(visibleBricks.map((brick) => [brick.id, brick]))
   const visibleEntityNameById = new Map(visibleEntities.map((entity) => [entity.id, entity.name]))
   const protagonist = visibleEntities.find((entity) => entity.controller === 'player')
+  const cognitionRanking = rankWorldCognitionCandidates({ ...world, entities: visibleEntities }, snapshotCognitionRelevantCount)
+  const detailedEntityIds = collectSnapshotDetailedEntityIds(
+    { ...world, entities: visibleEntities },
+    visibleEntities,
+    protagonist,
+    cognitionRanking,
+  )
   const speakerContext = [
     ...world.narrative.stories.slice(-2).map((story) => story.body),
     ...world.events.slice(-4).flatMap((event) => [event.actorName, event.targetName, event.dialogueText].filter(Boolean) as string[]),
@@ -188,7 +234,7 @@ export const createWorldAiSnapshot = (
   elapsedSeconds: Number(world.elapsedSeconds.toFixed(2)),
   brickCount: visibleBricks.length,
   brickSnapshotTruncated: selectedBricks.length < visibleBricks.length,
-  cognitionCandidates: rankWorldCognitionCandidates({ ...world, entities: visibleEntities }).map((candidate) => ({
+  cognitionCandidates: cognitionRanking.slice(0, 4).map((candidate) => ({
     entityId: candidate.entityId,
     score: candidate.score,
     reasons: candidate.reasons,
@@ -198,20 +244,25 @@ export const createWorldAiSnapshot = (
     : [],
   entities: visibleEntities.map((entity) => {
     const definition = worldEntityDefinitionById.get(entity.definitionId)
-    const nearbyEntities = visibleEntities.filter((candidate) => (
-      candidate.id !== entity.id
-      && candidate.health > 0
-      && Math.hypot(candidate.transform.x - entity.transform.x, candidate.transform.z - entity.transform.z)
-        <= (definition?.perception.detectionRangeStuds ?? 0)
-    ))
+    const detailed = detailedEntityIds.has(entity.id)
+    const nearbyEntities = detailed
+      ? visibleEntities.filter((candidate) => (
+        candidate.id !== entity.id
+        && candidate.health > 0
+        && Math.hypot(candidate.transform.x - entity.transform.x, candidate.transform.z - entity.transform.z)
+          <= (definition?.perception.detectionRangeStuds ?? 0)
+      ))
+      : []
     const activeTarget = entity.activeCommand && 'target' in entity.activeCommand ? entity.activeCommand.target : undefined
-    const recentContext = world.events
-      .filter((event) => event.actorId === entity.id || event.targetId === entity.id)
-      .slice(-4)
-      .map((event) => [event.actorName, event.targetName, event.dialogueText, event.type].filter(Boolean).join(' '))
-      .join(' ')
-    const focusedMemories = retrieveWorldMemories(world, entity.id, recentContext)
-    const knownClues = retrieveWorldClues(world, entity.id, recentContext)
+    const recentContext = detailed
+      ? world.events
+        .filter((event) => event.actorId === entity.id || event.targetId === entity.id)
+        .slice(-4)
+        .map((event) => [event.actorName, event.targetName, event.dialogueText, event.type].filter(Boolean).join(' '))
+        .join(' ')
+      : ''
+    const focusedMemories = detailed ? retrieveWorldMemories(world, entity.id, recentContext) : []
+    const knownClues = detailed ? retrieveWorldClues(world, entity.id, recentContext) : []
     return ({
     id: entity.id,
     name: entity.name,
@@ -219,6 +270,7 @@ export const createWorldAiSnapshot = (
     definitionId: entity.definitionId,
     factionId: entity.factionId,
     controller: entity.controller,
+    detail: detailed ? 'full' as const : 'summary' as const,
     health: entity.health,
     maxHealth: entity.maxHealth,
     role: definition?.role,
@@ -270,15 +322,17 @@ export const createWorldAiSnapshot = (
       sourceEntityId: clue.sourceEntityId,
       score,
     })),
-    reflections: deriveWorldReflections(world, entity.id),
-    relationships: Object.values(world.narrative.relationshipsByEntityId[entity.id] ?? {}).map((relationship) => ({
-      targetEntityId: relationship.targetEntityId,
-      affinity: relationship.affinity,
-      trust: relationship.trust ?? Math.max(0, relationship.affinity),
-      hostility: relationship.hostility ?? Math.max(0, -relationship.affinity),
-      fear: relationship.fear ?? 0,
-      encounters: relationship.encounters,
-    })),
+    reflections: detailed ? deriveWorldReflections(world, entity.id) : [],
+    relationships: detailed
+      ? Object.values(world.narrative.relationshipsByEntityId[entity.id] ?? {}).map((relationship) => ({
+        targetEntityId: relationship.targetEntityId,
+        affinity: relationship.affinity,
+        trust: relationship.trust ?? Math.max(0, relationship.affinity),
+        hostility: relationship.hostility ?? Math.max(0, -relationship.affinity),
+        fear: relationship.fear ?? 0,
+        encounters: relationship.encounters,
+      }))
+      : [],
   })}),
   bricks: selectedBricks.map((brick) => ({
     id: brick.id,
@@ -346,6 +400,7 @@ Rules:
 - AI-controlled units already use local combat and social behavior between model turns. Issue a command only when it improves their current plan.
 - Prefer entities listed in cognitionCandidates. It is valid to issue no command when nobody needs to reconsider.
 - focusedMemories are locally ranked for the current situation; do not assume omitted memories were forgotten.
+- Entities with detail "summary" are distant or currently irrelevant; their memories, clues, reflections, and relationships are elided, not empty.
 - knownClues are private to that character. Never transfer one character's clue into another character's knowledge without an actual conversation or authored scenario action.
 - reflections are deterministic patterns distilled from repeated experiences. They guide interpretation but never override current facts or simulation outcomes.
 - Use motive as a long-term tie-breaker, focus as the current intention, and commands only as local executable steps.

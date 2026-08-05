@@ -158,6 +158,63 @@ describe('world AI adapter', () => {
     expect(rejected.rejected[0].issue).toBe('TARGET_NOT_FOUND')
   })
 
+  it('degrades distant irrelevant NPCs to summary entries in large worlds', () => {
+    const definition = worldEntityDefinitionById.get('knight')!
+    const player = createWorldEntity(definition, {
+      id: 'hero', name: 'Hero', controller: 'player', factionId: 'blue', transform: { x: 0 },
+    })
+    const distant = Array.from({ length: 9 }, (_, index) => createWorldEntity(definition, {
+      id: `npc-${String(index + 1).padStart(2, '0')}`,
+      name: `NPC ${index + 1}`,
+      controller: 'ai',
+      factionId: 'blue',
+      transform: { x: 500 + index * 4 },
+    }))
+    const world = {
+      ...createEmptyWorldState('partition'),
+      entities: [player, ...distant],
+    }
+    world.narrative.memoriesByEntityId = {
+      'npc-09': [{
+        id: 'far-memory', eventId: 'e1', entityId: 'npc-09', timeSeconds: 0,
+        type: 'interaction' as const, importance: 2 as const, content: '远方的传闻',
+      }],
+    }
+
+    const snapshot = createWorldAiSnapshot(world, [])
+
+    const heroEntry = snapshot.entities.find((entity) => entity.id === 'hero')!
+    expect(heroEntry.detail).toBe('full')
+    const nearCandidate = snapshot.entities.find((entity) => entity.id === 'npc-01')!
+    expect(nearCandidate.detail).toBe('full')
+    const elided = snapshot.entities.find((entity) => entity.id === 'npc-09')!
+    expect(elided.detail).toBe('summary')
+    expect(elided.focusedMemories).toEqual([])
+    expect(elided.relationships).toEqual([])
+    expect(elided.nearbyHostileIds).toEqual([])
+    expect(snapshot.cognitionCandidates.length).toBeLessThanOrEqual(4)
+  })
+
+  it('keeps full detail for distant characters holding an active goal', () => {
+    const definition = worldEntityDefinitionById.get('knight')!
+    const player = createWorldEntity(definition, {
+      id: 'hero', controller: 'player', factionId: 'blue', transform: { x: 0 },
+    })
+    const wanderer = createWorldEntity(definition, {
+      id: 'zz-wanderer', controller: 'ai', factionId: 'blue', transform: { x: 600 },
+    })
+    wanderer.mind.goals = [{
+      summary: '调查远方烽火', source: 'seed', updatedAtSeconds: 0, status: 'active',
+    }]
+    const fillers = Array.from({ length: 8 }, (_, index) => createWorldEntity(definition, {
+      id: `npc-${index}`, controller: 'ai', factionId: 'blue', transform: { x: 500 + index },
+    }))
+    const world = { ...createEmptyWorldState('goal-detail'), entities: [player, wanderer, ...fillers] }
+
+    const snapshot = createWorldAiSnapshot(world, [])
+    expect(snapshot.entities.find((entity) => entity.id === 'zz-wanderer')!.detail).toBe('full')
+  })
+
   it('parses plain and fenced JSON responses', () => {
     expect(parseWorldAiJson('{"commands":[]}')).toEqual({ commands: [] })
     expect(parseWorldAiJson('```json\n{"commands":[]}\n```')).toEqual({ commands: [] })
