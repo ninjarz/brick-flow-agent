@@ -1,5 +1,6 @@
 import { Bot, CircleStop, Send, Sparkles, Trash2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { worldCharacterSparkPresets } from '../data/worldCharacterSparkPresets'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { useI18n } from '../lib/i18n'
 import { changeWorldEntityController } from '../lib/worldEntity'
@@ -17,7 +18,7 @@ type WorldEntityEditorPanelProps = {
 }
 
 export const WorldEntityEditorPanel = ({ entity, commandTargets, onUpdate, onIssueCommand, onDelete, onClose }: WorldEntityEditorPanelProps) => {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [draftName, setDraftName] = useState(entity?.name ?? '')
   const [commandType, setCommandType] = useState<'wander' | 'move' | 'attack' | 'revive' | 'guard' | 'follow' | 'interact'>('move')
   const [targetKey, setTargetKey] = useState('')
@@ -121,6 +122,22 @@ export const WorldEntityEditorPanel = ({ entity, commandTargets, onUpdate, onIss
           <h3>{t('worldEntity.spark')}</h3>
         </div>
         <small>{t('worldEntity.sparkHint')}</small>
+        <label>
+          {t('worldEntity.sparkPreset')}
+          <select
+            value=""
+            onChange={(event) => {
+              const preset = worldCharacterSparkPresets.find((candidate) => candidate.id === event.target.value)
+              if (!preset) return
+              onUpdate({ ...entity, mind: { ...entity.mind, spark: { ...preset.spark[locale] } } })
+            }}
+          >
+            <option value="">{t('worldEntity.sparkPresetPlaceholder')}</option>
+            {worldCharacterSparkPresets.map((preset) => (
+              <option key={preset.id} value={preset.id}>{preset.label[locale]}</option>
+            ))}
+          </select>
+        </label>
         <label>
           {t('worldEntity.motive')}
           <input
