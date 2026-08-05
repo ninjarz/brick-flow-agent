@@ -566,6 +566,84 @@ button.status-pill:hover {
   color: #7c6f8f;
 }
 
+.world-story-trace {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.world-story-trace-entry {
+  padding: 6px 8px;
+  border: 1px solid rgba(124, 111, 143, 0.28);
+  border-radius: 8px;
+}
+
+.world-story-trace-entry > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+  color: #7c6f8f;
+  font-size: 11px;
+}
+
+.world-story-trace-entry ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.world-story-trace-entry ul li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: #475569;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.world-story-trace-entry ul li.selected {
+  opacity: 1;
+  font-weight: 750;
+}
+
+.world-story-trace-entry ul li.selected > strong::before {
+  content: "▸ ";
+  color: #6d28d9;
+}
+
+.world-story-trace-entry ul li .score {
+  font-variant-numeric: tabular-nums;
+}
+
+.world-story-trace-entry ul li em {
+  font-style: normal;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.world-story-trace-entry ul li em.up {
+  color: #15803d;
+}
+
+.world-story-trace-entry ul li em.down {
+  color: #b91c1c;
+}
+
+.world-story-trace-entry ul li small {
+  margin-top: 0;
+  margin-left: auto;
+  font-size: 11px;
+}
+
 .narrative-reference {
   display: inline;
   padding: 0;

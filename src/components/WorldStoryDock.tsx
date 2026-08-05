@@ -1,4 +1,4 @@
-import { BookOpen, Bot, Bug, ChevronDown, Database, Dice5, GlassWater, MessageCircle, RefreshCw, Send, Sparkles, Square, X } from 'lucide-react'
+import { BookOpen, Bot, Bug, ChevronDown, Database, Dice5, GlassWater, MessageCircle, RefreshCw, Send, Sparkles, Square, TrendingUp, X } from 'lucide-react'
 import { type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { resizeBottomDockHeight, resizeBottomDockWidth } from '../lib/bottomDockResize'
 import { isDebugModeEnabled } from '../lib/debugMode'
@@ -20,6 +20,7 @@ import {
 } from '../lib/worldNarrativeFeed'
 import { inspectWorldScenarioRuntime } from '../lib/worldScenarioDiagnostics'
 import { deriveWorldReflections, rankWorldCognitionCandidates, retrieveWorldClues, retrieveWorldMemories } from '../lib/worldCognition'
+import { buildWorldCognitionTraceEntry, createWorldCognitionTraceStore, type WorldCognitionTraceEntry } from '../lib/worldCognitionTrace'
 import type { TavernDirectorEntry, TavernDirectorStreamPreview } from '../lib/worldTavernDirector'
 import type { TavernActivityKind, TavernActivityResult } from '../lib/worldTavernActivities'
 import type { BrickStructure } from '../types/bricks'
@@ -314,6 +315,8 @@ export const WorldStoryDock = ({
   const continuousPulseInFlightRef = useRef(false)
   const continuousNextAllowedAtRef = useRef(performance.now())
   const continuousFailureCountRef = useRef(0)
+  const cognitionTraceRef = useRef(createWorldCognitionTraceStore())
+  const [cognitionTrace, setCognitionTrace] = useState<WorldCognitionTraceEntry[]>([])
   const mountedRef = useRef(true)
   const continuousRuntimeRef = useRef({
     world,
@@ -674,11 +677,18 @@ export const WorldStoryDock = ({
         })
         if (mountedRef.current) setActiveTurn(undefined)
         continuousPulseInFlightRef.current = false
-        continuousNextAllowedAtRef.current = performance.now() + (
-          status === 'failed'
-            ? getContinuousDirectorBackoffMs(continuousFailureCountRef.current)
-            : getContinuousDirectorCadenceMs(continuousRuntimeRef.current.world)
-        )
+        const nextDelayMs = status === 'failed'
+          ? getContinuousDirectorBackoffMs(continuousFailureCountRef.current)
+          : getContinuousDirectorCadenceMs(continuousRuntimeRef.current.world)
+        continuousNextAllowedAtRef.current = performance.now() + nextDelayMs
+        if (debugMode) {
+          cognitionTraceRef.current.record(buildWorldCognitionTraceEntry(
+            continuousRuntimeRef.current.world,
+            4,
+            status === 'failed' ? undefined : nextDelayMs,
+          ))
+          if (mountedRef.current) setCognitionTrace(cognitionTraceRef.current.entries().reverse())
+        }
       }
     }
     const intervalId = window.setInterval(() => {
@@ -688,7 +698,7 @@ export const WorldStoryDock = ({
     return () => {
       window.clearInterval(intervalId)
     }
-  }, [locale])
+  }, [locale, debugMode])
 
   const playActivity = async (activity: TavernActivityKind) => {
     shouldAutoScrollRef.current = true
@@ -838,6 +848,47 @@ export const WorldStoryDock = ({
                       reflections: deriveWorldReflections(world, entity.id),
                     })),
                   }, null, 2)}</pre>
+                </details>
+                <details className="world-story-debug-memory">
+                  <summary><TrendingUp size={11} />{locale === 'zh-CN' ? '认知得分轨迹' : 'Cognition score trace'}</summary>
+                  {cognitionTrace.length === 0 ? (
+                    <p>{locale === 'zh-CN'
+                      ? '开启 AI 导演后，每次脉冲都会记录全体候选的得分与入选情况。'
+                      : 'Enable the AI director; every pulse records the full candidate ranking and selection.'}</p>
+                  ) : (
+                    <ol className="world-story-trace">
+                      {cognitionTrace.map((entry) => (
+                        <li key={entry.id} className="world-story-trace-entry">
+                          <header>
+                            <strong>{entry.timeSeconds.toFixed(1)}s</strong>
+                            {entry.cadenceMs !== undefined && (
+                              <span>{locale === 'zh-CN' ? `下一脉冲 +${(entry.cadenceMs / 1000).toFixed(0)}s` : `next pulse +${(entry.cadenceMs / 1000).toFixed(0)}s`}</span>
+                            )}
+                          </header>
+                          {entry.candidates.length === 0 ? (
+                            <p>{locale === 'zh-CN' ? '本轮没有可评估的候选。' : 'No eligible candidates this pulse.'}</p>
+                          ) : (
+                            <ul>
+                              {entry.candidates.map((candidate) => (
+                                <li key={candidate.entityId} className={candidate.selected ? 'selected' : ''}>
+                                  <strong>{candidate.name}</strong>
+                                  <span className="score">{candidate.score.toFixed(2)}</span>
+                                  {candidate.deltaScore !== undefined && candidate.deltaScore !== 0 && (
+                                    <em className={candidate.deltaScore > 0 ? 'up' : 'down'}>
+                                      {candidate.deltaScore > 0 ? '+' : ''}{candidate.deltaScore.toFixed(2)}
+                                    </em>
+                                  )}
+                                  <small>{candidate.reasons.length > 0
+                                    ? candidate.reasons.join(', ')
+                                    : (locale === 'zh-CN' ? '无加分项' : 'no signals')}</small>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </li>
+                      ))}
+                    </ol>
+                  )}
                 </details>
               </aside>
             )}
