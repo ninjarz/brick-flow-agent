@@ -3529,6 +3529,33 @@ button:disabled {
   color: #92400e;
 }
 
+.feedback-toast.success {
+  border-color: rgba(52, 211, 153, 0.45);
+  background: rgba(236, 253, 245, 0.97);
+  color: #065f46;
+}
+
+.feedback-toast.offer {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+}
+
+.feedback-toast .action-button {
+  padding: 6px 12px;
+  border: 1px solid rgba(6, 95, 70, 0.35);
+  border-radius: 6px;
+  background: #fff;
+  color: #065f46;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.feedback-toast .action-button:hover {
+  background: rgba(236, 253, 245, 0.9);
+}
+
 .feedback-toast .icon-button {
   width: 28px;
   height: 28px;

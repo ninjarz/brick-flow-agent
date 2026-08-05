@@ -212,6 +212,7 @@ function App() {
   const generationAbortRef = useRef<AbortController | undefined>(undefined)
   const [generationError, setGenerationError] = useState<string>()
   const [generationFeedbackTone, setGenerationFeedbackTone] = useState<'error' | 'warning'>('error')
+  const [generationManualOffer, setGenerationManualOffer] = useState(false)
   const [isConfigOpen, setIsConfigOpen] = useState(false)
   const [isPromptPreviewOpen, setIsPromptPreviewOpen] = useState(false)
   const [isAssetLibraryOpen, setIsAssetLibraryOpen] = useState(false)
@@ -286,6 +287,7 @@ function App() {
   const clearGenerationFeedback = useCallback(() => {
     setGenerationError(undefined)
     setGenerationFeedbackTone('error')
+    setGenerationManualOffer(false)
   }, [])
 
   const setGenerationFailure = (message: string) => {
@@ -979,6 +981,7 @@ function App() {
       if (initialResult.plan) {
         setPlan(initialResult.plan)
         selectBrick('')
+        setGenerationManualOffer(true)
         if (initialResult.repairedLocally) {
           setGenerationWarning(t('error.generationRepaired', { summary: summarizeBuildPlanIssues(initialResult.issues, locale) }))
         } else if (initialResult.issues.length > 0) {
@@ -1011,6 +1014,7 @@ function App() {
 
       setPlan(retryResult.plan)
       selectBrick('')
+      setGenerationManualOffer(true)
       setGenerationWarning(t('error.generationRetried', { summary: initialSummary }))
     } catch (error) {
       setGenerationFailure(error instanceof Error ? error.message : t('error.generationFailed'))
@@ -3010,6 +3014,33 @@ function App() {
         <div className="toast-region" aria-live={generationFeedbackTone === 'error' ? 'assertive' : 'polite'}>
           <div className={`feedback-toast ${generationFeedbackTone}`} role={generationFeedbackTone === 'error' ? 'alert' : 'status'}>
             <p>{generationError}</p>
+            <button
+              className="icon-button"
+              type="button"
+              aria-label={t('common.close')}
+              title={t('common.close')}
+              onClick={clearGenerationFeedback}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {generationManualOffer && !generationError && (
+        <div className="toast-region" aria-live="polite">
+          <div className="feedback-toast success offer" role="status">
+            <p>{t('generation.manualOffer')}</p>
+            <button
+              className="action-button"
+              type="button"
+              onClick={() => {
+                setGenerationManualOffer(false)
+                openManual()
+              }}
+            >
+              {t('generation.openManual')}
+            </button>
             <button
               className="icon-button"
               type="button"
