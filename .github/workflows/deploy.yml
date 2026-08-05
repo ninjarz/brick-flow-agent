@@ -41,6 +41,9 @@ jobs:
       - name: Validate builds
         run: npm run validate:builds
 
+      - name: Audit LDraw coverage
+        run: npm run audit:ldraw
+
       - name: Audit OBJ connectivity
         run: npm run audit:obj-connectivity
 
