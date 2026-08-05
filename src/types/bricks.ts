@@ -174,4 +174,5 @@ export type GeneratorInput = {
   imageName?: string
   imageDataUrl?: string
   inventoryOverrides?: Record<string, number>
+  pack?: BrickPack
 }

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LlmConfig } from '../types/bricks'
-import { getLlmEmptyResponseRetryTokens, requestLlmJsonContent, requestLlmTextStream, resetLlmThinkingCompatibility, testLlmConnection } from './llmGenerator'
+import { buildLlmUserPrompt, generateLlmBuildPlan, getLlmEmptyResponseRetryTokens, requestLlmJsonContent, requestLlmTextStream, resetLlmThinkingCompatibility, testLlmConnection } from './llmGenerator'
 
 const config: LlmConfig = {
   modelName: 'test-model',
@@ -257,5 +257,66 @@ describe('LLM thinking parameter compatibility', () => {
     expect(payloadAt(fetchMock, 1)).not.toHaveProperty('thinking')
     expect(payloadAt(fetchMock, 2)).not.toHaveProperty('enable_thinking')
     expect(payloadAt(fetchMock, 2)).not.toHaveProperty('thinking')
+  })
+})
+
+describe('pack-aware build plan generation', () => {
+  beforeEach(() => {
+    resetLlmThinkingCompatibility()
+    vi.stubGlobal('window', { setTimeout, clearTimeout })
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('builds a voxel-specific prompt for the minecraft pack and keeps lego as the default', () => {
+    const voxelPrompt = buildLlmUserPrompt({ prompt: '一座小屋', pack: 'minecraft' })
+    expect(voxelPrompt).toContain('voxel block build plans')
+    expect(voxelPrompt).toContain('minecraft-oak-log')
+    expect(voxelPrompt).toContain('0.5 increments')
+    expect(voxelPrompt).toContain('Small Oak Tree')
+    expect(voxelPrompt).not.toContain('brick-1x1')
+
+    const legoPrompt = buildLlmUserPrompt({ prompt: '一座小屋' })
+    expect(legoPrompt).toContain('brick build plans')
+    expect(legoPrompt).toContain('brick-1x1')
+    expect(legoPrompt).not.toContain('minecraft-oak-log')
+  })
+
+  it('normalizes a minecraft plan returned by the LLM', async () => {
+    const planResponse = () => new Response(JSON.stringify({
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            title: 'Flower Patch',
+            bricks: [
+              { brickId: 'minecraft-grass-block', color: 'green', xStud: 0, yStud: 0, zStud: 0 },
+              { brickId: 'minecraft-red-flower', color: 'red', xStud: 0, yStud: 1, zStud: 0 },
+              { brickId: 'minecraft-grass-block', color: 'green', xStud: 1, yStud: 0, zStud: 0 },
+            ],
+          }),
+        },
+      }],
+    }), { status: 200 })
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(planResponse()))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const plan = await generateLlmBuildPlan({ prompt: '一朵花', pack: 'minecraft', config })
+
+    expect(plan.bricks.map((brick) => brick.brickId)).toEqual([
+      'minecraft-grass-block',
+      'minecraft-red-flower',
+      'minecraft-grass-block',
+    ])
+    const flower = plan.bricks[1]
+    expect(flower.pose.yStud).toBe(1)
+    expect(flower.pose.verticalQuarterTurns).toBe(0)
+
+    const requestPayload = payloadAt(fetchMock, 0)
+    const userMessage = (requestPayload.messages as Array<{ role: string; content: string }>)
+      .find((message) => message.role === 'user')!
+    expect(userMessage.content).toContain('minecraft-grass-block')
+    expect(userMessage.content).toContain('plant: must sit on a solid cube top')
   })
 })

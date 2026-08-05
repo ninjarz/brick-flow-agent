@@ -17,6 +17,7 @@ import { defaultFinishedAssets, hasIndexedDbFinishedAssets, isDefaultFinishedAss
 import { formatBuildManualHtml, formatBuildManualMarkdown, serializeBuildManual } from './lib/manualSerializer'
 import { getManualPageTabItems, getManualStepPage, manualStepPageSize } from './lib/manualPagination'
 import { countBricks, createBrickCollisionIndex, createPlanSpatialState, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickPlacementDiagnostics, getBrickRawOverlapScore, getConnectedBrickComponents, hasBrickCollision, isBrickAboveGround, makeBrick, repairBuildPlan, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
+import { loadCatalogPreferences } from './lib/catalogPreferences'
 import { footprintToWorld, getBrickWorldFrame, normalizeHorizontalStud, normalizeQuarterTurns, normalizeVerticalQuarterTurns, normalizeYStud } from './lib/brickUnits'
 import { useI18n } from './lib/i18n'
 import type { ObjImportResult } from './lib/objImport'
@@ -535,7 +536,12 @@ function App() {
     ].some((value) => value.toLowerCase().includes(query)))
   }, [scenarioQuery, worldScenarios])
   const llmPromptPreview = useMemo(
-    () => buildLlmUserPrompt({ prompt: prompt.trim() || fallbackPrompt, imageName, inventoryOverrides }),
+    () => buildLlmUserPrompt({
+      prompt: prompt.trim() || fallbackPrompt,
+      imageName,
+      inventoryOverrides,
+      pack: loadCatalogPreferences().pack === 'minecraft' ? 'minecraft' : 'lego',
+    }),
     [fallbackPrompt, imageName, inventoryOverrides, prompt],
   )
 
@@ -935,6 +941,7 @@ function App() {
       imageName,
       imageDataUrl: imagePreview,
       inventoryOverrides,
+      pack: loadCatalogPreferences().pack === 'minecraft' ? ('minecraft' as const) : ('lego' as const),
     }
 
     clearGenerationFeedback()

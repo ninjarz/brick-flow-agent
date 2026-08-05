@@ -1,5 +1,5 @@
 import { brickById, brickDefinitions } from '../data/basicBricks'
-import type { BrickColor, BuildPlan, GeneratorInput, LlmConfig, PlacedBrick } from '../types/bricks'
+import type { BrickColor, BrickPack, BuildPlan, GeneratorInput, LlmConfig, PlacedBrick } from '../types/bricks'
 import { generateBuildPlan } from './localGenerator'
 import { PLATE_HEIGHT_WORLD, WORLD_EDIT_STEP_STUDS, normalizeHorizontalStud, normalizeYStud, plateHeightToWorldStud } from './brickUnits'
 import { createId, createSingleBrickSteps, findSupportedOpenPose, hasBrickCollision, isBrickSupported, makeBrick } from './planUtils'
@@ -215,10 +215,15 @@ const formatInventoryForPrompt = (inventory: number) =>
 const formatLegoHeightForPrompt = (heightStuds: number) =>
   Number((heightStuds / PLATE_HEIGHT_WORLD).toFixed(3))
 
-const getInventorySummary = (inventoryOverrides?: Record<string, number>) => brickDefinitions
-  .filter((brick) => brick.pack === 'lego')
+const getInventorySummary = (pack: BrickPack = 'lego', inventoryOverrides?: Record<string, number>) => brickDefinitions
+  .filter((brick) => brick.pack === pack)
   .map((brick) => {
     const inventory = inventoryOverrides?.[brick.id] ?? brick.inventory
+    if (pack === 'minecraft') {
+      const shape = brick.voxelVisual?.shape ?? 'cube'
+      const supportNote = shape === 'cross' ? ', plant: must sit on a solid cube top' : ''
+      return `${brick.id}: ${brick.name}, shape ${shape}, size 1x1x${brick.footprint.heightStuds} blocks, colors ${brick.colors.join('/')}, inventory ${formatInventoryForPrompt(inventory)}${supportNote}`
+    }
     return `${brick.id}: ${brick.name}, footprint ${brick.footprint.widthStuds}x${brick.footprint.depthStuds}, height ${formatLegoHeightForPrompt(brick.footprint.heightStuds)} plates, colors ${brick.colors.join('/')}, inventory ${formatInventoryForPrompt(inventory)}`
   })
   .join('\n')
@@ -243,31 +248,39 @@ const formatOfficialReplicaExample = () => {
   return JSON.stringify(example, null, 2)
 }
 
-export const buildLlmUserPrompt = ({ prompt, imageName, inventoryOverrides }: GeneratorInput) => `You generate small brick build plans for a browser 3D editor.
+const formatMinecraftExample = () => JSON.stringify({
+  title: 'Small Oak Tree',
+  bricks: [
+    { brickId: 'minecraft-oak-log', color: 'brown', xStud: 1, yStud: 0, zStud: 1, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
+    { brickId: 'minecraft-oak-log', color: 'brown', xStud: 1, yStud: 1, zStud: 1, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
+    { brickId: 'minecraft-oak-log', color: 'brown', xStud: 1, yStud: 2, zStud: 1, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
+    { brickId: 'minecraft-oak-leaves', color: 'green', xStud: 0, yStud: 2, zStud: 1, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
+    { brickId: 'minecraft-oak-leaves', color: 'green', xStud: 2, yStud: 2, zStud: 1, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
+    { brickId: 'minecraft-oak-leaves', color: 'green', xStud: 1, yStud: 2, zStud: 0, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
+    { brickId: 'minecraft-oak-leaves', color: 'green', xStud: 1, yStud: 2, zStud: 2, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
+    { brickId: 'minecraft-oak-leaves', color: 'green', xStud: 1, yStud: 3, zStud: 1, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
+  ],
+}, null, 2)
 
-User request: ${prompt}
-Reference image file name: ${imageName || 'none'}
+const minecraftRules = `Rules:
+- Use 1 to ${maxLlmBricks} blocks.
+- Output the title in English, even if the user request is not English.
+- Every block occupies a 1x1 stud footprint. xStud and zStud are whole studs; yStud is measured in blocks and must use 0.5 increments.
+- yStud must be 0 or higher. A block resting on a full cube has yStud exactly 1 above the cube's yStud; a slab adds only 0.5.
+- rotationQuarterTurns orients stairs and fences and must be 0, 1, 2, or 3. Keep it 0 for plain cubes.
+- verticalQuarterTurns must always be 0 for this block set.
+- Keep the model compact, usually inside x=0..7 and z=0..7.
+- Every raised block must sit directly on another block's top face. Plants (shape cross) may only sit on a solid cube, never on slabs, stairs, fences, or other plants.
+- Stairs and slabs still need a solid block or ground directly below them.
+- Avoid floating blocks. The final model must be one connected structure through shared faces; fences may bridge small gaps only when both ends touch a block.
+- Prefer terrain and wood blocks for landscapes, stone and deepslate for cliffs and caves, ores embedded inside stone walls, and glow lamps or redstone blocks for light accents.
+- Use only available block ids and their listed colors.
+- Do not include markdown or explanatory text.
 
-Available parts:
-${getInventorySummary(inventoryOverrides)}
+Good voxel example, a small oak tree:
+${formatMinecraftExample()}`
 
-Return only valid JSON with this exact shape:
-{
-  "title": "short English title",
-  "bricks": [
-    {
-      "brickId": "one available part id",
-      "color": "one allowed color for that part",
-      "xStud": 0,
-      "yStud": 0,
-      "zStud": 0,
-      "rotationQuarterTurns": 0,
-      "verticalQuarterTurns": 0
-    }
-  ]
-}
-
-Rules:
+const legoRules = `Rules:
 - Use 1 to ${maxLlmBricks} bricks.
 - Output the title in English, even if the user request is not English.
 - Coordinates use one world unit: xStud, yStud, and zStud are all measured in studs and may use 0.1 increments. One plate is 0.4 studs tall.
@@ -286,6 +299,32 @@ Rules:
 
 Good official-replica example, calibrated from LEGO Classic 10696 Ghost:
 ${formatOfficialReplicaExample()}`
+
+export const buildLlmUserPrompt = ({ prompt, imageName, inventoryOverrides, pack = 'lego' }: GeneratorInput) => `You generate small ${pack === 'minecraft' ? 'voxel block build plans' : 'brick build plans'} for a browser 3D editor.
+
+User request: ${prompt}
+Reference image file name: ${imageName || 'none'}
+
+Available parts:
+${getInventorySummary(pack, inventoryOverrides)}
+
+Return only valid JSON with this exact shape:
+{
+  "title": "short English title",
+  "bricks": [
+    {
+      "brickId": "one available part id",
+      "color": "one allowed color for that part",
+      "xStud": 0,
+      "yStud": 0,
+      "zStud": 0,
+      "rotationQuarterTurns": 0,
+      "verticalQuarterTurns": 0
+    }
+  ]
+}
+
+${pack === 'minecraft' ? minecraftRules : legoRules}`
 
 export const buildLlmRepairPrompt = (previousPlan: BuildPlan, repairFeedback: string) => `
 
@@ -903,7 +942,7 @@ export const requestLlmTextStream = async ({
   }
 }
 
-export const generateLlmBuildPlan = async ({ prompt, imageName, imageDataUrl, inventoryOverrides, config, signal, locale = 'zh-CN', repairFeedback, previousPlan }: LlmGenerateInput): Promise<BuildPlan> => {
+export const generateLlmBuildPlan = async ({ prompt, imageName, imageDataUrl, inventoryOverrides, pack, config, signal, locale = 'zh-CN', repairFeedback, previousPlan }: LlmGenerateInput): Promise<BuildPlan> => {
   if (!isLlmConfigComplete(config)) throw new Error(llmText[locale].incompleteConfig)
 
   const controller = new AbortController()
@@ -911,7 +950,7 @@ export const generateLlmBuildPlan = async ({ prompt, imageName, imageDataUrl, in
   signal?.addEventListener('abort', abortFromCaller)
   const timeout = window.setTimeout(() => controller.abort(), clientRequestTimeoutMs)
   let response: Response
-  const userPrompt = `${buildLlmUserPrompt({ prompt, imageName, inventoryOverrides })}${
+  const userPrompt = `${buildLlmUserPrompt({ prompt, imageName, inventoryOverrides, pack })}${
     repairFeedback && previousPlan ? buildLlmRepairPrompt(previousPlan, repairFeedback) : ''
   }`
 
