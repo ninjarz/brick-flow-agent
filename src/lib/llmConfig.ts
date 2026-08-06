@@ -3,6 +3,15 @@ import type { LlmConfig } from '../types/bricks'
 const storageKey = 'brick-flow-agent:llm-config'
 const connectionStorageKey = 'brick-flow-agent:llm-connection:v1'
 
+export const defaultMaxRepairAttempts = 2
+export const maxRepairAttemptsCeiling = 4
+
+export const normalizeMaxRepairAttempts = (value: unknown) => {
+  const parsed = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(parsed)) return defaultMaxRepairAttempts
+  return Math.max(1, Math.min(maxRepairAttemptsCeiling, Math.round(parsed)))
+}
+
 export const defaultLlmConfig: LlmConfig = {
   modelName: '',
   endpoint: '',
@@ -10,6 +19,7 @@ export const defaultLlmConfig: LlmConfig = {
   requestMode: 'direct',
   enableThinking: false,
   autoRepair: true,
+  maxRepairAttempts: defaultMaxRepairAttempts,
 }
 
 const isLlmRequestMode = (value: unknown): value is LlmConfig['requestMode'] =>
@@ -30,6 +40,7 @@ export const loadLlmConfig = (): LlmConfig => {
       requestMode: isLlmRequestMode(parsed.requestMode) ? parsed.requestMode : defaultLlmConfig.requestMode,
       enableThinking: parsed.enableThinking === true,
       autoRepair: parsed.autoRepair !== false,
+      maxRepairAttempts: normalizeMaxRepairAttempts(parsed.maxRepairAttempts),
     }
   } catch {
     return defaultLlmConfig

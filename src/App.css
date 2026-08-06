@@ -2874,6 +2874,21 @@ button.status-pill:hover {
   gap: 8px;
 }
 
+.config-inline-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.config-inline-field input {
+  width: 64px;
+  padding: 4px 8px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 6px;
+  font: inherit;
+}
+
 .prompt-preview-modal label {
   display: grid;
   gap: 6px;

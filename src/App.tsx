@@ -12,7 +12,7 @@ import { createDefaultWorldScenarios } from './data/worldScenarios'
 import { dropBrickGroupAtPoint, findNearestOpenBrickGroupAround, getBrickGroupDragPointerOffset, offsetBrickGroupDragPoint, rotationRepositionSearchRadiusStuds, type HorizontalDropPoint, type StationaryPlanSpatialData } from './lib/brickGroupPlacement'
 import { generateBuildPlan } from './lib/localGenerator'
 import { buildLlmUserPrompt, generateLlmBuildPlan, isLlmConfigComplete, llmSystemPrompt, requestLlmJsonContent, requestLlmTextStream, resetLlmThinkingCompatibility, testLlmConnection } from './lib/llmGenerator'
-import { clearLlmConnection, hasPersistedLlmConnection, loadLlmConfig, saveLlmConfig, saveLlmConnection } from './lib/llmConfig'
+import { clearLlmConnection, hasPersistedLlmConnection, loadLlmConfig, maxRepairAttemptsCeiling, normalizeMaxRepairAttempts, saveLlmConfig, saveLlmConnection } from './lib/llmConfig'
 import { defaultFinishedAssets, hasIndexedDbFinishedAssets, isDefaultFinishedAsset, loadAllDefaultFinishedAssets, loadFinishedAssets, loadFinishedAssetsFromIndexedDb, mergeWithDefaultAssets, saveFinishedAssets } from './lib/finishedAssets'
 import { formatBuildManualHtml, formatBuildManualMarkdown, serializeBuildManual } from './lib/manualSerializer'
 import { getManualPageTabItems, getManualStepPage, manualStepPageSize } from './lib/manualPagination'
@@ -977,45 +977,44 @@ function App() {
       }
 
       const initialPlan = await generateLlmBuildPlan({ ...input, config: llmConfig, signal: generationController.signal, locale })
-      const initialResult = validateCandidate(initialPlan)
-      if (initialResult.plan) {
-        setPlan(initialResult.plan)
-        selectBrick('')
-        setGenerationManualOffer(true)
-        if (initialResult.repairedLocally) {
-          setGenerationWarning(t('error.generationRepaired', { summary: summarizeBuildPlanIssues(initialResult.issues, locale) }))
-        } else if (initialResult.issues.length > 0) {
-          setGenerationWarning(summarizeBuildPlanIssues(initialResult.issues, locale))
-        }
-        return
+      let candidatePlan = initialPlan
+      let result = validateCandidate(candidatePlan)
+      const firstFailureSummary = summarizeBuildPlanIssues(result.issues, locale)
+      const repairBudget = llmConfig.autoRepair
+        ? normalizeMaxRepairAttempts(llmConfig.maxRepairAttempts)
+        : 0
+      let repairAttempts = 0
+
+      while (!result.plan && repairAttempts < repairBudget) {
+        repairAttempts += 1
+        candidatePlan = await generateLlmBuildPlan({
+          ...input,
+          config: llmConfig,
+          signal: generationController.signal,
+          locale,
+          repairFeedback: summarizeBuildPlanIssues(result.issues, locale),
+          previousPlan: candidatePlan,
+        })
+        result = validateCandidate(candidatePlan)
       }
 
-      const initialSummary = summarizeBuildPlanIssues(initialResult.issues, locale)
-      if (!llmConfig.autoRepair) {
-        setGenerationFailure(t('error.generationBlocked', { summary: initialSummary }))
-        return
-      }
-
-      const retryPlan = await generateLlmBuildPlan({
-        ...input,
-        config: llmConfig,
-        signal: generationController.signal,
-        locale,
-        repairFeedback: initialSummary,
-        previousPlan: initialPlan,
-      })
-      const retryResult = validateCandidate(retryPlan)
-      if (!retryResult.plan) {
+      if (!result.plan) {
         setGenerationFailure(t('error.generationBlocked', {
-          summary: summarizeBuildPlanIssues(retryResult.issues, locale),
+          summary: summarizeBuildPlanIssues(result.issues, locale),
         }))
         return
       }
 
-      setPlan(retryResult.plan)
+      setPlan(result.plan)
       selectBrick('')
       setGenerationManualOffer(true)
-      setGenerationWarning(t('error.generationRetried', { summary: initialSummary }))
+      if (repairAttempts > 0) {
+        setGenerationWarning(t('error.generationRetried', { summary: firstFailureSummary, attempts: repairAttempts }))
+      } else if (result.repairedLocally) {
+        setGenerationWarning(t('error.generationRepaired', { summary: firstFailureSummary }))
+      } else if (result.issues.length > 0) {
+        setGenerationWarning(summarizeBuildPlanIssues(result.issues, locale))
+      }
     } catch (error) {
       setGenerationFailure(error instanceof Error ? error.message : t('error.generationFailed'))
     } finally {
@@ -3222,6 +3221,21 @@ function App() {
                     <small>{t(`config.autoRepairDescription.${llmConfig.autoRepair ? 'on' : 'off'}`)}</small>
                   </span>
                 </label>
+                {llmConfig.autoRepair && (
+                  <label className="config-inline-field">
+                    <span>{t('config.maxRepairAttempts')}</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={maxRepairAttemptsCeiling}
+                      step={1}
+                      value={normalizeMaxRepairAttempts(llmConfig.maxRepairAttempts)}
+                      onChange={(event) => {
+                        updateLlmConfig({ ...llmConfig, maxRepairAttempts: normalizeMaxRepairAttempts(event.target.value) })
+                      }}
+                    />
+                  </label>
+                )}
                 <div className="config-actions">
                   <button type="button" className="secondary" onClick={handleTestLlmConfig} disabled={isTestingLlmConfig}>
                     {isTestingLlmConfig ? t('config.testing') : t('config.test')}

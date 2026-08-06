@@ -156,6 +156,8 @@ export type LlmConfig = {
   requestMode: 'direct' | 'proxy'
   enableThinking: boolean
   autoRepair: boolean
+  /** LLM repair retries allowed after the first invalid candidate (1-4, default 2). */
+  maxRepairAttempts?: number
 }
 
 export type FinishedAsset = {

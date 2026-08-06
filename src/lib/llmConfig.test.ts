@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LlmConfig } from '../types/bricks'
-import { clearLlmConnection, hasPersistedLlmConnection, saveLlmConnection } from './llmConfig'
+import { clearLlmConnection, defaultMaxRepairAttempts, hasPersistedLlmConnection, maxRepairAttemptsCeiling, normalizeMaxRepairAttempts, saveLlmConnection } from './llmConfig'
 
 const config: LlmConfig = {
   modelName: 'test-model',
@@ -49,5 +49,16 @@ describe('persisted LLM connection status', () => {
 
     clearLlmConnection()
     expect(hasPersistedLlmConnection(config)).toBe(false)
+  })
+})
+
+describe('repair attempt budget', () => {
+  it('clamps the repair attempts into the supported range with a sane default', () => {
+    expect(normalizeMaxRepairAttempts(undefined)).toBe(defaultMaxRepairAttempts)
+    expect(normalizeMaxRepairAttempts(Number.NaN)).toBe(defaultMaxRepairAttempts)
+    expect(normalizeMaxRepairAttempts(0)).toBe(1)
+    expect(normalizeMaxRepairAttempts(2.6)).toBe(3)
+    expect(normalizeMaxRepairAttempts(99)).toBe(maxRepairAttemptsCeiling)
+    expect(normalizeMaxRepairAttempts('2')).toBe(2)
   })
 })
