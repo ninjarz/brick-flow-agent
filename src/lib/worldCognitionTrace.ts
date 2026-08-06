@@ -1,5 +1,5 @@
 import type { WorldState } from '../types/world'
-import { rankWorldCognitionCandidates, type WorldCognitionCandidate } from './worldCognition'
+import { rankWorldCognitionCandidates, rankWorldSpeakers, type WorldCognitionCandidate } from './worldCognition'
 
 export type WorldCognitionTraceCandidate = {
   entityId: string
@@ -10,17 +10,29 @@ export type WorldCognitionTraceCandidate = {
   deltaScore?: number
 }
 
+export type WorldCognitionTraceSpeaker = {
+  entityId: string
+  name: string
+  score: number
+  selected: boolean
+}
+
 export type WorldCognitionTraceEntry = {
   id: string
   timeSeconds: number
   cadenceMs?: number
   candidates: WorldCognitionTraceCandidate[]
+  speakers: WorldCognitionTraceSpeaker[]
 }
+
+const speakerTraceLimit = 3
 
 /**
  * Ranks every eligible character (not just the top slice) so the debug trace
  * can also explain why a character stayed silent. `selectedLimit` must match
  * the limit used when the AI snapshot is built (worldAi.ts default of 4).
+ * Speaker candidates mirror the snapshot's listener/context so the trace
+ * answers both "who reconsiders" and "who would speak".
  */
 export const buildWorldCognitionTraceEntry = (
   world: WorldState,
@@ -29,6 +41,14 @@ export const buildWorldCognitionTraceEntry = (
 ): WorldCognitionTraceEntry => {
   const nameById = new Map(world.entities.map((entity) => [entity.id, entity.name]))
   const ranked = rankWorldCognitionCandidates(world, Math.max(selectedLimit, world.entities.length))
+  const protagonist = world.entities.find((entity) => entity.controller === 'player' && entity.health > 0)
+  const speakerContext = [
+    ...world.narrative.stories.slice(-2).map((story) => story.body),
+    ...world.events.slice(-4).flatMap((event) => [event.actorName, event.targetName, event.dialogueText].filter(Boolean) as string[]),
+  ].join(' ')
+  const speakers = protagonist
+    ? rankWorldSpeakers(world, protagonist, speakerContext, Math.max(speakerTraceLimit, world.entities.length))
+    : []
   return {
     id: `cognition-trace-${world.elapsedSeconds.toFixed(2)}-${ranked.length}`,
     timeSeconds: Number(world.elapsedSeconds.toFixed(2)),
@@ -39,6 +59,12 @@ export const buildWorldCognitionTraceEntry = (
       score: candidate.score,
       reasons: candidate.reasons,
       selected: index < selectedLimit,
+    })),
+    speakers: speakers.map((speaker, index) => ({
+      entityId: speaker.entityId,
+      name: nameById.get(speaker.entityId) ?? speaker.entityId,
+      score: speaker.score,
+      selected: index < speakerTraceLimit,
     })),
   }
 }

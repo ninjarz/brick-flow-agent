@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { worldCharacterSparkPresets } from '../data/worldCharacterSparkPresets'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { useI18n } from '../lib/i18n'
+import { normalizeWorldCharacterSpark } from '../lib/worldCharacter'
 import { changeWorldEntityController } from '../lib/worldEntity'
 import type { WorldEntity, WorldEntityCommand, WorldTargetRef } from '../types/world'
 
@@ -23,15 +24,37 @@ export const WorldEntityEditorPanel = ({ entity, commandTargets, onUpdate, onIss
   const [commandType, setCommandType] = useState<'wander' | 'move' | 'attack' | 'revive' | 'guard' | 'follow' | 'interact'>('move')
   const [targetKey, setTargetKey] = useState('')
   const [commandFeedback, setCommandFeedback] = useState<'sent' | 'failed'>()
+  const [sparkImportText, setSparkImportText] = useState('')
+  const [sparkIoStatus, setSparkIoStatus] = useState<'copied' | 'applied' | 'invalid'>()
 
   useEffect(() => setDraftName(entity?.name ?? ''), [entity?.id, entity?.name])
   useEffect(() => {
     setTargetKey('')
     setCommandFeedback(undefined)
+    setSparkIoStatus(undefined)
   }, [entity?.id])
   if (!entity) return null
   const definition = worldEntityDefinitionById.get(entity.definitionId)
   const visibleCommand = entity.activeCommand ?? entity.commandQueue[0]
+  const exportSpark = () => {
+    void navigator.clipboard?.writeText(JSON.stringify(entity.mind.spark, null, 2))
+      .then(() => setSparkIoStatus('copied'))
+      .catch(() => setSparkIoStatus('invalid'))
+  }
+  const applySparkImport = () => {
+    if (!definition) {
+      setSparkIoStatus('invalid')
+      return
+    }
+    try {
+      const spark = normalizeWorldCharacterSpark(JSON.parse(sparkImportText), definition)
+      onUpdate({ ...entity, mind: { ...entity.mind, spark } })
+      setSparkImportText('')
+      setSparkIoStatus('applied')
+    } catch {
+      setSparkIoStatus('invalid')
+    }
+  }
   const commitName = () => {
     const nextName = draftName.trim() || entity.name
     setDraftName(nextName)
@@ -138,6 +161,25 @@ export const WorldEntityEditorPanel = ({ entity, commandTargets, onUpdate, onIss
             ))}
           </select>
         </label>
+        <div className="world-spark-io">
+          <button type="button" onClick={exportSpark}>{t('worldEntity.sparkExport')}</button>
+          <details>
+            <summary>{t('worldEntity.sparkImport')}</summary>
+            <textarea
+              rows={3}
+              value={sparkImportText}
+              placeholder={t('worldEntity.sparkImportPlaceholder')}
+              onChange={(event) => {
+                setSparkImportText(event.target.value)
+                setSparkIoStatus(undefined)
+              }}
+            />
+            <button type="button" onClick={applySparkImport} disabled={!sparkImportText.trim()}>
+              {t('worldEntity.sparkApply')}
+            </button>
+          </details>
+          {sparkIoStatus && <small role="status">{t(`worldEntity.sparkIo.${sparkIoStatus}`)}</small>}
+        </div>
         <label>
           {t('worldEntity.motive')}
           <input

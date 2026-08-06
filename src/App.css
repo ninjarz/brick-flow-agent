@@ -644,6 +644,29 @@ button.status-pill:hover {
   font-size: 11px;
 }
 
+.world-story-trace-speakers {
+  margin: 5px 0 0;
+  color: #7c6f8f;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.world-story-debug-memory .action-button {
+  margin-top: 6px;
+  padding: 5px 10px;
+  border: 1px solid rgba(124, 111, 143, 0.4);
+  border-radius: 6px;
+  background: #fff;
+  color: #475569;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.world-story-snapshot-estimate {
+  font-variant-numeric: tabular-nums;
+}
+
 .narrative-reference {
   display: inline;
   padding: 0;
@@ -3827,6 +3850,56 @@ button:disabled {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 7px;
+}
+
+.world-spark-io {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.world-spark-io > button,
+.world-spark-io details > button {
+  padding: 4px 10px;
+  border: 1px solid rgba(124, 111, 143, 0.4);
+  border-radius: 6px;
+  background: #fff;
+  color: #475569;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.world-spark-io details {
+  flex: 1;
+  min-width: 180px;
+}
+
+.world-spark-io details summary {
+  cursor: pointer;
+  color: #6d28d9;
+  font-size: 12px;
+}
+
+.world-spark-io details textarea {
+  width: 100%;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 12px;
+  resize: vertical;
+}
+
+.world-spark-io details > button {
+  margin-top: 6px;
+}
+
+.world-spark-io > small {
+  color: #7c6f8f;
 }
 
 .world-character-initiative > span {

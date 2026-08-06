@@ -29,6 +29,26 @@ describe('world cognition trace', () => {
     expect(entry.cadenceMs).toBe(8_000)
   })
 
+  it('includes speaker candidates ranked for the protagonist listener', () => {
+    const world = {
+      ...buildWorld(['e1', 'e2', 'e3', 'e4']),
+      entities: [
+        ...buildWorld(['e1', 'e2', 'e3', 'e4']).entities,
+        createWorldEntity(knightDefinition, { id: 'hero', name: '玩家', controller: 'player' }),
+      ],
+    }
+    const entry = buildWorldCognitionTraceEntry(world, 4)
+    expect(entry.speakers).toHaveLength(4)
+    expect(entry.speakers.filter((speaker) => speaker.selected)).toHaveLength(3)
+    expect(entry.speakers.every((speaker) => speaker.entityId !== 'hero')).toBe(true)
+    expect(entry.speakers[0].name).toBeTruthy()
+  })
+
+  it('omits speaker candidates when no living protagonist exists', () => {
+    const entry = buildWorldCognitionTraceEntry(buildWorld(['e1', 'e2']), 4)
+    expect(entry.speakers).toEqual([])
+  })
+
   it('annotates score deltas against the previous recorded entry', () => {
     const store = createWorldCognitionTraceStore()
     const world = buildWorld(['e1', 'e2'])

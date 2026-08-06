@@ -1,8 +1,9 @@
-import { BookOpen, Bot, Bug, ChevronDown, Database, Dice5, GlassWater, MessageCircle, RefreshCw, Send, Sparkles, Square, TrendingUp, X } from 'lucide-react'
+import { BookOpen, Bot, Bug, ChevronDown, Database, Dice5, Gauge, GlassWater, MessageCircle, RefreshCw, Send, Sparkles, Square, TrendingUp, X } from 'lucide-react'
 import { type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { resizeBottomDockHeight, resizeBottomDockWidth } from '../lib/bottomDockResize'
 import { isDebugModeEnabled } from '../lib/debugMode'
 import { useI18n } from '../lib/i18n'
+import { createWorldAiSnapshot } from '../lib/worldAi'
 import {
   buildContinuousDirectorIntent,
   continuousDirectorPollIntervalMs,
@@ -317,6 +318,11 @@ export const WorldStoryDock = ({
   const continuousFailureCountRef = useRef(0)
   const cognitionTraceRef = useRef(createWorldCognitionTraceStore())
   const [cognitionTrace, setCognitionTrace] = useState<WorldCognitionTraceEntry[]>([])
+  const [snapshotEstimate, setSnapshotEstimate] = useState<{
+    entities: number
+    fullDetail: number
+    bytes: number
+  }>()
   const mountedRef = useRef(true)
   const continuousRuntimeRef = useRef({
     world,
@@ -885,9 +891,44 @@ export const WorldStoryDock = ({
                               ))}
                             </ul>
                           )}
+                          {entry.speakers.length > 0 && (
+                            <p className="world-story-trace-speakers">
+                              {locale === 'zh-CN' ? '发言候选' : 'Speakers'}:{' '}
+                              {entry.speakers.map((speaker) => (
+                                `${speaker.selected ? '▸' : ''}${speaker.name} ${speaker.score.toFixed(2)}`
+                              )).join(' · ')}
+                            </p>
+                          )}
                         </li>
                       ))}
                     </ol>
+                  )}
+                </details>
+                <details className="world-story-debug-memory">
+                  <summary><Gauge size={11} />{locale === 'zh-CN' ? '快照估算' : 'Snapshot estimate'}</summary>
+                  <p>{locale === 'zh-CN'
+                    ? '按需估算当前 AI 快照的体积，观察空间分区对上下文大小的影响。'
+                    : 'Estimate the current AI snapshot size on demand to see the effect of spatial partitioning.'}</p>
+                  <button
+                    type="button"
+                    className="action-button"
+                    onClick={() => {
+                      const snapshot = createWorldAiSnapshot(world, [], structures)
+                      setSnapshotEstimate({
+                        entities: snapshot.entities.length,
+                        fullDetail: snapshot.entities.filter((entity) => entity.detail === 'full').length,
+                        bytes: JSON.stringify(snapshot).length,
+                      })
+                    }}
+                  >
+                    {locale === 'zh-CN' ? '估算当前快照' : 'Estimate current snapshot'}
+                  </button>
+                  {snapshotEstimate && (
+                    <p className="world-story-snapshot-estimate">
+                      {locale === 'zh-CN'
+                        ? `实体 ${snapshotEstimate.entities}（完整 ${snapshotEstimate.fullDetail} / 摘要 ${snapshotEstimate.entities - snapshotEstimate.fullDetail}）· 约 ${(snapshotEstimate.bytes / 1024).toFixed(1)} KB（≈${Math.round(snapshotEstimate.bytes / 4).toLocaleString()} tokens）`
+                        : `${snapshotEstimate.entities} entities (full ${snapshotEstimate.fullDetail} / summary ${snapshotEstimate.entities - snapshotEstimate.fullDetail}) · ~${(snapshotEstimate.bytes / 1024).toFixed(1)} KB (≈${Math.round(snapshotEstimate.bytes / 4).toLocaleString()} tokens)`}
+                    </p>
                   )}
                 </details>
               </aside>
