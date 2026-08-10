@@ -15,7 +15,7 @@ const emptyPlan: BuildPlan = {
 
 describe('Minecraft scene assets', () => {
   it('ships original, editable, structurally valid voxel scenes', () => {
-    expect(minecraftSceneAssets).toHaveLength(3)
+    expect(minecraftSceneAssets).toHaveLength(4)
     for (const asset of minecraftSceneAssets) {
       expect(asset.plan.bricks.length).toBeGreaterThan(50)
       expect(asset.plan.bricks.every((brick) => brick.brickId.startsWith('minecraft-'))).toBe(true)

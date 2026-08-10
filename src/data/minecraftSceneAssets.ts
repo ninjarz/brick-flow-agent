@@ -169,6 +169,50 @@ const makeForestCamp = () => {
   return scene.finish('minecraft-forest-camp-plan', '林间营地', '一个带树木、营火、帐篷与物资点的体素营地')
 }
 
+const makeSeasideLighthouse = () => {
+  const scene = createSceneBuilder()
+  for (let x = 0; x < 8; x += 1) {
+    for (let z = 0; z < 8; z += 1) {
+      const isWater = x === 0 || z === 0 || x === 7 || z === 7
+      if (isWater) {
+        scene.brick('minecraft-water-block', x, 0, z, 0, '岛岸与水面')
+        continue
+      }
+      const isSand = x === 1 || z === 1 || x === 6 || z === 6
+      scene.brick(isSand ? 'minecraft-sand-block' : 'minecraft-stone-block', x, 0, z, 0, '岛岸与水面')
+    }
+  }
+  for (const z of [0, 1] as const) {
+    scene.brick('minecraft-oak-planks', 3, 1, z, 0, '码头')
+    scene.brick('minecraft-oak-planks', 4, 1, z, 0, '码头')
+  }
+  scene.brick('minecraft-oak-fence', 3, 2, 0, 0, '码头')
+  scene.brick('minecraft-oak-fence', 4, 2, 0, 0, '码头')
+  const bands: Array<[number, string]> = [
+    [1, 'minecraft-white-concrete'],
+    [2, 'minecraft-white-concrete'],
+    [3, 'minecraft-red-concrete'],
+    [4, 'minecraft-red-concrete'],
+    [5, 'minecraft-white-concrete'],
+  ]
+  for (const [y, blockId] of bands) {
+    for (const x of [3, 4] as const) {
+      for (const z of [3, 4] as const) {
+        scene.brick(blockId, x, y, z, 0, '灯塔塔身')
+      }
+    }
+  }
+  for (const x of [3, 4] as const) {
+    for (const z of [3, 4] as const) {
+      scene.brick('minecraft-glow-lamp', x, 6, z, 0, '灯室与细节')
+    }
+  }
+  scene.brick('minecraft-redstone-block', 3, 7, 3, 0, '灯室与细节')
+  scene.brick('minecraft-tall-grass', 2, 1, 5, 0, '灯室与细节')
+  scene.brick('minecraft-yellow-flower', 5, 1, 2, 0, '灯室与细节')
+  return scene.finish('minecraft-seaside-lighthouse-plan', '滨海灯塔', '一座带环形水面、木板码头与发光灯室的体素灯塔')
+}
+
 export const minecraftSceneAssets: FinishedAsset[] = [
   {
     id: 'finished-minecraft-waystation',
@@ -193,5 +237,13 @@ export const minecraftSceneAssets: FinishedAsset[] = [
     category: 'Minecraft 场景',
     description: '带两种树木、营火、帐篷和物资点的小型探索营地。',
     plan: makeForestCamp(),
+  },
+  {
+    id: 'finished-minecraft-seaside-lighthouse',
+    i18nKey: 'asset.default.minecraftSeasideLighthouse',
+    title: '滨海灯塔',
+    category: 'Minecraft 场景',
+    description: '红白条纹塔身、发光灯室、木板码头和环形水面的原创滨海灯塔。',
+    plan: makeSeasideLighthouse(),
   },
 ]

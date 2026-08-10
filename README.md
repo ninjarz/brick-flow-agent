@@ -48,7 +48,7 @@ The app uses React + Three.js for the editor, LDraw data for part rendering, and
 - Search the catalog with either localized names or aliases; the selected pack, category, and query persist locally
 - Stairs orient from the placement view, slabs distinguish upper and lower halves, and fences connect only toward eligible neighbors
 - Plants require a supporting voxel block; removing that support marks the plant as structurally invalid
-- The asset library includes three original incremental presets: **Valley Waystation**, **Ore Cutaway**, and **Forest Camp**. Loading one preserves the current world and places the preset in nearby free space
+- The asset library includes four original incremental presets: **Valley Waystation**, **Ore Cutaway**, **Forest Camp**, and **Seaside Lighthouse**. Loading one preserves the current world and places the preset in nearby free space
 - Repeated cube and slab materials are instanced in stable `16 x 16` spatial chunks. Unchanged chunks reuse their instance groups and each chunk participates in frustum culling
 
 ## 🚀 Quick Start

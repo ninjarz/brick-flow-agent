@@ -201,6 +201,7 @@ await writeFile(entry, `
     'finished-minecraft-waystation',
     'finished-minecraft-ore-cutaway',
     'finished-minecraft-forest-camp',
+    'finished-minecraft-seaside-lighthouse',
     'finished-obj-stanford-bunny-s',
     'finished-obj-stanford-bunny-m',
     'finished-obj-stanford-bunny-l',
@@ -220,6 +221,7 @@ await writeFile(entry, `
     'finished-minecraft-waystation': 93,
     'finished-minecraft-ore-cutaway': 103,
     'finished-minecraft-forest-camp': 104,
+    'finished-minecraft-seaside-lighthouse': 97,
   };
   const retiredDefaultAssetIds = new Set([
     'finished-tiger',
@@ -561,7 +563,12 @@ await writeFile(entry, `
         pose: { xStud: 0, yStud: 0.4, zStud: 0, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
       },
     ],
-    steps: [],
+    steps: [{
+      id: 'llm-sample-lego-step',
+      title: '全部',
+      description: '',
+      brickIds: ['llm-sample-lego-base', 'llm-sample-lego-top'],
+    }],
   };
   const minecraftLlmSamplePlan = {
     id: 'llm-sample-minecraft',
@@ -594,7 +601,12 @@ await writeFile(entry, `
         pose: { xStud: 1, yStud: 1, zStud: 0, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
       },
     ],
-    steps: [],
+    steps: [{
+      id: 'llm-sample-mc-step',
+      title: '全部',
+      description: '',
+      brickIds: ['llm-sample-mc-grass', 'llm-sample-mc-flower', 'llm-sample-mc-planks', 'llm-sample-mc-slab'],
+    }],
   };
   const legoLlmSampleIssues = validateBuildPlan(legoLlmSamplePlan);
   const minecraftLlmSampleIssues = validateBuildPlan(minecraftLlmSamplePlan);
