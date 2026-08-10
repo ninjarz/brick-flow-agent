@@ -274,6 +274,7 @@ const minecraftRules = `Rules:
 - Stairs and slabs still need a solid block or ground directly below them.
 - Avoid floating blocks. The final model must be one connected structure through shared faces; fences may bridge small gaps only when both ends touch a block.
 - Prefer terrain and wood blocks for landscapes, stone and deepslate for cliffs and caves, ores embedded inside stone walls, and glow lamps or redstone blocks for light accents.
+- When a reference image is provided, first block out its silhouette with full cubes, then refine thin layers with slabs and sloped edges with stairs; do not trace pixel-level detail.
 - Use only available block ids and their listed colors.
 - Do not include markdown or explanatory text.
 

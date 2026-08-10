@@ -292,6 +292,7 @@ await writeFile(entry, `
   );
   const ghostReferencePlan = generateBuildPlan({ prompt: '一个 Classic 小幽灵' });
   const llmPrompt = buildLlmUserPrompt({ prompt: 'test prompt' });
+  const minecraftLlmPrompt = buildLlmUserPrompt({ prompt: 'voxel hut', pack: 'minecraft' });
   const limitedInventoryPrompt = buildLlmUserPrompt({ prompt: 'limited inventory', inventoryOverrides: { 'brick-2x4': 0 } });
   const llmRepairPrompt = buildLlmRepairPrompt(objImportRegression.plan, '2 disconnected structures, 1 collision');
   const llmPromptGhostExampleMatch = llmPrompt.match(/Good official-replica example[\\s\\S]*?\\n(\\{[\\s\\S]*\\})$/);
@@ -541,6 +542,62 @@ await writeFile(entry, `
     pose: { xStud: 1, yStud: 1, zStud: 0, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
   };
   const minecraftOverlapBlock = makePlacedBrick('minecraft-overlap', 'minecraft-basic-block', 0, 'green');
+  const legoLlmSamplePlan = {
+    id: 'llm-sample-lego',
+    title: 'LLM LEGO Sample',
+    prompt: 'sample',
+    source: 'llm',
+    bricks: [
+      {
+        id: 'llm-sample-lego-base',
+        brickId: 'plate-2x4',
+        color: 'gray',
+        pose: { xStud: 0, yStud: 0, zStud: 0, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
+      },
+      {
+        id: 'llm-sample-lego-top',
+        brickId: 'brick-1x1',
+        color: 'red',
+        pose: { xStud: 0, yStud: 0.4, zStud: 0, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
+      },
+    ],
+    steps: [],
+  };
+  const minecraftLlmSamplePlan = {
+    id: 'llm-sample-minecraft',
+    title: 'LLM Minecraft Sample',
+    prompt: 'sample',
+    source: 'llm',
+    bricks: [
+      {
+        id: 'llm-sample-mc-grass',
+        brickId: 'minecraft-grass-block',
+        color: 'green',
+        pose: { xStud: 0, yStud: 0, zStud: 0, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
+      },
+      {
+        id: 'llm-sample-mc-flower',
+        brickId: 'minecraft-red-flower',
+        color: 'red',
+        pose: { xStud: 0, yStud: 1, zStud: 0, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
+      },
+      {
+        id: 'llm-sample-mc-planks',
+        brickId: 'minecraft-oak-planks',
+        color: 'tan',
+        pose: { xStud: 1, yStud: 0, zStud: 0, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
+      },
+      {
+        id: 'llm-sample-mc-slab',
+        brickId: 'minecraft-oak-slab',
+        color: 'tan',
+        pose: { xStud: 1, yStud: 1, zStud: 0, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
+      },
+    ],
+    steps: [],
+  };
+  const legoLlmSampleIssues = validateBuildPlan(legoLlmSamplePlan);
+  const minecraftLlmSampleIssues = validateBuildPlan(minecraftLlmSamplePlan);
   const clipBarPlan = {
     id: 'clip-bar-regression',
     title: 'Clip Bar Regression',
@@ -840,6 +897,19 @@ await writeFile(entry, `
       : '',
     llmPrompt.includes('minecraft-basic-block')
       ? 'Default LLM prompt should not include Minecraft parts until generation supports pack selection'
+      : '',
+    !minecraftLlmPrompt.includes('minecraft-grass-block') ||
+      minecraftLlmPrompt.includes('brick-1x1') ||
+      !minecraftLlmPrompt.includes('0.5 increments') ||
+      !minecraftLlmPrompt.includes('Small Oak Tree') ||
+      !minecraftLlmPrompt.includes('plant: must sit on a solid cube top')
+      ? 'Minecraft LLM prompt must use the voxel catalog, half-block height rules, and the oak tree example'
+      : '',
+    getBlockingBuildPlanIssues(legoLlmSampleIssues).length > 0
+      ? 'Fixed LEGO LLM sample must stay structurally valid: ' + summarizeBuildPlanIssues(legoLlmSampleIssues)
+      : '',
+    getBlockingBuildPlanIssues(minecraftLlmSampleIssues).length > 0
+      ? 'Fixed Minecraft LLM sample must stay structurally valid: ' + summarizeBuildPlanIssues(minecraftLlmSampleIssues)
       : '',
     !limitedInventoryPrompt.includes('brick-2x4:') || !limitedInventoryPrompt.match(/brick-2x4:[^\\n]*inventory 0/)
       ? 'LLM prompt must respect per-part inventory overrides'
