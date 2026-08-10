@@ -732,6 +732,7 @@ function App() {
     active: world.entities.length > 0 && !world.paused && !placementSession && !worldEntityPlacement,
     enableAi: llmConfigComplete,
     readPlan: () => planRef.current,
+    readWorld: () => worldRef.current,
     readDirectorPlayback: () => ({
       active: Boolean(tavernDirectorPlaybackRef.current),
       simulationStarted: Boolean(tavernDirectorPlaybackRef.current?.simulationStarted),
