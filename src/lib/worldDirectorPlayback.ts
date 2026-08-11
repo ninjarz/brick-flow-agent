@@ -90,8 +90,35 @@ export const getWorldDirectorPlaybackEntityIds = (event: WorldDirectorEvent) => 
 }
 
 export const shouldStartWorldDirectorPlayback = (event: WorldDirectorEvent) => (
-  event.type === 'dialogue' || event.type === 'command'
+  event.type === 'dialogue' || (event.type === 'command' && event.command.type !== 'stop')
 )
+
+export const isWorldDirectorCommandConfirmed = (
+  world: WorldState,
+  event: Extract<WorldDirectorEvent, { type: 'command' }>,
+  startedAtSeconds: number,
+) => {
+  const command = event.command
+  const targetId = 'target' in command ? command.target.id : undefined
+  const matchingEvent = (type: WorldState['events'][number]['type']) => world.events.some((candidate) => (
+    candidate.timeSeconds >= startedAtSeconds
+    && candidate.type === type
+    && candidate.actorId === event.entityId
+    && (!targetId || candidate.targetId === targetId)
+  ))
+  if (command.type === 'stop' || command.type === 'wander') return true
+  if (command.type === 'move') return matchingEvent('command-complete')
+  if (command.type === 'interact') return matchingEvent('interaction')
+  if (command.type === 'revive') return matchingEvent('revive')
+  if (command.type === 'attack') {
+    if (command.target.kind === 'entity') {
+      const attackedEntityId = command.target.id
+      return (world.entities.find((entity) => entity.id === attackedEntityId)?.health ?? 1) <= 0
+    }
+    return matchingEvent(command.target.kind === 'brick' ? 'brick-hit' : 'structure-hit')
+  }
+  return true
+}
 
 export const applyWorldDirectorPlaybackEvent = ({
   world,
@@ -272,6 +299,7 @@ export const waitForWorldDirectorEventPlayback = async ({
   entityIds,
   signal,
   timeoutMs,
+  commandStartedAtSeconds = getWorld().elapsedSeconds,
   finishDialogueWhenVisible,
   onPhaseChange,
   pollIntervalMs = 100,
@@ -283,6 +311,7 @@ export const waitForWorldDirectorEventPlayback = async ({
   entityIds: ReadonlySet<string>
   signal: AbortSignal
   timeoutMs: number
+  commandStartedAtSeconds?: number
   finishDialogueWhenVisible?: () => boolean
   onPhaseChange?: (phase: WorldDirectorEventPlaybackPhase) => void
   pollIntervalMs?: number
@@ -312,7 +341,9 @@ export const waitForWorldDirectorEventPlayback = async ({
     const world = getWorld()
     if (isWorldDirectorPlaybackSettled(world, entityIds)) {
       onPhaseChange?.('completed')
-      return 'played'
+      return event.type === 'command' && !isWorldDirectorCommandConfirmed(world, event, commandStartedAtSeconds)
+        ? 'missed'
+        : 'played'
     }
     if (!phaseReported) {
       phaseReported = true
@@ -373,6 +404,7 @@ export const executeWorldDirectorPlaybackEvent = async ({
     entityIds: new Set(applied.entityIds),
     signal,
     timeoutMs,
+    commandStartedAtSeconds: currentWorld.elapsedSeconds,
     finishDialogueWhenVisible,
     onPhaseChange,
     pollIntervalMs,

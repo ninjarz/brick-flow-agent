@@ -11,6 +11,7 @@ import {
   getWorldDirectorPlaybackOutcomeDetail,
   getWorldDirectorDialoguePlaybackPhase,
   isWorldDirectorDialogueVisible,
+  isWorldDirectorCommandConfirmed,
   isWorldDirectorPlaybackSettled,
   isWorldDirectorPlaybackSettledIgnoringSpeech,
   prepareWorldForDirectorPlayback,
@@ -47,6 +48,11 @@ describe('world director playback', () => {
     })).toBe(true)
     expect(shouldStartWorldDirectorPlayback({ type: 'narration', text: '风吹过酒馆。' })).toBe(false)
     expect(shouldStartWorldDirectorPlayback({ type: 'end', summary: '思考结束。' })).toBe(false)
+    expect(shouldStartWorldDirectorPlayback({
+      type: 'command',
+      entityId: 'speaker',
+      command: { type: 'stop' },
+    })).toBe(false)
   })
 
   it('applies accepted events through one playback transition and starts time only when needed', () => {
@@ -184,6 +190,13 @@ describe('world director playback', () => {
       sleep: async () => {
         current = {
           ...current,
+          events: [...current.events, {
+            id: 'move-complete',
+            timeSeconds: current.elapsedSeconds,
+            type: 'command-complete',
+            actorId: 'roland',
+            targetId: 'erin',
+          }],
           entities: current.entities.map((entity) => entity.id === 'roland' ? {
             ...entity,
             activeCommand: undefined,
@@ -200,6 +213,43 @@ describe('world director playback', () => {
     expect(result.simulationStarted).toBe(true)
     expect(current.paused).toBe(false)
     expect(phases).toEqual(['acting', 'completed'])
+  })
+
+  it('does not confirm a finite action merely because its command disappeared', () => {
+    const world = createWorld()
+    const move = {
+      type: 'command' as const,
+      entityId: 'roland',
+      command: { type: 'move' as const, target: { kind: 'entity' as const, id: 'erin' } },
+    }
+    expect(isWorldDirectorCommandConfirmed(world, move, world.elapsedSeconds)).toBe(false)
+    expect(isWorldDirectorCommandConfirmed({
+      ...world,
+      events: [{
+        id: 'complete',
+        timeSeconds: world.elapsedSeconds + 0.1,
+        type: 'command-complete',
+        actorId: 'roland',
+        targetId: 'erin',
+      }],
+    }, move, world.elapsedSeconds)).toBe(true)
+  })
+
+  it('reports a vanished unconfirmed command as missed so later narration can be blocked', async () => {
+    const world = createWorld()
+    const outcome = await waitForWorldDirectorEventPlayback({
+      getWorld: () => world,
+      event: {
+        type: 'command',
+        entityId: 'roland',
+        command: { type: 'move', target: { kind: 'entity', id: 'erin' } },
+      },
+      entityIds: new Set(['roland']),
+      signal: new AbortController().signal,
+      timeoutMs: 1_000,
+      commandStartedAtSeconds: world.elapsedSeconds,
+    })
+    expect(outcome).toBe('missed')
   })
 
   it('reports an interrupted finite command as a blocking playback outcome', async () => {

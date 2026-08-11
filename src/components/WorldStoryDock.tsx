@@ -179,6 +179,8 @@ const FeedBlock = ({
       ? (locale === 'zh-CN' ? '执行中' : 'acting')
       : block.detail === 'PLAYED'
         ? (locale === 'zh-CN' ? '已完成' : 'completed')
+        : block.detail === 'PLAYBACK_MISSED'
+          ? (locale === 'zh-CN' ? '未完成' : 'not completed')
         : block.detail === 'PLAYBACK_TIMEOUT'
           ? (locale === 'zh-CN' ? '执行超时' : 'timed out')
           : block.detail === 'PLAYBACK_PAUSED'

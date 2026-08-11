@@ -250,6 +250,8 @@ Rules:
 - Every dialogue event must identify who is listening. A dialogue is itself a completed conversation fact; do not also emit an interact command for the same exchange.
 - Dialogue should come before a command that interrupts the speaker.
 - Commands start actions; never claim that movement, attacks, revival, or interaction already succeeded.
+- Put any narration that depends on an action after its command. The runtime may suppress that narration when the command cannot be confirmed.
+- Narration before a command may describe only atmosphere and already supplied world facts, never the command's result.
 - Relationship delta must be between -10 and 10 and grounded in dialogue or an existing event.
 - Never return health, damage, faction, visibility, coordinates, transforms, new entities, or new object IDs.
 - Use at most 3 commands, at most 3 dialogue lines, and finish with exactly one end event.`
