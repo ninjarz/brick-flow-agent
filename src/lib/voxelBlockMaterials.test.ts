@@ -65,5 +65,17 @@ describe('voxel block materials', () => {
     expect(getDefinition('minecraft-tall-grass').connectors.map((connector) => connector.id)).toEqual([
       'minecraft-tall-grass-studsocket-bottom',
     ])
+    expect(getDefinition('minecraft-oak-door').footprint).toEqual({
+      widthStuds: 1,
+      depthStuds: 0.1875,
+      heightStuds: 2,
+    })
+    expect(getDefinition('minecraft-glass-pane').footprint.depthStuds).toBe(0.125)
+    expect(getDefinition('minecraft-lantern').footprint).toEqual({
+      widthStuds: 0.5,
+      depthStuds: 0.5,
+      heightStuds: 0.75,
+    })
+    expect(solidCells('minecraft-iron-bars')).toHaveLength(9)
   })
 })

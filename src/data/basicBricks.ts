@@ -630,6 +630,8 @@ const makeMinecraftBlockDefinition = (
   catalogCategory: 'terrain' | 'stone' | 'wood' | 'ore' | 'building' | 'functional',
   voxelVisual: VoxelBlockVisual,
   options: {
+    widthStuds?: number
+    depthStuds?: number
     heightStuds?: number
     connectorFaces?: Array<'top' | 'bottom' | 'right' | 'left' | 'back' | 'front'>
   } = {},
@@ -639,8 +641,18 @@ const makeMinecraftBlockDefinition = (
   partNumber: id,
   name,
   kind: 'block',
-  footprint: { widthStuds: 1, depthStuds: 1, heightStuds: options.heightStuds ?? 1 },
-  connectors: makeStudSocketFaceConnectors(id, 1, 1, options.heightStuds ?? 1, options.connectorFaces),
+  footprint: {
+    widthStuds: options.widthStuds ?? 1,
+    depthStuds: options.depthStuds ?? 1,
+    heightStuds: options.heightStuds ?? 1,
+  },
+  connectors: makeStudSocketFaceConnectors(
+    id,
+    options.widthStuds ?? 1,
+    options.depthStuds ?? 1,
+    options.heightStuds ?? 1,
+    options.connectorFaces,
+  ),
   colors: [color],
   inventory: 64,
   catalogCategory,
@@ -678,6 +690,18 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
   makeMinecraftBlockDefinition('minecraft-yellow-flower', 'Yellow Flower', 'yellow', 'terrain', {
     shape: 'cross', textures: { all: 'yellow-flower' }, renderLayer: 'cutout',
   }, { heightStuds: 0.9, connectorFaces: ['bottom'] }),
+  makeMinecraftBlockDefinition('minecraft-blue-flower', 'Blue Flower', 'blue', 'terrain', {
+    shape: 'cross', textures: { all: 'blue-flower' }, renderLayer: 'cutout',
+  }, { heightStuds: 0.9, connectorFaces: ['bottom'] }),
+  makeMinecraftBlockDefinition('minecraft-gravel-block', 'Gravel Block', 'gray', 'terrain', {
+    shape: 'cube', textures: { all: 'gravel' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-mud-block', 'Mud Block', 'brown', 'terrain', {
+    shape: 'cube', textures: { all: 'mud' }, renderLayer: 'opaque',
+  }),
+  makeMinecraftBlockDefinition('minecraft-cactus', 'Cactus', 'green', 'terrain', {
+    shape: 'cube', textures: { all: 'cactus-side', top: 'cactus-top', bottom: 'cactus-top' }, renderLayer: 'opaque',
+  }, { widthStuds: 0.875, depthStuds: 0.875, connectorFaces: ['bottom', 'top'] }),
   makeMinecraftBlockDefinition('minecraft-stone-block', 'Stone Block', 'gray', 'stone', {
     shape: 'cube', textures: { all: 'stone' }, renderLayer: 'opaque',
   }),
@@ -777,6 +801,18 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
   makeMinecraftBlockDefinition('minecraft-furnace', 'Furnace', 'gray', 'building', {
     shape: 'cube', textures: { all: 'furnace-side', top: 'stone', bottom: 'stone' }, renderLayer: 'opaque',
   }),
+  makeMinecraftBlockDefinition('minecraft-oak-door', 'Oak Door', 'brown', 'building', {
+    shape: 'cube', textures: { all: 'oak-door', top: 'oak-planks', bottom: 'oak-planks' }, renderLayer: 'cutout',
+  }, { depthStuds: 0.1875, heightStuds: 2, connectorFaces: ['bottom'] }),
+  makeMinecraftBlockDefinition('minecraft-glass-pane', 'Glass Pane', 'white', 'building', {
+    shape: 'cube', textures: { all: 'glass' }, renderLayer: 'translucent',
+  }, { depthStuds: 0.125, connectorFaces: ['bottom', 'top'] }),
+  makeMinecraftBlockDefinition('minecraft-chest', 'Chest', 'brown', 'building', {
+    shape: 'cube', textures: { all: 'chest-side', top: 'chest-top', bottom: 'oak-planks' }, renderLayer: 'opaque',
+  }, { widthStuds: 0.875, depthStuds: 0.875, heightStuds: 0.75 }),
+  makeMinecraftBlockDefinition('minecraft-hay-bale', 'Hay Bale', 'yellow', 'building', {
+    shape: 'cube', textures: { all: 'hay-side', top: 'hay-top', bottom: 'hay-top' }, renderLayer: 'opaque',
+  }),
   makeMinecraftBlockDefinition('minecraft-water-block', 'Water Block', 'cyan', 'functional', {
     shape: 'cube', textures: { all: 'water' }, renderLayer: 'translucent',
   }),
@@ -788,6 +824,12 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
   }),
   makeMinecraftBlockDefinition('minecraft-glow-lamp', 'Glow Lamp', 'yellow', 'functional', {
     shape: 'cube', textures: { all: 'glow-lamp' }, renderLayer: 'emissive', emissiveIntensity: 0.42,
+  }),
+  makeMinecraftBlockDefinition('minecraft-lantern', 'Lantern', 'yellow', 'functional', {
+    shape: 'cube', textures: { all: 'lantern' }, renderLayer: 'emissive', emissiveIntensity: 0.52,
+  }, { widthStuds: 0.5, depthStuds: 0.5, heightStuds: 0.75, connectorFaces: ['bottom', 'top'] }),
+  makeMinecraftBlockDefinition('minecraft-iron-bars', 'Iron Bars', 'gray', 'functional', {
+    shape: 'fence', textures: { all: 'iron-bars' }, renderLayer: 'cutout',
   }),
   {
     id: 'minecraft-basic-block',

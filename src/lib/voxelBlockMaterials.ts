@@ -54,6 +54,8 @@ const speckleRecipes: Record<string, SpeckleRecipe> = {
   snow: { base: '#e8f2f1', accent: '#ffffff', salt: 47, range: 0.1 },
   clay: { base: '#8b9aa3', accent: '#b2bec4', salt: 53, range: 0.15 },
   moss: { base: '#4d7330', accent: '#779443', salt: 59, range: 0.25 },
+  gravel: { base: '#777471', accent: '#a49d96', salt: 60, range: 0.3 },
+  mud: { base: '#4b3b35', accent: '#6b554a', salt: 62, range: 0.18 },
   deepslate: { base: '#363b40', accent: '#5a6065', salt: 61, range: 0.22 },
   obsidian: { base: '#17152a', accent: '#433160', salt: 67, range: 0.17 },
   'sandstone-top': { base: '#d3bd78', accent: '#f0dda1', salt: 71, range: 0.13 },
@@ -157,14 +159,18 @@ const texturePixels = (textureId: string) => {
         pixel = leftBlade || centerBlade || rightBlade
           ? speckle(x, y, hexToPixel('#4f8738'), 138, 0.18)
           : hexToPixel('#000000', 0)
-      } else if (textureId === 'red-flower' || textureId === 'yellow-flower') {
+      } else if (textureId === 'red-flower' || textureId === 'yellow-flower' || textureId === 'blue-flower') {
         const stem = x >= 7 && x <= 8 && y >= 6
         const leaf = (y >= 10 && y <= 12) && (x >= 4 && x <= 11)
         const flowerCenterX = 7.5
         const flowerCenterY = 4
         const petalDistance = Math.abs(x - flowerCenterX) + Math.abs(y - flowerCenterY)
         const petal = petalDistance <= 4 && !(Math.abs(x - flowerCenterX) > 2 && Math.abs(y - flowerCenterY) > 1)
-        const bloomColor = textureId === 'red-flower' ? '#d84b43' : '#e8c73f'
+        const bloomColor = textureId === 'red-flower'
+          ? '#d84b43'
+          : textureId === 'blue-flower'
+            ? '#557bd8'
+            : '#e8c73f'
         pixel = petal
           ? hexToPixel(bloomColor)
           : stem || leaf
@@ -217,6 +223,28 @@ const texturePixels = (textureId: string) => {
         const opening = x >= 4 && x <= 11 && y >= 7 && y <= 13
         const rim = (x === 3 || x === 12) && y >= 6 || (y === 6 || y === 14) && x >= 3 && x <= 12
         pixel = opening ? hexToPixel('#23282b') : rim ? hexToPixel('#b3b7b5') : speckle(x, y, hexToPixel('#737a7d'), 173, 0.18)
+      } else if (textureId === 'cactus-side' || textureId === 'cactus-top') {
+        const top = textureId === 'cactus-top'
+        const ridge = top ? x === 7 || y === 7 : x % 5 === 0
+        const thorn = (x * 7 + y * 11) % 37 === 0
+        pixel = thorn ? hexToPixel('#d5e9a1') : ridge ? hexToPixel('#2e6f36') : hexToPixel('#4f914a')
+      } else if (textureId === 'oak-door') {
+        const frame = x < 2 || x > 13 || y < 2 || y > 13 || x === 7 || y === 7
+        const window = y >= 3 && y <= 6 && x >= 3 && x <= 12
+        pixel = window ? hexToPixel('#6e99a0', 110) : frame ? hexToPixel('#694425') : speckle(x, y, hexToPixel('#a87842'), 179, 0.1)
+      } else if (textureId === 'chest-side' || textureId === 'chest-top') {
+        const seam = y === 7 || x < 1 || x > 14 || y < 1 || y > 14
+        const latch = textureId === 'chest-side' && x >= 7 && x <= 8 && y >= 6 && y <= 9
+        pixel = latch ? hexToPixel('#d5bc67') : seam ? hexToPixel('#4e321d') : speckle(x, y, hexToPixel('#a56c32'), 181, 0.12)
+      } else if (textureId === 'hay-side' || textureId === 'hay-top') {
+        const band = textureId === 'hay-side' ? x === 3 || x === 12 : Math.max(Math.abs(x - 7.5), Math.abs(y - 7.5)) % 4 < 1
+        pixel = band ? hexToPixel('#9a7620') : speckle(x, y, hexToPixel('#d7b33d'), 191, 0.16)
+      } else if (textureId === 'lantern') {
+        const frame = x < 3 || x > 12 || y < 2 || y > 13 || x === 7 || x === 8
+        pixel = frame ? hexToPixel('#4e4f49') : hexToPixel((x + y) % 3 === 0 ? '#fff2a2' : '#eabf4d')
+      } else if (textureId === 'iron-bars') {
+        const bar = x === 3 || x === 4 || x === 11 || x === 12 || y === 7 || y === 8
+        pixel = bar ? hexToPixel('#9aa2a4') : hexToPixel('#000000', 0)
       } else if (textureId === 'glow-lamp') {
         const frame = x < 2 || y < 2 || x > 13 || y > 13 || x === 7 || y === 7
         pixel = frame ? hexToPixel('#745226') : hexToPixel((x + y) % 3 === 0 ? '#ffe37b' : '#dba93e')
