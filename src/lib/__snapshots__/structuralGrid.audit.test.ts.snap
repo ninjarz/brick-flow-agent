@@ -25,6 +25,13 @@ exports[`structural voxel audit > preserves every reviewed non-rectangular part 
   },
   {
     "compactSolidBoxCount": 5,
+    "fingerprint": "99e665c8a02f",
+    "id": "minecraft-iron-bars",
+    "occupiedVoxelCount": 25,
+    "partNumber": "minecraft-iron-bars",
+  },
+  {
+    "compactSolidBoxCount": 5,
     "fingerprint": "bf5f9cc4782f",
     "id": "tile-eye-1x1",
     "occupiedVoxelCount": 41,
