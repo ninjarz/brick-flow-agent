@@ -87,6 +87,8 @@ npm run verify:release       # run the complete release gate
 npm run generate:obj         # rebuild OBJ-derived default assets
 ```
 
+The profile fixes repeatable workloads for validation and spatial indexing at 100/500/1,500 voxel blocks, plus 100 simulation steps at 10/30/60 NPCs. CI records relative timings for trend review rather than unstable absolute millisecond gates on shared runners.
+
 ### OBJ to brick assets
 
 The OBJ generator reads `.ignored/objs/stanford-bunny.obj` and `.ignored/objs/armadillo.obj`, then writes `src/data/generatedObjAssets.ts`. Source meshes stay outside Git because of their size and licensing provenance.

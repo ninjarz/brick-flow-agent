@@ -160,20 +160,47 @@ await writeFile(entry, `
       getBrickRawOverlapScore(moved, largestAsset.plan.bricks, collisionIndex);
     }
   });
-  measure('simulate 48 NPCs for 100 world steps', () => {
+  const makeVoxelBenchmarkPlan = (brickCount: number) => ({
+    id: 'voxel-benchmark-' + brickCount,
+    title: 'Voxel benchmark ' + brickCount,
+    prompt: '',
+    source: 'template-local' as const,
+    bricks: Array.from({ length: brickCount }, (_, index) => makeBrick(
+      'minecraft-stone-block',
+      'gray',
+      index % 50,
+      Math.floor(index / 2500),
+      Math.floor(index / 50) % 50,
+    )),
+    steps: [],
+  });
+  for (const brickCount of [100, 500, 1500]) {
+    const benchmarkPlan = makeVoxelBenchmarkPlan(brickCount);
+    measure('validate ' + brickCount + ' voxel blocks', () => validateBuildPlan(benchmarkPlan));
+    measure('index ' + brickCount + ' voxel blocks', () => createPlanSpatialState(benchmarkPlan.bricks));
+  }
+
+  const simulateNpcScenario = (entityCount: number) => {
     const knight = worldEntityDefinitions.worldEntityDefinitionById.get('knight')!;
     let world = {
       ...worldEntity.createEmptyWorldState('performance-profile'),
-      entities: Array.from({ length: 48 }, (_, index) => worldEntity.createWorldEntity(knight, {
+      entities: Array.from({ length: entityCount }, (_, index) => worldEntity.createWorldEntity(knight, {
         id: 'profile-npc-' + index,
         factionId: index % 2 === 0 ? 'blue' : 'red',
-        transform: { x: (index % 8) * 2.5 - 8.75, z: Math.floor(index / 8) * 2.5 - 6.25 },
+        transform: {
+          x: (index % 10) * 2.5 - 11.25,
+          z: Math.floor(index / 10) * 2.5 - Math.floor(entityCount / 20) * 2.5,
+        },
       })),
     };
     for (let step = 0; step < 100; step += 1) {
       world = worldSimulation.stepWorldSimulation(world, largestAsset.plan.bricks, 0.1, largestAsset.plan.structures ?? []);
     }
-  });
+    return world;
+  };
+  for (const entityCount of [10, 30, 60]) {
+    measure('simulate ' + entityCount + ' NPCs for 100 world steps', () => simulateNpcScenario(entityCount));
+  }
   measure('part definitions scan x1000', () => {
     for (let index = 0; index < 1000; index += 1) {
       brickDefinitions.filter((brick) => brick.name.toLowerCase().includes('slope'));

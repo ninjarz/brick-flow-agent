@@ -82,6 +82,8 @@ npm run verify:release       # 执行完整发布验收
 npm run generate:obj         # 重新生成 OBJ 默认素材
 ```
 
+性能分析固定覆盖 100/500/1500 个体素块的校验与空间索引，以及 10/30/60 个 NPC 的 100 步模拟。CI 记录相对耗时用于观察趋势，不使用受共享机器波动影响的绝对毫秒门槛。
+
 ### OBJ 转积木素材
 
 OBJ 生成器读取 `.ignored/objs/stanford-bunny.obj` 和 `.ignored/objs/armadillo.obj`，并写入 `src/data/generatedObjAssets.ts`。源网格因为体积和授权来源不进入 Git。
