@@ -4,7 +4,13 @@ import type { WorldState } from '../types/world'
 import { advanceWorldFixedStepClock, createWorldFixedStepClock } from '../lib/worldClock'
 import { worldSimulationStepSeconds } from '../lib/worldSimulation'
 import { advanceWorldSimulationSteps } from '../lib/worldSimulationRuntime'
-import type { WorldSimulationWorkerRequest, WorldSimulationWorkerResponse } from '../workers/worldSimulationWorker'
+import {
+  appendWorldSimulationBacklog,
+  isExpectedWorldSimulationWorkerResponse,
+  worldSimulationWorkerProtocolVersion,
+  type WorldSimulationWorkerRequest,
+  type WorldSimulationWorkerResponse,
+} from '../lib/worldSimulationWorkerProtocol'
 
 type WorldSimulationLoopOptions = {
   active: boolean
@@ -43,16 +49,23 @@ export const useWorldSimulationLoop = ({
     let clock = createWorldFixedStepClock(performance.now())
     let pendingStepCount = 0
     let inFlight = false
+    let inFlightRequestId = 0
+    let inFlightStepCount = 0
+    let nextRequestId = 1
     let sentWorld: WorldState | undefined
     const canUseWorker = typeof Worker !== 'undefined'
-    const worker = canUseWorker
+    let worker = canUseWorker
       ? new Worker(new URL('../workers/worldSimulationWorker.ts', import.meta.url), { type: 'module' })
       : undefined
     const resetClock = () => {
       clock = createWorldFixedStepClock(performance.now())
     }
+    const handleVisibilityChange = () => {
+      pendingStepCount = 0
+      resetClock()
+    }
     const scheduleWorldStep = () => {
-      timeoutId = window.setTimeout(animateWorld, worldSimulationStepSeconds * 1_000)
+      timeoutId = window.setTimeout(animateWorld, document.hidden ? 500 : worldSimulationStepSeconds * 1_000)
     }
     const readOptions = () => {
       const source = sourcesRef.current
@@ -65,23 +78,41 @@ export const useWorldSimulationLoop = ({
       }
     }
     const animateWorld = () => {
+      if (document.hidden) {
+        pendingStepCount = 0
+        resetClock()
+        scheduleWorldStep()
+        return
+      }
       const now = performance.now()
       const advanced = advanceWorldFixedStepClock(clock, now, worldSimulationStepSeconds)
       clock = advanced.clock
-      pendingStepCount += advanced.stepCount
+      pendingStepCount = appendWorldSimulationBacklog(pendingStepCount, advanced.stepCount)
       if (pendingStepCount > 0 && !inFlight) {
         const source = sourcesRef.current
         const stepCount = pendingStepCount
         pendingStepCount = 0
         if (worker) {
           inFlight = true
+          inFlightRequestId = nextRequestId
+          nextRequestId += 1
+          inFlightStepCount = stepCount
           sentWorld = source.readWorld()
-          worker.postMessage({
-            world: sentWorld,
-            plan: source.readPlan(),
-            stepCount,
-            options: readOptions(),
-          } satisfies WorldSimulationWorkerRequest)
+          try {
+            worker.postMessage({
+              protocolVersion: worldSimulationWorkerProtocolVersion,
+              requestId: inFlightRequestId,
+              world: sentWorld,
+              plan: source.readPlan(),
+              stepCount,
+              options: readOptions(),
+            } satisfies WorldSimulationWorkerRequest)
+          } catch {
+            inFlight = false
+            pendingStepCount = appendWorldSimulationBacklog(pendingStepCount, inFlightStepCount)
+            worker.terminate()
+            worker = undefined
+          }
         } else {
           setWorld((current) => advanceWorldSimulationSteps(current, source.readPlan(), stepCount, readOptions()))
         }
@@ -89,19 +120,33 @@ export const useWorldSimulationLoop = ({
       scheduleWorldStep()
     }
     if (worker) {
+      const disableWorker = () => {
+        if (!worker) return
+        inFlight = false
+        pendingStepCount = appendWorldSimulationBacklog(pendingStepCount, inFlightStepCount)
+        worker.terminate()
+        worker = undefined
+      }
       worker.onmessage = (event: MessageEvent<WorldSimulationWorkerResponse>) => {
+        if (!sentWorld || !isExpectedWorldSimulationWorkerResponse(event.data, inFlightRequestId, sentWorld.id)) {
+          disableWorker()
+          return
+        }
         inFlight = false
         const nextWorld = event.data.world
-        setWorld((current) => (current === sentWorld ? nextWorld : current))
+        setWorld((current) => {
+          if (current === sentWorld) return nextWorld
+          pendingStepCount = appendWorldSimulationBacklog(pendingStepCount, inFlightStepCount)
+          return current
+        })
       }
-      worker.onerror = () => {
-        inFlight = false
-      }
+      worker.onerror = disableWorker
+      worker.onmessageerror = disableWorker
     }
-    document.addEventListener('visibilitychange', resetClock)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
     scheduleWorldStep()
     return () => {
-      document.removeEventListener('visibilitychange', resetClock)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.clearTimeout(timeoutId)
       worker?.terminate()
     }
