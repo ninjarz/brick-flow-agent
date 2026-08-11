@@ -36,6 +36,8 @@ type ControlPanelProps = {
   onExportLDraw: () => void
   onImportPlan: (file?: File) => void
   onOpenManual: () => void
+  catalogPack: CatalogPackPreference
+  onCatalogPackChange: (pack: CatalogPackPreference) => void
 }
 
 const getFootprintLabel = (widthStuds: number, depthStuds: number) =>
@@ -77,12 +79,13 @@ export const ControlPanel = ({
   onExportLDraw,
   onImportPlan,
   onOpenManual,
+  catalogPack: partPackFilter,
+  onCatalogPackChange,
 }: ControlPanelProps) => {
   const { locale, t } = useI18n()
   const [initialCatalogPreferences] = useState(loadCatalogPreferences)
   const [partQuery, setPartQuery] = useState(initialCatalogPreferences.query)
   const [partKindFilter, setPartKindFilter] = useState(initialCatalogPreferences.kind)
-  const [partPackFilter, setPartPackFilter] = useState<CatalogPackPreference>(initialCatalogPreferences.pack)
   const [visiblePartLimit, setVisiblePartLimit] = useState(initialVisiblePartCount)
   const [backgroundValidation, setBackgroundValidation] = useState<{
     plan: BuildPlan
@@ -269,7 +272,7 @@ export const ControlPanel = ({
             aria-label={t('control.partsPackSelect')}
             value={partPackFilter}
             onChange={(event) => {
-              setPartPackFilter(event.target.value as CatalogPackPreference)
+              onCatalogPackChange(event.target.value as CatalogPackPreference)
               setPartKindFilter('all')
             }}
           >

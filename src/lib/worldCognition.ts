@@ -236,7 +236,7 @@ export const rankWorldCognitionCandidates = (
       return { entityId: entity.id, score: Number(score.toFixed(3)), reasons }
     })
     .sort((left, right) => right.score - left.score || left.entityId.localeCompare(right.entityId))
-    .slice(0, Math.max(0, Math.min(8, Math.floor(limit))))
+    .slice(0, Math.max(0, Math.floor(limit)))
 }
 
 export const rankWorldSpeakers = (
@@ -271,5 +271,5 @@ export const rankWorldSpeakers = (
       }
     })
     .sort((left, right) => right.score - left.score || left.entityId.localeCompare(right.entityId))
-    .slice(0, Math.max(0, Math.min(6, Math.floor(limit))))
+    .slice(0, Math.max(0, Math.floor(limit)))
 }

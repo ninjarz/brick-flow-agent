@@ -12,17 +12,18 @@ const buildWorld = (entityIds: string[]) => ({
 
 describe('world cognition trace', () => {
   it('ranks every eligible candidate and marks only the top slice as selected', () => {
+    const candidateIds = Array.from({ length: 10 }, (_, index) => `e${index + 1}`)
     const world = {
-      ...buildWorld(['e1', 'e2', 'e3', 'e4', 'e5', 'e6']),
+      ...buildWorld(candidateIds),
       entities: [
-        ...buildWorld(['e1', 'e2', 'e3', 'e4', 'e5', 'e6']).entities,
+        ...buildWorld(candidateIds).entities,
         createWorldEntity(knightDefinition, { id: 'hero', name: '玩家', controller: 'player' }),
       ],
     }
     const entry = buildWorldCognitionTraceEntry(world, 4, 8_000)
-    expect(entry.candidates).toHaveLength(6)
+    expect(entry.candidates).toHaveLength(10)
     expect(entry.candidates.filter((candidate) => candidate.selected).map((candidate) => candidate.entityId))
-      .toEqual(['e1', 'e2', 'e3', 'e4'])
+      .toEqual(['e1', 'e10', 'e2', 'e3'])
     expect(entry.candidates.find((candidate) => candidate.entityId === 'hero')).toBeUndefined()
     expect(entry.candidates[0].name).toBe('角色e1')
     expect(entry.candidates[0].reasons).toContain('idle')

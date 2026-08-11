@@ -24,11 +24,12 @@ import { deriveWorldReflections, rankWorldCognitionCandidates, retrieveWorldClue
 import { buildWorldCognitionTraceEntry, createWorldCognitionTraceStore, type WorldCognitionTraceEntry } from '../lib/worldCognitionTrace'
 import type { TavernDirectorEntry, TavernDirectorStreamPreview } from '../lib/worldTavernDirector'
 import type { TavernActivityKind, TavernActivityResult } from '../lib/worldTavernActivities'
-import type { BrickStructure } from '../types/bricks'
+import type { BrickStructure, PlacedBrick } from '../types/bricks'
 import type { WorldDirectorTurn, WorldState } from '../types/world'
 
 type WorldStoryDockProps = {
   world: WorldState
+  bricks: PlacedBrick[]
   structures: BrickStructure[]
   llmConfigured: boolean
   isLlmTesting: boolean
@@ -279,6 +280,7 @@ const DirectorDebugPanel = ({
 
 export const WorldStoryDock = ({
   world,
+  bricks,
   structures,
   llmConfigured,
   isLlmTesting,
@@ -913,7 +915,7 @@ export const WorldStoryDock = ({
                     type="button"
                     className="action-button"
                     onClick={() => {
-                      const snapshot = createWorldAiSnapshot(world, [], structures)
+                      const snapshot = createWorldAiSnapshot(world, bricks, structures)
                       setSnapshotEstimate({
                         entities: snapshot.entities.length,
                         fullDetail: snapshot.entities.filter((entity) => entity.detail === 'full').length,

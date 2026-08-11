@@ -17,7 +17,7 @@ import { defaultFinishedAssets, hasIndexedDbFinishedAssets, isDefaultFinishedAss
 import { formatBuildManualHtml, formatBuildManualMarkdown, serializeBuildManual } from './lib/manualSerializer'
 import { getManualPageTabItems, getManualStepPage, manualStepPageSize } from './lib/manualPagination'
 import { countBricks, createBrickCollisionIndex, createPlanSpatialState, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickPlacementDiagnostics, getBrickRawOverlapScore, getConnectedBrickComponents, hasBrickCollision, isBrickAboveGround, makeBrick, repairBuildPlan, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
-import { loadCatalogPreferences } from './lib/catalogPreferences'
+import { loadCatalogPreferences, type CatalogPackPreference } from './lib/catalogPreferences'
 import { footprintToWorld, getBrickWorldFrame, normalizeHorizontalStud, normalizeQuarterTurns, normalizeVerticalQuarterTurns, normalizeYStud } from './lib/brickUnits'
 import { useI18n } from './lib/i18n'
 import type { ObjImportResult } from './lib/objImport'
@@ -203,6 +203,7 @@ function App() {
     () => hasPersistedLlmConnection(llmConfig),
   )
   const [inventoryOverrides, setInventoryOverrides] = useState(() => loadInventoryOverrides())
+  const [catalogPack, setCatalogPack] = useState<CatalogPackPreference>(() => loadCatalogPreferences().pack)
   const [isTestingLlmConfig, setIsTestingLlmConfig] = useState(false)
   const [llmConfigFeedback, setLlmConfigFeedback] = useState<{
     tone: 'error' | 'warning' | 'success'
@@ -304,11 +305,12 @@ function App() {
     if (!generationError) return
 
     const timeoutId = window.setTimeout(() => {
-      clearGenerationFeedback()
+      setGenerationError(undefined)
+      setGenerationFeedbackTone('error')
     }, generationFeedbackTone === 'error' ? 5200 : 4200)
 
     return () => window.clearTimeout(timeoutId)
-  }, [clearGenerationFeedback, generationError, generationFeedbackTone])
+  }, [generationError, generationFeedbackTone])
 
   const setPlan = useCallback((nextPlan: BuildPlan | ((current: BuildPlan) => BuildPlan)) => {
     const current = planRef.current
@@ -542,9 +544,9 @@ function App() {
       prompt: prompt.trim() || fallbackPrompt,
       imageName,
       inventoryOverrides,
-      pack: loadCatalogPreferences().pack === 'minecraft' ? 'minecraft' : 'lego',
+      pack: catalogPack === 'minecraft' ? 'minecraft' : 'lego',
     }),
-    [fallbackPrompt, imageName, inventoryOverrides, prompt],
+    [catalogPack, fallbackPrompt, imageName, inventoryOverrides, prompt],
   )
 
   const updateLlmConfig = (nextConfig: LlmConfig) => {
@@ -944,7 +946,7 @@ function App() {
       imageName,
       imageDataUrl: imagePreview,
       inventoryOverrides,
-      pack: loadCatalogPreferences().pack === 'minecraft' ? ('minecraft' as const) : ('lego' as const),
+      pack: catalogPack === 'minecraft' ? ('minecraft' as const) : ('lego' as const),
     }
 
     clearGenerationFeedback()
@@ -2918,6 +2920,7 @@ function App() {
             <Suspense fallback={null}>
               <WorldStoryDock
                 world={world}
+                bricks={plan.bricks}
                 structures={plan.structures ?? []}
                 llmConfigured={llmConfigComplete}
                 isLlmTesting={isTestingLlmConfig}
@@ -3008,12 +3011,26 @@ function App() {
         onExportLDraw={exportLDraw}
         onImportPlan={handleImportPlan}
         onOpenManual={() => openManual()}
+        catalogPack={catalogPack}
+        onCatalogPackChange={setCatalogPack}
       />
 
       {generationError && (
         <div className="toast-region" aria-live={generationFeedbackTone === 'error' ? 'assertive' : 'polite'}>
-          <div className={`feedback-toast ${generationFeedbackTone}`} role={generationFeedbackTone === 'error' ? 'alert' : 'status'}>
+          <div className={`feedback-toast ${generationFeedbackTone} ${generationManualOffer ? 'offer' : ''}`} role={generationFeedbackTone === 'error' ? 'alert' : 'status'}>
             <p>{generationError}</p>
+            {generationManualOffer && (
+              <button
+                className="action-button"
+                type="button"
+                onClick={() => {
+                  clearGenerationFeedback()
+                  openManual()
+                }}
+              >
+                {t('generation.openManual')}
+              </button>
+            )}
             <button
               className="icon-button"
               type="button"
