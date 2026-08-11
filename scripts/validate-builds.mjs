@@ -914,10 +914,10 @@ await writeFile(entry, `
       : '',
     !minecraftLlmPrompt.includes('minecraft-grass-block') ||
       minecraftLlmPrompt.includes('brick-1x1') ||
-      !minecraftLlmPrompt.includes('0.5 increments') ||
+      !minecraftLlmPrompt.includes('0.25 increments') ||
       !minecraftLlmPrompt.includes('Small Oak Tree') ||
       !minecraftLlmPrompt.includes('plant: must sit on a solid cube top')
-      ? 'Minecraft LLM prompt must use the voxel catalog, half-block height rules, and the oak tree example'
+      ? 'Minecraft LLM prompt must use the voxel catalog, quarter-block height rules, and the oak tree example'
       : '',
     getBlockingBuildPlanIssues(legoLlmSampleIssues).length > 0
       ? 'Fixed LEGO LLM sample must stay structurally valid: ' + summarizeBuildPlanIssues(legoLlmSampleIssues)

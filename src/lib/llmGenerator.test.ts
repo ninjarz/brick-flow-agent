@@ -274,7 +274,8 @@ describe('pack-aware build plan generation', () => {
     const voxelPrompt = buildLlmUserPrompt({ prompt: '一座小屋', pack: 'minecraft' })
     expect(voxelPrompt).toContain('voxel block build plans')
     expect(voxelPrompt).toContain('minecraft-oak-log')
-    expect(voxelPrompt).toContain('0.5 increments')
+    expect(voxelPrompt).toContain('0.25 increments')
+    expect(voxelPrompt).toContain('minecraft-oak-door: Oak Door, shape cube, size 1x0.1875x2 blocks')
     expect(voxelPrompt).toContain('Small Oak Tree')
     expect(voxelPrompt).not.toContain('brick-1x1')
 
@@ -293,7 +294,9 @@ describe('pack-aware build plan generation', () => {
             bricks: [
               { brickId: 'minecraft-grass-block', color: 'green', xStud: 0, yStud: 0, zStud: 0 },
               { brickId: 'minecraft-red-flower', color: 'red', xStud: 0, yStud: 1, zStud: 0 },
-              { brickId: 'minecraft-grass-block', color: 'green', xStud: 1, yStud: 0, zStud: 0 },
+              { brickId: 'minecraft-grass-block', color: 'green', xStud: 1.4, yStud: 0, zStud: 0 },
+              { brickId: 'brick-1x1', color: 'red', xStud: 2, yStud: 0, zStud: 0 },
+              { brickId: 'minecraft-oak-door', color: 'brown', xStud: 2.4, yStud: 0.12, zStud: 0 },
             ],
           }),
         },
@@ -308,10 +311,14 @@ describe('pack-aware build plan generation', () => {
       'minecraft-grass-block',
       'minecraft-red-flower',
       'minecraft-grass-block',
+      'minecraft-oak-door',
     ])
     const flower = plan.bricks[1]
     expect(flower.pose.yStud).toBe(1)
     expect(flower.pose.verticalQuarterTurns).toBe(0)
+    expect(plan.bricks.every((brick) => Number.isInteger(brick.pose.xStud) && Number.isInteger(brick.pose.zStud))).toBe(true)
+    expect(plan.bricks.every((brick) => Number.isInteger(brick.pose.yStud * 4))).toBe(true)
+    expect(plan.bricks.some((brick) => brick.brickId === 'brick-1x1')).toBe(false)
 
     const requestPayload = payloadAt(fetchMock, 0)
     const userMessage = (requestPayload.messages as Array<{ role: string; content: string }>)

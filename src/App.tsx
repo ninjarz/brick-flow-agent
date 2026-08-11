@@ -214,6 +214,7 @@ function App() {
   const [generationError, setGenerationError] = useState<string>()
   const [generationFeedbackTone, setGenerationFeedbackTone] = useState<'error' | 'warning'>('error')
   const [generationManualOffer, setGenerationManualOffer] = useState(false)
+  const [generationSummary, setGenerationSummary] = useState<string>()
   const [isConfigOpen, setIsConfigOpen] = useState(false)
   const [isPromptPreviewOpen, setIsPromptPreviewOpen] = useState(false)
   const [isAssetLibraryOpen, setIsAssetLibraryOpen] = useState(false)
@@ -289,6 +290,7 @@ function App() {
     setGenerationError(undefined)
     setGenerationFeedbackTone('error')
     setGenerationManualOffer(false)
+    setGenerationSummary(undefined)
   }, [])
 
   const setGenerationFailure = (message: string) => {
@@ -1010,6 +1012,11 @@ function App() {
 
       setPlan(result.plan)
       selectBrick('')
+      setGenerationSummary(t('generation.report', {
+        pack: t(`control.pack.${input.pack}`),
+        bricks: result.plan.bricks.length,
+        repairs: repairAttempts + (result.repairedLocally ? 1 : 0),
+      }))
       setGenerationManualOffer(true)
       if (repairAttempts > 0) {
         setGenerationWarning(t('error.generationRetried', { summary: firstFailureSummary, attempts: repairAttempts }))
@@ -3047,7 +3054,7 @@ function App() {
       {generationManualOffer && !generationError && (
         <div className="toast-region" aria-live="polite">
           <div className="feedback-toast success offer" role="status">
-            <p>{t('generation.manualOffer')}</p>
+            <p>{generationSummary ?? t('generation.manualOffer')}</p>
             <button
               className="action-button"
               type="button"

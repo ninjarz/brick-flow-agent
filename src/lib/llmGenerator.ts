@@ -172,14 +172,18 @@ const asInteger = (value: unknown, fallback = 0) => {
   return Number.isFinite(number) ? Math.round(number) : fallback
 }
 
-const asHorizontalStudGrid = (value: unknown, fallback = 0) => {
+const asPackHorizontalGrid = (value: unknown, pack: BrickPack, fallback = 0) => {
   const number = typeof value === 'number' ? value : Number(value)
-  return Number.isFinite(number) ? normalizeHorizontalStud(number) : fallback
+  if (!Number.isFinite(number)) return fallback
+  return pack === 'minecraft' ? Math.round(number) : normalizeHorizontalStud(number)
 }
 
-const asWorldStudGrid = (value: unknown, fallback = 0) => {
+const normalizeMinecraftYStud = (value: number) => Number((Math.round(value * 4) / 4).toFixed(2))
+
+const asPackYGrid = (value: unknown, pack: BrickPack, fallback = 0) => {
   const number = typeof value === 'number' ? value : Number(value)
-  return Number.isFinite(number) ? normalizeYStud(number) : fallback
+  if (!Number.isFinite(number)) return fallback
+  return pack === 'minecraft' ? normalizeMinecraftYStud(number) : normalizeYStud(number)
 }
 
 const asLegacyPlateGrid = (value: unknown, fallback = 0) => {
@@ -197,13 +201,13 @@ const clampRotation = (value: unknown) => {
   return (((rotation % 4) + 4) % 4) as 0 | 1 | 2 | 3
 }
 
-const normalizeBrickPose = (brick: PlacedBrick): PlacedBrick => ({
+const normalizeBrickPose = (brick: PlacedBrick, pack: BrickPack): PlacedBrick => ({
   ...brick,
   pose: {
     ...brick.pose,
-    xStud: normalizeHorizontalStud(brick.pose.xStud),
-    yStud: normalizeYStud(brick.pose.yStud),
-    zStud: normalizeHorizontalStud(brick.pose.zStud),
+    xStud: pack === 'minecraft' ? Math.round(brick.pose.xStud) : normalizeHorizontalStud(brick.pose.xStud),
+    yStud: pack === 'minecraft' ? normalizeMinecraftYStud(brick.pose.yStud) : normalizeYStud(brick.pose.yStud),
+    zStud: pack === 'minecraft' ? Math.round(brick.pose.zStud) : normalizeHorizontalStud(brick.pose.zStud),
     rotationQuarterTurns: clampRotation(brick.pose.rotationQuarterTurns),
     verticalQuarterTurns: clampRotation(brick.pose.verticalQuarterTurns ?? 0),
   },
@@ -222,7 +226,7 @@ const getInventorySummary = (pack: BrickPack = 'lego', inventoryOverrides?: Reco
     if (pack === 'minecraft') {
       const shape = brick.voxelVisual?.shape ?? 'cube'
       const supportNote = shape === 'cross' ? ', plant: must sit on a solid cube top' : ''
-      return `${brick.id}: ${brick.name}, shape ${shape}, size 1x1x${brick.footprint.heightStuds} blocks, colors ${brick.colors.join('/')}, inventory ${formatInventoryForPrompt(inventory)}${supportNote}`
+      return `${brick.id}: ${brick.name}, shape ${shape}, size ${brick.footprint.widthStuds}x${brick.footprint.depthStuds}x${brick.footprint.heightStuds} blocks, colors ${brick.colors.join('/')}, inventory ${formatInventoryForPrompt(inventory)}${supportNote}`
     }
     return `${brick.id}: ${brick.name}, footprint ${brick.footprint.widthStuds}x${brick.footprint.depthStuds}, height ${formatLegoHeightForPrompt(brick.footprint.heightStuds)} plates, colors ${brick.colors.join('/')}, inventory ${formatInventoryForPrompt(inventory)}`
   })
@@ -257,7 +261,7 @@ const formatMinecraftExample = () => JSON.stringify({
     { brickId: 'minecraft-oak-leaves', color: 'green', xStud: 0, yStud: 2, zStud: 1, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
     { brickId: 'minecraft-oak-leaves', color: 'green', xStud: 2, yStud: 2, zStud: 1, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
     { brickId: 'minecraft-oak-leaves', color: 'green', xStud: 1, yStud: 2, zStud: 0, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
-    { brickId: 'minecraft-oak-leaves', color: 'green', xStud: 1, yStud: 2, zStud: 2, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
+    { brickId: 'minecraft-oak-leaves', color: 'green', xStud: 1, yStud: 2, zStud: 1, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
     { brickId: 'minecraft-oak-leaves', color: 'green', xStud: 1, yStud: 3, zStud: 1, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
   ],
 }, null, 2)
@@ -265,7 +269,7 @@ const formatMinecraftExample = () => JSON.stringify({
 const minecraftRules = `Rules:
 - Use 1 to ${maxLlmBricks} blocks.
 - Output the title in English, even if the user request is not English.
-- Every block occupies a 1x1 stud footprint. xStud and zStud are whole studs; yStud is measured in blocks and must use 0.5 increments.
+- xStud and zStud are whole studs. Most blocks occupy 1x1, while doors, panes, lanterns, chests, and cacti use the exact listed size. yStud is measured in blocks and must use 0.25 increments.
 - yStud must be 0 or higher. A block resting on a full cube has yStud exactly 1 above the cube's yStud; a slab adds only 0.5.
 - rotationQuarterTurns orients stairs and fences and must be 0, 1, 2, or 3. Keep it 0 for plain cubes.
 - verticalQuarterTurns must always be 0 for this block set.
@@ -626,15 +630,16 @@ const nudgeToNearbyOpenPose = (brick: PlacedBrick, placed: PlacedBrick[]) => {
   return undefined
 }
 
-const lowerUntilSupported = (brick: PlacedBrick, placed: PlacedBrick[]) => {
+const lowerUntilSupported = (brick: PlacedBrick, placed: PlacedBrick[], pack: BrickPack) => {
   if (isBrickSupported(brick, placed)) return brick
 
-  for (let yStud = brick.pose.yStud - WORLD_EDIT_STEP_STUDS; yStud >= 0; yStud -= WORLD_EDIT_STEP_STUDS) {
+  const verticalStep = pack === 'minecraft' ? 0.25 : WORLD_EDIT_STEP_STUDS
+  for (let yStud = brick.pose.yStud - verticalStep; yStud >= 0; yStud -= verticalStep) {
     const candidate = {
       ...brick,
       pose: {
         ...brick.pose,
-        yStud: normalizeYStud(yStud),
+        yStud: pack === 'minecraft' ? normalizeMinecraftYStud(yStud) : normalizeYStud(yStud),
       },
     }
     if (!hasBrickCollision(candidate, placed) && isBrickSupported(candidate, placed)) return candidate
@@ -643,7 +648,12 @@ const lowerUntilSupported = (brick: PlacedBrick, placed: PlacedBrick[]) => {
   return undefined
 }
 
-const normalizeBricks = (rawBricks: unknown, locale: LlmLocale, inventoryOverrides?: Record<string, number>): PlacedBrick[] => {
+const normalizeBricks = (
+  rawBricks: unknown,
+  locale: LlmLocale,
+  inventoryOverrides: Record<string, number> | undefined,
+  pack: BrickPack,
+): PlacedBrick[] => {
   if (!Array.isArray(rawBricks)) throw new Error(llmText[locale].missingBricks)
 
   const placed: PlacedBrick[] = []
@@ -654,7 +664,7 @@ const normalizeBricks = (rawBricks: unknown, locale: LlmLocale, inventoryOverrid
     const brick = rawBrick as LlmBrick
     const brickId = asString(brick.brickId)
     const definition = brickById.get(brickId)
-    if (!definition) continue
+    if (!definition || definition.pack !== pack) continue
     const currentCount = placedCounts.get(brickId) ?? 0
     const inventory = inventoryOverrides?.[brickId] ?? definition.inventory
     if (Number.isFinite(inventory) && currentCount >= inventory) continue
@@ -665,11 +675,11 @@ const normalizeBricks = (rawBricks: unknown, locale: LlmLocale, inventoryOverrid
     const candidate = makeBrick(
       brickId,
       safeColor,
-      asHorizontalStudGrid(brick.xStud ?? pose.xStud, 0),
+      asPackHorizontalGrid(brick.xStud ?? pose.xStud, pack, 0),
       brick.yStud !== undefined || pose.yStud !== undefined
-        ? asWorldStudGrid(brick.yStud ?? pose.yStud, 0)
+        ? asPackYGrid(brick.yStud ?? pose.yStud, pack, 0)
         : asLegacyPlateGrid(brick.yPlate ?? pose.yPlate, 0),
-      asHorizontalStudGrid(brick.zStud ?? pose.zStud, 0),
+      asPackHorizontalGrid(brick.zStud ?? pose.zStud, pack, 0),
       clampRotation(brick.rotationQuarterTurns ?? pose.rotationQuarterTurns),
       clampRotation(brick.verticalQuarterTurns ?? pose.verticalQuarterTurns),
     )
@@ -677,19 +687,19 @@ const normalizeBricks = (rawBricks: unknown, locale: LlmLocale, inventoryOverrid
     const openBrick = nudgeToNearbyOpenPose(snapped, placed)
     if (!openBrick) continue
 
-    const supportedBrick = lowerUntilSupported(openBrick, placed)
+    const supportedBrick = lowerUntilSupported(openBrick, placed, pack)
     if (!supportedBrick) continue
 
     if (placed.length > 0 && supportedBrick.pose.yStud === 0) {
       const supportedOpenBrick = findSupportedOpenPose(supportedBrick, placed)
       if (supportedOpenBrick.pose.yStud > 0 && isBrickSupported(supportedOpenBrick, placed)) {
-        placed.push(normalizeBrickPose(supportedOpenBrick))
+        placed.push(normalizeBrickPose(supportedOpenBrick, pack))
         placedCounts.set(brickId, currentCount + 1)
       }
       continue
     }
 
-    placed.push(normalizeBrickPose(supportedBrick))
+    placed.push(normalizeBrickPose(supportedBrick, pack))
     placedCounts.set(brickId, currentCount + 1)
   }
 
@@ -1001,7 +1011,7 @@ export const generateLlmBuildPlan = async ({ prompt, imageName, imageDataUrl, in
   if (!content) throw new Error(formatEmptyContentError(payload, llmText[locale].responseContext, locale))
 
   const rawPlan = parseJsonContent(content, locale)
-  const bricks = normalizeBricks(rawPlan.bricks, locale, inventoryOverrides)
+  const bricks = normalizeBricks(rawPlan.bricks, locale, inventoryOverrides, pack ?? 'lego')
   const steps = normalizeSteps(bricks)
 
   return {
