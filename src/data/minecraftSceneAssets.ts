@@ -213,6 +213,63 @@ const makeSeasideLighthouse = () => {
   return scene.finish('minecraft-seaside-lighthouse-plan', '滨海灯塔', '一座带环形水面、木板码头与发光灯室的体素灯塔')
 }
 
+const makeVillageSquare = () => {
+  const scene = createSceneBuilder()
+  for (let x = 0; x < 9; x += 1) {
+    for (let z = 0; z < 7; z += 1) {
+      const square = z === 3 || (x >= 5 && z >= 1 && z <= 5)
+      const groundId = x === 0 && z === 5
+        ? 'minecraft-mud-block'
+        : x === 0 && z === 6
+          ? 'minecraft-sand-block'
+          : square
+            ? 'minecraft-gravel-block'
+            : 'minecraft-grass-block'
+      scene.brick(groundId, x, 0, z, 0, '广场地基')
+    }
+  }
+
+  for (let y = 1; y <= 2; y += 1) {
+    for (let x = 1; x <= 4; x += 1) {
+      if (!(x === 2 || (x === 3 && y === 1))) scene.brick('minecraft-oak-planks', x, y, 1, 0, '村舍墙体')
+      scene.brick('minecraft-oak-planks', x, y, 5, 0, '村舍墙体')
+    }
+    for (let z = 2; z <= 4; z += 1) {
+      if (!(z === 3 && y === 1)) scene.brick('minecraft-oak-log', 1, y, z, 0, '村舍墙体')
+      scene.brick('minecraft-oak-log', 4, y, z, 0, '村舍墙体')
+    }
+  }
+  scene.brick('minecraft-oak-door', 2, 1, 1, 0, '门窗与室内')
+  scene.brick('minecraft-glass-pane', 3, 1, 1, 0, '门窗与室内')
+  scene.brick('minecraft-glass-pane', 1, 1, 3, 1, '门窗与室内')
+  scene.brick('minecraft-chest', 3, 1, 4, 0, '门窗与室内')
+  scene.brick('minecraft-crafting-table', 2, 1, 4, 0, '门窗与室内')
+  for (let z = 1; z <= 5; z += 1) {
+    scene.brick('minecraft-oak-stairs', 1, 3, z, 1, '村舍屋顶')
+    scene.brick('minecraft-oak-stairs', 4, 3, z, 3, '村舍屋顶')
+  }
+  for (let z = 1; z <= 5; z += 1) {
+    scene.brick('minecraft-oak-slab', 2, 3, z, 0, '村舍屋顶')
+    scene.brick('minecraft-oak-slab', 3, 3, z, 0, '村舍屋顶')
+  }
+
+  for (const [x, z] of [[6, 1], [8, 1], [6, 5], [8, 5]] as const) {
+    scene.brick('minecraft-oak-fence', x, 1, z, 0, '市集与照明')
+    scene.brick('minecraft-lantern', x, 2, z, 0, '市集与照明')
+  }
+  scene.brick('minecraft-hay-bale', 6, 1, 2, 0, '市集与照明')
+  scene.brick('minecraft-hay-bale', 7, 1, 2, 0, '市集与照明')
+  scene.brick('minecraft-hay-bale', 6, 2, 2, 1, '市集与照明')
+  scene.brick('minecraft-chest', 8, 1, 4, 0, '市集与照明')
+  for (let z = 2; z <= 3; z += 1) scene.brick('minecraft-iron-bars', 8, 1, z, 0, '市集与照明')
+
+  scene.brick('minecraft-cactus', 0, 1, 6, 0, '自然细节')
+  scene.brick('minecraft-blue-flower', 5, 1, 6, 0, '自然细节')
+  scene.brick('minecraft-red-flower', 6, 1, 6, 0, '自然细节')
+  scene.brick('minecraft-yellow-flower', 7, 1, 6, 0, '自然细节')
+  return scene.finish('minecraft-village-square-plan', '村庄广场', '一座带村舍、市集、路灯与花圃的体素村庄广场')
+}
+
 export const minecraftSceneAssets: FinishedAsset[] = [
   {
     id: 'finished-minecraft-waystation',
@@ -245,5 +302,13 @@ export const minecraftSceneAssets: FinishedAsset[] = [
     category: 'Minecraft 场景',
     description: '红白条纹塔身、发光灯室、木板码头和环形水面的原创滨海灯塔。',
     plan: makeSeasideLighthouse(),
+  },
+  {
+    id: 'finished-minecraft-village-square',
+    i18nKey: 'asset.default.minecraftVillageSquare',
+    title: '村庄广场',
+    category: 'Minecraft 场景',
+    description: '带薄门窗、村舍、市集摊位、路灯、围栏和花圃的原创体素村庄广场。',
+    plan: makeVillageSquare(),
   },
 ]

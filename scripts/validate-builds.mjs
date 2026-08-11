@@ -202,6 +202,7 @@ await writeFile(entry, `
     'finished-minecraft-ore-cutaway',
     'finished-minecraft-forest-camp',
     'finished-minecraft-seaside-lighthouse',
+    'finished-minecraft-village-square',
     'finished-obj-stanford-bunny-s',
     'finished-obj-stanford-bunny-m',
     'finished-obj-stanford-bunny-l',
@@ -222,6 +223,7 @@ await writeFile(entry, `
     'finished-minecraft-ore-cutaway': 103,
     'finished-minecraft-forest-camp': 104,
     'finished-minecraft-seaside-lighthouse': 97,
+    'finished-minecraft-village-square': 130,
   };
   const retiredDefaultAssetIds = new Set([
     'finished-tiger',
