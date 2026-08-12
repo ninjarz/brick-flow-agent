@@ -7,6 +7,7 @@ import {
   getStairRotationFromViewDirection,
   isVoxelPlantSupported,
   synchronizeVoxelBlockStates,
+  toggleVoxelBlockInteraction,
 } from './voxelBlockState'
 
 const brick = (id: string, brickId: string, x: number, y: number, z: number): PlacedBrick => ({
@@ -17,6 +18,13 @@ const brick = (id: string, brickId: string, x: number, y: number, z: number): Pl
 })
 
 describe('voxel block state', () => {
+  it('persists interactive door, chest, and lantern state on the placed block', () => {
+    expect(toggleVoxelBlockInteraction(brick('door', 'minecraft-oak-door', 0, 0, 0)).voxelState?.open).toBe(true)
+    expect(toggleVoxelBlockInteraction(brick('chest', 'minecraft-chest', 0, 0, 0)).voxelState?.open).toBe(true)
+    const lantern = toggleVoxelBlockInteraction(brick('lantern', 'minecraft-lantern', 0, 0, 0))
+    expect(lantern.voxelState?.powered).toBe(false)
+    expect(toggleVoxelBlockInteraction(lantern).voxelState?.powered).toBe(true)
+  })
   it('connects fences only to eligible horizontal neighbors', () => {
     const source = brick('fence', 'minecraft-oak-fence', 0, 0, 0)
     const blocks = [

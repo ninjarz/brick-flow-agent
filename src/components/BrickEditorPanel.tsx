@@ -4,6 +4,7 @@ import { brickById } from '../data/basicBricks'
 import { WORLD_EDIT_STEP_STUDS, normalizeEditableStud, normalizeYStud } from '../lib/brickUnits'
 import { useI18n } from '../lib/i18n'
 import type { BrickColor, BrickStructure, BuildPlan, PlacedBrick } from '../types/bricks'
+import { getVoxelInteractionKind, toggleVoxelBlockInteraction } from '../lib/voxelBlockState'
 
 type BrickEditorPanelProps = {
   plan: BuildPlan
@@ -82,6 +83,7 @@ export const BrickEditorPanel = ({
   const selectedDefinition = brickById.get(selectedBrick.brickId)
   const selectedColors = selectedDefinition?.colors ?? colors
   const selectedStep = plan.steps.find((step) => step.brickIds.includes(selectedBrick.id))
+  const voxelInteractionKind = getVoxelInteractionKind(selectedBrick)
 
   const setPose = (axis: 'xStud' | 'yStud' | 'zStud', value: number) => {
     if (!Number.isFinite(value)) return
@@ -201,6 +203,20 @@ export const BrickEditorPanel = ({
           />
         ))}
       </div>
+
+      {voxelInteractionKind && selectedCount <= 1 && (
+        <section className="voxel-interaction-editor">
+          <header><strong>{t('voxelInteraction.title')}</strong><small>{t(`voxelInteraction.${voxelInteractionKind}`)}</small></header>
+          {voxelInteractionKind === 'chest' && (
+            <label>{t('voxelInteraction.containerName')}<input maxLength={48} value={selectedBrick.voxelState?.containerName ?? ''} onChange={(event) => onUpdateBrick({ ...selectedBrick, voxelState: { ...selectedBrick.voxelState, containerName: event.target.value } })} /></label>
+          )}
+          <button type="button" onClick={() => onUpdateBrick(toggleVoxelBlockInteraction(selectedBrick))}>
+            {voxelInteractionKind === 'lantern'
+              ? t(selectedBrick.voxelState?.powered === false ? 'voxelInteraction.turnOn' : 'voxelInteraction.turnOff')
+              : t(selectedBrick.voxelState?.open ? 'voxelInteraction.close' : 'voxelInteraction.open')}
+          </button>
+        </section>
+      )}
 
       <div className="button-row">
         {selectedCount <= 1 && (

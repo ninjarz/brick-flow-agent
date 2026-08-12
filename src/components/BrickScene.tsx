@@ -484,6 +484,17 @@ const VoxelBlockBody = ({
   showEdges: boolean
 }) => {
   const shape = definition.voxelVisual?.shape ?? 'cube'
+  if (brick.brickId === 'minecraft-oak-door' && brick.voxelState?.open) {
+    return <VoxelBlockMesh definition={definition} size={[depth, height, width]} position={[width / 2 - depth / 2, 0, width / 2 - depth / 2]} opacity={opacity} showEdges={showEdges} />
+  }
+  if (brick.brickId === 'minecraft-chest' && brick.voxelState?.open) {
+    return <group>
+      <VoxelBlockMesh definition={definition} size={[width, height * 0.72, depth]} position={[0, -height * 0.14, 0]} opacity={opacity} showEdges={showEdges} />
+      <group position={[0, height * 0.34, -depth * 0.42]} rotation={[-Math.PI / 3, 0, 0]}>
+        <VoxelBlockMesh definition={definition} size={[width, height * 0.24, depth]} position={[0, 0, depth * 0.42]} opacity={opacity} showEdges={showEdges} />
+      </group>
+    </group>
+  }
   if (shape === 'stairs') {
     return (
       <group>
@@ -550,14 +561,10 @@ const VoxelBlockBody = ({
     )
   }
 
-  return (
-    <VoxelBlockMesh
-      definition={definition}
-      size={[width, height, depth]}
-      opacity={opacity}
-      showEdges={showEdges}
-    />
-  )
+  return <group>
+    <VoxelBlockMesh definition={definition} size={[width, height, depth]} opacity={opacity} showEdges={showEdges} />
+    {brick.brickId === 'minecraft-lantern' && brick.voxelState?.powered !== false && <pointLight color="#ffd36a" intensity={1.25} distance={5} decay={2} />}
+  </group>
 }
 
 const createSlopeGeometry = (width: number, height: number, depth: number, rotationQuarterTurns: number) => {

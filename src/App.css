@@ -2189,6 +2189,11 @@ button.status-pill:hover {
   backdrop-filter: blur(10px);
 }
 
+.voxel-interaction-editor { display: grid; gap: 7px; padding: 10px; border: 1px solid #d7e3f3; border-radius: 10px; background: #f7fbff; }
+.voxel-interaction-editor header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.voxel-interaction-editor header small { color: #64748b; }
+.voxel-interaction-editor label { display: grid; gap: 4px; color: #475569; font-size: 11px; font-weight: 800; }
+
 .floating-window-title {
   display: flex;
   align-items: center;

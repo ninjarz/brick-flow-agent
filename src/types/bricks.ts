@@ -114,6 +114,9 @@ export type VoxelFenceConnections = {
 export type VoxelBlockState = {
   slabHalf?: 'bottom' | 'top'
   fenceConnections?: VoxelFenceConnections
+  open?: boolean
+  powered?: boolean
+  containerName?: string
 }
 
 export type PlacedBrick = {

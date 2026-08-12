@@ -81,6 +81,21 @@ export const synchronizePlanVoxelBlockStates = (plan: BuildPlan): BuildPlan => {
   return bricks === plan.bricks ? plan : { ...plan, bricks }
 }
 
+export const getVoxelInteractionKind = (brick: PlacedBrick) => brick.brickId === 'minecraft-oak-door'
+  ? 'door' as const
+  : brick.brickId === 'minecraft-chest'
+    ? 'chest' as const
+    : brick.brickId === 'minecraft-lantern'
+      ? 'lantern' as const
+      : undefined
+
+export const toggleVoxelBlockInteraction = (brick: PlacedBrick): PlacedBrick => {
+  const kind = getVoxelInteractionKind(brick)
+  if (kind === 'door' || kind === 'chest') return { ...brick, voxelState: { ...brick.voxelState, open: !brick.voxelState?.open } }
+  if (kind === 'lantern') return { ...brick, voxelState: { ...brick.voxelState, powered: brick.voxelState?.powered === false } }
+  return brick
+}
+
 export const getStairRotationFromViewDirection = (x: number, z: number): 0 | 1 | 2 | 3 => {
   if (Math.abs(x) > Math.abs(z)) return x >= 0 ? 1 : 3
   return z >= 0 ? 0 : 2
