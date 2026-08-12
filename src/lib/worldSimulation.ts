@@ -967,13 +967,18 @@ export const stepWorldSimulation = (
     },
   }))
   const narrativeLockedEntityIds = new Set(world.scenarios.flatMap((scenario) => {
-    if (!scenario.activeDialogue) return []
-    const activeStage = scenario.stages.find((stage) => stage.id === scenario.activeDialogue?.stageId)
-    const activeBranch = scenario.activeDialogue.branchId
-      ? activeStage?.branches?.find((branch) => branch.id === scenario.activeDialogue?.branchId)
+    const performance = scenario.activeDialogue ?? scenario.activeTimeline ?? scenario.pendingAi
+    if (!performance) return []
+    const activeStage = scenario.stages.find((stage) => stage.id === performance.stageId)
+    const activeBranch = 'branchId' in performance && performance.branchId
+      ? activeStage?.branches?.find((branch) => branch.id === performance.branchId)
       : undefined
     const dialogue = activeBranch?.dialogue ?? activeStage?.dialogue ?? []
-    return [...(scenario.castEntityIds ?? []), ...dialogue.map((line) => line.speakerId)]
+    return [
+      ...(scenario.castEntityIds ?? []),
+      ...dialogue.map((line) => line.speakerId),
+      ...(activeStage?.ai?.speakerIds ?? []),
+    ]
   }))
   const reservePartyMemberIds = new Set(world.parties.flatMap((party) => (
     party.members.flatMap((member) => member.status === 'reserve' ? [member.entityId] : [])

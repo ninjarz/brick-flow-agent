@@ -86,6 +86,26 @@ describe('WorldEntity simulation', () => {
     expect(world.entities[0].behaviorState).toBe('idle')
   })
 
+  it('locks cast behavior while an AI node is thinking or its timeline is executing', () => {
+    const definition = worldEntityDefinitionById.get('knight')!
+    for (const performance of ['ai', 'timeline'] as const) {
+      const actor = createWorldEntity(definition, { id: `actor-${performance}`, factionId: 'blue' })
+      const enemy = createWorldEntity(definition, { id: `enemy-${performance}`, factionId: 'red', transform: { x: 2, z: 0 } })
+      actor.activeCommand = { type: 'attack', target: { kind: 'entity', id: enemy.id } }
+      enemy.activeCommand = { type: 'attack', target: { kind: 'entity', id: actor.id } }
+      const scenario = {
+        id: `story-${performance}`, assetId: 'asset', title: 'Story', description: 'Story', castEntityIds: [actor.id], processedEventIds: [],
+        stages: [{ id: 'stage', title: 'Stage', description: 'Stage', status: 'active' as const, trigger: { eventType: 'interaction' as const }, ai: { mode: 'dialogue' as const, instruction: 'Talk', speakerIds: [actor.id] } }],
+        ...(performance === 'ai'
+          ? { pendingAi: { stageId: 'stage', eventId: 'event', requestedAtSeconds: 0 } }
+          : { activeTimeline: { stageId: 'stage', eventId: 'event', actionIndex: 0, nextActionAtSeconds: 2 } }),
+      }
+      const world = stepWorldSimulation({ ...createEmptyWorldState('plan'), entities: [actor, enemy], scenarios: [scenario] }, [], 0.1)
+      expect(world.entities.every((entity) => entity.activeCommand === undefined)).toBe(true)
+      expect(world.events.some((event) => event.type === 'attack')).toBe(false)
+    }
+  })
+
   it('locks branch speakers and prevents outsiders from interrupting active dialogue', () => {
     const knightDefinition = worldEntityDefinitionById.get('knight')!
     const actor = createWorldEntity(knightDefinition, { id: 'dialogue-actor', factionId: 'blue' })
