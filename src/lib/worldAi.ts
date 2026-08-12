@@ -28,6 +28,15 @@ export type WorldAiSnapshot = {
     entityId: string
     score: number
   }>
+  activeFlows: Array<{
+    id: string
+    title: string
+    nodeId: string
+    nodeTitle: string
+    nodeDescription: string
+    allowedSpeakerIds: string[]
+    aiMode?: 'dialogue' | 'choice'
+  }>
   entities: Array<{
     id: string
     name: string
@@ -242,6 +251,19 @@ export const createWorldAiSnapshot = (
   speakerCandidates: protagonist
     ? rankWorldSpeakers({ ...world, entities: visibleEntities }, protagonist, speakerContext)
     : [],
+  activeFlows: world.scenarios.flatMap((scenario) => {
+    if (scenario.enabled === false) return []
+    const stage = scenario.stages.find((candidate) => candidate.status === 'active')
+    return stage ? [{
+      id: scenario.id,
+      title: scenario.title,
+      nodeId: stage.id,
+      nodeTitle: stage.title,
+      nodeDescription: stage.description,
+      allowedSpeakerIds: stage.ai?.speakerIds ?? scenario.castEntityIds ?? [],
+      aiMode: stage.ai?.mode,
+    }] : []
+  }).slice(0, 8),
   entities: visibleEntities.map((entity) => {
     const definition = worldEntityDefinitionById.get(entity.definitionId)
     const detailed = detailedEntityIds.has(entity.id)

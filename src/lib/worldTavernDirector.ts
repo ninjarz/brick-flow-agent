@@ -202,6 +202,19 @@ The simulation owns facts and outcomes. You may express intent, dialogue, and hi
 Never invent IDs. Hidden objects are absent from the supplied snapshot and must not be revealed.
 Character knowledge is bounded: focusedMemories and knownClues belong only to that character. A rumor is not confirmed truth.`
 
+export type TavernDirectorPlayerIntent = 'talk' | 'move' | 'investigate' | 'attack' | 'support' | 'wait' | 'direct'
+
+export const classifyTavernDirectorPlayerIntent = (text: string): TavernDirectorPlayerIntent => {
+  const value = text.toLocaleLowerCase()
+  if (/(攻击|进攻|开战|战斗|击败|杀|attack|fight|defeat)/i.test(value)) return 'attack'
+  if (/(治疗|复活|保护|支援|守卫|heal|revive|protect|guard|support)/i.test(value)) return 'support'
+  if (/(调查|搜索|寻找|检查|看看|线索|investigate|search|inspect|clue)/i.test(value)) return 'investigate'
+  if (/(过去|前往|移动|跟随|离开|撤退|move|go to|follow|leave|retreat)/i.test(value)) return 'move'
+  if (/(等待|休息|暂停|观察|wait|rest|pause|observe)/i.test(value)) return 'wait'
+  if (/(说|聊|问|告诉|交谈|talk|ask|tell|speak)/i.test(value)) return 'talk'
+  return 'direct'
+}
+
 export const buildTavernDirectorPrompt = (
   snapshot: WorldAiSnapshot,
   playerText: string,
@@ -210,6 +223,9 @@ export const buildTavernDirectorPrompt = (
   protagonist?: { id: string; name: string },
 ) => `${locale === 'zh-CN' ? '玩家对酒馆世界下达了自然语言导演意图' : 'The player gave a natural-language direction to the tavern world'}:
 ${JSON.stringify(playerText)}
+
+Locally classified intent (routing hint only):
+${JSON.stringify(classifyTavernDirectorPlayerIntent(playerText))}
 
 Player identity:
 ${JSON.stringify(protagonist ?? snapshot.entities.find((entity) => entity.controller === 'player') ?? null)}
@@ -246,6 +262,8 @@ Rules:
 - A speaker may only assert facts found in their own focusedMemories, knownClues, or directly visible current events. Other characters' clues remain private until spoken or granted by a scenario.
 - reflections summarize repeated personal experience. Use them for attitude and priorities, never as evidence that a new event occurred.
 - Follow the player's requested intent instead of defaulting every turn to a conversation. Use dialogue only when somebody actually speaks; use commands for requested movement, combat, following, guarding, revival, or wandering.
+- Treat the locally classified intent as the primary event-shape hint. Investigate may use movement plus tentative narration; wait normally uses no movement; direct should emit the fewest justified events.
+- activeFlows are author-owned boundaries. You may perform their allowed characters, but must not skip, complete, reveal, or contradict an active node or invent a branch outcome.
 - Dialogue text must be the words the character actually says. Never use dialogue merely to announce an upcoming command such as "I will go talk to X".
 - Every dialogue event must identify who is listening. A dialogue is itself a completed conversation fact; do not also emit an interact command for the same exchange.
 - Dialogue should come before a command that interrupts the speaker.

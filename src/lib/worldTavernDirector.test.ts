@@ -3,11 +3,18 @@ import { createDefaultWorldScenarios } from '../data/worldScenarios'
 import type { WorldState } from '../types/world'
 import { createEmptyWorldState, createWorldEntity } from './worldEntity'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
-import { applyTavernDirectorEvent, buildTavernDirectorPrompt, createTavernDirectorStreamParser, parseTavernDirectorEvent, parseTavernDirectorStreamPreview } from './worldTavernDirector'
+import { applyTavernDirectorEvent, buildTavernDirectorPrompt, classifyTavernDirectorPlayerIntent, createTavernDirectorStreamParser, parseTavernDirectorEvent, parseTavernDirectorStreamPreview } from './worldTavernDirector'
 import { stepWorldSimulation } from './worldSimulation'
 import { createWorldAiSnapshot } from './worldAi'
 
 describe('tavern director protocol', () => {
+  it('routes player intent without turning every request into dialogue', () => {
+    expect(classifyTavernDirectorPlayerIntent('让罗兰撤退到酒馆')).toBe('move')
+    expect(classifyTavernDirectorPlayerIntent('调查断箭上的标记')).toBe('investigate')
+    expect(classifyTavernDirectorPlayerIntent('攻击黑岩使者')).toBe('attack')
+    expect(classifyTavernDirectorPlayerIntent('先观察一会儿')).toBe('wait')
+    expect(classifyTavernDirectorPlayerIntent('问艾琳北路怎么走')).toBe('talk')
+  })
   it('parses complete NDJSON events across arbitrary chunks', () => {
     const events: unknown[] = []
     const parser = createTavernDirectorStreamParser((event) => events.push(event))
