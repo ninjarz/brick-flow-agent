@@ -14,4 +14,9 @@ describe('scenario playtest', () => {
     void mutated
     expect(finishWorldScenarioPlaytest(playtest.session)).toEqual(world)
   })
+
+  it('refuses an unknown node without mutating the input world', () => {
+    expect(beginWorldScenarioPlaytest(world, scenario, 'missing')).toBeUndefined()
+    expect(world.scenarios[0]).toBe(scenario)
+  })
 })

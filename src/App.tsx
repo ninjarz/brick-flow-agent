@@ -48,7 +48,7 @@ import { advanceWorldScenarios, getActiveWorldScenarioStages, resolveWorldScenar
 import { beginWorldScenarioPlaytest } from './lib/worldScenarioPlaytest'
 import { clearWorkspaceDraft, hasIndexedDbWorkspaceDraft, loadWorkspaceDraft, loadWorkspaceDraftFromIndexedDb, saveWorkspaceDraft } from './lib/workspaceDraft'
 import { applyVoxelPlacementSurface, isVoxelPlantSupported, synchronizePlanVoxelBlockStates, synchronizeVoxelBlockStates, type VoxelPlacementSurface } from './lib/voxelBlockState'
-import { applyWorldObjectActionToBrick } from './lib/worldObjectInteraction'
+import { applyPendingWorldObjectEvents } from './lib/worldObjectEventBridge'
 import type { BrickStructure, BuildPlan, FinishedAsset, LlmConfig, PlacedBrick } from './types/bricks'
 import type { WorldDirectorTurn, WorldEntity, WorldEntityCommand, WorldEntityControllerKind, WorldState } from './types/world'
 import './App.css'
@@ -640,22 +640,7 @@ function App() {
 
   const appliedWorldObjectEventIdsRef = useRef(new Set<string>())
   useEffect(() => {
-    const pending = world.events.filter((event) => event.type === 'object-interaction' && !appliedWorldObjectEventIdsRef.current.has(event.id))
-    if (pending.length === 0) return
-    for (const event of pending) appliedWorldObjectEventIdsRef.current.add(event.id)
-    setPlan((current) => {
-      let changed = false
-      const actionByBrickId = new Map(pending.flatMap((event) => event.targetId && event.objectAction ? [[event.targetId, event.objectAction] as const] : []))
-      const bricks = current.bricks.map((brick) => {
-        const action = actionByBrickId.get(brick.id)
-        if (!action) return brick
-        const updated = applyWorldObjectActionToBrick(brick, action)
-        if (!updated) return brick
-        changed = true
-        return updated
-      })
-      return changed ? { ...current, bricks } : current
-    })
+    setPlan((current) => applyPendingWorldObjectEvents(current, world.events, appliedWorldObjectEventIdsRef.current))
   }, [setPlan, world.events])
 
   useEffect(() => {

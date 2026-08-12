@@ -749,7 +749,7 @@ const parseStoredEntity = (value: unknown): WorldEntity | undefined => {
 }
 
 const eventTypes = new Set<WorldState['events'][number]['type']>([
-  'attack', 'damage', 'miss', 'defeated', 'revive', 'brick-hit', 'structure-hit', 'interaction', 'command-issued', 'command-complete',
+  'attack', 'damage', 'miss', 'defeated', 'revive', 'brick-hit', 'structure-hit', 'interaction', 'object-interaction', 'command-issued', 'command-complete',
 ])
 
 const parseStoredEvents = (value: unknown): WorldState['events'] => Array.isArray(value)
@@ -1073,6 +1073,9 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
               const target = parseTargetRef(action.target)
               return target && target.kind !== 'waypoint' ? [{ type: 'set-visibility' as const, target, visible: action.visible, ...parseStoredScenarioActionTiming(action) }] : []
             }
+            if (action.type === 'world-object' && typeof action.brickId === 'string' && ['open', 'close', 'toggle', 'power-on', 'power-off', 'inspect'].includes(String(action.action))) {
+              return [{ type: 'world-object' as const, brickId: action.brickId, action: action.action as 'open' | 'close' | 'toggle' | 'power-on' | 'power-off' | 'inspect', ...(typeof action.actorId === 'string' ? { actorId: action.actorId } : {}), ...parseStoredScenarioActionTiming(action) }]
+            }
             if (action.type === 'add-story' && typeof action.title === 'string' && typeof action.body === 'string') {
               return [{
                 type: 'add-story' as const,
@@ -1139,6 +1142,9 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
               if (action.type === 'set-visibility' && typeof action.visible === 'boolean') {
                 const target = parseTargetRef(action.target)
                 return target && target.kind !== 'waypoint' ? [{ type: 'set-visibility', target, visible: action.visible, ...parseStoredScenarioActionTiming(action) }] : []
+              }
+              if (action.type === 'world-object' && typeof action.brickId === 'string' && ['open', 'close', 'toggle', 'power-on', 'power-off', 'inspect'].includes(String(action.action))) {
+                return [{ type: 'world-object' as const, brickId: action.brickId, action: action.action as 'open' | 'close' | 'toggle' | 'power-on' | 'power-off' | 'inspect', ...(typeof action.actorId === 'string' ? { actorId: action.actorId } : {}), ...parseStoredScenarioActionTiming(action) }]
               }
               if (action.type === 'add-story' && typeof action.title === 'string' && typeof action.body === 'string') return [{
                 type: 'add-story', title: action.title, body: action.body,

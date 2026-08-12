@@ -198,6 +198,7 @@ export const formatWorldEvent = (event: WorldEvent, locale: 'zh-CN' | 'en-US') =
     if (event.type === 'brick-hit') return `${actor} struck brick ${target}, but the structure was not damaged.`
     if (event.type === 'structure-hit') return `${actor} struck structure ${target}, but it remained intact.`
     if (event.type === 'interaction') return `${actor} interacted with ${target}.`
+    if (event.type === 'object-interaction') return `${actor} used ${target} (${event.objectAction ?? 'interact'}).`
     return `${actor} completed an order involving ${target}.`
   }
   if (event.type === 'command-issued') {
@@ -212,6 +213,7 @@ export const formatWorldEvent = (event: WorldEvent, locale: 'zh-CN' | 'en-US') =
   if (event.type === 'brick-hit') return `${actor}击中了砖块${target}，但建筑没有受损。`
   if (event.type === 'structure-hit') return `${actor}攻击了结构${target}，结构依然完好。`
   if (event.type === 'interaction') return `${actor}与${target}进行了交谈。`
+  if (event.type === 'object-interaction') return `${actor}操作了${target}（${event.objectAction ?? '交互'}）。`
   return `${actor}完成了与${target}有关的命令。`
 }
 
