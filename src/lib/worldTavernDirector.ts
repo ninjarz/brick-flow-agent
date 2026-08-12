@@ -3,6 +3,7 @@ import type { WorldDirectorEntry, WorldDirectorEvent, WorldEntityCommand, WorldR
 import type { WorldAiSnapshot } from './worldAi'
 import { issueWorldEntityCommand } from './worldEntity'
 import { getWorldEntityCollisionRadius } from './worldEntityCollision'
+import { resolveDirectorIntentReferences } from './worldDirectorIntent'
 
 export type TavernDirectorEvent = WorldDirectorEvent
 export type TavernDirectorEntry = WorldDirectorEntry
@@ -221,11 +222,16 @@ export const buildTavernDirectorPrompt = (
   recentEntries: TavernDirectorEntry[],
   locale: DirectorLocale,
   protagonist?: { id: string; name: string },
-) => `${locale === 'zh-CN' ? '玩家对酒馆世界下达了自然语言导演意图' : 'The player gave a natural-language direction to the tavern world'}:
+) => {
+  const targetResolution = resolveDirectorIntentReferences(playerText, snapshot.entities)
+  return `${locale === 'zh-CN' ? '玩家对酒馆世界下达了自然语言导演意图' : 'The player gave a natural-language direction to the tavern world'}:
 ${JSON.stringify(playerText)}
 
 Locally classified intent (routing hint only):
 ${JSON.stringify(classifyTavernDirectorPlayerIntent(playerText))}
+
+Deterministic target resolution (never override an ambiguous result by guessing):
+${JSON.stringify(targetResolution)}
 
 Player identity:
 ${JSON.stringify(protagonist ?? snapshot.entities.find((entity) => entity.controller === 'player') ?? null)}
@@ -272,7 +278,9 @@ Rules:
 - Narration before a command may describe only atmosphere and already supplied world facts, never the command's result.
 - Relationship delta must be between -10 and 10 and grounded in dialogue or an existing event.
 - Never return health, damage, faction, visibility, coordinates, transforms, new entities, or new object IDs.
+- If deterministic target resolution is ambiguous, do not issue a command. Return a choice for each plausible candidate so the player can clarify.
 - Use at most 3 commands, at most 3 dialogue lines, and finish with exactly one end event.`
+}
 
 const clampAffinity = (value: number) => Math.max(-100, Math.min(100, value))
 
