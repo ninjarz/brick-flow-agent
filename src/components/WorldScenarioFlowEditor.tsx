@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Bot, Copy, GitBranch, Maximize2, Minus, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Bot, Copy, GitBranch, Maximize2, Minus, Play, Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import type { WorldScenarioRuntime } from '../types/world'
 import type { WorldScenarioValidationIssue } from '../lib/worldScenarioValidation'
@@ -14,6 +14,7 @@ type Props = {
   onDuplicateStage: () => void
   onDeleteStage: () => void
   onMoveStage: (direction: -1 | 1) => void
+  onPlaytestStage?: (stageId: string) => void
 }
 
 const nodeWidth = 190
@@ -38,6 +39,7 @@ export const WorldScenarioFlowEditor = ({
   onDuplicateStage,
   onDeleteStage,
   onMoveStage,
+  onPlaytestStage,
 }: Props) => {
   const zh = locale === 'zh-CN'
   const [zoom, setZoom] = useState(1)
@@ -80,6 +82,7 @@ export const WorldScenarioFlowEditor = ({
           <button type="button" title={zh ? '适配窗口' : 'Fit to viewport'} onClick={() => setZoom(Math.max(0.6, Math.min(1, 620 / canvasWidth)))}><Maximize2 size={13} /></button>
           <button type="button" title={zh ? '向前移动节点' : 'Move node left'} disabled={selectedIndex <= 0} onClick={() => onMoveStage(-1)}><ArrowLeft size={13} /></button>
           <button type="button" title={zh ? '向后移动节点' : 'Move node right'} disabled={selectedIndex >= scenario.stages.length - 1} onClick={() => onMoveStage(1)}><ArrowRight size={13} /></button>
+          {onPlaytestStage && <button type="button" disabled={!selectedStageId} onClick={() => onPlaytestStage(selectedStageId)}><Play size={13} />{zh ? '从此试演' : 'Play from here'}</button>}
           <button type="button" onClick={onDuplicateStage} disabled={!selectedStageId}><Copy size={13} />{zh ? '复制' : 'Duplicate'}</button>
           <button type="button" className="danger" onClick={onDeleteStage} disabled={scenario.stages.length <= 1}><Trash2 size={13} />{zh ? '删除' : 'Delete'}</button>
           <button type="button" onClick={onAddStage}><Plus size={13} />{zh ? '新节点' : 'New node'}</button>

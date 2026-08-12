@@ -19,6 +19,7 @@ type WorldTavernProps = {
   structures: BrickStructure[]
   bricks: PlacedBrick[]
   onSetTargetVisibility: (target: WorldState['hiddenTargets'][number], visible: boolean) => void
+  onPlaytestStage: (scenario: WorldScenarioRuntime, stageId: string) => void
   onClose: () => void
 }
 
@@ -26,6 +27,8 @@ type ScenarioEditSession = {
   baseline: WorldScenarioRuntime
   draft: WorldScenarioRuntime
   resumeAfterEditing: boolean
+  past: WorldScenarioRuntime[]
+  future: WorldScenarioRuntime[]
 }
 
 export const WorldTavern = ({
@@ -38,6 +41,7 @@ export const WorldTavern = ({
   structures,
   bricks,
   onSetTargetVisibility,
+  onPlaytestStage,
   onClose,
 }: WorldTavernProps) => {
   const { locale, t } = useI18n()
@@ -64,7 +68,7 @@ export const WorldTavern = ({
     const resumeAfterEditing = scenario.enabled !== false
     const draft = resumeAfterEditing ? { ...scenario, enabled: false } : scenario
     if (resumeAfterEditing) onUpdateScenario(draft)
-    setScenarioEditSession({ baseline: draft, draft, resumeAfterEditing })
+    setScenarioEditSession({ baseline: draft, draft, resumeAfterEditing, past: [], future: [] })
     setConfirmDeleteScenarioId('')
     setConfirmCloseEditor(false)
   }
@@ -230,6 +234,8 @@ export const WorldTavern = ({
                     baseline: scenario,
                     draft: scenario,
                     resumeAfterEditing: false,
+                    past: [],
+                    future: [],
                   })
                   setConfirmCloseEditor(false)
                 }}
@@ -334,6 +340,8 @@ export const WorldTavern = ({
                             baseline: copied,
                             draft: copied,
                             resumeAfterEditing: false,
+                            past: [],
+                            future: [],
                           })
                           setConfirmCloseEditor(false)
                         }}
@@ -419,6 +427,20 @@ export const WorldTavern = ({
                         <button type="button" disabled={!scenarioDraftChanged} onClick={() => setScenarioEditSession((current) => current ? { ...current, draft: current.baseline } : current)}>
                           <RotateCcw size={13} />{locale === 'zh-CN' ? '撤销全部' : 'Reset'}
                         </button>
+                        <button type="button" disabled={!scenarioEditSession.past.length} onClick={() => setScenarioEditSession((current) => {
+                          if (!current) return current
+                          const previous = current.past.at(-1)
+                          return previous ? { ...current, draft: previous, past: current.past.slice(0, -1), future: [current.draft, ...current.future].slice(0, 40) } : current
+                        })}>
+                          {locale === 'zh-CN' ? '撤销' : 'Undo'}
+                        </button>
+                        <button type="button" disabled={!scenarioEditSession.future.length} onClick={() => setScenarioEditSession((current) => {
+                          if (!current) return current
+                          const next = current.future[0]
+                          return next ? { ...current, draft: next, past: [...current.past, current.draft].slice(-40), future: current.future.slice(1) } : current
+                        })}>
+                          {locale === 'zh-CN' ? '重做' : 'Redo'}
+                        </button>
                         <button type="button" onClick={() => closeScenarioEditing(false)}>
                           <X size={13} />{locale === 'zh-CN' ? '取消' : 'Cancel'}
                         </button>
@@ -446,10 +468,19 @@ export const WorldTavern = ({
                           llmConfigured={llmConfigured}
                           locale={locale}
                           onChange={(draft) => {
-                            setScenarioEditSession((current) => current ? { ...current, draft } : current)
+                            setScenarioEditSession((current) => current && JSON.stringify(current.draft) !== JSON.stringify(draft) ? {
+                              ...current,
+                              draft,
+                              past: [...current.past, current.draft].slice(-40),
+                              future: [],
+                            } : current)
                             setConfirmCloseEditor(false)
                           }}
                           onSetTargetVisibility={onSetTargetVisibility}
+                          onPlaytestStage={(draft, stageId) => {
+                            onPlaytestStage(draft, stageId)
+                            setScenarioEditSession(null)
+                          }}
                         />
                       )}
                     </>

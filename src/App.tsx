@@ -45,6 +45,7 @@ import { importAssetPlanIncrementally } from './lib/incrementalAssetImport'
 import { addWorldScenario, startWorldScenario } from './lib/worldScenarioImport'
 import { buildWorldScenarioAiPrompt, parseWorldScenarioAiResolution, worldScenarioAiSystemPrompt } from './lib/worldScenarioAi'
 import { advanceWorldScenarios, getActiveWorldScenarioStages, resolveWorldScenarioAi } from './lib/worldScenarioRuntime'
+import { beginWorldScenarioPlaytest } from './lib/worldScenarioPlaytest'
 import { clearWorkspaceDraft, hasIndexedDbWorkspaceDraft, loadWorkspaceDraft, loadWorkspaceDraftFromIndexedDb, saveWorkspaceDraft } from './lib/workspaceDraft'
 import { applyVoxelPlacementSurface, isVoxelPlantSupported, synchronizePlanVoxelBlockStates, synchronizeVoxelBlockStates, type VoxelPlacementSurface } from './lib/voxelBlockState'
 import { applyWorldObjectActionToBrick } from './lib/worldObjectInteraction'
@@ -84,6 +85,7 @@ type PlacementSession = {
 type WorldEntityPlacementSession = {
   entity: WorldEntity
 }
+type ScenarioPlaytestSession = { world: WorldState; plan: BuildPlan; scenarioTitle: string; stageTitle: string }
 type AssetLibraryKind = 'models' | 'scenarios'
 const workspaceDraftSaveDebounceMs = 120
 const tavernDirectorPlaybackTimeoutMs = 15_000
@@ -179,6 +181,7 @@ function App() {
   const [imagePreview, setImagePreview] = useState<string>()
   const [imageName, setImageName] = useState<string>()
   const [plan, setPlanState] = useState<BuildPlan>(initialPlan)
+  const [scenarioPlaytest, setScenarioPlaytest] = useState<ScenarioPlaytestSession>()
   const [world, setWorld] = useState(() => (
     workspaceDraft?.world?.planId === initialPlan.id
       ? workspaceDraft.world
@@ -3127,12 +3130,40 @@ function App() {
             structures={plan.structures ?? []}
             bricks={plan.bricks}
             onSetTargetVisibility={setWorldTargetVisibility}
+            onPlaytestStage={(scenario, stageId) => {
+              const result = beginWorldScenarioPlaytest(worldRef.current, scenario, stageId)
+              if (!result) return
+              setScenarioPlaytest({
+                world: structuredClone(worldRef.current),
+                plan: structuredClone(planRef.current),
+                scenarioTitle: scenario.title,
+                stageTitle: scenario.stages.find((stage) => stage.id === stageId)?.title ?? stageId,
+              })
+              worldRef.current = result.world
+              setWorld(result.world)
+              setIsTavernOpen(false)
+            }}
             onClose={() => {
               tavernAiAbortRef.current?.abort()
               setIsTavernOpen(false)
             }}
           />
         </Suspense>
+      )}
+
+      {scenarioPlaytest && (
+        <div className="scenario-playtest-bar" role="status">
+          <span>{locale === 'zh-CN' ? `试演：${scenarioPlaytest.scenarioTitle} · ${scenarioPlaytest.stageTitle}` : `Playtest: ${scenarioPlaytest.scenarioTitle} · ${scenarioPlaytest.stageTitle}`}</span>
+          <button type="button" onClick={() => setWorld((current) => ({ ...current, paused: !current.paused }))}>{world.paused ? (locale === 'zh-CN' ? '开始试演' : 'Start') : (locale === 'zh-CN' ? '暂停' : 'Pause')}</button>
+          <button type="button" onClick={() => {
+            planRef.current = scenarioPlaytest.plan
+            setPlanState(scenarioPlaytest.plan)
+            worldRef.current = scenarioPlaytest.world
+            setWorld(scenarioPlaytest.world)
+            setScenarioPlaytest(undefined)
+            setIsTavernOpen(true)
+          }}>{locale === 'zh-CN' ? '退出并还原' : 'Exit and restore'}</button>
+        </div>
       )}
 
       {isConfigOpen && (

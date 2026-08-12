@@ -23,6 +23,7 @@ type Props = {
   locale: 'zh-CN' | 'en-US'
   onChange: (scenario: WorldScenarioRuntime) => void
   onSetTargetVisibility: (target: { kind: 'entity' | 'brick' | 'structure'; id: string }, visible: boolean) => void
+  onPlaytestStage?: (scenario: WorldScenarioRuntime, stageId: string) => void
 }
 
 const triggerTypes: WorldEvent['type'][] = ['interaction', 'command-complete', 'command-issued', 'defeated']
@@ -305,7 +306,7 @@ const ScenarioBranchContentEditor = ({
   )
 }
 
-export const WorldScenarioEditor = ({ scenario, entities, structures, bricks, hiddenTargets, llmConfigured, locale, onChange, onSetTargetVisibility }: Props) => {
+export const WorldScenarioEditor = ({ scenario, entities, structures, bricks, hiddenTargets, llmConfigured, locale, onChange, onSetTargetVisibility, onPlaytestStage }: Props) => {
   const zh = locale === 'zh-CN'
   const [editorMode, setEditorMode] = useState<'flow' | 'form'>('flow')
   const [selectedStageId, setSelectedStageId] = useState(
@@ -372,6 +373,7 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, bricks, hi
             ...moveWorldScenarioStage(scenario, selectedStageId, direction),
             authoringVersion: 3,
           })}
+          onPlaytestStage={onPlaytestStage ? (stageId) => onPlaytestStage(scenario, stageId) : undefined}
         />
       )}
       <section className={`scenario-validation-summary${validationErrorCount > 0 ? ' has-errors' : ''}`} aria-live="polite">

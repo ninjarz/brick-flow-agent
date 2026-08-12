@@ -731,6 +731,26 @@ button.status-pill:hover {
 .world-story-block-row.execution-failed { border-left: 2px solid #ef4444; padding-left: 8px; }
 .world-story-block-row.execution-skipped { opacity: 0.62; }
 
+.scenario-playtest-bar {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+  padding: 8px 10px 8px 14px;
+  border: 1px solid #a78bfa;
+  border-radius: 999px;
+  background: color-mix(in srgb, #f5f3ff 94%, transparent);
+  box-shadow: 0 8px 28px rgb(76 29 149 / 16%);
+  transform: translateX(-50%);
+}
+
+.scenario-playtest-bar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scenario-playtest-bar button { white-space: nowrap; }
+
 .world-story-entry-replay {
   display: inline-grid;
   place-items: center;
