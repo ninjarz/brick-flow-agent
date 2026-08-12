@@ -79,6 +79,9 @@ describe('world director replay checkpoints', () => {
             speakerId: 'speaker',
             listenerId: 'listener',
             text: '北门怎么走？',
+            status: 'accepted' as const,
+            detail: 'PLAYED',
+            execution: { phase: 'confirmed' as const, attempt: 2, startedAtSeconds: 0.5, finishedAtSeconds: 1 },
           }],
           createdAtSeconds: 1,
           status: 'completed' as const,
@@ -95,6 +98,18 @@ describe('world director replay checkpoints', () => {
       elapsedSeconds: 0,
     })
     expect(restored?.narrative.directorTurns[0].checkpoint?.narrative).not.toHaveProperty('directorTurns')
+    expect(restored?.narrative.directorTurns[0].entries[0]).toMatchObject({
+      detail: 'PLAYED',
+      execution: { phase: 'confirmed', attempt: 2, startedAtSeconds: 0.5, finishedAtSeconds: 1 },
+    })
+  })
+
+  it('restores hidden interactive objects through a scene checkpoint', () => {
+    const world = createEmptyWorldState('voxel-replay')
+    const before = { ...world, hiddenTargets: [{ kind: 'brick' as const, id: 'secret-chest' }] }
+    const checkpoint = createWorldDirectorCheckpoint(before)
+    const changed = { ...before, hiddenTargets: [] }
+    expect(restoreWorldDirectorCheckpoint(changed, checkpoint).hiddenTargets).toEqual(before.hiddenTargets)
   })
 
   it('rebuilds only through the selected entry and retries that entry even if it failed', () => {

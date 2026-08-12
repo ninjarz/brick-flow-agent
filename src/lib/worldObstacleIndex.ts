@@ -13,7 +13,12 @@ const toCell = (value: number) => Math.floor(value / cellSizeStuds)
 const cellKey = (x: number, z: number) => `${x}:${z}`
 
 export const createWorldObstacleIndex = (bricks: PlacedBrick[]): WorldObstacleIndex => {
-  const bounds = bricks.map(getBrickBounds).filter((item): item is WorldObstacleBounds => Boolean(item))
+  // An open door remains editable and visible, but no longer blocks the world
+  // navigation lane through its original closed plane.
+  const bounds = bricks
+    .filter((brick) => !(brick.brickId === 'minecraft-oak-door' && brick.voxelState?.open))
+    .map(getBrickBounds)
+    .filter((item): item is WorldObstacleBounds => Boolean(item))
   const cells = new Map<string, number[]>()
   bounds.forEach((item, index) => {
     for (let x = toCell(item.minX); x <= toCell(item.maxX); x += 1) {

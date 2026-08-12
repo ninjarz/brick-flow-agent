@@ -145,6 +145,10 @@ node scripts/generate-obj-assets.mjs --dry-run --source=stanford-bunny --profile
 
 对于非 LEGO 零件包，应优先定义清晰的结构语义，而不是硬套 LEGO 的 stud/tube 规则。例如 Minecraft 基础方块使用 `studsocket` 双向面连接器：方块保持完整实心，同时又能支持面对面连接
 
+## 性能回归门禁
+
+`npm run check:performance` 会在标准数据集上验证 1500 个体素的校验/索引、60 个 NPC 的 100 步模拟，以及 10000 个体素的渲染分区。阈值刻意保留跨机器余量，用于阻止数量级退化，而不是比较微小的计时噪声。
+
 ## 🤝 参与贡献
 
 欢迎 issue 和 patch。比较有价值的贡献方向包括：
@@ -167,6 +171,3 @@ npm run verify:release
 
 - [LDraw](https://ldraw.org/)：开放的零件几何、primitive 和社区维护的零件库，是 LDraw 零件包的基础
 - [Rebrickable](https://rebrickable.com/downloads/)：公开的 element 和 color 数据，用于生成粗粒度官方颜色可用性
-# 性能回归门禁
-
-`npm run check:performance` 会在标准数据集上验证 1500 个体素的校验/索引、60 个 NPC 的 100 步模拟，以及 10000 个体素的渲染分区。阈值刻意保留跨机器余量，用于阻止数量级退化，而不是比较微小的计时噪声。

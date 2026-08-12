@@ -18,4 +18,11 @@ describe('world obstacle spatial index', () => {
     const obstacleIndex = createWorldObstacleIndex([brick])
     expect(queryWorldObstacleBounds(obstacleIndex, { minX: 0, maxX: 8, minZ: 0, maxZ: 2 })).toHaveLength(1)
   })
+
+  it('removes an open voxel door from navigation obstacles', () => {
+    const closed = makeBrick('minecraft-oak-door', 'brown', 0, 0, 0)
+    const open = { ...closed, id: 'open-door', voxelState: { open: true } }
+    expect(createWorldObstacleIndex([closed]).bounds).toHaveLength(1)
+    expect(createWorldObstacleIndex([open]).bounds).toHaveLength(0)
+  })
 })
