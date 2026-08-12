@@ -167,3 +167,6 @@ npm run verify:release
 
 - [LDraw](https://ldraw.org/)：开放的零件几何、primitive 和社区维护的零件库，是 LDraw 零件包的基础
 - [Rebrickable](https://rebrickable.com/downloads/)：公开的 element 和 color 数据，用于生成粗粒度官方颜色可用性
+# 性能回归门禁
+
+`npm run check:performance` 会在标准数据集上验证 1500 个体素的校验/索引、60 个 NPC 的 100 步模拟，以及 10000 个体素的渲染分区。阈值刻意保留跨机器余量，用于阻止数量级退化，而不是比较微小的计时噪声。

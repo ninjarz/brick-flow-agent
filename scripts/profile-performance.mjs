@@ -4,11 +4,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 const workspace = process.cwd()
+const enforceBudgets = process.argv.includes('--check')
 const tempDir = await mkdtemp(join(tmpdir(), 'brick-flow-agent-profile-'))
 const entry = join(tempDir, 'entry.ts')
 const outfile = join(tempDir, 'entry.mjs')
 
 await writeFile(entry, `
+  const enforceBudgets = ${JSON.stringify(enforceBudgets)};
   const results: Array<{ name: string; ms: number; detail?: string }> = [];
   const measure = <T>(name: string, fn: () => T): T => {
     const start = performance.now();
@@ -221,6 +223,22 @@ await writeFile(entry, `
     relative: Number((result.ms / max).toFixed(3)),
   }));
   console.table(table);
+  if (enforceBudgets) {
+    const budgets = new Map([
+      ['validate 1500 voxel blocks', 180],
+      ['index 1500 voxel blocks', 40],
+      ['simulate 60 NPCs for 100 world steps', 1800],
+      ['partition 10,000 voxel blocks into render chunks', 80],
+    ]);
+    const failures = results.flatMap((result) => {
+      const budget = budgets.get(result.name);
+      return budget !== undefined && result.ms > budget
+        ? [result.name + ': ' + result.ms.toFixed(2) + ' ms > ' + budget + ' ms']
+        : [];
+    });
+    if (failures.length) throw new Error('Performance budget exceeded:\\n' + failures.join('\\n'));
+    console.log('performance budgets: passed');
+  }
 `)
 
 await esbuild.build({
