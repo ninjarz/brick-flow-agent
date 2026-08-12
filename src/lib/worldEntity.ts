@@ -900,6 +900,16 @@ const parseStoredDirectorEntry = (value: unknown): WorldDirectorEntry | undefine
     ...(typeof value.detail === 'string' ? { detail: value.detail.slice(0, 160) } : {}),
     ...(isFiniteNumber(value.before) ? { before: Math.max(-100, Math.min(100, value.before)) } : {}),
     ...(isFiniteNumber(value.after) ? { after: Math.max(-100, Math.min(100, value.after)) } : {}),
+    ...(isRecord(value.execution)
+      && ['queued', 'approaching', 'acting', 'speaking', 'confirmed', 'failed', 'skipped'].includes(String(value.execution.phase))
+      ? { execution: {
+          phase: value.execution.phase as NonNullable<WorldDirectorEntry['execution']>['phase'],
+          attempt: isFiniteNumber(value.execution.attempt) ? Math.max(1, Math.floor(value.execution.attempt)) : 1,
+          ...(isFiniteNumber(value.execution.startedAtSeconds) ? { startedAtSeconds: Math.max(0, value.execution.startedAtSeconds) } : {}),
+          ...(isFiniteNumber(value.execution.finishedAtSeconds) ? { finishedAtSeconds: Math.max(0, value.execution.finishedAtSeconds) } : {}),
+          ...(typeof value.execution.retryable === 'boolean' ? { retryable: value.execution.retryable } : {}),
+        } }
+      : {}),
   } as WorldDirectorEntry
 }
 

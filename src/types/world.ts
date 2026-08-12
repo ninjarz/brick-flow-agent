@@ -210,6 +210,13 @@ export type WorldDirectorEntry = WorldDirectorEvent & {
   detail?: string
   before?: number
   after?: number
+  execution?: {
+    phase: 'queued' | 'approaching' | 'acting' | 'speaking' | 'confirmed' | 'failed' | 'skipped'
+    attempt: number
+    startedAtSeconds?: number
+    finishedAtSeconds?: number
+    retryable?: boolean
+  }
 }
 
 export type WorldDirectorTurn = {

@@ -19,6 +19,7 @@ export const getWorldDirectorPlaybackPhaseDetail = (
 
 type SequenceEntryOptions = {
   id: string
+  attempt?: number
   finishDialogueWhenVisible?: () => boolean
   onEntry?: (entry: WorldDirectorEntry) => void
 }
@@ -58,10 +59,17 @@ export const createWorldDirectorSequenceRunner = ({
     const task = tail.then(async () => {
       if (signal.aborted) return undefined
       const makeEntry = (
-        patch: Pick<WorldDirectorEntry, 'status' | 'detail' | 'before' | 'after'>,
+        patch: Pick<WorldDirectorEntry, 'status' | 'detail' | 'before' | 'after'> & {
+          execution?: WorldDirectorEntry['execution']
+        },
       ) => ({ ...event, id: options.id, ...patch }) as WorldDirectorEntry
+      const attempt = Math.max(1, options.attempt ?? 1)
       if (blocked) {
-        const entry = makeEntry({ status: 'rejected', detail: 'BLOCKED_BY_PREVIOUS_EVENT' })
+        const entry = makeEntry({
+          status: 'rejected',
+          detail: 'BLOCKED_BY_PREVIOUS_EVENT',
+          execution: { phase: 'skipped', attempt, retryable: false },
+        })
         options.onEntry?.(entry)
         return entry
       }
@@ -80,6 +88,12 @@ export const createWorldDirectorSequenceRunner = ({
         onPhaseChange: (phase) => options.onEntry?.(makeEntry({
           status: 'accepted',
           detail: getWorldDirectorPlaybackPhaseDetail(phase),
+          execution: {
+            phase: phase === 'completed' ? 'confirmed' : phase === 'missed' ? 'failed' : phase,
+            attempt,
+            startedAtSeconds: getWorld().elapsedSeconds,
+            retryable: phase === 'missed',
+          },
         })),
         pollIntervalMs,
         now,
@@ -95,6 +109,15 @@ export const createWorldDirectorSequenceRunner = ({
           : applied.detail,
         before: applied.before,
         after: applied.after,
+        execution: {
+          phase: applied.status === 'rejected' || isBlockingWorldDirectorPlaybackOutcome(applied.outcome)
+            ? 'failed'
+            : 'confirmed',
+          attempt,
+          startedAtSeconds: getWorld().elapsedSeconds,
+          finishedAtSeconds: getWorld().elapsedSeconds,
+          retryable: applied.status === 'rejected' || isBlockingWorldDirectorPlaybackOutcome(applied.outcome),
+        },
       })
       options.onEntry?.(entry)
       blocked = applied.status === 'rejected' || isBlockingWorldDirectorPlaybackOutcome(applied.outcome)
