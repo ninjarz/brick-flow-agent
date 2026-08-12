@@ -159,7 +159,7 @@ const applyScenarioAction = (
   if (action.type === 'world-object') {
     if (world.hiddenTargets.some((target) => target.kind === 'brick' && target.id === action.brickId)) return world
     const objectEvent: WorldEvent = {
-      id: `scenario-object-${scenario.id}-${action.brickId}-${world.events.length}`,
+      id: `scenario-object-${scenario.id}-${action.brickId}-${Math.round(world.elapsedSeconds * 1_000)}-${world.events.length}`,
       timeSeconds: world.elapsedSeconds,
       type: 'object-interaction',
       actorId: action.actorId ?? event.actorId,

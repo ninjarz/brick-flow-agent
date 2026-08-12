@@ -16,7 +16,7 @@ export const beginWorldScenarioPlaytest = (
   if (stageIndex < 0) return undefined
   const stagedScenario: WorldScenarioRuntime = {
     ...scenario,
-    enabled: false,
+    enabled: true,
     stages: scenario.stages.map((stage, index) => ({
       ...stage,
       status: index === stageIndex ? 'active' : 'locked',

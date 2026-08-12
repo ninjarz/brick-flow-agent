@@ -13,4 +13,15 @@ describe('world object event bridge', () => {
     expect(opened.bricks[0].voxelState?.open).toBe(true)
     expect(applyPendingWorldObjectEvents(opened, [event], applied)).toBe(opened)
   })
+
+  it('preserves repeated action order for the same object', () => {
+    const applied = new Set<string>()
+    const toggles: WorldEvent[] = [
+      { ...event, id: 'toggle-1', objectAction: 'toggle' },
+      { ...event, id: 'toggle-2', timeSeconds: 2, objectAction: 'toggle' },
+    ]
+    const result = applyPendingWorldObjectEvents(plan, toggles, applied)
+    expect(result.bricks[0].voxelState?.open).toBe(false)
+    expect(applied).toEqual(new Set(['toggle-1', 'toggle-2']))
+  })
 })

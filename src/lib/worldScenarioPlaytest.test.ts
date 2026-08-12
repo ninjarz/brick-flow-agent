@@ -9,6 +9,7 @@ describe('scenario playtest', () => {
   it('isolates a selected node and restores the complete checkpoint', () => {
     const playtest = beginWorldScenarioPlaytest(world, scenario, 'b')!
     expect(playtest.world.paused).toBe(true)
+    expect(playtest.world.scenarios[0].enabled).toBe(true)
     expect(playtest.world.scenarios[0].stages.map((stage) => stage.status)).toEqual(['locked', 'active'])
     const mutated = { ...playtest.world, hiddenTargets: [{ kind: 'brick' as const, id: 'door' }] }
     void mutated

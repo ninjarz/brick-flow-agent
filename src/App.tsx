@@ -639,9 +639,17 @@ function App() {
   }, [world])
 
   const appliedWorldObjectEventIdsRef = useRef(new Set<string>())
+  const appliedWorldObjectEventWorldIdRef = useRef(world.id)
   useEffect(() => {
+    if (appliedWorldObjectEventWorldIdRef.current !== world.id) {
+      appliedWorldObjectEventWorldIdRef.current = world.id
+      appliedWorldObjectEventIdsRef.current = new Set(world.events
+        .filter((event) => event.type === 'object-interaction')
+        .map((event) => event.id))
+      return
+    }
     setPlan((current) => applyPendingWorldObjectEvents(current, world.events, appliedWorldObjectEventIdsRef.current))
-  }, [setPlan, world.events])
+  }, [setPlan, world.events, world.id])
 
   useEffect(() => {
     worldScenarioAiAbortRef.current?.abort()
@@ -3143,6 +3151,9 @@ function App() {
           <button type="button" onClick={() => {
             planRef.current = scenarioPlaytest.plan
             setPlanState(scenarioPlaytest.plan)
+            appliedWorldObjectEventIdsRef.current = new Set(scenarioPlaytest.world.events
+              .filter((event) => event.type === 'object-interaction')
+              .map((event) => event.id))
             worldRef.current = scenarioPlaytest.world
             setWorld(scenarioPlaytest.world)
             setScenarioPlaytest(undefined)
