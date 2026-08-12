@@ -70,4 +70,17 @@ describe('world scenario validation', () => {
     expect(issues.some((issue) => issue.code === 'duplicate-branch-id')).toBe(true)
     expect(new Set(issues.filter((issue) => issue.code === 'cyclic-stage-flow').map((issue) => issue.stageIndex))).toEqual(new Set([0, 1]))
   })
+
+  it('reports unsafe authoring details before play', () => {
+    const scenario = validScenario()
+    scenario.stages[0].dialogue = [
+      { id: 'same', speakerId: 'hero', text: 'One', durationSeconds: 1 },
+      { id: 'same', speakerId: 'envoy', text: 'Two', durationSeconds: 1 },
+    ]
+    scenario.stages[0].actions = [{ type: 'set-faction', entityId: 'envoy', factionId: 'red', delaySeconds: 121 }]
+    const issues = validateWorldScenario(scenario, { entityIds: ['hero', 'envoy'], structureIds: ['outpost'] })
+    expect(issues.map((issue) => issue.code)).toEqual(expect.arrayContaining(['duplicate-dialogue-id', 'invalid-action-delay']))
+    expect(validateWorldScenario({ ...scenario, stages: [] }, { entityIds: [], structureIds: [] }))
+      .toContainEqual(expect.objectContaining({ code: 'empty-flow', severity: 'error' }))
+  })
 })

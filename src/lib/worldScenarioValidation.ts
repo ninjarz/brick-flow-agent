@@ -11,6 +11,9 @@ export type WorldScenarioValidationIssueCode =
   | 'invalid-dialogue'
   | 'invalid-ai-config'
   | 'missing-ai-fallback'
+  | 'empty-flow'
+  | 'duplicate-dialogue-id'
+  | 'invalid-action-delay'
 
 export type WorldScenarioValidationIssue = {
   code: WorldScenarioValidationIssueCode
@@ -32,6 +35,7 @@ export const validateWorldScenario = (
   context: ValidationContext,
 ): WorldScenarioValidationIssue[] => {
   const issues: WorldScenarioValidationIssue[] = []
+  if (scenario.stages.length === 0) issues.push({ code: 'empty-flow', severity: 'error' })
   const entityIds = new Set(context.entityIds)
   const structureIds = new Set(context.structureIds)
   const stageIndexesById = new Map<string, number[]>()
@@ -74,6 +78,9 @@ export const validateWorldScenario = (
     }
   }
   const validateAction = (action: WorldScenarioAction, stageIndex: number, branchIndex?: number) => {
+    if (action.delaySeconds !== undefined && (!Number.isFinite(action.delaySeconds) || action.delaySeconds < 0 || action.delaySeconds > 120)) {
+      issues.push({ code: 'invalid-action-delay', severity: 'warning', stageIndex, branchIndex })
+    }
     if (action.type === 'set-faction' || action.type === 'issue-command' ||
       action.type === 'join-party' || action.type === 'leave-party' || action.type === 'grant-clue') {
       addMissingEntity(action.entityId, stageIndex, branchIndex)
@@ -101,7 +108,10 @@ export const validateWorldScenario = (
     stageIndex: number,
     branchIndex?: number,
   ) => {
+    const lineIds = new Set<string>()
     for (const line of dialogue ?? []) {
+      if (lineIds.has(line.id)) issues.push({ code: 'duplicate-dialogue-id', severity: 'error', stageIndex, branchIndex, referenceId: line.id })
+      lineIds.add(line.id)
       addMissingEntity(line.speakerId, stageIndex, branchIndex)
       if (!line.text.trim() || !Number.isFinite(line.durationSeconds) || line.durationSeconds < 0.5) {
         issues.push({ code: 'invalid-dialogue', severity: 'warning', stageIndex, branchIndex, referenceId: line.id })

@@ -1,4 +1,5 @@
-import { ArrowLeft, ArrowRight, Bot, Copy, GitBranch, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Bot, Copy, GitBranch, Maximize2, Minus, Plus, Trash2 } from 'lucide-react'
+import { useState } from 'react'
 import type { WorldScenarioRuntime } from '../types/world'
 import type { WorldScenarioValidationIssue } from '../lib/worldScenarioValidation'
 import { getWorldScenarioDefaultNextStageId } from '../lib/worldScenarioAuthoring'
@@ -39,6 +40,7 @@ export const WorldScenarioFlowEditor = ({
   onMoveStage,
 }: Props) => {
   const zh = locale === 'zh-CN'
+  const [zoom, setZoom] = useState(1)
   const stageIndexById = new Map(scenario.stages.map((stage, index) => [stage.id, index]))
   const maxBranchCount = Math.max(0, ...scenario.stages.map((stage) => stage.branches?.length ?? 0))
   const canvasWidth = Math.max(620, canvasPadding * 2 + scenario.stages.length * nodeWidth + Math.max(0, scenario.stages.length - 1) * nodeGap)
@@ -72,6 +74,10 @@ export const WorldScenarioFlowEditor = ({
           <small>{zh ? '流程图控制触发和去向；AI 节点只生成对白或从紫色分支中选择。' : 'The graph controls triggers and outcomes; AI nodes only write dialogue or choose a purple branch.'}</small>
         </div>
         <div className="scenario-flow-actions">
+          <button type="button" title={zh ? '缩小流程图' : 'Zoom out'} disabled={zoom <= 0.6} onClick={() => setZoom((value) => Math.max(0.6, value - 0.1))}><Minus size={13} /></button>
+          <button type="button" className="scenario-flow-zoom" title={zh ? '恢复 100%' : 'Reset zoom'} onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button>
+          <button type="button" title={zh ? '放大流程图' : 'Zoom in'} disabled={zoom >= 1.4} onClick={() => setZoom((value) => Math.min(1.4, value + 0.1))}><Plus size={13} /></button>
+          <button type="button" title={zh ? '适配窗口' : 'Fit to viewport'} onClick={() => setZoom(Math.max(0.6, Math.min(1, 620 / canvasWidth)))}><Maximize2 size={13} /></button>
           <button type="button" title={zh ? '向前移动节点' : 'Move node left'} disabled={selectedIndex <= 0} onClick={() => onMoveStage(-1)}><ArrowLeft size={13} /></button>
           <button type="button" title={zh ? '向后移动节点' : 'Move node right'} disabled={selectedIndex >= scenario.stages.length - 1} onClick={() => onMoveStage(1)}><ArrowRight size={13} /></button>
           <button type="button" onClick={onDuplicateStage} disabled={!selectedStageId}><Copy size={13} />{zh ? '复制' : 'Duplicate'}</button>
@@ -80,7 +86,7 @@ export const WorldScenarioFlowEditor = ({
         </div>
       </header>
       <div className="scenario-flow-viewport">
-        <div className="scenario-flow-canvas" style={{ width: canvasWidth, height: canvasHeight }}>
+        <div className="scenario-flow-canvas" style={{ width: canvasWidth, height: canvasHeight, zoom }}>
           <svg width={canvasWidth} height={canvasHeight} aria-hidden="true">
             <defs>
               <marker id="scenario-flow-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">

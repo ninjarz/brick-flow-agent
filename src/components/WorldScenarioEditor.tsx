@@ -788,6 +788,9 @@ const formatValidationIssue = (
     'invalid-dialogue': '台词为空或显示时间不足 0.5 秒',
     'invalid-ai-config': 'AI 节点缺少有效指令，或对白数量超出 1–6 句',
     'missing-ai-fallback': `AI 抉择节点缺少有效的保底分支 ${reference}`,
+    'empty-flow': '流程至少需要一个节点',
+    'duplicate-dialogue-id': `台词 ID ${reference} 重复`,
+    'invalid-action-delay': '行为等待时间必须在 0–120 秒之间',
   } : {
     'duplicate-stage-id': `Duplicate stage ID ${reference}`,
     'duplicate-branch-id': `Duplicate branch ID ${reference}`,
@@ -799,6 +802,9 @@ const formatValidationIssue = (
     'invalid-dialogue': 'Dialogue is empty or shorter than 0.5 seconds',
     'invalid-ai-config': 'AI node needs a valid instruction and a 1–6 line limit',
     'missing-ai-fallback': `AI choice node needs a valid fallback branch ${reference}`,
+    'empty-flow': 'A flow needs at least one node',
+    'duplicate-dialogue-id': `Duplicate dialogue ID ${reference}`,
+    'invalid-action-delay': 'Action delay must be between 0 and 120 seconds',
   }
   return `${location}${messages[issue.code]}`
 }
