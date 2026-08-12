@@ -5,6 +5,7 @@ import { memo, type CSSProperties, type ReactNode, type RefCallback, useCallback
 import { BufferGeometry, DoubleSide, Float32BufferAttribute, Object3D, Vector3, type DirectionalLight, type Group, type InstancedMesh } from 'three'
 import { brickById, colorHex, colorOpacity } from '../data/basicBricks'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
+import { getWorldCombatPresentationPhase } from '../lib/worldCombatPresentation'
 import { createRound2x2AxleBodyGeometry, createRound2x2AxleGrilleBodyGeometry } from '../lib/csgBrickGeometry'
 import { getBrickWorldBoundsFrame } from '../lib/ldrawBounds'
 import { loadLDrawGeneratedVisual } from '../lib/ldrawGeneratedVisualLoader'
@@ -2393,10 +2394,16 @@ const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementAct
     groupRef.current.rotation.y += yawDelta * interpolation
     groupRef.current.rotation.z += ((entity.health <= 0 ? Math.PI / 2 : 0) - groupRef.current.rotation.z) * interpolation
     const movingBob = entity.behaviorState === 'moving' ? Math.abs(Math.sin(animationTimeRef.current * 9)) * 0.09 : 0
+    const combatPhase = getWorldCombatPresentationPhase(entity, definition, elapsedSeconds)
     const attackBob = entity.behaviorState === 'attacking'
-      ? Math.sin(animationTimeRef.current * 16) * 0.06
+      ? combatPhase === 'windup'
+        ? -Math.abs(Math.sin(animationTimeRef.current * 8)) * 0.04
+        : Math.max(0, Math.sin(animationTimeRef.current * 18)) * 0.12
       : entity.behaviorState === 'reviving' ? Math.sin(animationTimeRef.current * 7) * 0.1 : 0
+    const hitRecoil = combatPhase === 'hurt' ? Math.sin(animationTimeRef.current * 28) * 0.08 : 0
     groupRef.current.position.y = entity.transform.y + movingBob + attackBob
+    groupRef.current.position.x += hitRecoil * Math.cos(groupRef.current.rotation.y)
+    groupRef.current.position.z -= hitRecoil * Math.sin(groupRef.current.rotation.y)
   })
   if (!definition) return null
   const healthRatio = Math.max(0, Math.min(1, entity.health / Math.max(1, entity.maxHealth)))
