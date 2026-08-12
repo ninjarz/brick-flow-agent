@@ -12,6 +12,7 @@ import {
   shouldRunContinuousDirectorPulse,
 } from '../lib/worldContinuousDirector'
 import { createWorldDirectorCheckpoint } from '../lib/worldDirectorReplay'
+import { getWorldDirectorExecutionFailureReason, getWorldDirectorExecutionPresentation } from '../lib/worldDirectorExecution'
 import {
   buildWorldNarrativeFeed,
   upsertWorldDirectorEntry,
@@ -135,12 +136,14 @@ const FeedBlock = ({
   onChoose: (input: string) => void
   onSelectEntity: (entityId: string) => void
 }) => {
+  const execution = 'execution' in block ? getWorldDirectorExecutionPresentation(block) : undefined
+  const executionLabel = execution?.label[locale === 'zh-CN' ? 'zh' : 'en']
   if (block.type === 'narration') return <p className="narration"><AnnotatedText text={block.text} references={references} onSelectEntity={onSelectEntity} /></p>
   if (block.type === 'dialogue') {
     const speaker = world.entities.find((entity) => entity.id === block.speakerId)
     const speakerName = speaker?.name ?? block.speakerId
     const detail = 'detail' in block ? block.detail : undefined
-    const playbackBadge = detail === 'WAITING_FOR_PROXIMITY'
+    const playbackBadge = executionLabel ?? (detail === 'WAITING_FOR_PROXIMITY'
       ? (locale === 'zh-CN' ? '正在接近' : 'approaching')
       : detail === 'PLAYING'
         ? (locale === 'zh-CN' ? '正在说' : 'speaking')
@@ -154,8 +157,10 @@ const FeedBlock = ({
               ? (locale === 'zh-CN' ? '已暂停' : 'paused')
               : detail === 'PLAYBACK_STOPPED'
                 ? (locale === 'zh-CN' ? '已停止' : 'stopped')
-                : undefined
-    const playbackClass = detail === 'WAITING_FOR_PROXIMITY'
+                : undefined)
+    const playbackClass = execution
+      ? ` ${execution.tone}`
+      : detail === 'WAITING_FOR_PROXIMITY'
       ? ' queued'
       : detail === 'PLAYING'
         ? ' playing'
@@ -175,7 +180,7 @@ const FeedBlock = ({
     const commandLabel = block.command.type === 'interact'
       ? (locale === 'zh-CN' ? '交谈' : 'talk')
       : block.command.type
-    const detailLabel = block.detail === 'PLAYING'
+    const detailLabel = executionLabel ?? (block.detail === 'PLAYING'
       ? (locale === 'zh-CN' ? '执行中' : 'acting')
       : block.detail === 'PLAYED'
         ? (locale === 'zh-CN' ? '已完成' : 'completed')
@@ -189,7 +194,7 @@ const FeedBlock = ({
               ? (locale === 'zh-CN' ? '已停止' : 'stopped')
               : block.detail === 'BLOCKED_BY_PREVIOUS_EVENT'
                 ? (locale === 'zh-CN' ? '前序动作失败，已跳过' : 'skipped after a failed action')
-                : block.detail
+                : block.detail)
     return <p className={`stage-direction ${block.status ?? ''}`}>〔<AnnotatedText text={actor?.name ?? block.entityId} references={references} onSelectEntity={onSelectEntity} /> · {commandLabel}{target ? <> → <AnnotatedText text={target} references={references} onSelectEntity={onSelectEntity} /></> : ''}{detailLabel ? ` · ${detailLabel}` : ''}〕</p>
   }
   if (block.type === 'relationship') {
@@ -976,15 +981,15 @@ export const WorldStoryDock = ({
                   <DirectorDebugPanel item={item} locale={locale} />
                 )}
                 {item.blocks.map((block) => (
-                  <div className="world-story-block-row" key={block.id}>
+                  <div className={`world-story-block-row${'execution' in block && block.execution ? ` execution-${block.execution.phase}` : ''}`} key={block.id}>
                     <FeedBlock block={block} world={world} structures={structures} references={references} locale={locale} disabled={isDirectorThinking || isScenarioDialoguePlaying} onChoose={chooseInput} onSelectEntity={onSelectEntity} />
-                    {item.kind === 'director-turn' && item.status === 'completed' && world.narrative.directorTurns.some((turn) => turn.id === item.id && turn.checkpoint) && (
+                    {item.kind === 'director-turn' && world.narrative.directorTurns.some((turn) => turn.id === item.id && turn.checkpoint) && (
                       <button
                         type="button"
                         className="world-story-entry-replay"
                         disabled={isDirectorThinking || isScenarioDialoguePlaying || isLlmTesting}
-                        aria-label={locale === 'zh-CN' ? '重播到此事件' : 'Replay through this event'}
-                        title={locale === 'zh-CN' ? '恢复场景并重播到此事件' : 'Restore the scene and replay through this event'}
+                        aria-label={'execution' in block && block.execution?.retryable ? (locale === 'zh-CN' ? '重试此事件' : 'Retry this event') : (locale === 'zh-CN' ? '重播到此事件' : 'Replay through this event')}
+                        title={`${'execution' in block && block.execution?.retryable ? (locale === 'zh-CN' ? '从检查点恢复并重试' : 'Restore the checkpoint and retry') : (locale === 'zh-CN' ? '恢复场景并重播到此事件' : 'Restore the scene and replay through this event')}${'execution' in block && block.execution?.phase === 'failed' ? ` · ${getWorldDirectorExecutionFailureReason(block) ?? ''}` : ''}`}
                         onClick={() => {
                           const turn = world.narrative.directorTurns.find((candidate) => candidate.id === item.id)
                           if (turn?.checkpoint) void onReplayDirectorEntry(turn, block.id)
