@@ -208,7 +208,19 @@ export const BrickEditorPanel = ({
         <section className="voxel-interaction-editor">
           <header><strong>{t('voxelInteraction.title')}</strong><small>{t(`voxelInteraction.${voxelInteractionKind}`)}</small></header>
           {voxelInteractionKind === 'chest' && (
-            <label>{t('voxelInteraction.containerName')}<input maxLength={48} value={selectedBrick.voxelState?.containerName ?? ''} onChange={(event) => onUpdateBrick({ ...selectedBrick, voxelState: { ...selectedBrick.voxelState, containerName: event.target.value } })} /></label>
+            <>
+              <label>{t('voxelInteraction.containerName')}<input maxLength={48} value={selectedBrick.voxelState?.containerName ?? ''} onChange={(event) => onUpdateBrick({ ...selectedBrick, voxelState: { ...selectedBrick.voxelState, containerName: event.target.value } })} /></label>
+              <label>{t('voxelInteraction.storyContents')}<textarea rows={3} maxLength={400} value={selectedBrick.voxelState?.storyContents?.map((item) => `${item.title}｜${item.description}`).join('\n') ?? ''} placeholder={t('voxelInteraction.storyContentsHint')} onChange={(event) => onUpdateBrick({
+                ...selectedBrick,
+                voxelState: {
+                  ...selectedBrick.voxelState,
+                  storyContents: event.target.value.split(/\r?\n/).map((line, index) => {
+                    const [title, ...description] = line.split('｜')
+                    return { id: selectedBrick.voxelState?.storyContents?.[index]?.id ?? `item-${selectedBrick.id}-${index}`, title: title.trim(), description: description.join('｜').trim() }
+                  }).filter((item) => item.title || item.description),
+                },
+              })} /></label>
+            </>
           )}
           <button type="button" onClick={() => onUpdateBrick(toggleVoxelBlockInteraction(selectedBrick))}>
             {voxelInteractionKind === 'lantern'

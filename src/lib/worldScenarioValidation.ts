@@ -14,6 +14,7 @@ export type WorldScenarioValidationIssueCode =
   | 'empty-flow'
   | 'duplicate-dialogue-id'
   | 'invalid-action-delay'
+  | 'missing-brick'
 
 export type WorldScenarioValidationIssue = {
   code: WorldScenarioValidationIssueCode
@@ -26,6 +27,7 @@ export type WorldScenarioValidationIssue = {
 type ValidationContext = {
   entityIds: Iterable<string>
   structureIds: Iterable<string>
+  brickIds?: Iterable<string>
 }
 
 const commandTarget = (command: WorldEntityCommand) => 'target' in command ? command.target : undefined
@@ -38,6 +40,7 @@ export const validateWorldScenario = (
   if (scenario.stages.length === 0) issues.push({ code: 'empty-flow', severity: 'error' })
   const entityIds = new Set(context.entityIds)
   const structureIds = new Set(context.structureIds)
+  const brickIds = new Set(context.brickIds ?? [])
   const stageIndexesById = new Map<string, number[]>()
   scenario.stages.forEach((stage, stageIndex) => {
     const indexes = stageIndexesById.get(stage.id)
@@ -98,6 +101,10 @@ export const validateWorldScenario = (
       if (action.target.kind === 'structure' && !structureIds.has(action.target.id)) {
         issues.push({ code: 'missing-structure', severity: 'error', stageIndex, branchIndex, referenceId: action.target.id })
       }
+    }
+    if (action.type === 'world-object') {
+      if (!brickIds.has(action.brickId)) issues.push({ code: 'missing-brick', severity: 'error', stageIndex, branchIndex, referenceId: action.brickId })
+      addMissingEntity(action.actorId, stageIndex, branchIndex)
     }
     if (action.type === 'add-story') {
       for (const characterId of action.characterIds ?? []) addMissingEntity(characterId, stageIndex, branchIndex)

@@ -115,7 +115,7 @@ export type WorldParty = {
 export type WorldEvent = {
   id: string
   timeSeconds: number
-  type: 'attack' | 'damage' | 'miss' | 'defeated' | 'revive' | 'brick-hit' | 'structure-hit' | 'interaction' | 'command-issued' | 'command-complete'
+  type: 'attack' | 'damage' | 'miss' | 'defeated' | 'revive' | 'brick-hit' | 'structure-hit' | 'interaction' | 'object-interaction' | 'command-issued' | 'command-complete'
   actorId: string
   actorName?: string
   targetId?: string
@@ -123,6 +123,7 @@ export type WorldEvent = {
   amount?: number
   commandType?: WorldEntityCommand['type']
   commandSource?: WorldEntityControllerKind
+  objectAction?: WorldObjectActionKind
   dialogueText?: string
   dialogueSpeakerId?: string
   dialogueListenerId?: string
@@ -307,10 +308,13 @@ export type WorldScenarioAction = (
       clue: Pick<WorldClue, 'id' | 'text' | 'kind' | 'confidence' | 'tags'>
     }
   | { type: 'set-visibility'; target: Extract<WorldTargetRef, { kind: 'entity' | 'brick' | 'structure' }>; visible: boolean }
+  | { type: 'world-object'; brickId: string; action: WorldObjectActionKind; actorId?: string }
 ) & {
   /** Delay after the previous action before this action is applied. */
   delaySeconds?: number
 }
+
+export type WorldObjectActionKind = 'open' | 'close' | 'toggle' | 'power-on' | 'power-off' | 'inspect'
 
 export type WorldScenarioDialogueLine = {
   id: string

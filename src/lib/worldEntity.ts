@@ -1324,6 +1324,8 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
           ...(stage.dialogue ?? []).map((line) => line.speakerId),
           ...(stage.actions ?? []).flatMap((action) => action.type === 'add-story'
             ? action.characterIds ?? []
+            : action.type === 'world-object'
+              ? action.actorId ? [action.actorId] : []
             : action.type === 'set-visibility'
               ? action.target.kind === 'entity' ? [action.target.id] : []
               : action.type === 'join-party' ? [action.entityId, action.leaderId] : [action.entityId]),
@@ -1333,6 +1335,8 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
             ...(branch.dialogue ?? []).map((line) => line.speakerId),
             ...(branch.actions ?? []).flatMap((action) => action.type === 'add-story'
               ? action.characterIds ?? []
+              : action.type === 'world-object'
+                ? action.actorId ? [action.actorId] : []
               : action.type === 'set-visibility'
                 ? action.target.kind === 'entity' ? [action.target.id] : []
                 : action.type === 'join-party' ? [action.entityId, action.leaderId] : [action.entityId]),

@@ -278,6 +278,11 @@ const remapScenarioWorld = (
           const target = remapTarget(action.target, entityIdMap, maps.brickIdMap, maps.structureIdMap)
           return target && target.kind !== 'waypoint' ? [{ ...action, target }] : []
         }
+        if (action.type === 'world-object') {
+          const brickId = maps.brickIdMap[action.brickId]
+          const actorId = action.actorId ? entityIdMap[action.actorId] : undefined
+          return brickId && (!action.actorId || actorId) ? [{ ...action, brickId, ...(actorId ? { actorId } : {}) }] : []
+        }
         return [{
           ...action,
           characterIds: action.characterIds
@@ -319,6 +324,11 @@ const remapScenarioWorld = (
           if (action.type === 'set-visibility') {
             const target = remapTarget(action.target, entityIdMap, maps.brickIdMap, maps.structureIdMap)
             return target && target.kind !== 'waypoint' ? [{ ...action, target }] : []
+          }
+          if (action.type === 'world-object') {
+            const brickId = maps.brickIdMap[action.brickId]
+            const actorId = action.actorId ? entityIdMap[action.actorId] : undefined
+            return brickId && (!action.actorId || actorId) ? [{ ...action, brickId, ...(actorId ? { actorId } : {}) }] : []
           }
           return [{
             ...action,

@@ -156,6 +156,18 @@ const applyScenarioAction = (
         : world.entities,
     }
   }
+  if (action.type === 'world-object') {
+    if (world.hiddenTargets.some((target) => target.kind === 'brick' && target.id === action.brickId)) return world
+    const objectEvent: WorldEvent = {
+      id: `scenario-object-${scenario.id}-${action.brickId}-${world.events.length}`,
+      timeSeconds: world.elapsedSeconds,
+      type: 'object-interaction',
+      actorId: action.actorId ?? event.actorId,
+      targetId: action.brickId,
+      objectAction: action.action,
+    }
+    return { ...world, events: [...world.events, objectEvent].slice(-500) }
+  }
   const storyId = `story-scenario-${scenario.id}-${world.narrative.stories.length + 1}`
   return {
     ...world,

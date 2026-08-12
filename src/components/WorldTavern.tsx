@@ -7,7 +7,7 @@ import { getWorldScenarioPlaybackLane, getWorldScenarioRuntimeStatus } from '../
 import { validateWorldScenario } from '../lib/worldScenarioValidation'
 import type { WorldScenarioRuntime, WorldState } from '../types/world'
 import { WorldScenarioEditor } from './WorldScenarioEditor'
-import type { BrickStructure } from '../types/bricks'
+import type { BrickStructure, PlacedBrick } from '../types/bricks'
 
 type WorldTavernProps = {
   world: WorldState
@@ -17,6 +17,7 @@ type WorldTavernProps = {
   onAddScenario: (scenario: WorldScenarioRuntime) => void
   onDeleteScenario: (scenarioId: string) => void
   structures: BrickStructure[]
+  bricks: PlacedBrick[]
   onSetTargetVisibility: (target: WorldState['hiddenTargets'][number], visible: boolean) => void
   onClose: () => void
 }
@@ -35,6 +36,7 @@ export const WorldTavern = ({
   onAddScenario,
   onDeleteScenario,
   structures,
+  bricks,
   onSetTargetVisibility,
   onClose,
 }: WorldTavernProps) => {
@@ -52,8 +54,9 @@ export const WorldTavern = ({
     ? validateWorldScenario(scenarioEditSession.draft, {
         entityIds: world.entities.map((entity) => entity.id),
         structureIds: structures.map((structure) => structure.id),
+        brickIds: bricks.map((brick) => brick.id),
       })
-    : [], [scenarioEditSession, structures, world.entities])
+    : [], [bricks, scenarioEditSession, structures, world.entities])
   const scenarioDraftErrorCount = scenarioDraftIssues.filter((issue) => issue.severity === 'error').length
   const scenarioPlaybackLane = useMemo(() => getWorldScenarioPlaybackLane(world), [world])
   const processedEventIds = () => world.events.map((event) => event.id).slice(-500)
@@ -438,6 +441,7 @@ export const WorldTavern = ({
                           scenario={scenarioEditSession.draft}
                           entities={world.entities}
                           structures={structures}
+                          bricks={bricks}
                           hiddenTargets={world.hiddenTargets}
                           llmConfigured={llmConfigured}
                           locale={locale}

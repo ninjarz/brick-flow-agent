@@ -47,6 +47,7 @@ import { buildWorldScenarioAiPrompt, parseWorldScenarioAiResolution, worldScenar
 import { advanceWorldScenarios, getActiveWorldScenarioStages, resolveWorldScenarioAi } from './lib/worldScenarioRuntime'
 import { clearWorkspaceDraft, hasIndexedDbWorkspaceDraft, loadWorkspaceDraft, loadWorkspaceDraftFromIndexedDb, saveWorkspaceDraft } from './lib/workspaceDraft'
 import { applyVoxelPlacementSurface, isVoxelPlantSupported, synchronizePlanVoxelBlockStates, synchronizeVoxelBlockStates, type VoxelPlacementSurface } from './lib/voxelBlockState'
+import { applyWorldObjectActionToBrick } from './lib/worldObjectInteraction'
 import type { BrickStructure, BuildPlan, FinishedAsset, LlmConfig, PlacedBrick } from './types/bricks'
 import type { WorldDirectorTurn, WorldEntity, WorldEntityCommand, WorldEntityControllerKind, WorldState } from './types/world'
 import './App.css'
@@ -633,6 +634,26 @@ function App() {
   useEffect(() => {
     worldRef.current = world
   }, [world])
+
+  const appliedWorldObjectEventIdsRef = useRef(new Set<string>())
+  useEffect(() => {
+    const pending = world.events.filter((event) => event.type === 'object-interaction' && !appliedWorldObjectEventIdsRef.current.has(event.id))
+    if (pending.length === 0) return
+    for (const event of pending) appliedWorldObjectEventIdsRef.current.add(event.id)
+    setPlan((current) => {
+      let changed = false
+      const actionByBrickId = new Map(pending.flatMap((event) => event.targetId && event.objectAction ? [[event.targetId, event.objectAction] as const] : []))
+      const bricks = current.bricks.map((brick) => {
+        const action = actionByBrickId.get(brick.id)
+        if (!action) return brick
+        const updated = applyWorldObjectActionToBrick(brick, action)
+        if (!updated) return brick
+        changed = true
+        return updated
+      })
+      return changed ? { ...current, bricks } : current
+    })
+  }, [setPlan, world.events])
 
   useEffect(() => {
     worldScenarioAiAbortRef.current?.abort()
@@ -3104,6 +3125,7 @@ function App() {
             onAddScenario={addAuthoredWorldScenario}
             onDeleteScenario={deleteAuthoredWorldScenario}
             structures={plan.structures ?? []}
+            bricks={plan.bricks}
             onSetTargetVisibility={setWorldTargetVisibility}
             onClose={() => {
               tavernAiAbortRef.current?.abort()

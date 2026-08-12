@@ -1,7 +1,8 @@
 import { Bot, GitBranch, ListTree, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { WorldEntity, WorldEntityCommand, WorldEvent, WorldScenarioAction, WorldScenarioBranch, WorldScenarioCondition, WorldScenarioConditionGroup, WorldScenarioRuntime, WorldScenarioStage } from '../types/world'
-import type { BrickStructure } from '../types/bricks'
+import type { BrickStructure, PlacedBrick } from '../types/bricks'
+import { getVoxelInteractionKind } from '../lib/voxelBlockState'
 import { validateWorldScenario, type WorldScenarioValidationIssue } from '../lib/worldScenarioValidation'
 import {
   addWorldScenarioStage,
@@ -16,6 +17,7 @@ type Props = {
   scenario: WorldScenarioRuntime
   entities: WorldEntity[]
   structures: BrickStructure[]
+  bricks: PlacedBrick[]
   hiddenTargets: Array<{ kind: 'entity' | 'brick' | 'structure'; id: string }>
   llmConfigured: boolean
   locale: 'zh-CN' | 'en-US'
@@ -175,16 +177,19 @@ const ScenarioBranchContentEditor = ({
   branch,
   entities,
   structures,
+  bricks,
   zh,
   onChange,
 }: {
   branch: WorldScenarioBranch
   entities: WorldEntity[]
   structures: BrickStructure[]
+  bricks: PlacedBrick[]
   zh: boolean
   onChange: (branch: WorldScenarioBranch) => void
 }) => {
   const firstEntityId = entities[0]?.id ?? ''
+  const interactiveBricks = bricks.filter((brick) => getVoxelInteractionKind(brick))
   const patchAction = (actionIndex: number, action: WorldScenarioAction) => onChange({
     ...branch,
     actions: branch.actions?.map((item, index) => index === actionIndex ? action : item),
@@ -263,6 +268,10 @@ const ScenarioBranchContentEditor = ({
               <input value={action.title} placeholder={zh ? '段落标题' : 'Passage title'} onChange={(event) => patchAction(actionIndex, { ...action, title: event.target.value })} />
               <textarea rows={2} value={action.body} placeholder={zh ? '段落内容' : 'Passage body'} onChange={(event) => patchAction(actionIndex, { ...action, body: event.target.value })} />
             </>}
+            {action.type === 'world-object' && <>
+              <select value={action.brickId} onChange={(event) => patchAction(actionIndex, { ...action, brickId: event.target.value })}>{interactiveBricks.map((brick) => <option key={brick.id} value={brick.id}>{brick.voxelState?.containerName || `${getVoxelInteractionKind(brick)} · ${brick.id}`}</option>)}</select>
+              <select value={action.action} onChange={(event) => patchAction(actionIndex, { ...action, action: event.target.value as typeof action.action })}><option value="open">{zh ? '打开' : 'Open'}</option><option value="close">{zh ? '关闭' : 'Close'}</option><option value="toggle">{zh ? '切换' : 'Toggle'}</option><option value="inspect">{zh ? '检查' : 'Inspect'}</option><option value="power-on">{zh ? '点亮' : 'Power on'}</option><option value="power-off">{zh ? '熄灭' : 'Power off'}</option></select>
+            </>}
             <label title={zh ? '等待上一行为完成后再执行' : 'Wait after the previous action'}>
               {zh ? '等待' : 'Delay'}
               <input
@@ -289,13 +298,14 @@ const ScenarioBranchContentEditor = ({
           <button type="button" disabled={!firstEntityId} onClick={() => addAction({ type: 'issue-command', entityId: firstEntityId, command: { type: 'wander' } })}><Plus size={13} />{zh ? '单位命令' : 'Command'}</button>
           <button type="button" onClick={() => addAction({ type: 'add-story', title: zh ? '分支段落' : 'Branch passage', body: '' })}><Plus size={13} />{zh ? '剧情段落' : 'Passage'}</button>
           <button type="button" disabled={!firstEntityId} onClick={() => addAction({ type: 'set-visibility', target: { kind: 'entity', id: firstEntityId }, visible: true })}><Plus size={13} />{zh ? '显示/隐藏' : 'Visibility'}</button>
+          <button type="button" disabled={!interactiveBricks[0]} onClick={() => interactiveBricks[0] && addAction({ type: 'world-object', brickId: interactiveBricks[0].id, action: 'toggle' })}><Plus size={13} />{zh ? '世界物件' : 'World object'}</button>
         </div>
       </section>
     </div>
   )
 }
 
-export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTargets, llmConfigured, locale, onChange, onSetTargetVisibility }: Props) => {
+export const WorldScenarioEditor = ({ scenario, entities, structures, bricks, hiddenTargets, llmConfigured, locale, onChange, onSetTargetVisibility }: Props) => {
   const zh = locale === 'zh-CN'
   const [editorMode, setEditorMode] = useState<'flow' | 'form'>('flow')
   const [selectedStageId, setSelectedStageId] = useState(
@@ -310,10 +320,12 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
     stages: scenario.stages.map((stage, index) => index === stageIndex ? { ...stage, ...patch } : stage),
   })
   const firstEntityId = entities[0]?.id ?? ''
+  const interactiveBricks = bricks.filter((brick) => getVoxelInteractionKind(brick))
   const hiddenTargetKeys = new Set(hiddenTargets.map((target) => `${target.kind}:${target.id}`))
   const validationIssues = validateWorldScenario(scenario, {
     entityIds: entities.map((entity) => entity.id),
     structureIds: structures.map((structure) => structure.id),
+    brickIds: bricks.map((brick) => brick.id),
   })
   const validationErrorCount = validationIssues.filter((issue) => issue.severity === 'error').length
   const visibleStages = editorMode === 'flow'
@@ -647,6 +659,10 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
                     <input value={action.title} placeholder={zh ? '段落标题' : 'Passage title'} onChange={(event) => patchStage(stageIndex, { actions: stage.actions?.map((item, index) => index === actionIndex ? { ...action, title: event.target.value } : item) })} />
                     <textarea rows={2} value={action.body} placeholder={zh ? '段落内容' : 'Passage body'} onChange={(event) => patchStage(stageIndex, { actions: stage.actions?.map((item, index) => index === actionIndex ? { ...action, body: event.target.value } : item) })} />
                   </>}
+                  {action.type === 'world-object' && <>
+                    <select value={action.brickId} onChange={(event) => patchStage(stageIndex, { actions: stage.actions?.map((item, index) => index === actionIndex ? { ...action, brickId: event.target.value } : item) })}>{interactiveBricks.map((brick) => <option key={brick.id} value={brick.id}>{brick.voxelState?.containerName || `${getVoxelInteractionKind(brick)} · ${brick.id}`}</option>)}</select>
+                    <select value={action.action} onChange={(event) => patchStage(stageIndex, { actions: stage.actions?.map((item, index) => index === actionIndex ? { ...action, action: event.target.value as typeof action.action } : item) })}><option value="open">{zh ? '打开' : 'Open'}</option><option value="close">{zh ? '关闭' : 'Close'}</option><option value="toggle">{zh ? '切换' : 'Toggle'}</option><option value="inspect">{zh ? '检查' : 'Inspect'}</option><option value="power-on">{zh ? '点亮' : 'Power on'}</option><option value="power-off">{zh ? '熄灭' : 'Power off'}</option></select>
+                  </>}
                   <label title={zh ? '等待上一行为完成后再执行' : 'Wait after the previous action'}>
                     {zh ? '等待' : 'Delay'}
                     <input
@@ -675,6 +691,7 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
                 <button type="button" onClick={() => addAction(stageIndex, { type: 'issue-command', entityId: firstEntityId, command: { type: 'wander' } })}><Plus size={13} />{zh ? '单位命令' : 'Command'}</button>
                 <button type="button" onClick={() => addAction(stageIndex, { type: 'add-story', title: zh ? '新段落' : 'New passage', body: '' })}><Plus size={13} />{zh ? '剧情段落' : 'Passage'}</button>
                 <button type="button" disabled={!firstEntityId} onClick={() => addAction(stageIndex, { type: 'set-visibility', target: { kind: 'entity', id: firstEntityId }, visible: true })}><Plus size={13} />{zh ? '显示/隐藏' : 'Visibility'}</button>
+                <button type="button" disabled={!interactiveBricks[0]} onClick={() => interactiveBricks[0] && addAction(stageIndex, { type: 'world-object', brickId: interactiveBricks[0].id, action: 'toggle' })}><Plus size={13} />{zh ? '世界物件' : 'World object'}</button>
               </div>
             </div>
 
@@ -745,6 +762,7 @@ export const WorldScenarioEditor = ({ scenario, entities, structures, hiddenTarg
                       branch={branch}
                       entities={entities}
                       structures={structures}
+                      bricks={bricks}
                       zh={zh}
                       onChange={(updatedBranch) => patchStage(stageIndex, {
                         branches: stage.branches?.map((item, index) => index === branchIndex ? updatedBranch : item),
@@ -785,6 +803,7 @@ const formatValidationIssue = (
     'cyclic-stage-flow': '剧情跳转形成循环，运行时无法重新激活已完成阶段',
     'missing-entity': `引用的单位 ${reference} 不存在`,
     'missing-structure': `引用的建筑 ${reference} 不存在`,
+    'missing-brick': `引用的积木 ${reference} 不存在`,
     'invalid-dialogue': '台词为空或显示时间不足 0.5 秒',
     'invalid-ai-config': 'AI 节点缺少有效指令，或对白数量超出 1–6 句',
     'missing-ai-fallback': `AI 抉择节点缺少有效的保底分支 ${reference}`,
@@ -799,6 +818,7 @@ const formatValidationIssue = (
     'cyclic-stage-flow': 'Stage flow contains a cycle; completed stages cannot reactivate',
     'missing-entity': `Referenced entity ${reference} does not exist`,
     'missing-structure': `Referenced structure ${reference} does not exist`,
+    'missing-brick': `Referenced brick ${reference} does not exist`,
     'invalid-dialogue': 'Dialogue is empty or shorter than 0.5 seconds',
     'invalid-ai-config': 'AI node needs a valid instruction and a 1–6 line limit',
     'missing-ai-fallback': `AI choice node needs a valid fallback branch ${reference}`,

@@ -117,6 +117,15 @@ export type VoxelBlockState = {
   open?: boolean
   powered?: boolean
   containerName?: string
+  /** Lightweight story-facing contents, not a general inventory system. */
+  storyContents?: Array<{
+    id: string
+    title: string
+    description: string
+    tags?: string[]
+    discovered?: boolean
+    taken?: boolean
+  }>
 }
 
 export type PlacedBrick = {
