@@ -75,6 +75,27 @@ describe('world AI adapter', () => {
     expect(snapshot.bricks.some((brick) => brick.id === 'brick-299')).toBe(false)
   })
 
+  it('keeps deterministic brick selection and entity proximity ordering', () => {
+    const world = makeWorld()
+    const definition = worldEntityDefinitionById.get('knight')!
+    world.entities.push(
+      createWorldEntity(definition, { id: 'blue-near', controller: 'rule', factionId: 'blue', transform: { x: 3, z: 1 } }),
+      createWorldEntity(definition, { id: 'red-near', controller: 'rule', factionId: 'red', transform: { x: 4, z: 0 } }),
+    )
+    const bricks = Array.from({ length: 260 }, (_, index) => ({
+      id: `brick-${String(index).padStart(3, '0')}`,
+      brickId: 'brick-1x1',
+      color: 'gray' as const,
+      pose: { xStud: index - 130, yStud: 0, zStud: 0, rotationQuarterTurns: 0 as const },
+    }))
+
+    const first = createWorldAiSnapshot(world, bricks)
+    const second = createWorldAiSnapshot(world, bricks)
+    expect(second.bricks).toEqual(first.bricks)
+    expect(first.entities[0].nearbyFriendlyIds).toContain('blue-near')
+    expect(first.entities[0].nearbyHostileIds).toEqual(expect.arrayContaining(['rule-knight', 'red-near']))
+  })
+
   it('accepts an ID-based command without directly changing the transform', () => {
     const world = makeWorld()
     const result = applyWorldAiTurn(world, {

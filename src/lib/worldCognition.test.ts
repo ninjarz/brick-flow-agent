@@ -93,6 +93,23 @@ describe('world cognition', () => {
     expect(rankWorldCognitionCandidates(world).map((candidate) => candidate.entityId)).toEqual(['auto'])
   })
 
+  it('recognizes recent events even when imported history is not time-sorted', () => {
+    const actor = createWorldEntity(knightDefinition, { id: 'actor' })
+    const other = createWorldEntity(archerDefinition, { id: 'other' })
+    const base = createEmptyWorldState('unsorted-events')
+    const world = {
+      ...base,
+      elapsedSeconds: 100,
+      entities: [actor, other],
+      events: [
+        { id: 'recent', timeSeconds: 99, type: 'interaction' as const, actorId: actor.id },
+        { id: 'old', timeSeconds: 1, type: 'interaction' as const, actorId: other.id },
+      ],
+    }
+    expect(rankWorldCognitionCandidates(world).find((candidate) => candidate.entityId === actor.id)?.reasons)
+      .toContain('recent-event')
+  })
+
   it('derives a lightweight reflection only after a pattern repeats', () => {
     const actor = createWorldEntity(knightDefinition, { id: 'actor' })
     const target = createWorldEntity(archerDefinition, { id: 'target' })

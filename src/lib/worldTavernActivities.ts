@@ -1,5 +1,6 @@
 import { addWorldStory } from './worldNarrative'
 import type { WorldEntity, WorldState, WorldStory, WorldStoryBlock } from '../types/world'
+import { createWorldHiddenTargetIndex } from './worldVisibility'
 
 export type TavernActivityKind = 'toast' | 'dice' | 'rumor'
 
@@ -16,10 +17,8 @@ export type TavernActivityResult = {
 const makeId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
 
 const getAvailableCharacters = (world: WorldState) => {
-  const hiddenIds = new Set(
-    world.hiddenTargets.filter((target) => target.kind === 'entity').map((target) => target.id),
-  )
-  return world.entities.filter((entity) => entity.health > 0 && !hiddenIds.has(entity.id))
+  const hidden = createWorldHiddenTargetIndex(world.hiddenTargets, []).hiddenEntityIds
+  return world.entities.filter((entity) => entity.health > 0 && !hidden.has(entity.id))
 }
 
 const pickCharacter = (characters: WorldEntity[], random: () => number) => (

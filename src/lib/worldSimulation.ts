@@ -8,6 +8,7 @@ import { reconcileWorldEntityGoals } from './worldCharacter'
 import { ingestWorldEvents } from './worldNarrative'
 import { getWorldProjectileFlightSeconds } from './worldProjectiles'
 import { createWorldObstacleIndex, queryWorldObstacleBounds, type WorldObstacleBounds, type WorldObstacleIndex } from './worldObstacleIndex'
+import { createWorldVisibilityIndex } from './worldVisibility'
 import {
   createWorldEntityOccupancyIndex,
   getWorldEntityCollisionRadius,
@@ -925,26 +926,13 @@ export const stepWorldSimulation = (
   options: { suspendAutomaticControllers?: boolean } = {},
 ): WorldState => {
   if (world.entities.length === 0 || deltaSeconds <= 0) return world
-  const hiddenTargetKeys = new Set(world.hiddenTargets.map((target) => `${target.kind}:${target.id}`))
-  const hiddenStructureIds = new Set(world.hiddenTargets.filter((target) => target.kind === 'structure').map((target) => target.id))
-  const hiddenBrickIds = new Set([
-    ...world.hiddenTargets.filter((target) => target.kind === 'brick').map((target) => target.id),
-    ...allStructures.filter((structure) => hiddenStructureIds.has(structure.id)).flatMap((structure) => structure.brickIds),
-  ])
-  const hiddenEntityIds = new Set(world.hiddenTargets.filter((target) => target.kind === 'entity').map((target) => target.id))
-  // Preserve stable collection identities in the common case. The obstacle,
-  // ground-bounds and brick lookup caches are keyed by these immutable arrays.
-  const bricks = hiddenBrickIds.size === 0
-    ? allBricks
-    : allBricks.filter((brick) => !hiddenBrickIds.has(brick.id))
-  const structures = hiddenStructureIds.size === 0
-    ? allStructures
-    : allStructures.filter((structure) => !hiddenStructureIds.has(structure.id))
+  const visibility = createWorldVisibilityIndex(world, allBricks, allStructures)
+  const { hiddenEntityIds, hiddenStructureIds, hiddenBrickIds } = visibility
+  const bricks = visibility.visibleBricks
+  const structures = visibility.visibleStructures
   const groundBounds = getWorldGroundBounds(bricks)
   let correctedBoundary = false
-  const visibleSourceEntities = hiddenEntityIds.size === 0
-    ? world.entities
-    : world.entities.filter((entity) => !hiddenTargetKeys.has(`entity:${entity.id}`))
+  const visibleSourceEntities = visibility.visibleEntities
   const boundedEntities = visibleSourceEntities.map((entity) => {
     const point = clampEntityPointToGround(entity, entity.transform, groundBounds)
     if (point.x === entity.transform.x && point.z === entity.transform.z) return entity

@@ -45,6 +45,7 @@ await writeFile(entry, `
       import(${JSON.stringify(`${workspace}/src/lib/worldEntity.ts`)}),
       import(${JSON.stringify(`${workspace}/src/lib/worldSimulation.ts`)}),
       import(${JSON.stringify(`${workspace}/src/lib/voxelChunking.ts`)}),
+      import(${JSON.stringify(`${workspace}/src/lib/worldAi.ts`)}),
     ]);
     const ms = performance.now() - start;
     results.push({ name: 'module import + default asset construction', ms });
@@ -52,7 +53,7 @@ await writeFile(entry, `
     return modules;
   })();
 
-  const [{ brickById, brickDefinitions }, finishedAssets, { generateBuildPlan }, planUtils, structuralGrid, ldrawVisualGeometry, manualSerializer, stabilityAnalysis, disasterSimulation, worldEntityDefinitions, worldEntity, worldSimulation, voxelChunking] = imports;
+  const [{ brickById, brickDefinitions }, finishedAssets, { generateBuildPlan }, planUtils, structuralGrid, ldrawVisualGeometry, manualSerializer, stabilityAnalysis, disasterSimulation, worldEntityDefinitions, worldEntity, worldSimulation, voxelChunking, worldAi] = imports;
   const defaultFinishedAssets = await measureAsync('load all default finished assets', () => finishedAssets.loadAllDefaultFinishedAssets());
   const largestAsset = defaultFinishedAssets.reduce((largest, asset) =>
     asset.plan.bricks.length > largest.plan.bricks.length ? asset : largest
@@ -203,6 +204,25 @@ await writeFile(entry, `
   for (const entityCount of [10, 30, 60]) {
     measure('simulate ' + entityCount + ' NPCs for 100 world steps', () => simulateNpcScenario(entityCount));
   }
+  const makeAiSnapshotWorld = (entityCount: number) => ({
+    ...worldEntity.createEmptyWorldState('ai-snapshot-profile'),
+    entities: Array.from({ length: entityCount }, (_, index) => worldEntity.createWorldEntity(
+      worldEntityDefinitions.worldEntityDefinitionById.get('knight')!,
+      {
+        id: 'snapshot-npc-' + index,
+        controller: index === 0 ? 'player' as const : 'ai' as const,
+        factionId: index % 2 === 0 ? 'blue' : 'red',
+        transform: { x: (index % 10) * 4, z: Math.floor(index / 10) * 4 },
+      },
+    )),
+  });
+  const aiSnapshotWorld = makeAiSnapshotWorld(60);
+  const aiSnapshotBricks = makeVoxelBenchmarkPlan(1500).bricks;
+  measure('create AI snapshot for 60 NPCs and 1500 bricks x10', () => {
+    for (let index = 0; index < 10; index += 1) {
+      worldAi.createWorldAiSnapshot(aiSnapshotWorld, aiSnapshotBricks);
+    }
+  });
   measure('part definitions scan x1000', () => {
     for (let index = 0; index < 1000; index += 1) {
       brickDefinitions.filter((brick) => brick.name.toLowerCase().includes('slope'));
@@ -228,6 +248,7 @@ await writeFile(entry, `
       ['validate 1500 voxel blocks', 180],
       ['index 1500 voxel blocks', 40],
       ['simulate 60 NPCs for 100 world steps', 1800],
+      ['create AI snapshot for 60 NPCs and 1500 bricks x10', 150],
       ['partition 10,000 voxel blocks into render chunks', 80],
     ]);
     const failures = results.flatMap((result) => {

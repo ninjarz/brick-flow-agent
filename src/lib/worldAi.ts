@@ -11,6 +11,8 @@ import type {
 import { issueWorldEntityCommand } from './worldEntity'
 import { deriveWorldReflections, rankWorldCognitionCandidates, rankWorldSpeakers, retrieveWorldClues, retrieveWorldMemories } from './worldCognition'
 import { requestLlmJsonContent } from './llmGenerator'
+import { createWorldEntityProximityIndex, queryNearbyWorldEntities } from './worldEntityProximity'
+import { createWorldVisibilityIndex } from './worldVisibility'
 
 type WorldAiLocale = 'zh-CN' | 'en-US'
 
@@ -194,19 +196,33 @@ const selectRelevantBricks = (world: WorldState, bricks: PlacedBrick[]) => {
   const observers = world.entities.filter((entity) => entity.controller === 'ai' && entity.health > 0)
   const anchors = observers.length > 0 ? observers : world.entities.filter((entity) => entity.health > 0)
   if (anchors.length === 0) return bricks.slice(0, maxSnapshotBricks)
-  return [...bricks]
-    .sort((a, b) => {
-      const distanceA = Math.min(...anchors.map((entity) => Math.hypot(
-        a.pose.xStud - entity.transform.x,
-        a.pose.zStud - entity.transform.z,
-      )))
-      const distanceB = Math.min(...anchors.map((entity) => Math.hypot(
-        b.pose.xStud - entity.transform.x,
-        b.pose.zStud - entity.transform.z,
-      )))
-      return distanceA - distanceB || a.id.localeCompare(b.id)
-    })
+  return bricks
+    .map((brick) => ({
+      brick,
+      distanceSquared: anchors.reduce((closest, entity) => {
+        const deltaX = brick.pose.xStud - entity.transform.x
+        const deltaZ = brick.pose.zStud - entity.transform.z
+        return Math.min(closest, deltaX * deltaX + deltaZ * deltaZ)
+      }, Number.POSITIVE_INFINITY),
+    }))
+    .sort((a, b) => a.distanceSquared - b.distanceSquared || a.brick.id.localeCompare(b.brick.id))
     .slice(0, maxSnapshotBricks)
+    .map(({ brick }) => brick)
+}
+
+const indexRecentEventsByEntityId = (world: WorldState) => {
+  const eventsByEntityId = new Map<string, WorldState['events']>()
+  for (const event of world.events) {
+    const participantIds = event.targetId && event.targetId !== event.actorId
+      ? [event.actorId, event.targetId]
+      : [event.actorId]
+    for (const entityId of participantIds) {
+      const events = eventsByEntityId.get(entityId)
+      if (events) events.push(event)
+      else eventsByEntityId.set(entityId, [event])
+    }
+  }
+  return eventsByEntityId
 }
 
 export const createWorldAiSnapshot = (
@@ -214,22 +230,18 @@ export const createWorldAiSnapshot = (
   bricks: PlacedBrick[],
   structures: BrickStructure[] = [],
 ): WorldAiSnapshot => {
-  const hiddenEntityIds = new Set(world.hiddenTargets.filter((target) => target.kind === 'entity').map((target) => target.id))
-  const hiddenStructureIds = new Set(world.hiddenTargets.filter((target) => target.kind === 'structure').map((target) => target.id))
-  const hiddenBrickIds = new Set([
-    ...world.hiddenTargets.filter((target) => target.kind === 'brick').map((target) => target.id),
-    ...structures.filter((structure) => hiddenStructureIds.has(structure.id)).flatMap((structure) => structure.brickIds),
-  ])
-  const visibleEntities = world.entities.filter((entity) => !hiddenEntityIds.has(entity.id))
-  const visibleBricks = bricks.filter((brick) => !hiddenBrickIds.has(brick.id))
-  const visibleStructures = structures.filter((structure) => !hiddenStructureIds.has(structure.id))
-  const selectedBricks = selectRelevantBricks({ ...world, entities: visibleEntities }, visibleBricks)
+  const visibility = createWorldVisibilityIndex(world, bricks, structures)
+  const { visibleEntities, visibleBricks, visibleStructures } = visibility
+  const visibleWorld = visibleEntities === world.entities ? world : { ...world, entities: visibleEntities }
+  const selectedBricks = selectRelevantBricks(visibleWorld, visibleBricks)
   const bricksById = new Map(visibleBricks.map((brick) => [brick.id, brick]))
   const visibleEntityNameById = new Map(visibleEntities.map((entity) => [entity.id, entity.name]))
+  const proximityIndex = createWorldEntityProximityIndex(visibleEntities)
+  const recentEventsByEntityId = indexRecentEventsByEntityId(world)
   const protagonist = visibleEntities.find((entity) => entity.controller === 'player')
-  const cognitionRanking = rankWorldCognitionCandidates({ ...world, entities: visibleEntities }, snapshotCognitionRelevantCount)
+  const cognitionRanking = rankWorldCognitionCandidates(visibleWorld, snapshotCognitionRelevantCount)
   const detailedEntityIds = collectSnapshotDetailedEntityIds(
-    { ...world, entities: visibleEntities },
+    visibleWorld,
     visibleEntities,
     protagonist,
     cognitionRanking,
@@ -249,7 +261,7 @@ export const createWorldAiSnapshot = (
     reasons: candidate.reasons,
   })),
   speakerCandidates: protagonist
-    ? rankWorldSpeakers({ ...world, entities: visibleEntities }, protagonist, speakerContext)
+    ? rankWorldSpeakers(visibleWorld, protagonist, speakerContext)
     : [],
   activeFlows: world.scenarios.flatMap((scenario) => {
     if (scenario.enabled === false) return []
@@ -268,17 +280,11 @@ export const createWorldAiSnapshot = (
     const definition = worldEntityDefinitionById.get(entity.definitionId)
     const detailed = detailedEntityIds.has(entity.id)
     const nearbyEntities = detailed
-      ? visibleEntities.filter((candidate) => (
-        candidate.id !== entity.id
-        && candidate.health > 0
-        && Math.hypot(candidate.transform.x - entity.transform.x, candidate.transform.z - entity.transform.z)
-          <= (definition?.perception.detectionRangeStuds ?? 0)
-      ))
+      ? queryNearbyWorldEntities(proximityIndex, entity, definition?.perception.detectionRangeStuds ?? 0)
       : []
     const activeTarget = entity.activeCommand && 'target' in entity.activeCommand ? entity.activeCommand.target : undefined
     const recentContext = detailed
-      ? world.events
-        .filter((event) => event.actorId === entity.id || event.targetId === entity.id)
+      ? (recentEventsByEntityId.get(entity.id) ?? [])
         .slice(-4)
         .map((event) => [event.actorName, event.targetName, event.dialogueText, event.type].filter(Boolean).join(' '))
         .join(' ')

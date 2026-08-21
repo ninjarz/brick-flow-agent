@@ -204,6 +204,12 @@ export const rankWorldCognitionCandidates = (
 ): WorldCognitionCandidate[] => {
   const hidden = new Set(world.hiddenTargets.flatMap((target) => target.kind === 'entity' ? [target.id] : []))
   const recentCutoff = world.elapsedSeconds - 8
+  const recentEntityIds = new Set<string>()
+  for (const event of world.events) {
+    if (event.timeSeconds < recentCutoff) continue
+    recentEntityIds.add(event.actorId)
+    if (event.targetId) recentEntityIds.add(event.targetId)
+  }
   return world.entities
     .filter((entity) => entity.health > 0 && !hidden.has(entity.id) && entity.controller !== 'player')
     .map((entity): WorldCognitionCandidate => {
@@ -222,10 +228,7 @@ export const rankWorldCognitionCandidates = (
         score += 1.5
         reasons.push('threatened')
       }
-      if (world.events.some((event) => (
-        event.timeSeconds >= recentCutoff
-        && (event.actorId === entity.id || event.targetId === entity.id)
-      ))) {
+      if (recentEntityIds.has(entity.id)) {
         score += 1.25
         reasons.push('recent-event')
       }

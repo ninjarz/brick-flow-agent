@@ -49,6 +49,7 @@ import { beginWorldScenarioPlaytest } from './lib/worldScenarioPlaytest'
 import { clearWorkspaceDraft, hasIndexedDbWorkspaceDraft, loadWorkspaceDraft, loadWorkspaceDraftFromIndexedDb, saveWorkspaceDraft } from './lib/workspaceDraft'
 import { applyVoxelPlacementSurface, isVoxelPlantSupported, synchronizePlanVoxelBlockStates, synchronizeVoxelBlockStates, type VoxelPlacementSurface } from './lib/voxelBlockState'
 import { applyPendingWorldObjectEvents } from './lib/worldObjectEventBridge'
+import { createWorldHiddenTargetIndex } from './lib/worldVisibility'
 import type { BrickStructure, BuildPlan, FinishedAsset, LlmConfig, PlacedBrick } from './types/bricks'
 import type { WorldDirectorTurn, WorldEntity, WorldEntityCommand, WorldEntityControllerKind, WorldState } from './types/world'
 import './App.css'
@@ -407,8 +408,18 @@ function App() {
     () => world.entities.find((entity) => entity.id === selectedWorldEntityId),
     [selectedWorldEntityId, world.entities],
   )
+  const worldHiddenTargets = useMemo(
+    () => createWorldHiddenTargetIndex(world.hiddenTargets, plan.structures ?? []),
+    [plan.structures, world.hiddenTargets],
+  )
+  const visibleWorldEntities = useMemo(
+    () => showHiddenScenarioObjects || worldHiddenTargets.hiddenEntityIds.size === 0
+      ? world.entities
+      : world.entities.filter((entity) => !worldHiddenTargets.hiddenEntityIds.has(entity.id)),
+    [showHiddenScenarioObjects, world.entities, worldHiddenTargets],
+  )
   const worldCommandTargets = useMemo<WorldCommandTargetOption[]>(() => [
-    ...world.entities.filter((entity) => showHiddenScenarioObjects || !world.hiddenTargets.some((target) => target.kind === 'entity' && target.id === entity.id)).map((entity) => ({
+    ...visibleWorldEntities.map((entity) => ({
       kind: 'entity' as const,
       id: entity.id,
       label: `${entity.name} · ${t(`worldEntity.faction.${entity.factionId}`)}${entity.health <= 0 ? ` · ${t('worldEntity.behavior.dead')}` : ''}`,
@@ -419,7 +430,7 @@ function App() {
       id: structure.id,
       label: `${structure.name} · ${t('structure.solidified')}`,
     })),
-  ], [plan.structures, showHiddenScenarioObjects, t, world.entities, world.hiddenTargets])
+  ], [plan.structures, t, visibleWorldEntities])
   const activeSelectedIds = useMemo(() => {
     if (!selectedId) return []
     const liveBrickIds = new Set(plan.bricks.map((brick) => brick.id))
@@ -458,17 +469,8 @@ function App() {
       : 'mixed'
   }, [world.entities])
   const activeWorldScenarios = useMemo(() => getActiveWorldScenarioStages(world), [world])
-  const hiddenScenarioEntityIds = useMemo(() => world.hiddenTargets.filter((target) => target.kind === 'entity').map((target) => target.id), [world.hiddenTargets])
-  const visibleWorldEntities = useMemo(() => {
-    if (showHiddenScenarioObjects) return world.entities
-    const hiddenIds = new Set(hiddenScenarioEntityIds)
-    return world.entities.filter((entity) => !hiddenIds.has(entity.id))
-  }, [hiddenScenarioEntityIds, showHiddenScenarioObjects, world.entities])
-  const hiddenScenarioBrickIds = useMemo(() => {
-    const directIds = world.hiddenTargets.filter((target) => target.kind === 'brick').map((target) => target.id)
-    const hiddenStructureIds = new Set(world.hiddenTargets.filter((target) => target.kind === 'structure').map((target) => target.id))
-    return [...new Set([...directIds, ...(plan.structures ?? []).filter((structure) => hiddenStructureIds.has(structure.id)).flatMap((structure) => structure.brickIds)])]
-  }, [plan.structures, world.hiddenTargets])
+  const hiddenScenarioEntityIds = useMemo(() => [...worldHiddenTargets.hiddenEntityIds], [worldHiddenTargets])
+  const hiddenScenarioBrickIds = useMemo(() => [...worldHiddenTargets.hiddenBrickIds], [worldHiddenTargets])
   const manualSourcePlan = isManualOpen ? manualPlan ?? plan : undefined
   const buildManual = useMemo(() => manualSourcePlan ? serializeBuildManual(manualSourcePlan, locale) : undefined, [locale, manualSourcePlan])
   const manualMarkdown = useMemo(() => buildManual ? formatBuildManualMarkdown(buildManual, locale) : '', [buildManual, locale])
