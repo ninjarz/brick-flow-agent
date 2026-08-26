@@ -9,6 +9,8 @@
 
 English README | [中文文档](docs/README_zh.md)
 
+**[Try the live demo](https://ninjarz.github.io/brick-flow-agent/)** — runs directly in the browser with no sign-up required
+
 brick-flow-agent, also named 积流工坊 in Chinese, turns prompts, imported plans, and hand-edited layouts into an interactive 3D building workspace. The goal is to bring different brick-like systems into one editor: LEGO-compatible LDraw parts today, Minecraft-style voxel blocks next, and more part packs later
 
 The app uses React + Three.js for the editor, LDraw data for part rendering, and connector plus structural voxel rules for collision, support, and validation. It also includes a local asset library, voxel debugging, build-manual preview, and Markdown/HTML/JSON export

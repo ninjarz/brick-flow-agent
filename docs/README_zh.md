@@ -4,6 +4,8 @@
 
 [English README](../README.md) | 中文文档
 
+**[打开在线演示](https://ninjarz.github.io/brick-flow-agent/)** — 无需注册，浏览器直接运行
+
 积流工坊（brick-flow-agent）可以把提示词、导入方案和手动编辑的布局变成可交互的 3D 搭建工作区。项目的目标是把不同砖块类体系放进同一个编辑器：当前以 LEGO-compatible LDraw 零件为主，下一步扩展 Minecraft 风格体素方块，之后可以继续接入更多零件包
 
 项目使用 React + Three.js 构建编辑器，使用 LDraw 数据渲染零件，并通过连接点、结构体素、碰撞和支撑规则来校验模型；同时支持素材库、体素调试、搭建手册预览和 Markdown/HTML/JSON 导出
