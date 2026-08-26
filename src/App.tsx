@@ -10,7 +10,7 @@ import { brickById, getDefaultBrickColor } from './data/basicBricks'
 import { worldEntityDefinitionById } from './data/worldEntityDefinitions'
 import { createDefaultWorldScenarios } from './data/worldScenarios'
 import { dropBrickGroupAtPoint, findNearestOpenBrickGroupAround, getBrickGroupDragPointerOffset, offsetBrickGroupDragPoint, rotationRepositionSearchRadiusStuds, type HorizontalDropPoint, type StationaryPlanSpatialData } from './lib/brickGroupPlacement'
-import { generateBuildPlan } from './lib/localGenerator'
+import { createEmptyBuildPlan, generateBuildPlan } from './lib/localGenerator'
 import { buildLlmUserPrompt, generateLlmBuildPlan, isLlmConfigComplete, llmSystemPrompt, requestLlmJsonContent, requestLlmTextStream, resetLlmThinkingCompatibility, testLlmConnection } from './lib/llmGenerator'
 import { clearLlmConnection, hasPersistedLlmConnection, loadLlmConfig, maxRepairAttemptsCeiling, normalizeMaxRepairAttempts, saveLlmConfig, saveLlmConnection } from './lib/llmConfig'
 import { defaultFinishedAssets, hasIndexedDbFinishedAssets, isDefaultFinishedAsset, loadAllDefaultFinishedAssets, loadFinishedAssets, loadFinishedAssetsFromIndexedDb, mergeWithDefaultAssets, saveFinishedAssets } from './lib/finishedAssets'
@@ -952,15 +952,40 @@ function App() {
   const resetWorkspace = () => {
     if (!window.confirm(t('error.resetConfirm'))) return
 
+    generationAbortRef.current?.abort()
+    generationAbortRef.current = undefined
+    tavernAiAbortRef.current?.abort()
+    tavernAiAbortRef.current = undefined
+    tavernDirectorAbortRef.current?.abort()
+    tavernDirectorAbortRef.current = undefined
+    tavernDirectorPlaybackRef.current?.controller.abort()
+    tavernDirectorPlaybackRef.current = undefined
+    worldScenarioAiAbortRef.current?.abort()
+    worldScenarioAiAbortRef.current = undefined
+    worldScenarioAiRequestKeyRef.current = ''
+
     void clearWorkspaceDraft()
-    const nextPlan = generateBuildPlan({ prompt: defaultPrompt })
-    setPlan(nextPlan)
-    setWorld(createEmptyWorldState(nextPlan.id))
+    const nextPlan = createEmptyBuildPlan({ title: t('control.planNamePlaceholder') })
+    const nextWorld = createEmptyWorldState(nextPlan.id)
+    planHistoryRef.current = { past: [], future: [] }
+    planRef.current = nextPlan
+    worldRef.current = nextWorld
+    promptRef.current = ''
+    setPlanState(nextPlan)
+    setHistoryVersion((version) => version + 1)
+    setWorld(nextWorld)
+    setScenarioPlaytest(undefined)
+    setPlacementSession(undefined)
     setWorldEntityPlacement(undefined)
-    setPrompt(defaultPrompt)
+    setPrompt('')
     selectBrick('')
     setImageName(undefined)
     setImagePreview(undefined)
+    setIsGenerating(false)
+    setIsTavernAiThinking(false)
+    setIsTavernDirectorThinking(false)
+    setIsContinuousAiDirectorEnabled(false)
+    closeManual()
     clearGenerationFeedback()
   }
 

@@ -16,6 +16,22 @@ const assemblePlan = (
   steps: createSingleBrickSteps(bricks),
 })
 
+export const createEmptyBuildPlan = ({
+  title,
+  prompt = '',
+}: {
+  title: string
+  prompt?: string
+}): BuildPlan => ({
+  id: createId('plan'),
+  title,
+  prompt,
+  source: 'template-local',
+  bricks: [],
+  steps: [],
+  structures: [],
+})
+
 const carPlan = (prompt: string, imageName?: string) => {
   const bricks = [
     makeBrick('plate-4x6', 'gray', 0, 0, 0),
