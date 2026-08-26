@@ -59,6 +59,39 @@ describe('world AI adapter', () => {
     expect(snapshot.bricks).toEqual([])
   })
 
+  it('keeps hidden participants and their narratives out of AI context', () => {
+    const world = makeWorld()
+    world.hiddenTargets = [{ kind: 'entity', id: 'rule-knight' }]
+    world.events = [
+      { id: 'public-event', timeSeconds: 1, type: 'interaction', actorId: 'ai-knight' },
+      { id: 'secret-attack', timeSeconds: 2, type: 'attack', actorId: 'rule-knight', targetId: 'ai-knight', amount: 4 },
+    ]
+    world.narrative.stories = [
+      {
+        id: 'public-story',
+        title: 'Public story',
+        body: 'Visible.',
+        createdAtSeconds: 1,
+        eventIds: ['public-event'],
+        characterIds: ['ai-knight'],
+        source: 'local',
+      },
+      {
+        id: 'secret-story',
+        title: 'Secret story',
+        body: 'Bran moved through the hidden passage.',
+        createdAtSeconds: 2,
+        eventIds: [],
+        blocks: [{ type: 'dialogue', speakerId: 'rule-knight', text: 'I am here.' }],
+        source: 'local',
+      },
+    ]
+
+    const snapshot = createWorldAiSnapshot(world, [])
+    expect(snapshot.recentEvents.map((event) => event.actorId)).toEqual(['ai-knight'])
+    expect(snapshot.recentNarratives.map((story) => story.title)).toEqual(['Public story'])
+  })
+
   it('caps large brick snapshots to the nearest relevant targets', () => {
     const world = makeWorld()
     const bricks = Array.from({ length: 300 }, (_, index) => ({

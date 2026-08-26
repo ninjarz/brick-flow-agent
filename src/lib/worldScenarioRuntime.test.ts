@@ -323,6 +323,7 @@ describe('world scenario runtime', () => {
     }
     const pending = {
       ...createEmptyWorldState('deferred'),
+      entities: [{ ...createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'guide' }) }],
       scenarios: [scenario],
       events: [{ id: 'talk-event', timeSeconds: 1, type: 'interaction' as const, actorId: 'hero', targetId: 'guide' }],
     }
@@ -354,6 +355,7 @@ describe('world scenario runtime', () => {
     })
     const world = {
       ...createEmptyWorldState('serial-dialogue'),
+      entities: [createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'guide' })],
       scenarios: [makeScenario('first'), makeScenario('second')],
       events: [{ id: 'shared-event', timeSeconds: 1, type: 'interaction' as const, actorId: 'hero', targetId: 'guide' }],
     }
@@ -401,6 +403,7 @@ describe('world scenario runtime', () => {
     })
     const world = {
       ...createEmptyWorldState('priority-dialogue'),
+      entities: [createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'guide' })],
       scenarios: [
         makeScenario('low', 10, 'optional'),
         makeScenario('high', 90, 'main'),
@@ -450,6 +453,10 @@ describe('world scenario runtime', () => {
     const world = {
       ...createEmptyWorldState('fair-dialogue'),
       elapsedSeconds: 5,
+      entities: [
+        createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'guide' }),
+        createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'envoy' }),
+      ],
       scenarios: [fresh, queued],
       events: [
         { id: 'queued-event', timeSeconds: 1, type: 'interaction' as const, actorId: 'hero', targetId: 'guide' },
@@ -678,6 +685,42 @@ describe('world scenario runtime', () => {
 
     expect(world.hiddenTargets).toEqual([])
     expect(world.scenarios[0].stages[0].status).toBe('completed')
+  })
+
+  it('rejects AI dialogue from hidden characters and falls back safely', () => {
+    const actor = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'actor' })
+    const hidden = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'hidden' })
+    const scenario: WorldScenarioRuntime = {
+      id: 'hidden-ai',
+      assetId: 'asset',
+      title: 'Hidden AI',
+      description: 'Hidden AI',
+      processedEventIds: [],
+      pendingAi: { stageId: 'node', eventId: 'event', requestedAtSeconds: 1 },
+      stages: [{
+        id: 'node',
+        title: 'Node',
+        description: 'Node',
+        status: 'active',
+        trigger: { eventType: 'interaction', actorId: actor.id },
+        ai: { mode: 'dialogue', instruction: 'Only the hidden guard may speak.', speakerIds: [hidden.id] },
+      }],
+    }
+    const world = resolveWorldScenarioAi(
+      {
+        ...createEmptyWorldState('hidden-ai'),
+        entities: [actor, hidden],
+        scenarios: [scenario],
+        hiddenTargets: [{ kind: 'entity', id: hidden.id }],
+        events: [{ id: 'event', timeSeconds: 1, type: 'interaction', actorId: actor.id }],
+      },
+      scenario.id,
+      { dialogue: [{ speakerId: hidden.id, text: 'I am hidden.' }] },
+    )
+
+    expect(world.scenarios[0].pendingAi).toBeUndefined()
+    expect(world.scenarios[0].activeDialogue).toBeUndefined()
+    expect(world.entities.find((entity) => entity.id === hidden.id)?.speech).toBeUndefined()
   })
 
   it('ends an explicitly terminal stage instead of unlocking the following stage', () => {

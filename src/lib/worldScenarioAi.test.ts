@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { createEmptyWorldState } from './worldEntity'
+import { createEmptyWorldState, createWorldEntity } from './worldEntity'
+import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { buildWorldScenarioAiPrompt, parseWorldScenarioAiResolution } from './worldScenarioAi'
 import type { WorldScenarioRuntime } from '../types/world'
 
@@ -55,6 +56,40 @@ describe('world scenario AI', () => {
     expect(prompt).toContain('1 to 2 short dialogue lines')
     expect(prompt).toContain('Quarry alarm')
     expect(prompt).toContain('Search the quarry')
+  })
+
+  it('omits hidden characters from allowed AI speakers', () => {
+    const visible = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'visible' })
+    const hidden = createWorldEntity(worldEntityDefinitionById.get('knight')!, {
+      id: 'hidden', name: 'Hidden Guard', description: 'A concealed watcher.',
+    })
+    const scenario: WorldScenarioRuntime = {
+      id: 'flow',
+      assetId: 'authored',
+      title: 'Flow',
+      description: 'Flow',
+      processedEventIds: [],
+      pendingAi: { stageId: 'node', eventId: 'event', requestedAtSeconds: 1 },
+      stages: [{
+        id: 'node',
+        title: 'Node',
+        description: 'Node',
+        status: 'active',
+        trigger: { eventType: 'interaction' },
+        ai: { mode: 'dialogue', instruction: 'Speak.', speakerIds: [visible.id, hidden.id] },
+      }],
+    }
+    const world = {
+      ...createEmptyWorldState('hidden-speaker'),
+      entities: [visible, hidden],
+      scenarios: [scenario],
+      hiddenTargets: [{ kind: 'entity' as const, id: hidden.id }],
+    }
+
+    const prompt = buildWorldScenarioAiPrompt(world, scenario, 'zh-CN')
+    expect(prompt).toContain('"id":"visible"')
+    expect(prompt).not.toContain('Hidden Guard')
+    expect(prompt).not.toContain('"id":"hidden"')
   })
 
   it('parses fenced JSON while discarding malformed dialogue rows', () => {

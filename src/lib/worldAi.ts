@@ -231,13 +231,13 @@ export const createWorldAiSnapshot = (
   structures: BrickStructure[] = [],
 ): WorldAiSnapshot => {
   const visibility = createWorldVisibilityIndex(world, bricks, structures)
-  const { visibleEntities, visibleBricks, visibleStructures } = visibility
+  const { visibleEntities, visibleBricks, visibleStructures, visibleEvents, visibleStories } = visibility
   const visibleWorld = visibleEntities === world.entities ? world : { ...world, entities: visibleEntities }
   const selectedBricks = selectRelevantBricks(visibleWorld, visibleBricks)
   const bricksById = new Map(visibleBricks.map((brick) => [brick.id, brick]))
   const visibleEntityNameById = new Map(visibleEntities.map((entity) => [entity.id, entity.name]))
   const proximityIndex = createWorldEntityProximityIndex(visibleEntities)
-  const recentEventsByEntityId = indexRecentEventsByEntityId(world)
+  const recentEventsByEntityId = indexRecentEventsByEntityId({ ...world, events: visibleEvents })
   const protagonist = visibleEntities.find((entity) => entity.controller === 'player')
   const cognitionRanking = rankWorldCognitionCandidates(visibleWorld, snapshotCognitionRelevantCount)
   const detailedEntityIds = collectSnapshotDetailedEntityIds(
@@ -247,8 +247,8 @@ export const createWorldAiSnapshot = (
     cognitionRanking,
   )
   const speakerContext = [
-    ...world.narrative.stories.slice(-2).map((story) => story.body),
-    ...world.events.slice(-4).flatMap((event) => [event.actorName, event.targetName, event.dialogueText].filter(Boolean) as string[]),
+    ...visibleStories.slice(-2).map((story) => story.body),
+    ...visibleEvents.slice(-4).flatMap((event) => [event.actorName, event.targetName, event.dialogueText].filter(Boolean) as string[]),
   ].join(' ')
   return {
   worldId: world.id,
@@ -272,7 +272,8 @@ export const createWorldAiSnapshot = (
       nodeId: stage.id,
       nodeTitle: stage.title,
       nodeDescription: stage.description,
-      allowedSpeakerIds: stage.ai?.speakerIds ?? scenario.castEntityIds ?? [],
+      allowedSpeakerIds: (stage.ai?.speakerIds ?? scenario.castEntityIds ?? [])
+        .filter((entityId) => visibility.visibleEntities.some(({ id }) => id === entityId)),
       aiMode: stage.ai?.mode,
     }] : []
   }).slice(0, 8),
@@ -381,7 +382,7 @@ export const createWorldAiSnapshot = (
       } : undefined,
     }
   }),
-  recentNarratives: world.narrative.stories.slice(-4).map((story) => ({
+  recentNarratives: visibleStories.slice(-4).map((story) => ({
     title: story.title,
     text: (
       story.blocks?.map((block) => (
@@ -392,7 +393,7 @@ export const createWorldAiSnapshot = (
       || story.body
     ).trim().slice(0, 1_200),
   })).filter((story) => Boolean(story.text)),
-  recentEvents: world.events.slice(-16).map((event) => ({
+  recentEvents: visibleEvents.slice(-16).map((event) => ({
     type: event.type,
     actorId: event.actorId,
     actorName: event.actorName,

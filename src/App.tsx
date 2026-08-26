@@ -425,12 +425,15 @@ function App() {
       label: `${entity.name} · ${t(`worldEntity.faction.${entity.factionId}`)}${entity.health <= 0 ? ` · ${t('worldEntity.behavior.dead')}` : ''}`,
       health: entity.health,
     })),
-    ...(plan.structures ?? []).map((structure) => ({
+    ...(worldHiddenTargets.hiddenStructureIds.size === 0
+      ? plan.structures ?? []
+      : (plan.structures ?? []).filter((structure) => !worldHiddenTargets.hiddenStructureIds.has(structure.id))
+    ).map((structure) => ({
       kind: 'structure' as const,
       id: structure.id,
       label: `${structure.name} · ${t('structure.solidified')}`,
     })),
-  ], [plan.structures, t, visibleWorldEntities])
+  ], [plan.structures, t, visibleWorldEntities, worldHiddenTargets.hiddenStructureIds])
   const activeSelectedIds = useMemo(() => {
     if (!selectedId) return []
     const liveBrickIds = new Set(plan.bricks.map((brick) => brick.id))
@@ -1632,6 +1635,8 @@ function App() {
     const actor = currentWorld.entities.find((entity) => entity.id === entityId)
     if (!actor || actor.controller !== 'player') return false
     const currentPlan = planRef.current
+    const currentHidden = createWorldHiddenTargetIndex(currentWorld.hiddenTargets, currentPlan.structures ?? [])
+    if (currentHidden.hiddenEntityIds.has(entityId)) return false
     const result = issueWorldEntityCommand(
       currentWorld,
       entityId,
@@ -1639,11 +1644,15 @@ function App() {
       (target) => target.kind === 'entity'
         ? currentWorld.entities.some((entity) => entity.id === target.id && (
             command.type === 'revive' ? entity.health <= 0 : entity.health > 0
-          ))
+          ) && !currentHidden.hiddenEntityIds.has(target.id))
         : target.kind === 'structure'
-          ? (currentPlan.structures ?? []).some((structure) => structure.id === target.id)
+          ? (currentPlan.structures ?? []).some((structure) => structure.id === target.id && (
+              !currentHidden.hiddenStructureIds.has(structure.id)
+            ))
           : target.kind === 'brick'
-            ? currentPlan.bricks.some((brick) => brick.id === target.id)
+            ? currentPlan.bricks.some((brick) => brick.id === target.id && (
+                !currentHidden.hiddenBrickIds.has(brick.id)
+              ))
             : false,
       'replace',
     )

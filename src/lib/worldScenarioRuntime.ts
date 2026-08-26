@@ -3,6 +3,7 @@ import { issueWorldEntityCommand, joinWorldParty, leaveWorldParty } from './worl
 import { grantWorldClue } from './worldClues'
 import { makeScenarioDialogueStoryId } from './worldNarrativeFeed'
 import { getWorldScenarioPlaybackLane, orderWorldScenariosForEvaluation } from './worldScenarioScheduler'
+import { createWorldHiddenTargetIndex } from './worldVisibility'
 
 export const evaluateWorldScenarioConditions = (
   world: WorldState,
@@ -444,13 +445,20 @@ export const resolveWorldScenarioAi = (
   const branch = chosenBranchId
     ? activeStage.branches?.find((candidate) => candidate.id === chosenBranchId)
     : undefined
-  const allowedSpeakerIds = new Set(
+  const hiddenEntityIds = createWorldHiddenTargetIndex(world.hiddenTargets, []).hiddenEntityIds
+  const visibleLivingEntityIds = new Set(world.entities.filter((entity) => (
+    !hiddenEntityIds.has(entity.id)
+  )).map((entity) => entity.id))
+  const configuredSpeakerIds = new Set(
     activeStage.ai.speakerIds?.length
       ? activeStage.ai.speakerIds
       : scenario.castEntityIds?.length
         ? scenario.castEntityIds
         : world.entities.map((entity) => entity.id),
   )
+  const allowedSpeakerIds = new Set([...configuredSpeakerIds].filter((entityId) => (
+    visibleLivingEntityIds.has(entityId)
+  )))
   const maxLines = Math.max(1, Math.min(6, activeStage.ai.maxDialogueLines ?? 3))
   const generatedDialogue = (resolution.dialogue ?? [])
     .flatMap((line, index): WorldScenarioDialogueLine[] => {
@@ -470,11 +478,12 @@ export const resolveWorldScenarioAi = (
   const dialogue = generatedDialogue.length
     ? generatedDialogue
     : branch?.dialogue ?? activeStage.dialogue ?? []
+  const visibleDialogue = dialogue.filter((line) => visibleLivingEntityIds.has(line.speakerId))
   const source = generatedDialogue.length ? 'ai' as const : 'authored' as const
   const clearedScenario = { ...scenario, pendingAi: undefined }
 
-  if (dialogue.length > 0) {
-    const firstLine = dialogue[0]
+    if (visibleDialogue.length > 0) {
+      const firstLine = visibleDialogue[0]
     const updatedScenario: WorldScenarioRuntime = {
       ...clearedScenario,
       activeDialogue: {
@@ -487,7 +496,7 @@ export const resolveWorldScenarioAi = (
         lineEndsAtSeconds: world.elapsedSeconds + Math.max(0.5, firstLine.durationSeconds),
       },
     }
-    const nextWorld = stopDialogueParticipants(world, updatedScenario, dialogue, 0, updatedScenario.activeDialogue!.lineEndsAtSeconds)
+    const nextWorld = stopDialogueParticipants(world, updatedScenario, visibleDialogue, 0, updatedScenario.activeDialogue!.lineEndsAtSeconds)
     return {
       ...nextWorld,
       scenarios: nextWorld.scenarios.map((candidate, index) => index === scenarioIndex ? updatedScenario : candidate),
@@ -550,14 +559,19 @@ export const advanceWorldScenarios = (
         ? activeStage.branches?.find((branch) => branch.id === scenario.activeDialogue?.branchId)
         : undefined
       const dialogue = scenario.activeDialogue.generatedDialogue ?? activeBranch?.dialogue ?? activeStage.dialogue ?? []
-      if (dialogue.length === 0) return { ...scenario, activeDialogue: undefined }
+      const hiddenEntityIds = createWorldHiddenTargetIndex(world.hiddenTargets, []).hiddenEntityIds
+      const visibleDialogue = dialogue.filter((line) => {
+        const speaker = world.entities.find((entity) => entity.id === line.speakerId)
+        return speaker && !hiddenEntityIds.has(speaker.id)
+      })
+      if (visibleDialogue.length === 0) return { ...scenario, activeDialogue: undefined }
       const currentLineIndex = Math.min(scenario.activeDialogue.lineIndex, dialogue.length - 1)
-      nextWorld = stopDialogueParticipants(nextWorld, scenario, dialogue, currentLineIndex, scenario.activeDialogue.lineEndsAtSeconds)
+      nextWorld = stopDialogueParticipants(nextWorld, scenario, visibleDialogue, currentLineIndex, scenario.activeDialogue.lineEndsAtSeconds)
       if (world.elapsedSeconds < scenario.activeDialogue.lineEndsAtSeconds) return scenario
-      if (currentLineIndex + 1 < dialogue.length) {
+      if (currentLineIndex + 1 < visibleDialogue.length) {
         scenariosChanged = true
         const nextLineIndex = currentLineIndex + 1
-        const nextLine = dialogue[nextLineIndex]
+        const nextLine = visibleDialogue[nextLineIndex]
         const updatedScenario = {
           ...scenario,
           activeDialogue: {
@@ -625,6 +639,11 @@ export const advanceWorldScenarios = (
       : matched.branch
 
     const dialogue = branch?.dialogue ?? activeStage.dialogue
+    const hiddenEntityIds = createWorldHiddenTargetIndex(world.hiddenTargets, []).hiddenEntityIds
+    const visibleEntityIds = new Set(world.entities.filter((entity) => (
+      !hiddenEntityIds.has(entity.id)
+    )).map((entity) => entity.id))
+    const visibleDialogue = dialogue?.filter((line) => visibleEntityIds.has(line.speakerId))
     const actions = branch?.actions ?? activeStage.actions ?? []
     const needsDialogueLane = Boolean(
       dialogue?.length
@@ -670,9 +689,9 @@ export const advanceWorldScenarios = (
         },
       }
     }
-    if (dialogue?.length) {
+    if (visibleDialogue?.length) {
       dialogueLaneOccupied = true
-      const firstLine = dialogue[0]
+      const firstLine = visibleDialogue[0]
       const updatedScenario: WorldScenarioRuntime = {
         ...consumedScenario,
         activeDialogue: {
@@ -683,7 +702,7 @@ export const advanceWorldScenarios = (
           lineEndsAtSeconds: world.elapsedSeconds + Math.max(0.5, firstLine.durationSeconds),
         },
       }
-      nextWorld = stopDialogueParticipants(nextWorld, updatedScenario, dialogue, 0, updatedScenario.activeDialogue!.lineEndsAtSeconds)
+      nextWorld = stopDialogueParticipants(nextWorld, updatedScenario, visibleDialogue, 0, updatedScenario.activeDialogue!.lineEndsAtSeconds)
       return updatedScenario
     }
     const completed = startTimelineOrCompleteStage(nextWorld, consumedScenario, activeStageIndex, event, branch)

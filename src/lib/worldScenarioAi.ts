@@ -1,4 +1,5 @@
 import type { WorldScenarioAiResolution } from './worldScenarioRuntime'
+import { createWorldHiddenTargetIndex } from './worldVisibility'
 import type { WorldScenarioRuntime, WorldState } from '../types/world'
 
 export const worldScenarioAiSystemPrompt = `You are the constrained scene writer inside an interactive story graph.
@@ -43,8 +44,14 @@ export const buildWorldScenarioAiPrompt = (
   const allowedSpeakerIds = stage.ai.speakerIds?.length
     ? stage.ai.speakerIds
     : scenario.castEntityIds ?? []
+  const hiddenEntityIds = createWorldHiddenTargetIndex(
+    world.hiddenTargets,
+    [],
+  ).hiddenEntityIds
   const allowedSpeakers = world.entities
-    .filter((entity) => allowedSpeakerIds.includes(entity.id))
+    .filter((entity) => (
+      !hiddenEntityIds.has(entity.id) && allowedSpeakerIds.includes(entity.id)
+    ))
     .map((entity) => ({
       id: entity.id,
       name: entity.name,
