@@ -1,6 +1,6 @@
 import type { BuildPlan } from '../types/bricks'
 
-export const appVersion = '0.1.0'
+export const appVersion = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev'
 export const repositoryUrl = 'https://github.com/ninjarz/brick-flow-agent'
 
 export type AppDiagnostics = {

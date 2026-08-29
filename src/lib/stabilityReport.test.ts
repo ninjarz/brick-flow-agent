@@ -20,5 +20,12 @@ describe('stability reports', () => {
     expect(report.plan.brickCount).toBe(plan.bricks.length)
     expect(formatStabilityReportMarkdown(report, 'en-US')).toContain('Structural Analysis Report')
     expect(formatStabilityReportSvg(report, 'en-US')).toContain('<svg')
+    const themedSvg = formatStabilityReportSvg(report, 'en-US', {
+      theme: 'dark',
+      thumbnailDataUrl: 'data:image/png;base64,preview',
+    })
+    expect(themedSvg).toContain('fill="#0f172a"')
+    expect(themedSvg).toContain('<image')
+    expect(themedSvg).toContain('2026-08-27T00:00:00.000Z')
   })
 })

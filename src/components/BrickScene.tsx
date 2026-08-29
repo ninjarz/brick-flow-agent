@@ -54,6 +54,8 @@ type BrickSceneProps = {
   selectedId?: string
   highlightedIds?: string[]
   cameraFrameKey?: string
+  cameraFocusBrickIds?: string[]
+  preserveDrawingBuffer?: boolean
   initialCameraAzimuthDegrees?: number
   viewMode?: BrickSceneViewMode
   stabilityAnalysis?: StabilityAnalysis
@@ -2830,6 +2832,8 @@ export const BrickScene = ({
   selectedId,
   highlightedIds = [],
   cameraFrameKey,
+  cameraFocusBrickIds,
+  preserveDrawingBuffer = false,
   initialCameraAzimuthDegrees,
   viewMode = 'border',
   stabilityAnalysis,
@@ -2872,8 +2876,11 @@ export const BrickScene = ({
     [bricks, hiddenBrickIdSet, placementSourceBrickIds, showHiddenObjects],
   )
   const cameraFrameBricks = useMemo(
-    () => bricks.filter((brick) => showHiddenObjects || !hiddenBrickIdSet.has(brick.id)),
-    [bricks, hiddenBrickIdSet, showHiddenObjects],
+    () => {
+      const focusIds = cameraFocusBrickIds?.length ? new Set(cameraFocusBrickIds) : undefined
+      return bricks.filter((brick) => (showHiddenObjects || !hiddenBrickIdSet.has(brick.id)) && (!focusIds || focusIds.has(brick.id)))
+    },
+    [bricks, cameraFocusBrickIds, hiddenBrickIdSet, showHiddenObjects],
   )
   const [ldrawBoundsVersion, setLDrawBoundsVersion] = useState(0)
   // Placement hides source meshes and shows ghosts instead. Camera framing
@@ -2987,6 +2994,7 @@ export const BrickScene = ({
       shadows={enableRealtimeShadows}
       frameloop="demand"
       dpr={[1, performanceSettings.maxDevicePixelRatio]}
+      gl={{ preserveDrawingBuffer }}
       camera={{ position: [8, 7, 9], fov: 42 }}
       onPointerMissed={() => {
         if (!placementActive) onSelect('')

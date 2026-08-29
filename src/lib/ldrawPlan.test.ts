@@ -31,4 +31,19 @@ describe('LDraw plan interchange', () => {
     expect(imported?.ignoredParts).toBe(0)
     expect(imported?.plan.bricks[0].pose).toMatchObject({ xStud: 2, yStud: 0, zStud: 0 })
   })
+
+  it('reports repeated unknown parts, colors, and unsupported poses', () => {
+    const imported = parseLDrawPlan([
+      '0 FILE compatibility.ldr',
+      '1 999 0 0 0 1 0 0 0 1 0 0 0 1 3001.dat',
+      '1 4 40 0 0 0.7 0 0.7 0 1 0 -0.7 0 0.7 3001.dat',
+      '1 4 80 0 0 1 0 0 0 1 0 0 0 1 missing.dat',
+      '1 4 120 0 0 1 0 0 0 1 0 0 0 1 missing.dat',
+    ].join('\n'))
+
+    expect(imported?.unknownPartCounts).toEqual({ 'missing.dat': 2 })
+    expect(imported?.unsupportedColorCodes).toEqual([999])
+    expect(imported?.unsupportedPoseCount).toBe(1)
+    expect(imported?.ignoredParts).toBe(3)
+  })
 })

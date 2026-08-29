@@ -20,6 +20,9 @@ export type LDrawImportResult = {
   usedEmbeddedPlan: boolean
   ignoredParts: number
   unknownPartNumbers: string[]
+  unknownPartCounts: Record<string, number>
+  unsupportedColorCodes: number[]
+  unsupportedPoseCount: number
 }
 
 const ldrawUnitsPerStud = 20
@@ -224,6 +227,7 @@ const expandLDrawReferences = (text: string) => {
   const references: LDrawReference[] = []
   let ignoredParts = 0
   const unknownPartNumbers = new Set<string>()
+  const unknownPartCounts = new Map<string, number>()
   const rootName = firstFileName ?? rootSectionName
 
   const visit = (
@@ -268,6 +272,7 @@ const expandLDrawReferences = (text: string) => {
       if (!definitionByPartNumber.has(partNumber)) {
         ignoredParts += 1
         unknownPartNumbers.add(partNumber)
+        unknownPartCounts.set(partNumber, (unknownPartCounts.get(partNumber) ?? 0) + 1)
         continue
       }
       references.push({ colorCode, translation: worldTranslation, matrix: worldMatrix, partName: rawPartName })
@@ -275,17 +280,19 @@ const expandLDrawReferences = (text: string) => {
   }
 
   visit(rootName, identity, [0, 0, 0], 16, new Set())
-  return { references, ignoredParts, unknownPartNumbers: [...unknownPartNumbers].sort(), rootName }
+  return { references, ignoredParts, unknownPartNumbers: [...unknownPartNumbers].sort(), unknownPartCounts: Object.fromEntries(unknownPartCounts), rootName }
 }
 
 export const parseLDrawPlan = (text: string, fallbackTitle = 'Imported LDraw'): LDrawImportResult | undefined => {
   const embeddedPlan = parseEmbeddedPlan(text)
   if (embeddedPlan) {
-    return { plan: embeddedPlan, usedEmbeddedPlan: true, ignoredParts: 0, unknownPartNumbers: [] }
+    return { plan: embeddedPlan, usedEmbeddedPlan: true, ignoredParts: 0, unknownPartNumbers: [], unknownPartCounts: {}, unsupportedColorCodes: [], unsupportedPoseCount: 0 }
   }
 
   const bricks: PlacedBrick[] = []
   const expanded = expandLDrawReferences(text)
+  const unsupportedColorCodes = new Set<number>()
+  let unsupportedPoseCount = 0
 
   for (const reference of expanded.references) {
     const { colorCode, matrix } = reference
@@ -299,9 +306,11 @@ export const parseLDrawPlan = (text: string, fallbackTitle = 'Imported LDraw'): 
     ))
     if (matrixDistance(poseMatch.matrix, matrix) > 0.1) {
       expanded.ignoredParts += 1
+      unsupportedPoseCount += 1
       continue
     }
     const footprint = footprintToWorld(definition, poseMatch.horizontal, poseMatch.vertical)
+    if (!ldrawCodeToColor.has(colorCode) && colorCode !== 16) unsupportedColorCodes.add(colorCode)
     const color = ldrawCodeToColor.get(colorCode) ?? definition.colors[0]
     const safeColor = definition.colors.includes(color) ? color : definition.colors[0]
     bricks.push({
@@ -337,5 +346,8 @@ export const parseLDrawPlan = (text: string, fallbackTitle = 'Imported LDraw'): 
     usedEmbeddedPlan: false,
     ignoredParts: expanded.ignoredParts,
     unknownPartNumbers: expanded.unknownPartNumbers,
+    unknownPartCounts: expanded.unknownPartCounts,
+    unsupportedColorCodes: [...unsupportedColorCodes].sort((left, right) => left - right),
+    unsupportedPoseCount,
   }
 }

@@ -1,4 +1,4 @@
-import { Activity, ArrowRight, CloudRain, Download, FileJson, Gauge, Image, LoaderCircle, Pause, Play, RotateCcw, Wind, X, Zap } from 'lucide-react'
+import { Activity, ArrowLeft, ArrowRight, CloudRain, Download, FileJson, Gauge, Image, LoaderCircle, Pause, Play, RotateCcw, Wind, X, Zap } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { BrickScene, type BrickSceneTransform } from './BrickScene'
 import { brickById } from '../data/basicBricks'
@@ -15,11 +15,15 @@ import {
 import { useI18n } from '../lib/i18n'
 import { getSimulationPlaybackFps } from '../lib/scenePerformance'
 import { createBrickStabilityInsights, createStabilityReport, formatStabilityReportMarkdown, formatStabilityReportSvg } from '../lib/stabilityReport'
+import { createPlanFingerprint, deleteStabilitySnapshot, loadStabilityHistory, renameStabilitySnapshot, saveStabilitySnapshot, type StabilitySnapshot } from '../lib/stabilityHistory'
+import { createBuildGraph } from '../lib/planUtils'
+import { StabilityHistoryPanel } from './StabilityHistoryPanel'
 import type { BuildPlan } from '../types/bricks'
 
 type StabilityLabProps = {
   plan: BuildPlan
   onClose: () => void
+  onSnapshotSaved?: () => void
 }
 
 const weatherParticleCount = 18
@@ -85,7 +89,7 @@ const WindDirectionIndicator = ({
   </div>
 )
 
-export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
+export const StabilityLab = ({ plan, onClose, onSnapshotSaved }: StabilityLabProps) => {
   const { locale, t } = useI18n()
   const [scenario, setScenario] = useState<DisasterScenario>('wind')
   const [intensity, setIntensity] = useState(70)
@@ -99,7 +103,11 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
   const [cameraAzimuthDegrees, setCameraAzimuthDegrees] = useState(18)
   const [showConnectionHeatmap, setShowConnectionHeatmap] = useState(true)
   const [inspectedBrickId, setInspectedBrickId] = useState('')
+  const [history, setHistory] = useState<StabilitySnapshot[]>(() => loadStabilityHistory(plan.id))
+  const [baselineId, setBaselineId] = useState(() => loadStabilityHistory(plan.id)[0]?.id ?? '')
+  const [reportTheme, setReportTheme] = useState<'light' | 'dark'>('light')
   const workerRef = useRef<Worker>()
+  const simulatorRef = useRef<HTMLElement>(null)
   const simulationRunRef = useRef(0)
   const simulationPlaybackIntervalMs = 1000 / getSimulationPlaybackFps(plan.bricks.length)
 
@@ -296,14 +304,60 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
     () => result ? createStabilityReport(plan, result.analysis, locale, result) : undefined,
     [locale, plan, result],
   )
-  const downloadReport = (format: 'json' | 'md' | 'svg') => {
+  useEffect(() => {
+    if (!report) return
+    const now = new Date()
+    const saved = saveStabilitySnapshot({
+      id: `analysis-${now.getTime().toString(36)}`,
+      planId: plan.id,
+      name: locale === 'zh-CN' ? `分析 ${now.toLocaleString('zh-CN')}` : `Analysis ${now.toLocaleString('en-US')}`,
+      createdAt: now.toISOString(),
+      planFingerprint: createPlanFingerprint(plan),
+      report,
+    })
+    setHistory(saved.history)
+    if (saved.created) {
+      setBaselineId((current) => current || saved.history[1]?.id || saved.snapshot.id)
+      onSnapshotSaved?.()
+    }
+  }, [locale, onSnapshotSaved, plan, report])
+
+  const getSceneThumbnail = () => {
+    try {
+      return simulatorRef.current?.querySelector('canvas')?.toDataURL('image/png')
+    } catch {
+      return undefined
+    }
+  }
+
+  const downloadReport = async (format: 'json' | 'md' | 'svg' | 'png') => {
     if (!report) return
     const content = format === 'json'
       ? JSON.stringify(report, null, 2)
       : format === 'md'
         ? formatStabilityReportMarkdown(report, locale)
-        : formatStabilityReportSvg(report, locale)
-    const blob = new Blob([content], { type: format === 'json' ? 'application/json' : format === 'svg' ? 'image/svg+xml' : 'text/markdown' })
+        : formatStabilityReportSvg(report, locale, { theme: reportTheme, thumbnailDataUrl: getSceneThumbnail() })
+    let blob: Blob
+    if (format === 'png') {
+      const svgUrl = URL.createObjectURL(new Blob([content], { type: 'image/svg+xml' }))
+      try {
+        const image = document.createElement('img')
+        await new Promise<void>((resolve, reject) => {
+          image.onload = () => resolve()
+          image.onerror = () => reject(new Error('REPORT_IMAGE_FAILED'))
+          image.src = svgUrl
+        })
+        const canvas = document.createElement('canvas')
+        canvas.width = image.naturalWidth
+        canvas.height = image.naturalHeight
+        canvas.getContext('2d')?.drawImage(image, 0, 0)
+        blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((value) => value ? resolve(value) : reject(new Error('REPORT_PNG_FAILED')), 'image/png'))
+      } finally {
+        URL.revokeObjectURL(svgUrl)
+      }
+    } else {
+      blob = new Blob([content], { type: format === 'json' ? 'application/json' : format === 'svg' ? 'image/svg+xml' : 'text/markdown' })
+    }
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -312,6 +366,28 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
     link.click()
     link.remove()
     URL.revokeObjectURL(url)
+  }
+  const riskyBrickIds = useMemo(() => result ? [...result.analysis.riskByBrickId.values()]
+    .filter((item) => item.riskLevel !== 'stable')
+    .sort((left, right) => right.risk - left.risk)
+    .map((item) => item.brickId) : [], [result])
+  const relatedSupportIds = useMemo(() => {
+    if (!inspectedBrickId) return []
+    const graph = createBuildGraph(plan.bricks)
+    const selectedBounds = graph.boundsById.get(inspectedBrickId)
+    const connected = [...(graph.attachmentEdges.get(inspectedBrickId) ?? [])]
+    if (!selectedBounds) return connected
+    const supports = connected.filter((brickId) => {
+      const bounds = graph.boundsById.get(brickId)
+      return bounds && bounds.maxY <= selectedBounds.minY + 0.15
+    })
+    return supports.length > 0 ? supports : connected
+  }, [inspectedBrickId, plan.bricks])
+  const navigateRisk = (direction: -1 | 1) => {
+    if (riskyBrickIds.length === 0) return
+    const current = riskyBrickIds.indexOf(inspectedBrickId)
+    const next = current < 0 ? 0 : (current + direction + riskyBrickIds.length) % riskyBrickIds.length
+    setInspectedBrickId(riskyBrickIds[next])
   }
   const scenarioOptions: Array<{ value: DisasterScenario; icon: typeof Wind }> = [
     { value: 'wind', icon: Wind },
@@ -464,7 +540,7 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
 
         {result && frame ? (
           <>
-            <section className="stability-simulator">
+            <section className="stability-simulator" ref={simulatorRef}>
               <div
                 className={`disaster-weather disaster-weather-${result.options.scenario} ${isPlaying ? '' : 'paused'}`}
                 style={result.options.scenario === 'wind'
@@ -477,7 +553,10 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
               <BrickScene
                 bricks={plan.bricks}
                 selectedId={inspectedBrickId}
-                cameraFrameKey={`${plan.id}:stability-lab`}
+                cameraFrameKey={`${plan.id}:stability-lab:${inspectedBrickId}`}
+                cameraFocusBrickIds={inspectedBrickId ? [inspectedBrickId, ...relatedSupportIds] : undefined}
+                preserveDrawingBuffer
+                highlightedIds={relatedSupportIds}
                 stabilityAnalysis={result.analysis}
                 displayColorByBrickId={sceneDisplayColorByBrickId}
                 transformsByBrickId={sceneTransformsByBrickId}
@@ -552,7 +631,11 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
                 )}
                 {inspectedBrickId && (
                   <div className="stability-brick-explanation" role="status">
-                    <strong>{locale === 'zh-CN' ? '所选零件诊断' : 'Selected part diagnosis'}</strong>
+                    <div className="stability-risk-navigation">
+                      <button type="button" onClick={() => navigateRisk(-1)} aria-label={locale === 'zh-CN' ? '上一个风险' : 'Previous risk'}><ArrowLeft size={13} /></button>
+                      <strong>{locale === 'zh-CN' ? `所选零件诊断 · 支撑 ${relatedSupportIds.length}` : `Selected part diagnosis · ${relatedSupportIds.length} supports`}</strong>
+                      <button type="button" onClick={() => navigateRisk(1)} aria-label={locale === 'zh-CN' ? '下一个风险' : 'Next risk'}><ArrowRight size={13} /></button>
+                    </div>
                     {inspectedInsights.length > 0 ? inspectedInsights.map((insight) => (
                       <p key={insight.reason}>
                         <span>{insight.reason}</span>
@@ -643,11 +726,34 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
                 <span>{t('stabilityLab.tippingMargin', { margin: result.analysis.tippingMargin.toFixed(2) })}</span>
               </div>
               <div className="stability-report-actions">
+                <div className="report-theme-toggle" role="group" aria-label={locale === 'zh-CN' ? '报告主题' : 'Report theme'}>
+                  {(['light', 'dark'] as const).map((theme) => <button key={theme} type="button" className={reportTheme === theme ? 'active' : ''} onClick={() => setReportTheme(theme)}>{theme === 'light' ? '☀' : '☾'}</button>)}
+                </div>
+                <button type="button" onClick={() => void downloadReport('png')} title={locale === 'zh-CN' ? '导出 PNG 图片' : 'Export PNG image'}><Image size={15} />PNG</button>
                 <button type="button" onClick={() => downloadReport('svg')} title={locale === 'zh-CN' ? '导出可分享图片' : 'Export shareable image'}><Image size={15} />SVG</button>
                 <button type="button" onClick={() => downloadReport('md')} title={locale === 'zh-CN' ? '导出 Markdown 报告' : 'Export Markdown report'}><Download size={15} />MD</button>
                 <button type="button" onClick={() => downloadReport('json')} title={locale === 'zh-CN' ? '导出结构化报告' : 'Export structured report'}><FileJson size={15} />JSON</button>
               </div>
             </footer>
+            <StabilityHistoryPanel
+              history={history}
+              currentReport={report!}
+              baselineId={baselineId}
+              onBaselineChange={setBaselineId}
+              onRename={(snapshot) => {
+                const name = window.prompt(locale === 'zh-CN' ? '分析记录名称' : 'Analysis record name', snapshot.name)
+                if (!name) return
+                const next = renameStabilitySnapshot(plan.id, snapshot.id, name)
+                setHistory(next)
+                onSnapshotSaved?.()
+              }}
+              onDelete={(snapshot) => {
+                const next = deleteStabilitySnapshot(plan.id, snapshot.id)
+                setHistory(next)
+                if (baselineId === snapshot.id) setBaselineId(next[0]?.id ?? '')
+                onSnapshotSaved?.()
+              }}
+            />
           </>
         ) : (
           <section className={`stability-simulator stability-simulator-placeholder ${simulationError ? 'error' : ''}`} aria-hidden="true">

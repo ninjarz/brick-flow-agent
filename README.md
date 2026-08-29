@@ -27,12 +27,15 @@ The app uses React + Three.js for the editor, LDraw data for part rendering, and
 - Four scene modes: bordered, borderless, structure X-ray, and structural voxels
 - Static stability analysis with per-brick risk colors, support hull, center of mass, tipping margin, and connection redundancy
 - A bridge-game-style disaster lab with deterministic wind, heavy-rain, and earthquake simulations, failure propagation, playback, and scoring
-- Actionable per-part stability explanations plus JSON, Markdown, and shareable SVG analysis reports
+- Actionable per-part stability explanations, risk navigation, and related-support highlighting
+- Per-project analysis history with named baselines, before/after metric comparisons, and stale-result detection
+- JSON, Markdown, themed SVG, and PNG analysis reports with an embedded scene thumbnail
 - Editable per-part inventory limits shared by manual editing and LLM generation
 - Built-in asset library with IndexedDB-backed persistence for large user models
 - Browser-side OBJ/MTL import with multi-material color mapping, size, brick-budget, edge-style, silhouette, and quality previews
 - JSON and LDraw/MPD import plus lossless LDraw export for application round trips
-- Workspace-wide drag-and-drop import for JSON, LDraw/MPD, and OBJ files, with a persistent compatibility summary
+- Workspace-wide drag-and-drop import for JSON, LDraw/MPD, and OBJ files
+- An import compatibility center retaining the latest 10 reports, unsupported-part counts, repair notes, and OBJ quality metrics
 - Build Manual 2.0 with delta-only storage, installation arrows, exploded view, guided camera angles, timeline playback, and Markdown/HTML/JSON export
 - Adaptive rendering for large scenes and lazy loading for 3D/OBJ-heavy modules
 - Bilingual UI with browser-language defaults and manual language selection
@@ -110,7 +113,7 @@ The same conversion core powers the in-browser **Import OBJ** dialog. Files stay
 
 ## 🌪️ Stability Lab
 
-Structure X-ray provides immediate static feedback. The stability lab then applies time-varying wind, heavy-rain, or earthquake loads, propagates failed connections through the support graph, and scores survival, static stability, span, and material efficiency. See [the stability model](docs/STABILITY_MODEL.md) for formulas, weights, and limitations.
+Structure X-ray provides immediate static feedback. The stability lab then applies time-varying wind, heavy-rain, or earthquake loads, propagates failed connections through the support graph, and scores survival, static stability, span, and material efficiency. Each run is retained per project for baseline comparison; changing the model marks the previous result as stale. Reports can be exported as JSON, Markdown, themed SVG, or PNG with a scene thumbnail. See [the stability model](docs/STABILITY_MODEL.md) for formulas, weights, and limitations.
 
 ## 🤖 LLM Configuration
 
@@ -132,6 +135,8 @@ Projects, custom assets, preferences, and API configuration remain in this brows
 ## 💬 Feedback
 
 Use the feedback button in the top toolbar to open a prefilled GitHub issue. It includes the app version, browser, platform, locale, part count, and active pack counts, but never includes the project contents, prompt, reference image, endpoint, or API key. Dedicated issue templates are available for bugs, feature requests, and import compatibility reports.
+
+The import compatibility center keeps the latest 10 local import reports. A report can be copied or opened as a prefilled GitHub issue, including unsupported part/color counts, validation messages, and OBJ conversion metrics without uploading the source model.
 
 ## ⌨️ Keyboard Controls
 

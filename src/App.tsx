@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, Box, Boxes, Download, Eye, EyeOff, FileUp, Gauge, Github, Globe2, KeyRound, Link, MessageCircle, MessageSquareText, Pause, Play, Plus, Redo2, RotateCcw, ScanLine, Settings2, ShieldCheck, Trash2, Undo2, Unlink2, X } from 'lucide-react'
+import { BookOpen, Box, Boxes, ClipboardList, Download, Eye, EyeOff, FileUp, Gauge, Github, Globe2, Link, MessageCircle, MessageSquareText, Pause, Play, Plus, Redo2, RotateCcw, ScanLine, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
 import { BrickEditorPanel } from './components/BrickEditorPanel'
 import { BrickCountsPanel } from './components/BrickCountsPanel'
 import type { WorldCommandTargetOption } from './components/WorldEntityEditorPanel'
@@ -12,7 +12,7 @@ import { createDefaultWorldScenarios } from './data/worldScenarios'
 import { dropBrickGroupAtPoint, findNearestOpenBrickGroupAround, getBrickGroupDragPointerOffset, offsetBrickGroupDragPoint, rotationRepositionSearchRadiusStuds, type HorizontalDropPoint, type StationaryPlanSpatialData } from './lib/brickGroupPlacement'
 import { createEmptyBuildPlan, generateBuildPlan } from './lib/localGenerator'
 import { buildLlmUserPrompt, generateLlmBuildPlan, isLlmConfigComplete, llmSystemPrompt, requestLlmJsonContent, requestLlmTextStream, resetLlmThinkingCompatibility, testLlmConnection } from './lib/llmGenerator'
-import { clearLlmConnection, defaultLlmConfig, hasPersistedLlmConnection, loadLlmConfig, maxRepairAttemptsCeiling, normalizeMaxRepairAttempts, saveLlmConfig, saveLlmConnection } from './lib/llmConfig'
+import { clearLlmConnection, hasPersistedLlmConnection, loadLlmConfig, normalizeMaxRepairAttempts, saveLlmConfig, saveLlmConnection } from './lib/llmConfig'
 import { defaultFinishedAssets, hasIndexedDbFinishedAssets, isDefaultFinishedAsset, loadAllDefaultFinishedAssets, loadFinishedAssets, loadFinishedAssetsFromIndexedDb, mergeWithDefaultAssets, saveFinishedAssets } from './lib/finishedAssets'
 import { formatBuildManualHtml, formatBuildManualMarkdown, serializeBuildManual } from './lib/manualSerializer'
 import { getManualPageTabItems, getManualStepPage, manualStepPageSize } from './lib/manualPagination'
@@ -50,8 +50,9 @@ import { clearWorkspaceDraft, hasIndexedDbWorkspaceDraft, loadWorkspaceDraft, lo
 import { applyVoxelPlacementSurface, isVoxelPlantSupported, synchronizePlanVoxelBlockStates, synchronizeVoxelBlockStates, type VoxelPlacementSurface } from './lib/voxelBlockState'
 import { applyPendingWorldObjectEvents } from './lib/worldObjectEventBridge'
 import { createWorldHiddenTargetIndex } from './lib/worldVisibility'
-import { appVersion, createFeedbackUrl } from './lib/appDiagnostics'
-import { clearAllLocalAppData } from './lib/localData'
+import { createFeedbackUrl } from './lib/appDiagnostics'
+import { clearStabilityHistory, createPlanFingerprint, loadStabilityHistory } from './lib/stabilityHistory'
+import { loadImportDiagnostics, saveImportDiagnostic, type ImportDiagnostic } from './lib/importDiagnostics'
 import type { BrickStructure, BuildPlan, FinishedAsset, LlmConfig, PlacedBrick } from './types/bricks'
 import type { WorldDirectorTurn, WorldEntity, WorldEntityCommand, WorldEntityControllerKind, WorldState } from './types/world'
 import './App.css'
@@ -59,6 +60,8 @@ import './App.css'
 const BrickScene = lazy(() => import('./components/BrickScene').then((module) => ({ default: module.BrickScene })))
 const ObjImportModal = lazy(() => import('./components/ObjImportModal').then((module) => ({ default: module.ObjImportModal })))
 const StabilityLab = lazy(() => import('./components/StabilityLab').then((module) => ({ default: module.StabilityLab })))
+const ImportDiagnosticsModal = lazy(() => import('./components/ImportDiagnosticsModal').then((module) => ({ default: module.ImportDiagnosticsModal })))
+const ConfigModal = lazy(() => import('./components/ConfigModal').then((module) => ({ default: module.ConfigModal })))
 const WorldEntityEditorPanel = lazy(() => import('./components/WorldEntityEditorPanel').then((module) => ({ default: module.WorldEntityEditorPanel })))
 const WorldTavern = lazy(() => import('./components/WorldTavern').then((module) => ({ default: module.WorldTavern })))
 const WorldStoryDock = lazy(() => import('./components/WorldStoryDock').then((module) => ({ default: module.WorldStoryDock })))
@@ -166,7 +169,7 @@ const isTypingElement = (target: EventTarget | null) => {
 }
 
 function App() {
-  const { locale, setLocale, t } = useI18n()
+  const { locale, t } = useI18n()
   const workspaceDraft = useMemo(() => loadWorkspaceDraft(), [])
   const defaultPrompt = t('prompt.default')
   const fallbackPrompt = t('prompt.fallback')
@@ -227,6 +230,8 @@ function App() {
   const [isPromptPreviewOpen, setIsPromptPreviewOpen] = useState(false)
   const [isAssetLibraryOpen, setIsAssetLibraryOpen] = useState(false)
   const [isObjImportOpen, setIsObjImportOpen] = useState(false)
+  const [isImportDiagnosticsOpen, setIsImportDiagnosticsOpen] = useState(false)
+  const [importDiagnostics, setImportDiagnostics] = useState<ImportDiagnostic[]>(loadImportDiagnostics)
   const [droppedObjFile, setDroppedObjFile] = useState<File>()
   const [isFileDragActive, setIsFileDragActive] = useState(false)
   const fileDragDepthRef = useRef(0)
@@ -269,6 +274,7 @@ function App() {
   const [showHiddenScenarioObjects, setShowHiddenScenarioObjects] = useState(false)
   const [assetImportFrameVersion, setAssetImportFrameVersion] = useState(0)
   const [isAutoSnapEnabled, setIsAutoSnapEnabled] = useState(false)
+  const [analysisHistoryVersion, setAnalysisHistoryVersion] = useState(0)
   useEffect(() => {
     if (world.hiddenTargets.length === 0) setShowHiddenScenarioObjects(false)
   }, [world.hiddenTargets.length])
@@ -276,6 +282,17 @@ function App() {
     () => sceneViewMode === 'xray' ? analyzeBuildStability(plan.bricks) : undefined,
     [plan.bricks, sceneViewMode],
   )
+  const latestAnalysisSnapshot = useMemo(
+    () => {
+      void analysisHistoryVersion
+      return loadStabilityHistory(plan.id)[0]
+    },
+    [analysisHistoryVersion, plan.id],
+  )
+  const analysisIsStale = Boolean(latestAnalysisSnapshot && latestAnalysisSnapshot.planFingerprint !== createPlanFingerprint(plan))
+  const handleAnalysisSnapshotSaved = useCallback(() => {
+    setAnalysisHistoryVersion((version) => version + 1)
+  }, [])
   const defaultAssetCategoryLabels = useMemo(() => new Set(['自定义', 'Custom']), [])
   const llmConfigComplete = isLlmConfigComplete(llmConfig)
   const llmEngineStatus: LlmEngineStatus = !llmConfigComplete
@@ -829,7 +846,7 @@ function App() {
   }, [buildManual, isManualOpen, isManualPlaying, manualPlaybackIntervalMs, manualStepIndex])
 
   useEffect(() => {
-    if (!isConfigOpen && !isPromptPreviewOpen && !isAssetLibraryOpen && !isObjImportOpen && !isManualOpen && !isStabilityLabOpen && !isTavernOpen) return
+    if (!isConfigOpen && !isPromptPreviewOpen && !isAssetLibraryOpen && !isObjImportOpen && !isImportDiagnosticsOpen && !isManualOpen && !isStabilityLabOpen && !isTavernOpen) return
 
     const handleModalEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
@@ -848,6 +865,8 @@ function App() {
         setIsAssetLibraryOpen(false)
       } else if (isObjImportOpen) {
         setIsObjImportOpen(false)
+      } else if (isImportDiagnosticsOpen) {
+        setIsImportDiagnosticsOpen(false)
       } else if (isConfigOpen) {
         setIsConfigOpen(false)
       }
@@ -855,11 +874,11 @@ function App() {
 
     window.addEventListener('keydown', handleModalEscape)
     return () => window.removeEventListener('keydown', handleModalEscape)
-  }, [closeManual, isAssetLibraryOpen, isConfigOpen, isManualOpen, isObjImportOpen, isPromptPreviewOpen, isStabilityLabOpen, isTavernOpen])
+  }, [closeManual, isAssetLibraryOpen, isConfigOpen, isImportDiagnosticsOpen, isManualOpen, isObjImportOpen, isPromptPreviewOpen, isStabilityLabOpen, isTavernOpen])
 
   useEffect(() => {
     const handleHistoryKeyDown = (event: KeyboardEvent) => {
-      if (isConfigOpen || isPromptPreviewOpen || isAssetLibraryOpen || isObjImportOpen || isManualOpen || isStabilityLabOpen || isTavernOpen) return
+      if (isConfigOpen || isPromptPreviewOpen || isAssetLibraryOpen || isObjImportOpen || isImportDiagnosticsOpen || isManualOpen || isStabilityLabOpen || isTavernOpen) return
       if (isTypingElement(event.target)) return
       if (!event.metaKey && !event.ctrlKey) return
 
@@ -878,7 +897,7 @@ function App() {
 
     window.addEventListener('keydown', handleHistoryKeyDown)
     return () => window.removeEventListener('keydown', handleHistoryKeyDown)
-  }, [isAssetLibraryOpen, isConfigOpen, isManualOpen, isObjImportOpen, isPromptPreviewOpen, isStabilityLabOpen, isTavernOpen, redoPlan, undoPlan])
+  }, [isAssetLibraryOpen, isConfigOpen, isImportDiagnosticsOpen, isManualOpen, isObjImportOpen, isPromptPreviewOpen, isStabilityLabOpen, isTavernOpen, redoPlan, undoPlan])
 
 
 
@@ -910,24 +929,47 @@ function App() {
     const reader = new FileReader()
     reader.onload = () => {
       const isLDrawFile = /\.(?:ldr|mpd)$/i.test(file.name)
+      let parsedLDraw: ReturnType<typeof parseLDrawPlan> = undefined
+      const recordFailure = (message: string) => {
+        const extension = file.name.split('.').at(-1)?.toUpperCase()
+        setImportDiagnostics(saveImportDiagnostic({
+          id: `import-${Date.now().toString(36)}`,
+          createdAt: new Date().toISOString(),
+          fileName: file.name,
+          format: extension === 'LDR' || extension === 'MPD' ? extension : 'JSON',
+          status: 'error',
+          importedPartCount: parsedLDraw?.plan.bricks.length ?? 0,
+          ignoredPartCount: parsedLDraw?.ignoredParts ?? 0,
+          unsupportedParts: Object.entries(parsedLDraw?.unknownPartCounts ?? {}).map(([partNumber, count]) => ({ partNumber, count })),
+          unsupportedColorCodes: parsedLDraw?.unsupportedColorCodes ?? [],
+          unsupportedPoseCount: parsedLDraw?.unsupportedPoseCount ?? 0,
+          validationMessages: [message],
+          repairs: [],
+        }))
+      }
       try {
         const text = String(reader.result)
         const ldrawResult = isLDrawFile
           ? parseLDrawPlan(text, file.name.replace(/\.(?:ldr|mpd)$/i, ''))
           : undefined
+        parsedLDraw = ldrawResult
         const importedProject = isLDrawFile
           ? ldrawResult?.plan ? { plan: ldrawResult.plan } : undefined
           : parseImportedProject(JSON.parse(text) as unknown, importText)
         const importedPlan = importedProject?.plan
         if (!importedPlan) {
-          setGenerationFailure(t(isLDrawFile ? 'error.importLDrawInvalid' : 'error.importInvalid'))
+          const message = t(isLDrawFile ? 'error.importLDrawInvalid' : 'error.importInvalid')
+          recordFailure(message)
+          setGenerationFailure(message)
           return
         }
 
         const issues = validateBuildPlan(importedPlan)
         const blockingIssues = getBlockingBuildPlanIssues(issues)
         if (blockingIssues.length > 0) {
-          setGenerationFailure(t('error.importIssues', { summary: summarizeBuildPlanIssues(issues, locale) }))
+          const message = t('error.importIssues', { summary: summarizeBuildPlanIssues(issues, locale) })
+          recordFailure(message)
+          setGenerationFailure(message)
           return
         }
 
@@ -953,11 +995,29 @@ function App() {
             ? warnings
             : [locale === 'zh-CN' ? '没有发现阻塞问题或不支持的零件。' : 'No blocking issues or unsupported parts were found.'],
         })
+        const extension = file.name.split('.').at(-1)?.toUpperCase()
+        const diagnostic: ImportDiagnostic = {
+          id: `import-${Date.now().toString(36)}`,
+          createdAt: new Date().toISOString(),
+          fileName: file.name,
+          format: extension === 'LDR' || extension === 'MPD' ? extension : 'JSON',
+          status: warnings.length > 0 ? 'warning' : 'success',
+          importedPartCount: importedPlan.bricks.length,
+          ignoredPartCount: ldrawResult?.ignoredParts ?? 0,
+          unsupportedParts: Object.entries(ldrawResult?.unknownPartCounts ?? {}).map(([partNumber, count]) => ({ partNumber, count })),
+          unsupportedColorCodes: ldrawResult?.unsupportedColorCodes ?? [],
+          unsupportedPoseCount: ldrawResult?.unsupportedPoseCount ?? 0,
+          validationMessages: warnings,
+          repairs: [],
+        }
+        setImportDiagnostics(saveImportDiagnostic(diagnostic))
         if (warnings.length > 0) {
           setGenerationWarning(warnings.join('；'))
         }
       } catch {
-        setGenerationFailure(t(isLDrawFile ? 'error.importLDrawInvalid' : 'error.importParse'))
+        const message = t(isLDrawFile ? 'error.importLDrawInvalid' : 'error.importParse')
+        recordFailure(message)
+        setGenerationFailure(message)
       }
     }
     reader.readAsText(file)
@@ -1027,6 +1087,8 @@ function App() {
     worldScenarioAiRequestKeyRef.current = ''
 
     void clearWorkspaceDraft()
+    clearStabilityHistory(planRef.current.id)
+    setAnalysisHistoryVersion((version) => version + 1)
     const nextPlan = createEmptyBuildPlan({ title: t('control.planNamePlaceholder') })
     const nextWorld = createEmptyWorldState(nextPlan.id)
     planHistoryRef.current = { past: [], future: [] }
@@ -2612,7 +2674,7 @@ function App() {
     clearGenerationFeedback()
   }
 
-  const importObjResult = (result: ObjImportResult, saveToLibrary: boolean) => {
+  const importObjResult = (result: ObjImportResult, saveToLibrary: boolean, fileName: string) => {
     const issues = validateBuildPlan(result.plan)
     const blockingIssues = getBlockingBuildPlanIssues(issues)
     if (blockingIssues.length > 0) {
@@ -2625,6 +2687,41 @@ function App() {
     selectBrick('')
     clearGenerationFeedback()
     setIsObjImportOpen(false)
+    const diagnostic: ImportDiagnostic = {
+      id: `import-${Date.now().toString(36)}`,
+      createdAt: new Date().toISOString(),
+      fileName,
+      format: 'OBJ',
+      status: issues.length > 0 || result.stats.structuralChangeRatio > 0.15 ? 'warning' : 'success',
+      importedPartCount: result.plan.bricks.length,
+      ignoredPartCount: result.stats.removedComponentVoxels + result.stats.prunedUnsupportedVoxels,
+      unsupportedParts: [],
+      unsupportedColorCodes: [],
+      unsupportedPoseCount: 0,
+      validationMessages: issues.length > 0 ? [summarizeBuildPlanIssues(issues, locale)] : [],
+      repairs: [
+        result.stats.addedSupportVoxels > 0 ? `${result.stats.addedSupportVoxels} support voxels added` : '',
+        result.stats.addedConnectivityVoxels > 0 ? `${result.stats.addedConnectivityVoxels} connectivity voxels added` : '',
+      ].filter(Boolean),
+      objMetrics: {
+        resolution: result.stats.resolution,
+        voxelIoU: result.stats.voxelIoU,
+        frontSilhouetteIoU: result.stats.frontSilhouetteIoU,
+        sideSilhouetteIoU: result.stats.sideSilhouetteIoU,
+        topSilhouetteIoU: result.stats.topSilhouetteIoU,
+        structuralChangePercent: result.stats.structuralChangeRatio * 100,
+        addedSupportVoxels: result.stats.addedSupportVoxels,
+        addedConnectivityVoxels: result.stats.addedConnectivityVoxels,
+        brickCount: result.stats.brickCount,
+      },
+    }
+    setImportDiagnostics(saveImportDiagnostic(diagnostic))
+    setImportReport({
+      title: locale === 'zh-CN' ? `已导入“${result.plan.title}” · ${result.plan.bricks.length} 个零件` : `Imported “${result.plan.title}” · ${result.plan.bricks.length} parts`,
+      details: [locale === 'zh-CN'
+        ? `轮廓 IoU ${(result.stats.frontSilhouetteIoU * 100).toFixed(1)}% · 结构改动 ${(result.stats.structuralChangeRatio * 100).toFixed(1)}%`
+        : `Silhouette IoU ${(result.stats.frontSilhouetteIoU * 100).toFixed(1)}% · structural change ${(result.stats.structuralChangeRatio * 100).toFixed(1)}%`],
+    })
 
     if (saveToLibrary) {
       const dimensions = `${result.stats.dimensions.width}×${result.stats.dimensions.height}×${result.stats.dimensions.depth}`
@@ -2768,10 +2865,23 @@ function App() {
                   <FileUp size={18} />
                 </button>
                 <button
-                  className="icon-button"
+                  className={`icon-button ${importDiagnostics.some((item) => item.status === 'warning' || item.status === 'error') ? 'has-warning' : ''}`}
                   type="button"
-                  aria-label={t('top.stabilityLab')}
-                  title={t('top.stabilityLab')}
+                  aria-label={locale === 'zh-CN' ? '导入兼容性中心' : 'Import Compatibility Center'}
+                  title={locale === 'zh-CN' ? '导入兼容性中心' : 'Import Compatibility Center'}
+                  onClick={() => setIsImportDiagnosticsOpen(true)}
+                >
+                  <ClipboardList size={18} />
+                </button>
+                <button
+                  className={`icon-button ${analysisIsStale ? 'analysis-stale' : ''}`}
+                  type="button"
+                  aria-label={analysisIsStale
+                    ? (locale === 'zh-CN' ? '模型已变化，需要重新分析' : 'Model changed; analysis required')
+                    : t('top.stabilityLab')}
+                  title={analysisIsStale
+                    ? (locale === 'zh-CN' ? '模型已变化，需要重新分析' : 'Model changed; analysis required')
+                    : t('top.stabilityLab')}
                   onClick={() => setIsStabilityLabOpen(true)}
                 >
                   <Gauge size={18} />
@@ -3236,9 +3346,23 @@ function App() {
         </Suspense>
       )}
 
+      {isImportDiagnosticsOpen && (
+        <Suspense fallback={null}>
+          <ImportDiagnosticsModal
+            diagnostics={importDiagnostics}
+            onChange={setImportDiagnostics}
+            onClose={() => setIsImportDiagnosticsOpen(false)}
+          />
+        </Suspense>
+      )}
+
       {isStabilityLabOpen && (
         <Suspense fallback={null}>
-          <StabilityLab plan={plan} onClose={() => setIsStabilityLabOpen(false)} />
+          <StabilityLab
+            plan={plan}
+            onClose={() => setIsStabilityLabOpen(false)}
+            onSnapshotSaved={handleAnalysisSnapshotSaved}
+          />
         </Suspense>
       )}
 
@@ -3294,202 +3418,18 @@ function App() {
       )}
 
       {isConfigOpen && (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setIsConfigOpen(false)}>
-          <section
-            className="config-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="config-title"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <header>
-              <div>
-                <h2 id="config-title">{t('config.title')}</h2>
-                <p>{llmEngineStatusLabel}</p>
-              </div>
-              <button className="icon-button" type="button" aria-label={t('common.close')} title={t('common.close')} onClick={() => setIsConfigOpen(false)}>
-                <X size={18} />
-              </button>
-            </header>
-            <div className="config-form">
-              <section className="config-section">
-                <div className="config-section-title">
-                  <Globe2 size={16} />
-                  <div>
-                    <h3>{t('config.languageSection')}</h3>
-                    <p>{t('config.languageDescription')}</p>
-                  </div>
-                </div>
-                <div className="language-options" role="group" aria-label={t('app.language')}>
-                  <button type="button" className={locale === 'zh-CN' ? 'active' : ''} onClick={() => setLocale('zh-CN')}>
-                    中文
-                  </button>
-                  <button type="button" className={locale === 'en-US' ? 'active' : ''} onClick={() => setLocale('en-US')}>
-                    English
-                  </button>
-                </div>
-              </section>
-
-              <section className="config-section">
-                <div className="config-section-title">
-                  <Settings2 size={16} />
-                  <div>
-                    <h3>{t('config.llmSection')}</h3>
-                    <p>{llmEngineStatusLabel}</p>
-                  </div>
-                </div>
-                <label>
-                  {t('config.modelName')}
-                  <input
-                    value={llmConfig.modelName}
-                    onChange={(event) => {
-                      updateLlmConfig({ ...llmConfig, modelName: event.target.value })
-                    }}
-                    placeholder={t('config.modelPlaceholder')}
-                    autoComplete="off"
-                  />
-                </label>
-                <label>
-                  {t('config.endpoint')}
-                  <span className="input-with-icon">
-                    <Link size={15} />
-                    <input
-                      value={llmConfig.endpoint}
-                      onChange={(event) => {
-                        updateLlmConfig({ ...llmConfig, endpoint: event.target.value })
-                      }}
-                      placeholder="https://api.example.com/v1/chat/completions"
-                      type="url"
-                      autoComplete="off"
-                    />
-                  </span>
-                </label>
-                <label>
-                  api_key
-                  <span className="input-with-icon">
-                    <KeyRound size={15} />
-                    <input
-                      value={llmConfig.apiKey}
-                      onChange={(event) => {
-                        updateLlmConfig({ ...llmConfig, apiKey: event.target.value })
-                      }}
-                      placeholder="sk-..."
-                      type="password"
-                      autoComplete="off"
-                    />
-                  </span>
-                </label>
-                <div className="config-field">
-                  <span>{t('config.requestMode')}</span>
-                  <div className="request-mode-options" role="group" aria-label={t('config.requestMode')}>
-                    {(['direct', 'proxy'] as const).map((requestMode) => (
-                      <button
-                        key={requestMode}
-                        type="button"
-                        className={llmConfig.requestMode === requestMode ? 'active' : ''}
-                        onClick={() => {
-                          updateLlmConfig({ ...llmConfig, requestMode })
-                        }}
-                      >
-                        {requestMode === 'direct' ? <Globe2 size={15} /> : <Link size={15} />}
-                        <span>{t(`config.requestMode.${requestMode}`)}</span>
-                      </button>
-                    ))}
-                  </div>
-                  <p className="config-field-note">
-                    {t(`config.requestModeDescription.${llmConfig.requestMode}`)}
-                  </p>
-                </div>
-                <label className="config-toggle">
-                  <input
-                    type="checkbox"
-                    checked={llmConfig.enableThinking}
-                    onChange={(event) => {
-                      updateLlmConfig({ ...llmConfig, enableThinking: event.target.checked })
-                    }}
-                  />
-                  <span>
-                    <strong>{t('config.thinkingMode')}</strong>
-                    <small>{t(`config.thinkingModeDescription.${llmConfig.enableThinking ? 'on' : 'off'}`)}</small>
-                  </span>
-                </label>
-                <label className="config-toggle">
-                  <input
-                    type="checkbox"
-                    checked={llmConfig.autoRepair}
-                    onChange={(event) => {
-                      updateLlmConfig({ ...llmConfig, autoRepair: event.target.checked })
-                    }}
-                  />
-                  <span>
-                    <strong>{t('config.autoRepair')}</strong>
-                    <small>{t(`config.autoRepairDescription.${llmConfig.autoRepair ? 'on' : 'off'}`)}</small>
-                  </span>
-                </label>
-                {llmConfig.autoRepair && (
-                  <label className="config-inline-field">
-                    <span>{t('config.maxRepairAttempts')}</span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={maxRepairAttemptsCeiling}
-                      step={1}
-                      value={normalizeMaxRepairAttempts(llmConfig.maxRepairAttempts)}
-                      onChange={(event) => {
-                        updateLlmConfig({ ...llmConfig, maxRepairAttempts: normalizeMaxRepairAttempts(event.target.value) })
-                      }}
-                    />
-                  </label>
-                )}
-                <div className="config-actions">
-                  <button type="button" className="secondary" onClick={handleTestLlmConfig} disabled={isTestingLlmConfig}>
-                    {isTestingLlmConfig ? t('config.testing') : t('config.test')}
-                  </button>
-                  {llmConfigFeedback && (
-                    <p className={`feedback-text ${llmConfigFeedback.tone}`}>{llmConfigFeedback.text}</p>
-                  )}
-                </div>
-              </section>
-
-              <section className="config-section privacy-section">
-                <div className="config-section-title">
-                  <ShieldCheck size={16} />
-                  <div>
-                    <h3>{locale === 'zh-CN' ? '隐私与本地数据' : 'Privacy and local data'}</h3>
-                    <p>{locale === 'zh-CN'
-                      ? '项目、素材和配置只保存在此浏览器。直连模式会把提示词、所选参考图片和 API Key 直接发送到你配置的模型服务商；Brick Flow 没有项目服务器。'
-                      : 'Projects, assets, and settings stay in this browser. Direct mode sends prompts, selected reference images, and the API key directly to your configured model provider; Brick Flow has no project server.'}</p>
-                  </div>
-                </div>
-                <p className="config-field-note">Brick Flow {appVersion}</p>
-                <div className="config-actions privacy-actions">
-                  <button type="button" className="secondary" onClick={() => {
-                    updateLlmConfig({ ...defaultLlmConfig })
-                    setLlmConfigFeedback({ tone: 'success', text: locale === 'zh-CN' ? 'API 配置已从本浏览器清除。' : 'API settings were cleared from this browser.' })
-                  }}>
-                    {locale === 'zh-CN' ? '清除 API 配置' : 'Clear API settings'}
-                  </button>
-                  <button type="button" className="danger-action" onClick={async () => {
-                    const confirmed = window.confirm(locale === 'zh-CN'
-                      ? '这会删除当前项目草稿、自定义素材、API 配置和所有偏好，且无法撤销。继续吗？'
-                      : 'This deletes the current draft, custom assets, API settings, and all preferences. It cannot be undone. Continue?')
-                    if (!confirmed) return
-                    const cleared = await clearAllLocalAppData()
-                    if (!cleared) {
-                      window.alert(locale === 'zh-CN'
-                        ? 'IndexedDB 正被另一个 Brick Flow 标签页使用。请关闭其他标签页后再试。'
-                        : 'IndexedDB is in use by another Brick Flow tab. Close the other tab and try again.')
-                      return
-                    }
-                    window.location.reload()
-                  }}>
-                    {locale === 'zh-CN' ? '清除所有本地数据' : 'Clear all local data'}
-                  </button>
-                </div>
-              </section>
-            </div>
-          </section>
-        </div>
+        <Suspense fallback={null}>
+          <ConfigModal
+            config={llmConfig}
+            engineStatusLabel={llmEngineStatusLabel}
+            testing={isTestingLlmConfig}
+            feedback={llmConfigFeedback}
+            onUpdate={updateLlmConfig}
+            onFeedback={setLlmConfigFeedback}
+            onTest={handleTestLlmConfig}
+            onClose={() => setIsConfigOpen(false)}
+          />
+        </Suspense>
       )}
 
       {isPromptPreviewOpen && (

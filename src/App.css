@@ -47,6 +47,36 @@
 .import-report > div { display: grid; gap: 4px; }
 .import-report span { color: #475569; font-size: 12px; line-height: 1.4; }
 
+.import-diagnostics-modal {
+  width: min(760px, calc(100vw - 30px));
+  max-height: min(780px, calc(100vh - 30px));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 22px 64px rgba(15, 23, 42, 0.25);
+}
+
+.import-diagnostics-modal > header { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; padding: 16px; border-bottom: 1px solid #e2e8f0; }
+.import-diagnostics-modal h2 { margin: 0; font-size: 18px; }
+.import-diagnostics-modal header p { margin: 4px 0 0; color: #64748b; font-size: 11px; }
+.import-diagnostics-list { display: grid; gap: 9px; padding: 14px; overflow: auto; }
+.import-diagnostics-list > article { display: grid; gap: 9px; padding: 12px; border: 1px solid #e2e8f0; border-radius: 9px; background: #f8fafc; }
+.import-diagnostics-list > article.warning { border-color: #fcd34d; background: #fffbeb; }
+.import-diagnostics-list > article.error { border-color: #fecaca; background: #fff1f2; }
+.import-diagnostics-list article > header { display: flex; justify-content: space-between; gap: 10px; }
+.import-diagnostics-list article > header div { display: grid; gap: 2px; }
+.import-diagnostics-list article > header small { color: #64748b; font-size: 9px; }
+.import-diagnostics-list article > header > span { color: #64748b; font-size: 9px; font-weight: 900; text-transform: uppercase; }
+.import-diagnostic-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.import-diagnostic-metrics span { padding: 6px; border-radius: 6px; background: #fff; color: #64748b; font-size: 10px; }
+.import-diagnostic-metrics b { display: block; color: var(--ink); font-size: 14px; }
+.import-diagnostics-list article > p { margin: 0; color: #475569; font-size: 10px; line-height: 1.45; }
+.import-diagnostics-list footer { display: flex; flex-wrap: wrap; gap: 6px; }
+.import-diagnostics-list footer button,
+.import-diagnostics-list footer a { min-height: 30px; display: inline-flex; align-items: center; gap: 5px; padding: 0 9px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; color: #475569; font-size: 10px; font-weight: 800; text-decoration: none; }
+
 .workspace {
   min-height: 0;
   min-width: 0;
@@ -117,6 +147,25 @@
   border-color: rgba(37, 99, 235, 0.28);
   background: #eaf2ff;
 }
+
+.toolbar-group .icon-button.analysis-stale {
+  position: relative;
+  border-color: #f59e0b;
+  color: #b45309;
+}
+
+.toolbar-group .icon-button.analysis-stale::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ef4444;
+}
+
+.toolbar-group .icon-button.has-warning { color: #b45309; }
 
 .toolbar-group .icon-button.github-link {
   border-color: transparent;
@@ -2248,6 +2297,105 @@ button.status-pill:hover {
   color: #64748b;
   line-height: 1.4;
 }
+
+.stability-risk-navigation {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) 26px;
+  align-items: center;
+  gap: 5px;
+}
+
+.stability-risk-navigation button {
+  min-height: 24px;
+  padding: 0;
+  border-color: #cbd5e1;
+  background: #fff;
+  color: #475569;
+}
+
+.report-theme-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid #dbeafe;
+  border-radius: 7px;
+}
+
+.report-theme-toggle button {
+  min-width: 25px;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.report-theme-toggle button.active { background: #dbeafe; color: #1d4ed8; }
+
+.stability-history-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.stability-history-panel > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.stability-history-panel h3 { margin: 0; color: var(--ink); font-size: 14px; }
+.stability-history-panel header p { margin: 3px 0 0; color: #64748b; font-size: 10px; }
+
+.stability-comparison-downloads { display: flex; gap: 5px; }
+.stability-comparison-downloads button {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 7px;
+  background: #fff;
+  color: #1d4ed8;
+  font-size: 9px;
+}
+
+.stability-comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.stability-comparison-grid article {
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  background: #fff;
+}
+
+.stability-comparison-grid article.improved { border-color: #86efac; background: #f0fdf4; }
+.stability-comparison-grid article.declined { border-color: #fecaca; background: #fff1f2; }
+.stability-comparison-grid span { color: #64748b; font-size: 9px; font-weight: 800; }
+.stability-comparison-grid strong { color: var(--ink); font-size: 12px; }
+.stability-comparison-grid small { color: #64748b; font-size: 9px; }
+.stability-comparison-grid .improved small { color: #15803d; }
+.stability-comparison-grid .declined small { color: #b91c1c; }
+
+.stability-history-list { display: grid; gap: 5px; max-height: 160px; overflow: auto; }
+.stability-history-list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px 28px;
+  gap: 4px;
+}
+.stability-history-list article.active { border-radius: 7px; box-shadow: inset 0 0 0 1px #60a5fa; }
+.stability-history-list button { min-height: 30px; padding: 0 6px; background: #fff; color: #475569; }
+.stability-history-list .history-baseline { display: grid; justify-items: start; text-align: left; }
+.stability-history-list .history-baseline span { font-size: 10px; font-weight: 800; }
+.stability-history-list .history-baseline small { font-size: 8px; color: #64748b; }
 
 .performance-badge {
   position: absolute;
@@ -5772,6 +5920,19 @@ button:disabled {
 
   .stability-score-card {
     grid-template-columns: 84px minmax(0, 1fr);
+  }
+
+  .stability-history-panel > header {
+    display: grid;
+  }
+
+  .stability-comparison-downloads {
+    flex-wrap: wrap;
+  }
+
+  .stability-comparison-grid,
+  .import-diagnostic-metrics {
+    grid-template-columns: 1fr 1fr;
   }
 
   .simulation-timeline {

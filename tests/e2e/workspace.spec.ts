@@ -40,5 +40,37 @@ test('a project file can be dropped anywhere in the workspace', async ({ page })
 test('feedback is prefilled with non-sensitive diagnostics', async ({ page }) => {
   const feedback = page.getByLabel('Send feedback or request a feature')
   await expect(feedback).toHaveAttribute('href', /github\.com\/ninjarz\/brick-flow-agent\/issues\/new/)
-  await expect(feedback).toHaveAttribute('href', /Brick\+Flow%3A\+0\.1\.0/)
+  await expect(feedback).toHaveAttribute('href', /Brick\+Flow%3A\+0\.2\.0/)
+})
+
+test('stability analysis is retained and exports a PNG report', async ({ page }) => {
+  await page.getByLabel('Stability disaster lab').click()
+  await expect(page.getByText('Analysis history and comparison')).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText('1/10 records retained for this project.')).toBeVisible()
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByTitle('Export PNG image').click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toMatch(/-stability-report\.png$/)
+})
+
+test('LDraw compatibility details remain available after import', async ({ page }) => {
+  await page.evaluate(() => {
+    const ldraw = [
+      '0 FILE compatibility-demo.ldr',
+      '0 Compatibility demo',
+      '1 4 0 0 0 1 0 0 0 1 0 0 0 1 3001.dat',
+      '1 999 80 0 0 1 0 0 0 1 0 0 0 1 99999.dat',
+      '1 999 160 0 0 1 0 0 0 1 0 0 0 1 99999.dat',
+    ].join('\n')
+    const transfer = new DataTransfer()
+    transfer.items.add(new File([ldraw], 'compatibility-demo.ldr', { type: 'text/plain' }))
+    window.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }))
+  })
+
+  await expect(page.getByText('1 parts', { exact: true })).toBeVisible()
+  await page.getByLabel('Import Compatibility Center').click()
+  await expect(page.getByRole('dialog', { name: 'Import Compatibility Center' })).toBeVisible()
+  await expect(page.getByText('99999 ×2')).toBeVisible()
+  await expect(page.getByText('Unknown colors')).toBeVisible()
 })

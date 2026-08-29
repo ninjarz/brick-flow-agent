@@ -18,7 +18,7 @@ type ObjImportModalProps = {
   open: boolean
   initialFile?: File
   onClose: () => void
-  onImported: (result: ObjImportResult, saveToLibrary: boolean) => void
+  onImported: (result: ObjImportResult, saveToLibrary: boolean, fileName: string) => void
 }
 
 const maxObjFileBytes = 100 * 1024 * 1024
@@ -382,7 +382,7 @@ export const ObjImportModal = ({ open, initialFile, onClose, onImported }: ObjIm
               {t('objImport.regenerate')}
             </button>
           )}
-          <button className="primary" type="button" disabled={!file || isImporting} onClick={result ? () => onImported(result, saveToLibrary) : startImport}>
+          <button className="primary" type="button" disabled={!file || isImporting} onClick={result ? () => onImported(result, saveToLibrary, file?.name ?? `${result.plan.title}.obj`) : startImport}>
             {result ? <Check size={17} /> : <FileUp size={17} />}
             {isImporting ? t('objImport.importing') : result ? t('objImport.confirmImport') : t('objImport.generatePreview')}
           </button>

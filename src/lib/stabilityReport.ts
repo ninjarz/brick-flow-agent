@@ -182,27 +182,38 @@ const escapeXml = (value: string) => value
   .replaceAll('>', '&gt;')
   .replaceAll('"', '&quot;')
 
-export const formatStabilityReportSvg = (report: StabilityReport, locale: Locale) => {
+export const formatStabilityReportSvg = (
+  report: StabilityReport,
+  locale: Locale,
+  options: { theme?: 'light' | 'dark'; thumbnailDataUrl?: string } = {},
+) => {
   const zh = locale === 'zh-CN'
+  const dark = options.theme === 'dark'
+  const background = dark ? '#0f172a' : '#f7f8fc'
+  const card = dark ? '#172033' : '#ffffff'
+  const ink = dark ? '#f8fafc' : '#172033'
+  const muted = dark ? '#a8b3c7' : '#526078'
   const findings = report.insights.slice(0, 3)
-  const height = 420 + findings.length * 76
+  const thumbnailHeight = options.thumbnailDataUrl ? 250 : 0
+  const height = 420 + thumbnailHeight + findings.length * 76
   const scoreColor = report.summary.score >= 80 ? '#16a34a' : report.summary.score >= 55 ? '#d97706' : '#dc2626'
   const findingRows = findings.map((insight, index) => {
-    const y = 390 + index * 76
-    return `<g transform="translate(64 ${y})"><circle cx="7" cy="-5" r="7" fill="${insight.severity === 'critical' ? '#dc2626' : insight.severity === 'warning' ? '#d97706' : '#2563eb'}"/><text x="28" y="0" font-size="18" font-weight="600" fill="#172033">${escapeXml(insight.reason)}</text><text x="28" y="30" font-size="15" fill="#526078">${escapeXml(insight.suggestion)}</text></g>`
+    const y = 390 + thumbnailHeight + index * 76
+    return `<g transform="translate(64 ${y})"><circle cx="7" cy="-5" r="7" fill="${insight.severity === 'critical' ? '#dc2626' : insight.severity === 'warning' ? '#d97706' : '#2563eb'}"/><text x="28" y="0" font-size="18" font-weight="600" fill="${ink}">${escapeXml(insight.reason)}</text><text x="28" y="30" font-size="15" fill="${muted}">${escapeXml(insight.suggestion)}</text></g>`
   }).join('')
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="${height}" viewBox="0 0 1000 ${height}">
-  <rect width="1000" height="${height}" rx="28" fill="#f7f8fc"/>
-  <rect x="40" y="40" width="920" height="${height - 80}" rx="22" fill="#ffffff" stroke="#dfe3ec"/>
+  <rect width="1000" height="${height}" rx="28" fill="${background}"/>
+  <rect x="40" y="40" width="920" height="${height - 80}" rx="22" fill="${card}" stroke="${dark ? '#334155' : '#dfe3ec'}"/>
   <text x="64" y="88" font-family="system-ui,sans-serif" font-size="18" font-weight="700" fill="#2563eb">BRICK FLOW</text>
-  <text x="64" y="132" font-family="system-ui,sans-serif" font-size="30" font-weight="700" fill="#172033">${escapeXml(report.plan.title)}</text>
-  <text x="64" y="163" font-family="system-ui,sans-serif" font-size="16" fill="#657089">${zh ? '结构分析报告' : 'Structural analysis report'} · ${report.plan.brickCount} ${zh ? '个零件' : 'parts'}</text>
+  <text x="64" y="132" font-family="system-ui,sans-serif" font-size="30" font-weight="700" fill="${ink}">${escapeXml(report.plan.title)}</text>
+  <text x="64" y="163" font-family="system-ui,sans-serif" font-size="16" fill="${muted}">${zh ? '结构分析报告' : 'Structural analysis report'} · ${report.plan.brickCount} ${zh ? '个零件' : 'parts'} · ${escapeXml(report.generatedAt)}</text>
   <circle cx="150" cy="252" r="64" fill="${scoreColor}" opacity="0.12"/>
   <text x="150" y="248" text-anchor="middle" font-family="system-ui,sans-serif" font-size="42" font-weight="800" fill="${scoreColor}">${report.summary.score}</text>
   <text x="150" y="278" text-anchor="middle" font-family="system-ui,sans-serif" font-size="14" fill="#657089">${zh ? '静态稳定性' : 'STATIC STABILITY'}</text>
-  <g font-family="system-ui,sans-serif" fill="#172033"><text x="290" y="225" font-size="16">${zh ? '接地质量' : 'Grounded mass'}</text><text x="560" y="225" font-size="22" font-weight="700">${report.summary.groundedPercent}%</text><text x="290" y="268" font-size="16">${zh ? '支撑覆盖' : 'Support coverage'}</text><text x="560" y="268" font-size="22" font-weight="700">${report.summary.supportCoveragePercent}%</text><text x="290" y="311" font-size="16">${zh ? '连接冗余' : 'Connection redundancy'}</text><text x="560" y="311" font-size="22" font-weight="700">${report.summary.connectionRedundancyPercent}%</text><text x="710" y="225" font-size="16">${zh ? '风险零件' : 'Critical parts'}</text><text x="880" y="225" font-size="22" font-weight="700">${report.summary.criticalBrickCount}</text><text x="710" y="268" font-size="16">${zh ? '倾覆裕度' : 'Tipping margin'}</text><text x="880" y="268" font-size="22" font-weight="700">${report.summary.tippingMargin.toFixed(2)}</text>${report.simulation ? `<text x="710" y="311" font-size="16">${zh ? '模拟得分' : 'Simulation'}</text><text x="880" y="311" font-size="22" font-weight="700">${report.simulation.grade} · ${report.simulation.score}</text>` : ''}</g>
-  <text x="64" y="354" font-family="system-ui,sans-serif" font-size="19" font-weight="700" fill="#172033">${zh ? '主要发现与建议' : 'Findings and recommendations'}</text>
+  <g font-family="system-ui,sans-serif" fill="${ink}"><text x="290" y="225" font-size="16">${zh ? '接地质量' : 'Grounded mass'}</text><text x="560" y="225" font-size="22" font-weight="700">${report.summary.groundedPercent}%</text><text x="290" y="268" font-size="16">${zh ? '支撑覆盖' : 'Support coverage'}</text><text x="560" y="268" font-size="22" font-weight="700">${report.summary.supportCoveragePercent}%</text><text x="290" y="311" font-size="16">${zh ? '连接冗余' : 'Connection redundancy'}</text><text x="560" y="311" font-size="22" font-weight="700">${report.summary.connectionRedundancyPercent}%</text><text x="710" y="225" font-size="16">${zh ? '风险零件' : 'Critical parts'}</text><text x="880" y="225" font-size="22" font-weight="700">${report.summary.criticalBrickCount}</text><text x="710" y="268" font-size="16">${zh ? '倾覆裕度' : 'Tipping margin'}</text><text x="880" y="268" font-size="22" font-weight="700">${report.summary.tippingMargin.toFixed(2)}</text>${report.simulation ? `<text x="710" y="311" font-size="16">${zh ? '模拟得分' : 'Simulation'}</text><text x="880" y="311" font-size="22" font-weight="700">${report.simulation.grade} · ${report.simulation.score}</text>` : ''}</g>
+  ${options.thumbnailDataUrl ? `<image x="64" y="338" width="872" height="220" href="${escapeXml(options.thumbnailDataUrl)}" preserveAspectRatio="xMidYMid slice"/><rect x="64" y="338" width="872" height="220" rx="12" fill="none" stroke="${dark ? '#475569' : '#dfe3ec'}"/>` : ''}
+  <text x="64" y="${354 + thumbnailHeight}" font-family="system-ui,sans-serif" font-size="19" font-weight="700" fill="${ink}">${zh ? '主要发现与建议' : 'Findings and recommendations'}</text>
   <g font-family="system-ui,sans-serif">${findingRows}</g>
-  <text x="64" y="${height - 58}" font-family="system-ui,sans-serif" font-size="13" fill="#8a94a8">${zh ? '确定性近似模型，不替代工程认证' : 'Deterministic approximation · not an engineering certification'}</text>
+  <text x="64" y="${height - 58}" font-family="system-ui,sans-serif" font-size="13" fill="${muted}">${zh ? '确定性近似模型，不替代工程认证' : 'Deterministic approximation · not an engineering certification'}</text>
 </svg>`
 }
