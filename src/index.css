@@ -89,6 +89,28 @@ body {
   margin: 0;
 }
 
+.app-error-boundary {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #f7f8fc;
+  color: #172033;
+}
+
+.app-error-boundary section {
+  width: min(620px, 100%);
+  padding: 28px;
+  border: 1px solid #dfe3ec;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.1);
+}
+
+.app-error-boundary details { margin: 18px 0; color: #64748b; }
+.app-error-boundary code { display: block; margin-top: 8px; white-space: pre-wrap; }
+.app-error-boundary section > div { display: flex; flex-wrap: wrap; gap: 10px; }
+
 canvas {
   display: block;
 }

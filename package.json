@@ -1,13 +1,14 @@
 {
   "name": "brick-flow-agent",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:e2e": "NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost playwright test",
     "audit:ldraw": "node scripts/audit-ldraw-coverage.mjs",
     "audit:obj-connectivity": "node scripts/audit-obj-connectivity.mjs",
     "download:ldraw": "node scripts/download-ldraw-parts.mjs",
@@ -16,7 +17,7 @@
     "generate:obj": "node scripts/generate-obj-assets.mjs",
     "profile:performance": "node scripts/profile-performance.mjs",
     "check:performance": "node scripts/profile-performance.mjs --check",
-    "verify:release": "npm run lint && npm run build && npm test && npm run validate:builds && npm run audit:ldraw && npm run audit:obj-connectivity && npm run check:performance",
+    "verify:release": "npm run lint && npm run build && npm test && npm run test:e2e && npm run validate:builds && npm run audit:ldraw && npm run audit:obj-connectivity && npm run check:performance",
     "validate:builds": "node scripts/validate-builds.mjs",
     "preview": "vite preview"
   },
@@ -31,6 +32,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "@playwright/test": "^1.62.1",
     "@types/node": "22.10.2",
     "@types/react": "18.3.17",
     "@types/react-dom": "18.3.5",

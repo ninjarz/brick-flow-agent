@@ -27,10 +27,12 @@ The app uses React + Three.js for the editor, LDraw data for part rendering, and
 - Four scene modes: bordered, borderless, structure X-ray, and structural voxels
 - Static stability analysis with per-brick risk colors, support hull, center of mass, tipping margin, and connection redundancy
 - A bridge-game-style disaster lab with deterministic wind, heavy-rain, and earthquake simulations, failure propagation, playback, and scoring
+- Actionable per-part stability explanations plus JSON, Markdown, and shareable SVG analysis reports
 - Editable per-part inventory limits shared by manual editing and LLM generation
 - Built-in asset library with IndexedDB-backed persistence for large user models
 - Browser-side OBJ/MTL import with multi-material color mapping, size, brick-budget, edge-style, silhouette, and quality previews
 - JSON and LDraw/MPD import plus lossless LDraw export for application round trips
+- Workspace-wide drag-and-drop import for JSON, LDraw/MPD, and OBJ files, with a persistent compatibility summary
 - Build Manual 2.0 with delta-only storage, installation arrows, exploded view, guided camera angles, timeline playback, and Markdown/HTML/JSON export
 - Adaptive rendering for large scenes and lazy loading for 3D/OBJ-heavy modules
 - Bilingual UI with browser-language defaults and manual language selection
@@ -82,6 +84,7 @@ npm run dev                  # start Vite
 npm run build                # type-check and build
 npm run lint                 # run ESLint
 npm test                     # run focused Vitest regressions
+npm run test:e2e             # run browser workflows with Playwright
 npm run validate:builds      # validate default assets and regression cases
 npm run audit:obj-connectivity # require every generated OBJ asset to stay connected
 npm run profile:performance  # profile performance-sensitive routines
@@ -123,6 +126,12 @@ Open **Config** in the app and set:
 - Request mode: browser direct or local proxy
 - Thinking mode: optional, off by default for faster and more predictable generation
 - Structural feedback retry: on by default; if deterministic repair still fails, the validator feedback and previous candidate are sent for one corrected retry
+
+Projects, custom assets, preferences, and API configuration remain in this browser. In browser-direct mode, prompts, selected reference images, and the API key are sent directly to the endpoint you configure; Brick Flow does not operate an application server. **Config → Privacy and local data** can clear only the API configuration or remove all Brick Flow browser data.
+
+## 💬 Feedback
+
+Use the feedback button in the top toolbar to open a prefilled GitHub issue. It includes the app version, browser, platform, locale, part count, and active pack counts, but never includes the project contents, prompt, reference image, endpoint, or API key. Dedicated issue templates are available for bugs, feature requests, and import compatibility reports.
 
 ## ⌨️ Keyboard Controls
 

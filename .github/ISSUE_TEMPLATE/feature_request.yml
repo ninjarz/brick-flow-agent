@@ -1,0 +1,33 @@
+name: Feature request
+description: Suggest an improvement or a new workflow
+title: "[Feature] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to accomplish?
+      description: Describe the workflow or problem before proposing a solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would make it better?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Building and editing
+        - Structural validation
+        - Hazard simulation
+        - Import and export
+        - Part library
+        - Build manual
+        - AI generation
+        - Other
+    validations:
+      required: true

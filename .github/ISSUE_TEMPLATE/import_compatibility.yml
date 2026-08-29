@@ -1,0 +1,24 @@
+name: Import compatibility
+description: Report an LDraw, MPD, JSON, or OBJ import issue
+title: "[Import] "
+labels: [compatibility]
+body:
+  - type: dropdown
+    id: format
+    attributes:
+      label: File format
+      options: [LDR, MPD, JSON, OBJ]
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Import result
+      description: Include ignored part numbers, validation messages, or screenshots shown by Brick Flow.
+    validations:
+      required: true
+  - type: textarea
+    id: file
+    attributes:
+      label: Minimal example file
+      description: Attach a file you are allowed to share, or link to its public source.

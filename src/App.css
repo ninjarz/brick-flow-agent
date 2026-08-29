@@ -7,6 +7,46 @@
   background: var(--page);
 }
 
+.workspace-file-drop-overlay {
+  position: fixed;
+  inset: 18px;
+  z-index: 1000;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  border: 3px dashed #2563eb;
+  border-radius: 20px;
+  background: rgba(239, 246, 255, 0.94);
+  color: #1d4ed8;
+  pointer-events: none;
+  backdrop-filter: blur(7px);
+}
+
+.workspace-file-drop-overlay strong { font-size: 20px; }
+.workspace-file-drop-overlay span { color: #64748b; font-size: 13px; font-weight: 800; }
+
+.import-report {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 80;
+  width: min(420px, calc(100vw - 36px));
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  background: rgba(240, 253, 244, 0.97);
+  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.16);
+  color: #166534;
+}
+
+.import-report > div { display: grid; gap: 4px; }
+.import-report span { color: #475569; font-size: 12px; line-height: 1.4; }
+
 .workspace {
   min-height: 0;
   min-width: 0;
@@ -2154,6 +2194,14 @@ button.status-pill:hover {
 
 .stability-result-summary {
   display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.stability-result-summary > div {
+  display: flex;
   flex-wrap: wrap;
   gap: 7px;
 }
@@ -2165,6 +2213,40 @@ button.status-pill:hover {
   color: #475569;
   font-size: 11px;
   font-weight: 800;
+}
+
+.stability-report-actions button {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 9px;
+  border: 1px solid #bfdbfe;
+  background: #fff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.stability-brick-explanation {
+  display: grid;
+  gap: 7px;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+.stability-brick-explanation p {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  color: #7f1d1d;
+  font-size: 11px;
+}
+
+.stability-brick-explanation small {
+  color: #64748b;
+  line-height: 1.4;
 }
 
 .performance-badge {
@@ -2927,6 +3009,16 @@ button.status-pill:hover {
   display: grid;
   justify-items: start;
   gap: 8px;
+}
+
+.privacy-actions {
+  justify-content: space-between;
+}
+
+.danger-action {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #b91c1c;
 }
 
 .config-inline-field {

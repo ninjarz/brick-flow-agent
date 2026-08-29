@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, Box, Boxes, Download, Eye, EyeOff, FileUp, Gauge, Github, Globe2, KeyRound, Link, MessageCircle, Pause, Play, Plus, Redo2, RotateCcw, ScanLine, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
+import { BookOpen, Box, Boxes, Download, Eye, EyeOff, FileUp, Gauge, Github, Globe2, KeyRound, Link, MessageCircle, MessageSquareText, Pause, Play, Plus, Redo2, RotateCcw, ScanLine, Settings2, ShieldCheck, Trash2, Undo2, Unlink2, X } from 'lucide-react'
 import { BrickEditorPanel } from './components/BrickEditorPanel'
 import { BrickCountsPanel } from './components/BrickCountsPanel'
 import type { WorldCommandTargetOption } from './components/WorldEntityEditorPanel'
@@ -12,7 +12,7 @@ import { createDefaultWorldScenarios } from './data/worldScenarios'
 import { dropBrickGroupAtPoint, findNearestOpenBrickGroupAround, getBrickGroupDragPointerOffset, offsetBrickGroupDragPoint, rotationRepositionSearchRadiusStuds, type HorizontalDropPoint, type StationaryPlanSpatialData } from './lib/brickGroupPlacement'
 import { createEmptyBuildPlan, generateBuildPlan } from './lib/localGenerator'
 import { buildLlmUserPrompt, generateLlmBuildPlan, isLlmConfigComplete, llmSystemPrompt, requestLlmJsonContent, requestLlmTextStream, resetLlmThinkingCompatibility, testLlmConnection } from './lib/llmGenerator'
-import { clearLlmConnection, hasPersistedLlmConnection, loadLlmConfig, maxRepairAttemptsCeiling, normalizeMaxRepairAttempts, saveLlmConfig, saveLlmConnection } from './lib/llmConfig'
+import { clearLlmConnection, defaultLlmConfig, hasPersistedLlmConnection, loadLlmConfig, maxRepairAttemptsCeiling, normalizeMaxRepairAttempts, saveLlmConfig, saveLlmConnection } from './lib/llmConfig'
 import { defaultFinishedAssets, hasIndexedDbFinishedAssets, isDefaultFinishedAsset, loadAllDefaultFinishedAssets, loadFinishedAssets, loadFinishedAssetsFromIndexedDb, mergeWithDefaultAssets, saveFinishedAssets } from './lib/finishedAssets'
 import { formatBuildManualHtml, formatBuildManualMarkdown, serializeBuildManual } from './lib/manualSerializer'
 import { getManualPageTabItems, getManualStepPage, manualStepPageSize } from './lib/manualPagination'
@@ -50,6 +50,8 @@ import { clearWorkspaceDraft, hasIndexedDbWorkspaceDraft, loadWorkspaceDraft, lo
 import { applyVoxelPlacementSurface, isVoxelPlantSupported, synchronizePlanVoxelBlockStates, synchronizeVoxelBlockStates, type VoxelPlacementSurface } from './lib/voxelBlockState'
 import { applyPendingWorldObjectEvents } from './lib/worldObjectEventBridge'
 import { createWorldHiddenTargetIndex } from './lib/worldVisibility'
+import { appVersion, createFeedbackUrl } from './lib/appDiagnostics'
+import { clearAllLocalAppData } from './lib/localData'
 import type { BrickStructure, BuildPlan, FinishedAsset, LlmConfig, PlacedBrick } from './types/bricks'
 import type { WorldDirectorTurn, WorldEntity, WorldEntityCommand, WorldEntityControllerKind, WorldState } from './types/world'
 import './App.css'
@@ -220,10 +222,14 @@ function App() {
   const [generationFeedbackTone, setGenerationFeedbackTone] = useState<'error' | 'warning'>('error')
   const [generationManualOffer, setGenerationManualOffer] = useState(false)
   const [generationSummary, setGenerationSummary] = useState<string>()
+  const [importReport, setImportReport] = useState<{ title: string; details: string[] }>()
   const [isConfigOpen, setIsConfigOpen] = useState(false)
   const [isPromptPreviewOpen, setIsPromptPreviewOpen] = useState(false)
   const [isAssetLibraryOpen, setIsAssetLibraryOpen] = useState(false)
   const [isObjImportOpen, setIsObjImportOpen] = useState(false)
+  const [droppedObjFile, setDroppedObjFile] = useState<File>()
+  const [isFileDragActive, setIsFileDragActive] = useState(false)
+  const fileDragDepthRef = useRef(0)
   const [isStabilityLabOpen, setIsStabilityLabOpen] = useState(false)
   const [isTavernOpen, setIsTavernOpen] = useState(false)
   const [isWorldStoryDockOpen, setIsWorldStoryDockOpen] = useState(true)
@@ -298,15 +304,15 @@ function App() {
     setGenerationSummary(undefined)
   }, [])
 
-  const setGenerationFailure = (message: string) => {
+  const setGenerationFailure = useCallback((message: string) => {
     setGenerationFeedbackTone('error')
     setGenerationError(message)
-  }
+  }, [])
 
-  const setGenerationWarning = (message: string) => {
+  const setGenerationWarning = useCallback((message: string) => {
     setGenerationFeedbackTone('warning')
     setGenerationError(message)
-  }
+  }, [])
 
   useEffect(() => {
     if (!generationError) return
@@ -731,7 +737,7 @@ function App() {
     )
 
     return () => window.clearTimeout(timeoutId)
-  }, [isWorkspaceStorageHydrated, plan, prompt, t])
+  }, [isWorkspaceStorageHydrated, plan, prompt, setGenerationWarning, t])
 
   useEffect(() => {
     if (!isWorkspaceStorageHydrated) return
@@ -786,7 +792,7 @@ function App() {
       storageWarningShownRef.current = true
       setGenerationWarning(t('error.storageUnavailable'))
     })
-  }, [finishedAssets, isAssetStorageHydrated, t])
+  }, [finishedAssets, isAssetStorageHydrated, setGenerationWarning, t])
 
   useEffect(() => {
     if (!isManualOpen) return
@@ -898,7 +904,7 @@ function App() {
     }
   }
 
-  const handleImportPlan = (file?: File) => {
+  const handleImportPlan = useCallback((file?: File) => {
     if (!file) return
 
     const reader = new FileReader()
@@ -939,6 +945,14 @@ function App() {
               })
             : '',
         ].filter(Boolean)
+        setImportReport({
+          title: locale === 'zh-CN'
+            ? `已导入“${importedPlan.title}” · ${importedPlan.bricks.length} 个零件`
+            : `Imported “${importedPlan.title}” · ${importedPlan.bricks.length} parts`,
+          details: warnings.length > 0
+            ? warnings
+            : [locale === 'zh-CN' ? '没有发现阻塞问题或不支持的零件。' : 'No blocking issues or unsupported parts were found.'],
+        })
         if (warnings.length > 0) {
           setGenerationWarning(warnings.join('；'))
         }
@@ -947,7 +961,55 @@ function App() {
       }
     }
     reader.readAsText(file)
-  }
+  }, [clearGenerationFeedback, importText, locale, selectBrick, setGenerationFailure, setGenerationWarning, setPlan, t])
+
+  useEffect(() => {
+    const hasFiles = (event: DragEvent) => event.dataTransfer?.types.includes('Files') === true
+    const handleDragEnter = (event: DragEvent) => {
+      if (!hasFiles(event)) return
+      event.preventDefault()
+      fileDragDepthRef.current += 1
+      setIsFileDragActive(true)
+    }
+    const handleDragOver = (event: DragEvent) => {
+      if (!hasFiles(event)) return
+      event.preventDefault()
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+    }
+    const handleDragLeave = (event: DragEvent) => {
+      if (!hasFiles(event)) return
+      fileDragDepthRef.current = Math.max(0, fileDragDepthRef.current - 1)
+      if (fileDragDepthRef.current === 0) setIsFileDragActive(false)
+    }
+    const handleDrop = (event: DragEvent) => {
+      if (!hasFiles(event)) return
+      event.preventDefault()
+      fileDragDepthRef.current = 0
+      setIsFileDragActive(false)
+      const file = event.dataTransfer?.files[0]
+      if (!file) return
+      if (/\.obj$/i.test(file.name)) {
+        setDroppedObjFile(file)
+        setIsObjImportOpen(true)
+        return
+      }
+      if (/\.(?:json|ldr|mpd)$/i.test(file.name)) {
+        handleImportPlan(file)
+        return
+      }
+      setGenerationFailure(t('error.importFileType'))
+    }
+    window.addEventListener('dragenter', handleDragEnter)
+    window.addEventListener('dragover', handleDragOver)
+    window.addEventListener('dragleave', handleDragLeave)
+    window.addEventListener('drop', handleDrop)
+    return () => {
+      window.removeEventListener('dragenter', handleDragEnter)
+      window.removeEventListener('dragover', handleDragOver)
+      window.removeEventListener('dragleave', handleDragLeave)
+      window.removeEventListener('drop', handleDrop)
+    }
+  }, [handleImportPlan, setGenerationFailure, t])
 
   const resetWorkspace = () => {
     if (!window.confirm(t('error.resetConfirm'))) return
@@ -1548,7 +1610,7 @@ function App() {
     setSelectedGroupIds(placedIdSet.size > 1 ? placedIds : [])
     placementPointerKeyRef.current = ''
     setPlacementSession(undefined)
-  }, [manualStepDescription, manualStepTitle, placementSession, setPlan, t])
+  }, [manualStepDescription, manualStepTitle, placementSession, setGenerationFailure, setPlan, t])
 
   const confirmActivePlacement = useCallback(() => {
     if (worldEntityPlacement) {
@@ -2336,7 +2398,7 @@ function App() {
       }
       return result.plan
     })
-  }, [activeSelectedIds, setPlan, t])
+  }, [activeSelectedIds, setGenerationWarning, setPlan, t])
 
   const updateSelectedStructure = useCallback((updated: BrickStructure) => {
     setPlan((current) => updateBrickStructure(current, updated))
@@ -2605,6 +2667,13 @@ function App() {
 
   return (
     <main className="app-shell">
+      {isFileDragActive && (
+        <div className="workspace-file-drop-overlay" role="status">
+          <FileUp size={38} />
+          <strong>{locale === 'zh-CN' ? '松开以导入项目或模型' : 'Drop to import a project or model'}</strong>
+          <span>JSON · LDR · MPD · OBJ</span>
+        </div>
+      )}
       <section className="workspace">
         <header className="topbar">
           <div>
@@ -2716,6 +2785,16 @@ function App() {
                 >
                   <Settings2 size={18} />
                 </button>
+                <a
+                  className="icon-button github-link"
+                  href={createFeedbackUrl(plan, locale)}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={locale === 'zh-CN' ? '反馈问题或需求' : 'Send feedback or request a feature'}
+                  title={locale === 'zh-CN' ? '反馈问题或需求' : 'Send feedback or request a feature'}
+                >
+                  <MessageSquareText size={18} />
+                </a>
                 <a
                   className="icon-button github-link"
                   href="https://github.com/ninjarz/brick-flow-agent"
@@ -3104,6 +3183,18 @@ function App() {
         </div>
       )}
 
+      {importReport && !generationError && (
+        <div className="import-report" role="status" aria-live="polite">
+          <div>
+            <strong>{importReport.title}</strong>
+            {importReport.details.map((detail) => <span key={detail}>{detail}</span>)}
+          </div>
+          <button className="icon-button" type="button" aria-label={t('common.close')} title={t('common.close')} onClick={() => setImportReport(undefined)}>
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
       {generationManualOffer && !generationError && (
         <div className="toast-region" aria-live="polite">
           <div className="feedback-toast success offer" role="status">
@@ -3135,7 +3226,11 @@ function App() {
         <Suspense fallback={null}>
           <ObjImportModal
             open
-            onClose={() => setIsObjImportOpen(false)}
+            initialFile={droppedObjFile}
+            onClose={() => {
+              setIsObjImportOpen(false)
+              setDroppedObjFile(undefined)
+            }}
             onImported={importObjResult}
           />
         </Suspense>
@@ -3353,6 +3448,43 @@ function App() {
                   {llmConfigFeedback && (
                     <p className={`feedback-text ${llmConfigFeedback.tone}`}>{llmConfigFeedback.text}</p>
                   )}
+                </div>
+              </section>
+
+              <section className="config-section privacy-section">
+                <div className="config-section-title">
+                  <ShieldCheck size={16} />
+                  <div>
+                    <h3>{locale === 'zh-CN' ? '隐私与本地数据' : 'Privacy and local data'}</h3>
+                    <p>{locale === 'zh-CN'
+                      ? '项目、素材和配置只保存在此浏览器。直连模式会把提示词、所选参考图片和 API Key 直接发送到你配置的模型服务商；Brick Flow 没有项目服务器。'
+                      : 'Projects, assets, and settings stay in this browser. Direct mode sends prompts, selected reference images, and the API key directly to your configured model provider; Brick Flow has no project server.'}</p>
+                  </div>
+                </div>
+                <p className="config-field-note">Brick Flow {appVersion}</p>
+                <div className="config-actions privacy-actions">
+                  <button type="button" className="secondary" onClick={() => {
+                    updateLlmConfig({ ...defaultLlmConfig })
+                    setLlmConfigFeedback({ tone: 'success', text: locale === 'zh-CN' ? 'API 配置已从本浏览器清除。' : 'API settings were cleared from this browser.' })
+                  }}>
+                    {locale === 'zh-CN' ? '清除 API 配置' : 'Clear API settings'}
+                  </button>
+                  <button type="button" className="danger-action" onClick={async () => {
+                    const confirmed = window.confirm(locale === 'zh-CN'
+                      ? '这会删除当前项目草稿、自定义素材、API 配置和所有偏好，且无法撤销。继续吗？'
+                      : 'This deletes the current draft, custom assets, API settings, and all preferences. It cannot be undone. Continue?')
+                    if (!confirmed) return
+                    const cleared = await clearAllLocalAppData()
+                    if (!cleared) {
+                      window.alert(locale === 'zh-CN'
+                        ? 'IndexedDB 正被另一个 Brick Flow 标签页使用。请关闭其他标签页后再试。'
+                        : 'IndexedDB is in use by another Brick Flow tab. Close the other tab and try again.')
+                      return
+                    }
+                    window.location.reload()
+                  }}>
+                    {locale === 'zh-CN' ? '清除所有本地数据' : 'Clear all local data'}
+                  </button>
                 </div>
               </section>
             </div>

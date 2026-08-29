@@ -1,4 +1,4 @@
-import { Activity, ArrowRight, CloudRain, Gauge, LoaderCircle, Pause, Play, RotateCcw, Wind, X, Zap } from 'lucide-react'
+import { Activity, ArrowRight, CloudRain, Download, FileJson, Gauge, Image, LoaderCircle, Pause, Play, RotateCcw, Wind, X, Zap } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { BrickScene, type BrickSceneTransform } from './BrickScene'
 import { brickById } from '../data/basicBricks'
@@ -14,6 +14,7 @@ import {
 } from '../lib/disasterSimulation'
 import { useI18n } from '../lib/i18n'
 import { getSimulationPlaybackFps } from '../lib/scenePerformance'
+import { createBrickStabilityInsights, createStabilityReport, formatStabilityReportMarkdown, formatStabilityReportSvg } from '../lib/stabilityReport'
 import type { BuildPlan } from '../types/bricks'
 
 type StabilityLabProps = {
@@ -85,7 +86,7 @@ const WindDirectionIndicator = ({
 )
 
 export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
-  const { t } = useI18n()
+  const { locale, t } = useI18n()
   const [scenario, setScenario] = useState<DisasterScenario>('wind')
   const [intensity, setIntensity] = useState(70)
   const [directionDegrees, setDirectionDegrees] = useState(25)
@@ -286,6 +287,32 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
         }
       })
   }, [frame, plan.bricks, result])
+  const inspectedInsights = useMemo(() => {
+    if (!result || !inspectedBrickId) return []
+    const item = result.analysis.riskByBrickId.get(inspectedBrickId)
+    return item ? createBrickStabilityInsights(item, locale) : []
+  }, [inspectedBrickId, locale, result])
+  const report = useMemo(
+    () => result ? createStabilityReport(plan, result.analysis, locale, result) : undefined,
+    [locale, plan, result],
+  )
+  const downloadReport = (format: 'json' | 'md' | 'svg') => {
+    if (!report) return
+    const content = format === 'json'
+      ? JSON.stringify(report, null, 2)
+      : format === 'md'
+        ? formatStabilityReportMarkdown(report, locale)
+        : formatStabilityReportSvg(report, locale)
+    const blob = new Blob([content], { type: format === 'json' ? 'application/json' : format === 'svg' ? 'image/svg+xml' : 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${plan.title || 'brick-plan'}-stability-report.${format}`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  }
   const scenarioOptions: Array<{ value: DisasterScenario; icon: typeof Wind }> = [
     { value: 'wind', icon: Wind },
     { value: 'rain', icon: CloudRain },
@@ -523,6 +550,17 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
                 ) : (
                   <small className="simulation-load-empty">{t('stabilityLab.noConnectionLoad')}</small>
                 )}
+                {inspectedBrickId && (
+                  <div className="stability-brick-explanation" role="status">
+                    <strong>{locale === 'zh-CN' ? '所选零件诊断' : 'Selected part diagnosis'}</strong>
+                    {inspectedInsights.length > 0 ? inspectedInsights.map((insight) => (
+                      <p key={insight.reason}>
+                        <span>{insight.reason}</span>
+                        <small>{insight.suggestion}</small>
+                      </p>
+                    )) : <small>{locale === 'zh-CN' ? '没有发现明显的静态结构弱点。' : 'No obvious static weakness was found.'}</small>}
+                  </div>
+                )}
               </div>
               <div className="simulation-status">
                 {windExposureSummary && (
@@ -599,9 +637,16 @@ export const StabilityLab = ({ plan, onClose }: StabilityLabProps) => {
             </section>
 
             <footer className="stability-result-summary">
-              <span>{t('stabilityLab.survived', { survived: result.survivedBrickCount, total: plan.bricks.length })}</span>
-              <span>{t('stabilityLab.staticScore', { score: result.analysis.stabilityScore })}</span>
-              <span>{t('stabilityLab.tippingMargin', { margin: result.analysis.tippingMargin.toFixed(2) })}</span>
+              <div>
+                <span>{t('stabilityLab.survived', { survived: result.survivedBrickCount, total: plan.bricks.length })}</span>
+                <span>{t('stabilityLab.staticScore', { score: result.analysis.stabilityScore })}</span>
+                <span>{t('stabilityLab.tippingMargin', { margin: result.analysis.tippingMargin.toFixed(2) })}</span>
+              </div>
+              <div className="stability-report-actions">
+                <button type="button" onClick={() => downloadReport('svg')} title={locale === 'zh-CN' ? '导出可分享图片' : 'Export shareable image'}><Image size={15} />SVG</button>
+                <button type="button" onClick={() => downloadReport('md')} title={locale === 'zh-CN' ? '导出 Markdown 报告' : 'Export Markdown report'}><Download size={15} />MD</button>
+                <button type="button" onClick={() => downloadReport('json')} title={locale === 'zh-CN' ? '导出结构化报告' : 'Export structured report'}><FileJson size={15} />JSON</button>
+              </div>
             </footer>
           </>
         ) : (

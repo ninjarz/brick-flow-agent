@@ -16,6 +16,7 @@ import { useI18n } from '../lib/i18n'
 
 type ObjImportModalProps = {
   open: boolean
+  initialFile?: File
   onClose: () => void
   onImported: (result: ObjImportResult, saveToLibrary: boolean) => void
 }
@@ -43,7 +44,7 @@ const ObjProjectionGraphic = ({ projection, variant, label }: {
   )
 }
 
-export const ObjImportModal = ({ open, onClose, onImported }: ObjImportModalProps) => {
+export const ObjImportModal = ({ open, initialFile, onClose, onImported }: ObjImportModalProps) => {
   const { locale, t } = useI18n()
   const workerRef = useRef<Worker>()
   const importRunRef = useRef(0)
@@ -68,9 +69,9 @@ export const ObjImportModal = ({ open, onClose, onImported }: ObjImportModalProp
 
   useEffect(() => {
     if (open) {
-      setFile(undefined)
+      setFile(initialFile)
       setMaterialFiles([])
-      setTitle('')
+      setTitle(initialFile ? stripObjExtension(initialFile.name) : '')
       setProfileId('s')
       setOrientation('upright')
       setEdgeStyle('angular')
@@ -86,7 +87,7 @@ export const ObjImportModal = ({ open, onClose, onImported }: ObjImportModalProp
     importRunRef.current += 1
     stopWorker()
     setIsImporting(false)
-  }, [open])
+  }, [initialFile, open])
 
   useEffect(() => () => {
     importRunRef.current += 1
