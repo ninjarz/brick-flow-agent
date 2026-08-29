@@ -27,6 +27,7 @@ The app uses React + Three.js for the editor, LDraw data for part rendering, and
 - Four scene modes: bordered, borderless, structure X-ray, and structural voxels
 - Static stability analysis with per-brick risk colors, support hull, center of mass, tipping margin, and connection redundancy
 - A bridge-game-style disaster lab with deterministic wind, heavy-rain, and earthquake simulations, failure propagation, playback, and scoring
+- Reproducible structural test suites with quick, standard, and stress coverage, background progress, aggregate resilience scoring, and weakest-case replay
 - Actionable per-part stability explanations, risk navigation, and related-support highlighting
 - Per-project analysis history with named baselines, before/after metric comparisons, and stale-result detection
 - JSON, Markdown, themed SVG, and PNG analysis reports with an embedded scene thumbnail
@@ -113,7 +114,7 @@ The same conversion core powers the in-browser **Import OBJ** dialog. Files stay
 
 ## 🌪️ Stability Lab
 
-Structure X-ray provides immediate static feedback. The stability lab then applies time-varying wind, heavy-rain, or earthquake loads, propagates failed connections through the support graph, and scores survival, static stability, span, and material efficiency. Each run is retained per project for baseline comparison; changing the model marks the previous result as stale. Reports can be exported as JSON, Markdown, themed SVG, or PNG with a scene thumbnail. See [the stability model](docs/STABILITY_MODEL.md) for formulas, weights, and limitations.
+Structure X-ray provides immediate static feedback. The stability lab then applies time-varying wind, heavy-rain, or earthquake loads, propagates failed connections through the support graph, and scores survival, static stability, span, and material efficiency. Each run is retained per project for baseline comparison; changing the model marks the previous result as stale. The structural test suite batches multiple hazards, intensities, and directions in a worker, calculates an aggregate resilience score, and can replay the weakest case in the simulator. Single-run reports export as JSON, Markdown, themed SVG, or PNG with a scene thumbnail; suite reports export as JSON, Markdown, or SVG. See [the stability model](docs/STABILITY_MODEL.md) for formulas, weights, and limitations.
 
 ## 🤖 LLM Configuration
 

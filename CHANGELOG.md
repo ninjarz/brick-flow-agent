@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0 — 2026-08-30
+
+- Added reproducible structural test suites covering multiple hazard types, intensities, and load directions.
+- Added quick, standard, and stress presets with challenge and realistic physics profiles.
+- Added background batch execution with per-case progress, aggregate resilience scoring, and automatic weakest-case detection.
+- Added one-click weakest-case replay inside Stability Lab.
+- Persisted the latest suite result per project and marked it stale after structural edits.
+- Added Markdown, JSON, and shareable SVG suite reports.
+- Added unit and browser workflow coverage for suite aggregation, persistence, and replay.
+
 ## 0.2.0 — 2026-08-30
 
 - Added per-project structural-analysis history with named baselines, metric comparisons, and Markdown/JSON/SVG comparison exports.

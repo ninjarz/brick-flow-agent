@@ -1086,8 +1086,10 @@ function App() {
     worldScenarioAiAbortRef.current = undefined
     worldScenarioAiRequestKeyRef.current = ''
 
+    const clearedPlanId = planRef.current.id
     void clearWorkspaceDraft()
-    clearStabilityHistory(planRef.current.id)
+    clearStabilityHistory(clearedPlanId)
+    void import('./lib/stabilitySuite').then(({ clearStabilitySuiteResult }) => clearStabilitySuiteResult(clearedPlanId))
     setAnalysisHistoryVersion((version) => version + 1)
     const nextPlan = createEmptyBuildPlan({ title: t('control.planNamePlaceholder') })
     const nextWorld = createEmptyWorldState(nextPlan.id)

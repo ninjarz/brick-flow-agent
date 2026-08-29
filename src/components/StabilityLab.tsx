@@ -18,6 +18,7 @@ import { createBrickStabilityInsights, createStabilityReport, formatStabilityRep
 import { createPlanFingerprint, deleteStabilitySnapshot, loadStabilityHistory, renameStabilitySnapshot, saveStabilitySnapshot, type StabilitySnapshot } from '../lib/stabilityHistory'
 import { createBuildGraph } from '../lib/planUtils'
 import { StabilityHistoryPanel } from './StabilityHistoryPanel'
+import { StabilitySuitePanel } from './StabilitySuitePanel'
 import type { BuildPlan } from '../types/bricks'
 
 type StabilityLabProps = {
@@ -169,6 +170,14 @@ export const StabilityLab = ({ plan, onClose, onSnapshotSaved }: StabilityLabPro
   const restartSimulation = useCallback(() => {
     runSimulation({ scenario, intensity, directionDegrees, physicsProfile })
   }, [directionDegrees, intensity, physicsProfile, runSimulation, scenario])
+
+  const inspectSuiteCase = useCallback((options: DisasterSimulationOptions) => {
+    setScenario(options.scenario)
+    setIntensity(options.intensity)
+    setDirectionDegrees(options.directionDegrees ?? 0)
+    setPhysicsProfile(options.physicsProfile ?? 'challenge')
+    runSimulation(options)
+  }, [runSimulation])
 
   useEffect(() => {
     if (!isPlaying || !result) return
@@ -735,6 +744,7 @@ export const StabilityLab = ({ plan, onClose, onSnapshotSaved }: StabilityLabPro
                 <button type="button" onClick={() => downloadReport('json')} title={locale === 'zh-CN' ? '导出结构化报告' : 'Export structured report'}><FileJson size={15} />JSON</button>
               </div>
             </footer>
+            <StabilitySuitePanel plan={plan} onInspect={inspectSuiteCase} />
             <StabilityHistoryPanel
               history={history}
               currentReport={report!}

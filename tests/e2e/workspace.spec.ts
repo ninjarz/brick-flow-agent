@@ -40,7 +40,7 @@ test('a project file can be dropped anywhere in the workspace', async ({ page })
 test('feedback is prefilled with non-sensitive diagnostics', async ({ page }) => {
   const feedback = page.getByLabel('Send feedback or request a feature')
   await expect(feedback).toHaveAttribute('href', /github\.com\/ninjarz\/brick-flow-agent\/issues\/new/)
-  await expect(feedback).toHaveAttribute('href', /Brick\+Flow%3A\+0\.2\.0/)
+  await expect(feedback).toHaveAttribute('href', /Brick\+Flow%3A\+0\.3\.0/)
 })
 
 test('stability analysis is retained and exports a PNG report', async ({ page }) => {
@@ -52,6 +52,16 @@ test('stability analysis is retained and exports a PNG report', async ({ page })
   await page.getByTitle('Export PNG image').click()
   const download = await downloadPromise
   expect(download.suggestedFilename()).toMatch(/-stability-report\.png$/)
+})
+
+test('a structural test suite finds and replays the weakest case', async ({ page }) => {
+  await page.getByLabel('Stability disaster lab').click()
+  await expect(page.getByRole('button', { name: 'Run test suite' })).toBeVisible({ timeout: 30_000 })
+  await page.getByRole('button', { name: 'Run test suite' }).click()
+  await expect(page.getByRole('button', { name: 'Replay weakest' })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText('Weakest case', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Replay weakest' }).click()
+  await expect(page.getByRole('button', { name: 'Run again' })).toBeVisible({ timeout: 30_000 })
 })
 
 test('LDraw compatibility details remain available after import', async ({ page }) => {
