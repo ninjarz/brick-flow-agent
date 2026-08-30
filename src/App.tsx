@@ -355,6 +355,24 @@ function App() {
     setHistoryVersion((version) => version + 1)
   }, [])
 
+  const applyStructuralReinforcement = useCallback((addedBricks: PlacedBrick[]) => {
+    setPlan((current) => {
+      const existingIds = new Set(current.bricks.map((brick) => brick.id))
+      const accepted = addedBricks.filter((brick) => !existingIds.has(brick.id))
+      if (accepted.length === 0) return current
+      return {
+        ...current,
+        bricks: [...current.bricks, ...accepted],
+        steps: [...current.steps, {
+          id: `reinforcement-step-${Date.now().toString(36)}`,
+          title: locale === 'zh-CN' ? '结构加固' : 'Structural reinforcement',
+          description: locale === 'zh-CN' ? '根据稳定性实验室验证结果添加支撑。' : 'Add supports validated by Stability Lab.',
+          brickIds: accepted.map((brick) => brick.id),
+        }],
+      }
+    })
+  }, [locale, setPlan])
+
   const undoPlan = useCallback(() => {
     const current = planRef.current
     const previous = planHistoryRef.current.past.at(-1)
@@ -3362,8 +3380,10 @@ function App() {
         <Suspense fallback={null}>
           <StabilityLab
             plan={plan}
+            inventoryOverrides={inventoryOverrides}
             onClose={() => setIsStabilityLabOpen(false)}
             onSnapshotSaved={handleAnalysisSnapshotSaved}
+            onApplyReinforcement={applyStructuralReinforcement}
           />
         </Suspense>
       )}

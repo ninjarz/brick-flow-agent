@@ -40,7 +40,7 @@ test('a project file can be dropped anywhere in the workspace', async ({ page })
 test('feedback is prefilled with non-sensitive diagnostics', async ({ page }) => {
   const feedback = page.getByLabel('Send feedback or request a feature')
   await expect(feedback).toHaveAttribute('href', /github\.com\/ninjarz\/brick-flow-agent\/issues\/new/)
-  await expect(feedback).toHaveAttribute('href', /Brick\+Flow%3A\+0\.3\.0/)
+  await expect(feedback).toHaveAttribute('href', /Brick\+Flow%3A\+0\.4\.0/)
 })
 
 test('stability analysis is retained and exports a PNG report', async ({ page }) => {
@@ -62,6 +62,40 @@ test('a structural test suite finds and replays the weakest case', async ({ page
   await expect(page.getByText('Weakest case', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Replay weakest' }).click()
   await expect(page.getByRole('button', { name: 'Run again' })).toBeVisible({ timeout: 30_000 })
+})
+
+test('a verified reinforcement can be previewed, applied, and undone', async ({ page }) => {
+  await page.evaluate(() => {
+    const project = {
+      id: 'e2e-reinforcement',
+      title: 'Reinforcement E2E',
+      prompt: '',
+      source: 'template-local',
+      bricks: [
+        { id: 'base', brickId: 'brick-1x1', color: 'gray', pose: { xStud: 0, yStud: 0, zStud: 0, rotationQuarterTurns: 0 } },
+        { id: 'cantilever', brickId: 'brick-1x4', color: 'gray', pose: { xStud: 0, yStud: 1.2, zStud: 0, rotationQuarterTurns: 0 } },
+      ],
+      steps: [
+        { id: 'step-base', title: 'Base', description: '', brickIds: ['base'] },
+        { id: 'step-cantilever', title: 'Cantilever', description: '', brickIds: ['cantilever'] },
+      ],
+    }
+    const transfer = new DataTransfer()
+    transfer.items.add(new File([JSON.stringify(project)], 'reinforcement.json', { type: 'application/json' }))
+    window.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }))
+  })
+  await expect(page.getByText('2 parts', { exact: true })).toBeVisible()
+  await page.getByLabel('Stability disaster lab').click()
+  const dialog = page.getByRole('dialog', { name: 'Stability disaster lab' })
+  await dialog.getByRole('button', { name: 'Generate reinforcement proposals' }).click()
+  await expect(dialog.getByRole('button', { name: 'Apply reinforcement' }).first()).toBeVisible({ timeout: 30_000 })
+  await dialog.getByRole('button', { name: 'Preview' }).first().click()
+  await expect(dialog.getByRole('button', { name: 'Hide preview' })).toBeVisible()
+  await dialog.getByRole('button', { name: 'Apply reinforcement' }).first().click()
+  await dialog.getByLabel('Close').click()
+  await expect(page.getByLabel('Undo')).toBeEnabled()
+  await page.getByLabel('Undo').click()
+  await expect(page.getByText('2 parts', { exact: true })).toBeVisible()
 })
 
 test('LDraw compatibility details remain available after import', async ({ page }) => {

@@ -19,12 +19,16 @@ import { createPlanFingerprint, deleteStabilitySnapshot, loadStabilityHistory, r
 import { createBuildGraph } from '../lib/planUtils'
 import { StabilityHistoryPanel } from './StabilityHistoryPanel'
 import { StabilitySuitePanel } from './StabilitySuitePanel'
+import { StabilityReinforcementPanel } from './StabilityReinforcementPanel'
+import type { InventoryOverrides } from '../lib/userInventory'
 import type { BuildPlan } from '../types/bricks'
 
 type StabilityLabProps = {
   plan: BuildPlan
+  inventoryOverrides: InventoryOverrides
   onClose: () => void
   onSnapshotSaved?: () => void
+  onApplyReinforcement: (bricks: BuildPlan['bricks']) => void
 }
 
 const weatherParticleCount = 18
@@ -90,7 +94,7 @@ const WindDirectionIndicator = ({
   </div>
 )
 
-export const StabilityLab = ({ plan, onClose, onSnapshotSaved }: StabilityLabProps) => {
+export const StabilityLab = ({ plan, inventoryOverrides, onClose, onSnapshotSaved, onApplyReinforcement }: StabilityLabProps) => {
   const { locale, t } = useI18n()
   const [scenario, setScenario] = useState<DisasterScenario>('wind')
   const [intensity, setIntensity] = useState(70)
@@ -107,6 +111,7 @@ export const StabilityLab = ({ plan, onClose, onSnapshotSaved }: StabilityLabPro
   const [history, setHistory] = useState<StabilitySnapshot[]>(() => loadStabilityHistory(plan.id))
   const [baselineId, setBaselineId] = useState(() => loadStabilityHistory(plan.id)[0]?.id ?? '')
   const [reportTheme, setReportTheme] = useState<'light' | 'dark'>('light')
+  const [reinforcementPreviewBricks, setReinforcementPreviewBricks] = useState<BuildPlan['bricks']>([])
   const workerRef = useRef<Worker>()
   const simulatorRef = useRef<HTMLElement>(null)
   const simulationRunRef = useRef(0)
@@ -178,6 +183,11 @@ export const StabilityLab = ({ plan, onClose, onSnapshotSaved }: StabilityLabPro
     setPhysicsProfile(options.physicsProfile ?? 'challenge')
     runSimulation(options)
   }, [runSimulation])
+
+  const applyReinforcementProposal = useCallback((proposal: { addedBricks: BuildPlan['bricks'] }) => {
+    onApplyReinforcement(proposal.addedBricks)
+    setReinforcementPreviewBricks([])
+  }, [onApplyReinforcement])
 
   useEffect(() => {
     if (!isPlaying || !result) return
@@ -565,6 +575,8 @@ export const StabilityLab = ({ plan, onClose, onSnapshotSaved }: StabilityLabPro
                 cameraFrameKey={`${plan.id}:stability-lab:${inspectedBrickId}`}
                 cameraFocusBrickIds={inspectedBrickId ? [inspectedBrickId, ...relatedSupportIds] : undefined}
                 preserveDrawingBuffer
+                placementPreviewBricks={reinforcementPreviewBricks}
+                placementActive={reinforcementPreviewBricks.length > 0}
                 highlightedIds={relatedSupportIds}
                 stabilityAnalysis={result.analysis}
                 displayColorByBrickId={sceneDisplayColorByBrickId}
@@ -744,6 +756,13 @@ export const StabilityLab = ({ plan, onClose, onSnapshotSaved }: StabilityLabPro
                 <button type="button" onClick={() => downloadReport('json')} title={locale === 'zh-CN' ? '导出结构化报告' : 'Export structured report'}><FileJson size={15} />JSON</button>
               </div>
             </footer>
+            <StabilityReinforcementPanel
+              plan={plan}
+              options={result.options}
+              inventoryOverrides={inventoryOverrides}
+              onPreview={setReinforcementPreviewBricks}
+              onApply={applyReinforcementProposal}
+            />
             <StabilitySuitePanel plan={plan} onInspect={inspectSuiteCase} />
             <StabilityHistoryPanel
               history={history}

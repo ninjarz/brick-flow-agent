@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0 — 2026-08-30
+
+- Added deterministic reinforcement proposals that turn an active hazard result into collision-free support-column options.
+- Added before/after hazard simulation for every candidate, ranked by score improvement and failure reduction.
+- Added inventory-aware LEGO and Minecraft support generation with full structural validation before recommendation.
+- Added translucent in-scene reinforcement previews and one-click application through the normal undo history.
+- Added explicit no-improvement handling so valid but ineffective candidates are not recommended.
+- Added unit and browser workflow coverage for generation, validation, preview, application, and undo.
+
 ## 0.3.0 — 2026-08-30
 
 - Added reproducible structural test suites covering multiple hazard types, intensities, and load directions.
