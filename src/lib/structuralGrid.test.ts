@@ -5,6 +5,8 @@ import {
   getBrickInteractionStructuralCells,
   getBrickRenderStructuralCells,
   getBrickStructuralCells,
+  doBrickStructuralCellsCollide,
+  getBrickWorldSupportBounds,
   structuralCellBlocksCollision,
   STRUCTURAL_VOXEL_SIZE,
   type StructuralCell,
@@ -115,6 +117,30 @@ describe('structural collision index', () => {
     const index = createBrickCollisionIndex([fixed])
 
     expect(hasBrickCollision(overlap, [fixed], index)).toBe(true)
+  })
+
+  it('uses exact geometry with and without an index', () => {
+    const fixed = makeBrick('minecraft-oak-door', 'brown', 0, 0, 0)
+    fixed.pose.xStud = 0.03
+    const candidate = makeBrick('minecraft-oak-door', 'brown', 1, 0, 0)
+    candidate.pose.xStud = 1.04
+    expect(doBrickStructuralCellsCollide(candidate, fixed)).toBe(false)
+    expect(hasBrickCollision(candidate, [fixed])).toBe(false)
+    expect(hasBrickCollision(candidate, [fixed], createBrickCollisionIndex([fixed]))).toBe(false)
+    expect(getBrickRawOverlapScore(candidate, [fixed])).toBe(0)
+    expect(getBrickRawOverlapScore(candidate, [fixed], createBrickCollisionIndex([fixed]))).toBe(0)
+  })
+
+  it('moves an open door collision body to the visible leaf', () => {
+    const closed = makeBrick('minecraft-oak-door', 'brown', 0, 0, 0)
+    const open = { ...closed, voxelState: { open: true } }
+    const closedLane = makeBrick('minecraft-lantern', 'yellow', 0, 0.5, 0)
+    const openLeaf = makeBrick('minecraft-lantern', 'yellow', 0.8, 0, 0.8)
+    expect(doBrickStructuralCellsCollide(closed, closedLane)).toBe(true)
+    expect(doBrickStructuralCellsCollide(open, closedLane)).toBe(false)
+    expect(doBrickStructuralCellsCollide(closed, openLeaf)).toBe(false)
+    expect(doBrickStructuralCellsCollide(open, openLeaf)).toBe(true)
+    expect(getBrickWorldSupportBounds(open)?.maxZ).toBeGreaterThanOrEqual(1)
   })
 })
 

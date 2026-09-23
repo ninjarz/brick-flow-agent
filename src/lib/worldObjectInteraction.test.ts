@@ -26,4 +26,14 @@ describe('world object interaction', () => {
     const world = { ...makeWorld(), hiddenTargets: [{ kind: 'brick' as const, id: 'door' }] }
     expect(applyWorldObjectInteraction({ plan: makePlan(makeBrick('door', 'minecraft-oak-door')), world, brickId: 'door', action: 'open' }).reason).toBe('HIDDEN_OBJECT')
   })
+
+  it('refuses to open a door into another voxel block', () => {
+    const plan = makePlan(makeBrick('door', 'minecraft-oak-door'))
+    plan.bricks.push({ ...makeBrick('lamp', 'minecraft-lantern'), pose: { ...makeBrick('lamp', 'minecraft-lantern').pose, xStud: 0.8, zStud: 0.8 } })
+    const world = makeWorld()
+    const result = applyWorldObjectInteraction({ plan, world, brickId: 'door', action: 'open' })
+    expect(result).toMatchObject({ ok: false, reason: 'BLOCKED' })
+    expect(result.plan).toBe(plan)
+    expect(result.world).toBe(world)
+  })
 })

@@ -55,7 +55,7 @@ import { buildWorldScenarioAiPrompt, parseWorldScenarioAiResolution, worldScenar
 import { advanceWorldScenarios, getActiveWorldScenarioStages, resolveWorldScenarioAi } from './lib/worldScenarioRuntime'
 import { beginWorldScenarioPlaytest } from './lib/worldScenarioPlaytest'
 import { clearWorkspaceDraft, loadWorkspaceDraft } from './lib/workspaceDraft'
-import { applyVoxelPlacementSurface, isVoxelPlantSupported, synchronizePlanVoxelBlockStates, synchronizeVoxelBlockStates, type VoxelPlacementSurface } from './lib/voxelBlockState'
+import { applyVoxelPlacementSurface, isVoxelDoorStateClear, isVoxelPlantSupported, synchronizePlanVoxelBlockStates, synchronizeVoxelBlockStates, type VoxelPlacementSurface } from './lib/voxelBlockState'
 import { applyPendingWorldObjectEvents } from './lib/worldObjectEventBridge'
 import { createWorldHiddenTargetIndex } from './lib/worldVisibility'
 import { createFeedbackUrl } from './lib/appDiagnostics'
@@ -1402,6 +1402,9 @@ function App() {
       const nextBrick = isAutoSnapEnabled
         ? snapBrickToPlan(updated, stationaryData.stationaryBricks, { previousBrick: currentBrick, spatialState: stationaryData.spatialState })
         : updated
+      if (currentBrick.brickId === 'minecraft-oak-door' &&
+        currentBrick.voxelState?.open !== nextBrick.voxelState?.open &&
+        !isVoxelDoorStateClear(nextBrick, stationaryData.stationaryBricks)) return current
       if (!canAcceptBrickPose(currentBrick, nextBrick, current.bricks, { action: 'updateBrick' }, stationaryData)) return current
 
       return {

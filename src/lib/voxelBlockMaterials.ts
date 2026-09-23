@@ -17,11 +17,11 @@ const pixelColorCache = new Map<string, Pixel>()
 const hexToPixel = (hex: string, alpha = 255): Pixel => {
   let pixel = pixelColorCache.get(hex)
   if (!pixel) {
-    const color = new Color(hex)
+    const rgb = Number.parseInt(hex.slice(1), 16)
     pixel = [
-      Math.round(color.r * 255),
-      Math.round(color.g * 255),
-      Math.round(color.b * 255),
+      (rgb >> 16) & 255,
+      (rgb >> 8) & 255,
+      rgb & 255,
       255,
     ]
     pixelColorCache.set(hex, pixel)

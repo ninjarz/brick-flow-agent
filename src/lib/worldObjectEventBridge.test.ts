@@ -24,4 +24,14 @@ describe('world object event bridge', () => {
     expect(result.bricks[0].voxelState?.open).toBe(false)
     expect(applied).toEqual(new Set(['toggle-1', 'toggle-2']))
   })
+
+  it('ignores a door opening event when its leaf is obstructed', () => {
+    const blockedPlan: BuildPlan = { ...plan, bricks: [
+      ...plan.bricks,
+      { id: 'lamp', brickId: 'minecraft-lantern', color: 'yellow', pose: { xStud: 0.8, yStud: 0, zStud: 0.8, rotationQuarterTurns: 0 as const } },
+    ] }
+    const applied = new Set<string>()
+    expect(applyPendingWorldObjectEvents(blockedPlan, [event], applied)).toBe(blockedPlan)
+    expect(applied.has(event.id)).toBe(true)
+  })
 })

@@ -16,6 +16,7 @@ import { PlanSpatialState, type WorldBrickConnector } from './planSpatialState'
 import {
   createStructuralCollisionIndex,
   doBrickStructuralCellsCollide,
+  getBrickStructuralOverlapVolume,
   getStructuralCacheVersion,
   getBrickWorldSupportBounds,
   getBrickWorldSupportFaces,
@@ -338,17 +339,11 @@ export const getBrickRawOverlapScore = (
 ) => {
   if (collisionIndex) return getStructuralOverlapScore(brick, collisionIndex)
 
-  const sourceKeys = getBrickWorldCollisionKeys(brick)
-  if (sourceKeys.size === 0) return 0
-
   return bricks.reduce((score, other) => {
     if (other.id === brick.id) return score
-    const otherKeys = getBrickWorldCollisionKeys(other)
-    let overlapCount = 0
-    for (const key of sourceKeys) {
-      if (otherKeys.has(key)) overlapCount += 1
-    }
-    return score + overlapCount * HORIZONTAL_EDIT_STEP_STUDS ** 3
+    return score + (doBrickBoundsOverlap(brick, other)
+      ? getBrickStructuralOverlapVolume(brick, other)
+      : 0)
   }, 0)
 }
 
@@ -362,6 +357,7 @@ export const hasBrickCollision = (
     return bricks.some((other) => (
       other.id !== brick.id &&
       doBrickBoundsOverlap(brick, other) &&
+      doBrickStructuralCellsCollide(brick, other) &&
       !hasConnectorConnection(brick, other, context) &&
       !hasIndirectMechanicalConnectorClearance(brick, other, bricks, context)
     ))

@@ -1,6 +1,7 @@
 import type { BuildPlan } from '../types/bricks'
 import type { WorldEvent } from '../types/world'
 import { applyWorldObjectActionToBrick } from './worldObjectInteraction'
+import { isVoxelDoorStateClear } from './voxelBlockState'
 
 export const applyPendingWorldObjectEvents = (
   plan: BuildPlan,
@@ -10,20 +11,18 @@ export const applyPendingWorldObjectEvents = (
   const pending = events.filter((event) => event.type === 'object-interaction' && !appliedEventIds.has(event.id))
   if (pending.length === 0) return plan
   for (const event of pending) appliedEventIds.add(event.id)
-  const actionsByBrickId = new Map<string, NonNullable<WorldEvent['objectAction']>[]>()
+  const indexById = new Map(plan.bricks.map((brick, index) => [brick.id, index]))
+  let updatedBricks: BuildPlan['bricks'] | undefined
   for (const event of pending) {
     if (!event.targetId || !event.objectAction) continue
-    const actions = actionsByBrickId.get(event.targetId) ?? []
-    actions.push(event.objectAction)
-    actionsByBrickId.set(event.targetId, actions)
+    const index = indexById.get(event.targetId)
+    if (index === undefined) continue
+    const bricks = updatedBricks ?? plan.bricks
+    const previous = bricks[index]
+    const updated = applyWorldObjectActionToBrick(previous, event.objectAction)
+    if (!updated || (previous.voxelState?.open !== updated.voxelState?.open && !isVoxelDoorStateClear(updated, bricks))) continue
+    updatedBricks ??= [...plan.bricks]
+    updatedBricks[index] = updated
   }
-  let changed = false
-  const bricks = plan.bricks.map((brick) => {
-    const actions = actionsByBrickId.get(brick.id)
-    if (!actions) return brick
-    const updated = actions.reduce((current, action) => applyWorldObjectActionToBrick(current, action) ?? current, brick)
-    if (updated !== brick) changed = true
-    return updated
-  })
-  return changed ? { ...plan, bricks } : plan
+  return updatedBricks ? { ...plan, bricks: updatedBricks } : plan
 }

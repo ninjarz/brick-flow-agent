@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { NearestFilter } from 'three'
+import { NearestFilter, SRGBColorSpace } from 'three'
 import { brickDefinitions } from '../data/basicBricks'
 import { getBrickStructuralCells } from './structuralGrid'
 import { getVoxelBlockMaterials, getVoxelPixelTexture, resolveVoxelFaceTextureIds } from './voxelBlockMaterials'
@@ -48,6 +48,12 @@ describe('voxel block materials', () => {
     expect(materials.every((material) => material.transparent && !material.depthWrite)).toBe(true)
     expect(new Set(materials).size).toBe(1)
     expect(getVoxelBlockMaterials(visual)).toBe(materials)
+  })
+
+  it('stores sRGB color bytes in sRGB textures', () => {
+    const texture = getVoxelPixelTexture('bookshelf-side')
+    expect(texture.colorSpace).toBe(SRGBColorSpace)
+    expect(Array.from((texture.image.data as Uint8Array).slice(0, 4))).toEqual([0x6a, 0x45, 0x28, 255])
   })
 
   it('keeps modular block silhouettes in structural collision data', () => {

@@ -1,5 +1,6 @@
 import { brickById } from '../data/basicBricks'
 import type { BuildPlan, PlacedBrick, VoxelFenceConnections } from '../types/bricks'
+import { doBrickStructuralCellsCollide, getBrickWorldSupportFaces } from './structuralGrid'
 
 const coordinateTolerance = 0.001
 
@@ -127,6 +128,11 @@ export const toggleVoxelBlockInteraction = (brick: PlacedBrick): PlacedBrick => 
   return brick
 }
 
+export const isVoxelDoorStateClear = (door: PlacedBrick, bricks: PlacedBrick[]) =>
+  door.brickId !== 'minecraft-oak-door' || bricks.every((other) =>
+    other.id === door.id || !doBrickStructuralCellsCollide(door, other),
+  )
+
 export const getStairRotationFromViewDirection = (x: number, z: number): 0 | 1 | 2 | 3 => {
   if (Math.abs(x) > Math.abs(z)) return x >= 0 ? 1 : 3
   return z >= 0 ? 0 : 2
@@ -152,12 +158,13 @@ export const isVoxelPlantSupported = (plant: PlacedBrick, bricks: PlacedBrick[])
     const definition = brickById.get(candidate.brickId)
     const visual = definition?.voxelVisual
     if (!definition || !visual || visual.shape === 'cross' || visual.shape === 'fence') return false
-    const topY = candidate.pose.yStud + definition.footprint.heightStuds
-    if (!isNear(topY, plant.pose.yStud)) return false
-    return centerX > candidate.pose.xStud + coordinateTolerance &&
-      centerX < candidate.pose.xStud + definition.footprint.widthStuds - coordinateTolerance &&
-      centerZ > candidate.pose.zStud + coordinateTolerance &&
-      centerZ < candidate.pose.zStud + definition.footprint.depthStuds - coordinateTolerance
+    return getBrickWorldSupportFaces(candidate).top.some((face) =>
+      isNear(face.y, plant.pose.yStud) &&
+      centerX > face.minX + coordinateTolerance &&
+      centerX < face.maxX - coordinateTolerance &&
+      centerZ > face.minZ + coordinateTolerance &&
+      centerZ < face.maxZ - coordinateTolerance,
+    )
   })
 }
 

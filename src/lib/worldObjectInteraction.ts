@@ -1,12 +1,12 @@
 import type { BuildPlan, PlacedBrick } from '../types/bricks'
 import type { WorldEvent, WorldObjectActionKind, WorldState } from '../types/world'
-import { getVoxelInteractionKind } from './voxelBlockState'
+import { getVoxelInteractionKind, isVoxelDoorStateClear } from './voxelBlockState'
 
 export type WorldObjectInteractionResult = {
   ok: boolean
   plan: BuildPlan
   world: WorldState
-  reason?: 'MISSING_OBJECT' | 'UNSUPPORTED_ACTION' | 'HIDDEN_OBJECT'
+  reason?: 'MISSING_OBJECT' | 'UNSUPPORTED_ACTION' | 'HIDDEN_OBJECT' | 'BLOCKED'
 }
 
 export const applyWorldObjectActionToBrick = (brick: PlacedBrick, action: WorldObjectActionKind): PlacedBrick | undefined => {
@@ -53,6 +53,9 @@ export const applyWorldObjectInteraction = ({
   }
   const updated = applyWorldObjectActionToBrick(brick, action)
   if (!updated) return { ok: false, plan, world, reason: 'UNSUPPORTED_ACTION' }
+  if (brick.voxelState?.open !== updated.voxelState?.open && !isVoxelDoorStateClear(updated, plan.bricks)) {
+    return { ok: false, plan, world, reason: 'BLOCKED' }
+  }
   const event: WorldEvent = {
     id: `world-object-${brickId}-${Math.round(world.elapsedSeconds * 1000)}-${world.events.length}`,
     timeSeconds: world.elapsedSeconds,

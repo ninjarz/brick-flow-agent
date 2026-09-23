@@ -5,6 +5,7 @@ import {
   applyVoxelPlacementSurface,
   getFenceConnections,
   getStairRotationFromViewDirection,
+  isVoxelDoorStateClear,
   isVoxelPlantSupported,
   synchronizeVoxelBlockStates,
   toggleVoxelBlockInteraction,
@@ -81,5 +82,19 @@ describe('voxel block state', () => {
     const plant = brick('plant', 'minecraft-tall-grass', 0, 1, 0)
     expect(isVoxelPlantSupported(plant, [plant])).toBe(false)
     expect(isVoxelPlantSupported(plant, [plant, brick('soil', 'minecraft-grass-block', 0, 0, 0)])).toBe(true)
+  })
+
+  it('supports plants only over an actual top face', () => {
+    const stair = brick('stair', 'minecraft-oak-stairs', 0, 0, 0)
+    expect(isVoxelPlantSupported(brick('low', 'minecraft-tall-grass', 0, 1, -0.2), [stair])).toBe(false)
+    expect(isVoxelPlantSupported(brick('high', 'minecraft-tall-grass', 0, 1, 0.2), [stair])).toBe(true)
+    const rotatedStair = { ...stair, pose: { ...stair.pose, rotationQuarterTurns: 2 as const } }
+    expect(isVoxelPlantSupported(brick('rotated-low', 'minecraft-tall-grass', 0, 1, 0.2), [rotatedStair])).toBe(false)
+  })
+
+  it('rejects opening a door into an occupied leaf area', () => {
+    const door = { ...brick('door', 'minecraft-oak-door', 0, 0, 0), voxelState: { open: true } }
+    expect(isVoxelDoorStateClear(door, [door, brick('lamp', 'minecraft-lantern', 0.8, 0, 0.8)])).toBe(false)
+    expect(isVoxelDoorStateClear(door, [door])).toBe(true)
   })
 })
