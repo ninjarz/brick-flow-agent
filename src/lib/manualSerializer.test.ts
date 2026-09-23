@@ -17,7 +17,7 @@ const plan: BuildPlan = {
 describe('build manual 2.0', () => {
   it('serializes delta-only steps with camera and assembly guidance', () => {
     const manual = serializeBuildManual(plan, 'en-US')
-    expect(manual.schemaVersion).toBe(5)
+    expect(manual.schemaVersion).toBe(6)
     expect(manual.steps[0].cameraAzimuthDegrees).toBeTypeOf('number')
     expect(manual.steps.flatMap((step) => step.addPieces).every((piece) => (
       piece.assembly.label.length > 0 && Number.isFinite(piece.assembly.explodedOffset.yStud)

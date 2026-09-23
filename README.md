@@ -90,6 +90,7 @@ npm run build                # type-check and build
 npm run lint                 # run ESLint
 npm test                     # run focused Vitest regressions
 npm run test:e2e             # run browser workflows with Playwright
+npm run test:production      # test a previously built app, including browser performance sampling
 npm run validate:builds      # validate default assets and regression cases
 npm run audit:obj-connectivity # require every generated OBJ asset to stay connected
 npm run profile:performance  # profile performance-sensitive routines
@@ -98,6 +99,14 @@ npm run generate:obj         # rebuild OBJ-derived default assets
 ```
 
 The profile fixes repeatable workloads for validation and spatial indexing at 100/500/1,500 voxel blocks, plus 100 simulation steps at 10/30/60 NPCs. CI records relative timings for trend review rather than unstable absolute millisecond gates on shared runners.
+
+The workspace restores unfinished builds, including floating pieces. Unreadable drafts pause autosave and can be downloaded before clearing the canvas. The save indicator distinguishes restoration, saving, saved data, and unavailable storage. IndexedDB drafts are checked independently of localStorage markers, with timestamps resolving stale copies.
+
+Undo/redo covers model edits, explicit NPC/scenario authoring, and complete project replacements. Simulation ticks do not create history entries. Playtests use disposable history and keep the pre-test workspace as the autosave checkpoint; **Exit and restore** returns to that workspace and its original undo/redo history. Manual JSON schema 6 retains voxel placement and interaction state and imports older manual schemas.
+
+Project copies have independent structural-analysis history and suite results, even when their plans share an ID. Existing analysis records from older versions move to the first project opened with that plan.
+
+`npm run verify:quality` runs the shared lint, build, unit, development-browser, production-browser and asset checks. `verify:release` also enforces local CPU performance budgets. Production tests write browser resource, frame-time and heap samples into Playwright attachments; the ten-second sample is a baseline, not a long-running memory-leak guarantee. The CPU profile also measures fence-heavy scenes and worker payload cloning.
 
 ### OBJ to brick assets
 

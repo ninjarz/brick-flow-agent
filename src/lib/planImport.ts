@@ -1,4 +1,4 @@
-import type { BuildPlan, PlacedBrick } from '../types/bricks'
+import type { BuildPlan, PlacedBrick, VoxelBlockState } from '../types/bricks'
 import {
   normalizeHorizontalStud,
   normalizeQuarterTurns,
@@ -33,6 +33,27 @@ export const normalizeImportedPose = (pose: Record<string, unknown>): PlacedBric
   verticalQuarterTurns: normalizeVerticalQuarterTurns(Number(pose.verticalQuarterTurns ?? 0)),
 })
 
+export const normalizeImportedVoxelState = (value: unknown): VoxelBlockState | undefined => {
+  if (!isRecord(value)) return undefined
+  return {
+    ...(value.slabHalf === 'top' || value.slabHalf === 'bottom' ? { slabHalf: value.slabHalf } : {}),
+    ...(typeof value.open === 'boolean' ? { open: value.open } : {}),
+    ...(typeof value.powered === 'boolean' ? { powered: value.powered } : {}),
+    ...(typeof value.containerName === 'string' ? { containerName: value.containerName } : {}),
+    ...(isRecord(value.fenceConnections) ? { fenceConnections: {
+      north: value.fenceConnections.north === true, east: value.fenceConnections.east === true,
+      south: value.fenceConnections.south === true, west: value.fenceConnections.west === true,
+    } } : {}),
+    ...(Array.isArray(value.storyContents) ? { storyContents: value.storyContents.filter((item) =>
+      isRecord(item) && typeof item.id === 'string' && typeof item.title === 'string' && typeof item.description === 'string'
+    ).map((item) => ({ id: item.id as string, title: item.title as string, description: item.description as string,
+      ...(Array.isArray(item.tags) ? { tags: item.tags.filter((tag): tag is string => typeof tag === 'string') } : {}),
+      ...(typeof item.discovered === 'boolean' ? { discovered: item.discovered } : {}),
+      ...(typeof item.taken === 'boolean' ? { taken: item.taken } : {}),
+    })) } : {}),
+  }
+}
+
 export const normalizeImportedPlan = (plan: BuildPlan): BuildPlan => pruneBrickStructures({
   ...plan,
   structures: Array.isArray(plan.structures)
@@ -46,12 +67,15 @@ export const normalizeImportedPlan = (plan: BuildPlan): BuildPlan => pruneBrickS
   bricks: plan.bricks.map((brick) => ({
     ...brick,
     pose: normalizeImportedPose(brick.pose as unknown as Record<string, unknown>),
+    ...(brick.voxelState ? { voxelState: normalizeImportedVoxelState(brick.voxelState) } : {}),
   })),
 })
 
 export const tryNormalizeImportedPlan = (plan: BuildPlan) => {
-  const hasInvalidBrick = plan.bricks.some((brick) => !isValidImportedPose(brick.pose))
+  if (typeof plan.id !== 'string' || typeof plan.title !== 'string' || typeof plan.prompt !== 'string') return undefined
+  const hasInvalidBrick = plan.bricks.some((brick) => !isRecord(brick) || typeof brick.id !== 'string' || typeof brick.brickId !== 'string' || typeof brick.color !== 'string' || !isValidImportedPose(brick.pose))
   if (hasInvalidBrick) return undefined
+  if (plan.steps.some((step) => !isRecord(step) || typeof step.id !== 'string' || typeof step.title !== 'string' || typeof step.description !== 'string' || !Array.isArray(step.brickIds) || step.brickIds.some((id) => typeof id !== 'string'))) return undefined
 
   return normalizeImportedPlan(plan)
 }

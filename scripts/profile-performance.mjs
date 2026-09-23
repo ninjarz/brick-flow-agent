@@ -228,6 +228,16 @@ await writeFile(entry, `
       brickDefinitions.filter((brick) => brick.name.toLowerCase().includes('slope'));
     }
   });
+  const { synchronizeVoxelBlockStates } = await import(${JSON.stringify(`${workspace}/src/lib/voxelBlockState.ts`)});
+  const fencePlan = Array.from({ length: 10000 }, (_, i) => ({ id: String(i), brickId: 'minecraft-oak-fence', color: 'brown' as const,
+    pose: { xStud: i % 100, yStud: 0, zStud: Math.floor(i / 100), rotationQuarterTurns: 0 as const } }));
+  measure('synchronize 10,000 fences', () => synchronizeVoxelBlockStates(fencePlan));
+  measure('clone 1500 bricks and 60 NPCs x100', () => {
+    for (let i = 0; i < 100; i++) structuredClone({ world: aiSnapshotWorld, plan: { bricks: aiSnapshotBricks } });
+  });
+  measure('clone 60 NPCs without unchanged plan x100', () => {
+    for (let i = 0; i < 100; i++) structuredClone({ world: aiSnapshotWorld });
+  });
   measure('partition 10,000 voxel blocks into render chunks', () => {
     const blocks = Array.from({ length: 10_000 }, (_, index) => ({
       x: index % 100,
@@ -250,6 +260,7 @@ await writeFile(entry, `
       ['simulate 60 NPCs for 100 world steps', 1800],
       ['create AI snapshot for 60 NPCs and 1500 bricks x10', 150],
       ['partition 10,000 voxel blocks into render chunks', 80],
+      ['synchronize 10,000 fences', 300],
     ]);
     const failures = results.flatMap((result) => {
       const budget = budgets.get(result.name);

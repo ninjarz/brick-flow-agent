@@ -13,14 +13,20 @@ const textureSize = 16
 
 type Pixel = readonly [number, number, number, number?]
 
+const pixelColorCache = new Map<string, Pixel>()
 const hexToPixel = (hex: string, alpha = 255): Pixel => {
-  const color = new Color(hex)
-  return [
-    Math.round(color.r * 255),
-    Math.round(color.g * 255),
-    Math.round(color.b * 255),
-    alpha,
-  ]
+  let pixel = pixelColorCache.get(hex)
+  if (!pixel) {
+    const color = new Color(hex)
+    pixel = [
+      Math.round(color.r * 255),
+      Math.round(color.g * 255),
+      Math.round(color.b * 255),
+      255,
+    ]
+    pixelColorCache.set(hex, pixel)
+  }
+  return alpha === 255 ? pixel : [pixel[0], pixel[1], pixel[2], alpha]
 }
 
 const mixPixel = (base: Pixel, amount: number): Pixel => {
@@ -311,9 +317,12 @@ export const getVoxelBlockMaterials = (
   const cached = materialCache.get(cacheKey)
   if (cached) return cached
   const transparent = opacity < 1 || visual.renderLayer === 'translucent'
+  const byTexture = new Map<string, MeshStandardMaterial>()
   const materials = faceIds.map((textureId) => {
+    const existing = byTexture.get(textureId)
+    if (existing) return existing
     const texture = getVoxelPixelTexture(textureId)
-    return new MeshStandardMaterial({
+    const material = new MeshStandardMaterial({
       name: `voxel-material:${textureId}`,
       map: texture,
       transparent,
@@ -326,6 +335,8 @@ export const getVoxelBlockMaterials = (
       emissiveMap: visual.renderLayer === 'emissive' ? texture : null,
       emissiveIntensity: visual.renderLayer === 'emissive' ? visual.emissiveIntensity ?? 0.15 : 0,
     })
+    byTexture.set(textureId, material)
+    return material
   })
   materialCache.set(cacheKey, materials)
   return materials

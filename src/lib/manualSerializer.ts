@@ -118,6 +118,7 @@ export type ManualPiece = {
   name: string
   color: BrickColor
   pose: BrickPose
+  voxelState?: BuildPlan['bricks'][number]['voxelState']
   footprint: {
     widthStuds: number
     depthStuds: number
@@ -154,7 +155,7 @@ export type ManualStepPage = {
 }
 
 export type BuildManual = {
-  schemaVersion: 5
+  schemaVersion: 6
   planId: string
   title: string
   prompt: string
@@ -240,6 +241,7 @@ const toManualPiece = (brick: BuildPlan['bricks'][number], locale: ManualLocale)
     name: definition?.name ?? brick.brickId,
     color: brick.color,
     pose: { ...brick.pose },
+    ...(brick.voxelState ? { voxelState: structuredClone(brick.voxelState) } : {}),
     footprint: {
       widthStuds: footprint?.widthStuds ?? 1,
       depthStuds: footprint?.depthStuds ?? 1,
@@ -398,7 +400,7 @@ export const serializeBuildManual = (plan: BuildPlan, locale: ManualLocale = 'zh
   const blockingIssues = getBlockingBuildPlanIssues(issues)
 
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     planId: plan.id,
     title: plan.title,
     prompt: plan.prompt,

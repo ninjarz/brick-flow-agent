@@ -25,6 +25,7 @@ import type { BuildPlan } from '../types/bricks'
 
 type StabilityLabProps = {
   plan: BuildPlan
+  projectId: string
   inventoryOverrides: InventoryOverrides
   onClose: () => void
   onSnapshotSaved?: () => void
@@ -94,7 +95,7 @@ const WindDirectionIndicator = ({
   </div>
 )
 
-export const StabilityLab = ({ plan, inventoryOverrides, onClose, onSnapshotSaved, onApplyReinforcement }: StabilityLabProps) => {
+export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onSnapshotSaved, onApplyReinforcement }: StabilityLabProps) => {
   const { locale, t } = useI18n()
   const [scenario, setScenario] = useState<DisasterScenario>('wind')
   const [intensity, setIntensity] = useState(70)
@@ -108,8 +109,8 @@ export const StabilityLab = ({ plan, inventoryOverrides, onClose, onSnapshotSave
   const [cameraAzimuthDegrees, setCameraAzimuthDegrees] = useState(18)
   const [showConnectionHeatmap, setShowConnectionHeatmap] = useState(true)
   const [inspectedBrickId, setInspectedBrickId] = useState('')
-  const [history, setHistory] = useState<StabilitySnapshot[]>(() => loadStabilityHistory(plan.id))
-  const [baselineId, setBaselineId] = useState(() => loadStabilityHistory(plan.id)[0]?.id ?? '')
+  const [history, setHistory] = useState<StabilitySnapshot[]>(() => loadStabilityHistory(plan.id, projectId))
+  const [baselineId, setBaselineId] = useState(() => loadStabilityHistory(plan.id, projectId)[0]?.id ?? '')
   const [reportTheme, setReportTheme] = useState<'light' | 'dark'>('light')
   const [reinforcementPreviewBricks, setReinforcementPreviewBricks] = useState<BuildPlan['bricks']>([])
   const workerRef = useRef<Worker>()
@@ -165,12 +166,12 @@ export const StabilityLab = ({ plan, inventoryOverrides, onClose, onSnapshotSave
   }, [plan.bricks, stopWorker])
 
   useEffect(() => {
-    runSimulation({ scenario: 'wind', intensity: 70, directionDegrees: 25, physicsProfile: 'challenge' })
+    runSimulation({ scenario, intensity, directionDegrees, physicsProfile })
     return () => {
       simulationRunRef.current += 1
       stopWorker()
     }
-  }, [runSimulation, stopWorker])
+  }, [runSimulation, stopWorker, scenario, intensity, directionDegrees, physicsProfile])
 
   const restartSimulation = useCallback(() => {
     runSimulation({ scenario, intensity, directionDegrees, physicsProfile })
@@ -181,8 +182,7 @@ export const StabilityLab = ({ plan, inventoryOverrides, onClose, onSnapshotSave
     setIntensity(options.intensity)
     setDirectionDegrees(options.directionDegrees ?? 0)
     setPhysicsProfile(options.physicsProfile ?? 'challenge')
-    runSimulation(options)
-  }, [runSimulation])
+  }, [])
 
   const applyReinforcementProposal = useCallback((proposal: { addedBricks: BuildPlan['bricks'] }) => {
     onApplyReinforcement(proposal.addedBricks)
@@ -333,13 +333,13 @@ export const StabilityLab = ({ plan, inventoryOverrides, onClose, onSnapshotSave
       createdAt: now.toISOString(),
       planFingerprint: createPlanFingerprint(plan),
       report,
-    })
+    }, projectId)
     setHistory(saved.history)
     if (saved.created) {
       setBaselineId((current) => current || saved.history[1]?.id || saved.snapshot.id)
       onSnapshotSaved?.()
     }
-  }, [locale, onSnapshotSaved, plan, report])
+  }, [locale, onSnapshotSaved, plan, projectId, report])
 
   const getSceneThumbnail = () => {
     try {
@@ -444,12 +444,6 @@ export const StabilityLab = ({ plan, inventoryOverrides, onClose, onSnapshotSave
                   aria-pressed={scenario === value}
                   onClick={() => {
                     setScenario(value)
-                    runSimulation({
-                      scenario: value,
-                      intensity,
-                      directionDegrees,
-                      physicsProfile,
-                    })
                   }}
                 >
                   <Icon size={17} />
@@ -472,7 +466,6 @@ export const StabilityLab = ({ plan, inventoryOverrides, onClose, onSnapshotSave
                     aria-pressed={physicsProfile === profile}
                     onClick={() => {
                       setPhysicsProfile(profile)
-                      runSimulation({ scenario, intensity, directionDegrees, physicsProfile: profile })
                     }}
                   >
                     {t(`stabilityLab.physicsProfile.${profile}`)}
@@ -763,7 +756,7 @@ export const StabilityLab = ({ plan, inventoryOverrides, onClose, onSnapshotSave
               onPreview={setReinforcementPreviewBricks}
               onApply={applyReinforcementProposal}
             />
-            <StabilitySuitePanel plan={plan} onInspect={inspectSuiteCase} />
+            <StabilitySuitePanel plan={plan} projectId={projectId} onInspect={inspectSuiteCase} />
             <StabilityHistoryPanel
               history={history}
               currentReport={report!}
@@ -772,12 +765,12 @@ export const StabilityLab = ({ plan, inventoryOverrides, onClose, onSnapshotSave
               onRename={(snapshot) => {
                 const name = window.prompt(locale === 'zh-CN' ? '分析记录名称' : 'Analysis record name', snapshot.name)
                 if (!name) return
-                const next = renameStabilitySnapshot(plan.id, snapshot.id, name)
+                const next = renameStabilitySnapshot(plan.id, snapshot.id, name, projectId)
                 setHistory(next)
                 onSnapshotSaved?.()
               }}
               onDelete={(snapshot) => {
-                const next = deleteStabilitySnapshot(plan.id, snapshot.id)
+                const next = deleteStabilitySnapshot(plan.id, snapshot.id, projectId)
                 setHistory(next)
                 if (baselineId === snapshot.id) setBaselineId(next[0]?.id ?? '')
                 onSnapshotSaved?.()

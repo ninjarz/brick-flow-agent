@@ -1,0 +1,48 @@
+import { afterEach, expect, it, vi } from 'vitest'
+import { generateLlmBuildPlan, isLlmConfigComplete } from './llmGenerator'
+import { defaultLlmConfig, loadLlmConfig } from './llmConfig'
+import { serializeBuildManual } from './manualSerializer'
+import { parseImportedPlan } from './planFileIO'
+import { makeBrick } from './planUtils'
+import type { BuildPlan } from '../types/bricks'
+import { loadWorkspaceDraft } from './workspaceDraft'
+import { createEmptyWorldState } from './worldEntity'
+
+afterEach(() => vi.unstubAllGlobals())
+
+it('evidence: saved unfinished floating draft is discarded on load', () => {
+  const plan: BuildPlan = { id: 'unfinished', title: 'Unfinished', prompt: '', source: 'template-local', bricks: [makeBrick('brick-2x2', 'gray', 0, 1.2, 0)], steps: [] }
+  vi.stubGlobal('window', { localStorage: { getItem: () => JSON.stringify({ plan, prompt: '', world: createEmptyWorldState(plan.id) }) } })
+  expect(loadWorkspaceDraft()).toBeUndefined()
+})
+
+it('evidence: manual round trip drops top slab state', () => {
+  const brick = { ...makeBrick('minecraft-stone-slab', 'gray', 0, 0, 0), voxelState: { slabHalf: 'top' as const } }
+  const plan: BuildPlan = { id: 'review', title: 'Review', prompt: '', source: 'template-local', bricks: [brick], steps: [] }
+  expect(parseImportedPlan(serializeBuildManual(plan))?.bricks[0].voxelState).toBeUndefined()
+})
+
+it('evidence: malformed stored config passes loader and crashes completeness check', () => {
+  vi.stubGlobal('window', { localStorage: { getItem: () => JSON.stringify({ modelName: 123 }) } })
+  expect(() => isLlmConfigComplete(loadLlmConfig())).toThrow(/trim/)
+})
+
+it('evidence: abort after response headers does not cancel generation', async () => {
+  vi.stubGlobal('window', { setTimeout, clearTimeout })
+  let deliver!: () => void
+  let bodyStarted!: () => void
+  const started = new Promise<void>((resolve) => { bodyStarted = resolve })
+  const body = new Promise<string>((resolve) => { deliver = () => resolve(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ title: 'Late result', bricks: [{ brickId: 'brick-2x2', color: 'gray', xStud: 0, yStud: 0, zStud: 0 }] }) } }] })) })
+  let requestSignal: AbortSignal | undefined
+  vi.stubGlobal('fetch', vi.fn(async (_url, options) => {
+    requestSignal = options.signal
+    return { ok: true, text: () => { bodyStarted(); return body } }
+  }))
+  const controller = new AbortController()
+  const pending = generateLlmBuildPlan({ prompt: 'review', config: { ...defaultLlmConfig, endpoint: 'https://example.invalid', modelName: 'mock', apiKey: 'mock' }, signal: controller.signal })
+  await started
+  controller.abort()
+  expect(requestSignal?.aborted).toBe(false)
+  deliver()
+  await expect(pending).resolves.toMatchObject({ title: 'Late result' })
+})

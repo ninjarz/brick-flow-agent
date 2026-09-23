@@ -31,6 +31,14 @@ describe('plan file import', () => {
     expect(parseImportedPlan({ schemaVersion: 5, steps: [] })).toBeUndefined()
   })
 
+  it('round-trips voxel placement and story interaction state in schema 6', () => {
+    const state = { slabHalf: 'top' as const, open: true, powered: false, containerName: 'Evidence', storyContents: [{ id: 'letter', title: 'Letter', description: 'Clue', tags: ['quest'], taken: true, discovered: true }] }
+    const source = { ...plan, bricks: [{ ...makeBrick('minecraft-chest', 'brown', 0, 0, 0), voxelState: state }] }
+    expect(parseImportedPlan(serializeBuildManual(source))?.bricks[0].voxelState).toEqual(state)
+    const legacy = { ...serializeBuildManual(source), schemaVersion: 5 }
+    expect(parseImportedPlan(legacy)?.bricks).toHaveLength(1)
+  })
+
   it('round-trips an optional world while remaining compatible with plan-only JSON', () => {
     const world = {
       ...createEmptyWorldState(plan.id),

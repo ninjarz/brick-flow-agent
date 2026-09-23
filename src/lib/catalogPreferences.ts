@@ -1,3 +1,4 @@
+import { safeStorage } from './safeStorage'
 import type { BrickPack } from '../types/bricks'
 
 export type CatalogPackPreference = BrickPack | 'npc'
@@ -32,7 +33,7 @@ export const normalizeCatalogPreferences = (value: unknown): CatalogPreferences 
 export const loadCatalogPreferences = (): CatalogPreferences => {
   if (typeof window === 'undefined') return defaultCatalogPreferences
   try {
-    return normalizeCatalogPreferences(JSON.parse(window.localStorage.getItem(storageKey) ?? 'null'))
+    return normalizeCatalogPreferences(JSON.parse(safeStorage.getItem(storageKey) ?? 'null'))
   } catch {
     return defaultCatalogPreferences
   }
@@ -41,7 +42,7 @@ export const loadCatalogPreferences = (): CatalogPreferences => {
 export const saveCatalogPreferences = (preferences: CatalogPreferences) => {
   if (typeof window === 'undefined') return
   try {
-    window.localStorage.setItem(storageKey, JSON.stringify(normalizeCatalogPreferences(preferences)))
+    safeStorage.setItem(storageKey, JSON.stringify(normalizeCatalogPreferences(preferences)))
   } catch {
     // Catalog UI preferences are optional when browser storage is unavailable.
   }

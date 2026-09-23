@@ -1,3 +1,4 @@
+import { safeStorage } from './safeStorage'
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
 
@@ -1258,7 +1259,7 @@ const translations: Record<Locale, Record<string, string>> = {
 
 const getInitialLocale = (): Locale => {
   if (typeof window === 'undefined') return 'zh-CN'
-  const stored = window.localStorage.getItem(storageKey)
+  const stored = safeStorage.getItem(storageKey)
   if (stored === 'zh-CN' || stored === 'en-US') return stored
   return navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en-US'
 }
@@ -1277,7 +1278,7 @@ export const I18nProvider = ({ children }: { children: ReactNode }) => {
     const setLocale = (nextLocale: Locale) => {
       setLocaleState(nextLocale)
       if (typeof window !== 'undefined') {
-        window.localStorage.setItem(storageKey, nextLocale)
+        safeStorage.setItem(storageKey, nextLocale)
       }
     }
 

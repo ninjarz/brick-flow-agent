@@ -1,3 +1,5 @@
+import { aiTasks } from './aiTasks'
+import { createRequestLifetime, withAbortSignal } from './requestLifetime'
 import { brickById, brickDefinitions } from '../data/basicBricks'
 import type { BrickColor, BrickPack, BuildPlan, GeneratorInput, LlmConfig, PlacedBrick } from '../types/bricks'
 import { generateBuildPlan } from './localGenerator'
@@ -518,6 +520,8 @@ const formatRequestError = async (response: Response, requestMode: LlmConfig['re
 }
 
 const requestLlmChat = (config: LlmConfig, payload: LlmRequestPayload, signal: AbortSignal) => {
+  signal.throwIfAborted()
+  payload = { ...payload, max_tokens: aiTasks.request(signal, Number(payload.max_tokens) || 4096) }
   const endpoint = config.endpoint.trim()
   const apiKey = config.apiKey.trim()
 
@@ -573,12 +577,12 @@ const requestLlmChatWithCompatibility = async (
   }
   let response = await requestLlmChat(config, compatiblePayload(), signal)
   if (response.ok) return response
-  let detail = (await response.clone().text()).toLowerCase()
+  let detail = (await withAbortSignal(signal, () => response.clone().text())).toLowerCase()
   if (!omitUnsupportedThinkingParameters && (detail.includes('thinking') || detail.includes('enable_thinking'))) {
     omitUnsupportedThinkingParameters = true
     response = await requestLlmChat(config, compatiblePayload(), signal)
     if (response.ok) return response
-    detail = (await response.clone().text()).toLowerCase()
+    detail = (await withAbortSignal(signal, () => response.clone().text())).toLowerCase()
   }
   if (!omitUnsupportedStreamOptions && detail.includes('stream_options')) {
     omitUnsupportedStreamOptions = true
@@ -712,12 +716,12 @@ const normalizeSteps = (bricks: PlacedBrick[]) => createSingleBrickSteps(bricks)
 export const isLlmConfigComplete = (config: LlmConfig) =>
   Boolean(config.modelName.trim() && config.endpoint.trim() && config.apiKey.trim())
 
-export const testLlmConnection = async (config: LlmConfig, locale: LlmLocale = 'zh-CN') => {
+const testLlmConnectionImpl = async (config: LlmConfig, locale: LlmLocale = 'zh-CN', signal?: AbortSignal) => {
   resetLlmThinkingCompatibility()
   if (!isLlmConfigComplete(config)) throw new Error(llmText[locale].incompleteConfig)
 
-  const controller = new AbortController()
-  const timeout = window.setTimeout(() => controller.abort(), configTestTimeoutMs)
+  const { controller, dispose } = createRequestLifetime(signal, configTestTimeoutMs)
+  aiTasks.bind(signal, controller.signal)
   let response: Response
 
   try {
@@ -738,28 +742,31 @@ export const testLlmConnection = async (config: LlmConfig, locale: LlmLocale = '
       stream: false,
       response_format: { type: 'json_object' },
     }, false), controller.signal)
+
+    if (!response.ok) {
+      throw new Error(await formatRequestError(response, config.requestMode, locale))
+    }
+
+    aiTasks.phase(signal, 'receiving')
+    const responseText = await withAbortSignal(controller.signal, () => response.text())
+    controller.signal.throwIfAborted()
+    if (!responseText.trim()) throw new Error(llmText[locale].emptyConfigResponse)
+
+    aiTasks.phase(signal, 'validating')
+    const payload = JSON.parse(responseText) as unknown
+    const content = extractMessageContent(payload)
+    if (!content) throw new Error(formatEmptyContentError(payload, llmText[locale].configTestContext, locale))
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       throw new Error(llmText[locale].configTimeout)
     }
     throw formatFetchError(error, config.requestMode, locale)
   } finally {
-    window.clearTimeout(timeout)
+    dispose()
   }
-
-  if (!response.ok) {
-    throw new Error(await formatRequestError(response, config.requestMode, locale))
-  }
-
-  const responseText = await response.text()
-  if (!responseText.trim()) throw new Error(llmText[locale].emptyConfigResponse)
-
-  const payload = JSON.parse(responseText) as unknown
-  const content = extractMessageContent(payload)
-  if (!content) throw new Error(formatEmptyContentError(payload, llmText[locale].configTestContext, locale))
 }
 
-export const requestLlmJsonContent = async ({
+const requestLlmJsonContentImpl = async ({
   config,
   systemPrompt,
   userPrompt,
@@ -770,10 +777,8 @@ export const requestLlmJsonContent = async ({
 }: LlmJsonRequestInput) => {
   if (!isLlmConfigComplete(config)) throw new Error(llmText[locale].incompleteConfig)
 
-  const controller = new AbortController()
-  const abortFromCaller = () => controller.abort()
-  signal?.addEventListener('abort', abortFromCaller)
-  const timeout = window.setTimeout(() => controller.abort(), clientRequestTimeoutMs)
+  const { controller, dispose } = createRequestLifetime(signal, clientRequestTimeoutMs)
+  aiTasks.bind(signal, controller.signal)
   let response: Response
 
   try {
@@ -788,6 +793,17 @@ export const requestLlmJsonContent = async ({
       stream: false,
       response_format: { type: 'json_object' },
     }, config.enableThinking), controller.signal)
+
+    if (!response.ok) throw new Error(await formatRequestError(response, config.requestMode, locale))
+    aiTasks.phase(signal, 'receiving')
+    const responseText = await withAbortSignal(controller.signal, () => response.text())
+    controller.signal.throwIfAborted()
+    if (!responseText.trim()) throw new Error(llmText[locale].emptyGenerationResponse)
+    aiTasks.phase(signal, 'validating')
+    const payload = JSON.parse(responseText) as unknown
+    const content = extractMessageContent(payload)
+    if (!content) throw new Error(formatEmptyContentError(payload, llmText[locale].responseContext, locale))
+    return content
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       if (signal?.aborted) throw new Error(llmText[locale].generationCanceled)
@@ -795,17 +811,8 @@ export const requestLlmJsonContent = async ({
     }
     throw formatFetchError(error, config.requestMode, locale)
   } finally {
-    signal?.removeEventListener('abort', abortFromCaller)
-    window.clearTimeout(timeout)
+    dispose()
   }
-
-  if (!response.ok) throw new Error(await formatRequestError(response, config.requestMode, locale))
-  const responseText = await response.text()
-  if (!responseText.trim()) throw new Error(llmText[locale].emptyGenerationResponse)
-  const payload = JSON.parse(responseText) as unknown
-  const content = extractMessageContent(payload)
-  if (!content) throw new Error(formatEmptyContentError(payload, llmText[locale].responseContext, locale))
-  return content
 }
 
 const readLlmEventStream = async (
@@ -873,7 +880,7 @@ export const getLlmEmptyResponseRetryTokens = (maxTokens: number) => Math.min(
   Math.max(emptyStreamRetryFloorTokens, Math.max(1, Math.round(maxTokens)) * 2),
 )
 
-export const requestLlmTextStream = async ({
+const requestLlmTextStreamImpl = async ({
   config,
   systemPrompt,
   userPrompt,
@@ -895,10 +902,8 @@ export const requestLlmTextStream = async ({
         ]
       : []
   if (requestMessages.length === 0) throw new Error('LLM messages are required.')
-  const controller = new AbortController()
-  const abortFromCaller = () => controller.abort()
-  signal?.addEventListener('abort', abortFromCaller)
-  const timeout = window.setTimeout(() => controller.abort(), clientRequestTimeoutMs)
+  const { controller, dispose } = createRequestLifetime(signal, clientRequestTimeoutMs)
+  aiTasks.bind(signal, controller.signal)
   try {
     const retryMaxTokens = getLlmEmptyResponseRetryTokens(maxTokens)
     const tokenBudgets = retryMaxTokens > maxTokens ? [maxTokens, retryMaxTokens] : [maxTokens]
@@ -913,9 +918,10 @@ export const requestLlmTextStream = async ({
         stream_options: { include_usage: true },
       }, config.enableThinking), controller.signal)
       if (!response.ok) throw new Error(await formatRequestError(response, config.requestMode, locale))
+      aiTasks.phase(signal, 'receiving')
       const contentType = response.headers.get('content-type')?.toLowerCase() ?? ''
       if (!contentType.includes('text/event-stream') && contentType.includes('application/json')) {
-        const payload = await response.json() as unknown
+        const payload = await withAbortSignal(controller.signal, () => response.json()) as unknown
         const reasoning = extractReasoningContent(payload)
         if (reasoning) onReasoningDelta?.(reasoning)
         const content = extractMessageContent(payload)
@@ -934,7 +940,7 @@ export const requestLlmTextStream = async ({
           retryCount: attempt,
         } satisfies LlmStreamResult
       }
-      const result = await readLlmEventStream(response, onDelta, onReasoningDelta)
+      const result = await withAbortSignal(controller.signal, () => readLlmEventStream(response, onDelta, onReasoningDelta))
       if (result.content.trim()) {
         return { ...result, maxTokens: attemptMaxTokens, retryCount: attempt }
       }
@@ -948,18 +954,15 @@ export const requestLlmTextStream = async ({
     }
     throw formatFetchError(error, config.requestMode, locale)
   } finally {
-    signal?.removeEventListener('abort', abortFromCaller)
-    window.clearTimeout(timeout)
+    dispose()
   }
 }
 
-export const generateLlmBuildPlan = async ({ prompt, imageName, imageDataUrl, inventoryOverrides, pack, config, signal, locale = 'zh-CN', repairFeedback, previousPlan }: LlmGenerateInput): Promise<BuildPlan> => {
+const generateLlmBuildPlanImpl = async ({ prompt, imageName, imageDataUrl, inventoryOverrides, pack, config, signal, locale = 'zh-CN', repairFeedback, previousPlan }: LlmGenerateInput): Promise<BuildPlan> => {
   if (!isLlmConfigComplete(config)) throw new Error(llmText[locale].incompleteConfig)
 
-  const controller = new AbortController()
-  const abortFromCaller = () => controller.abort()
-  signal?.addEventListener('abort', abortFromCaller)
-  const timeout = window.setTimeout(() => controller.abort(), clientRequestTimeoutMs)
+  const { controller, dispose } = createRequestLifetime(signal, clientRequestTimeoutMs)
+  aiTasks.bind(signal, controller.signal)
   let response: Response
   const userPrompt = `${buildLlmUserPrompt({ prompt, imageName, inventoryOverrides, pack })}${
     repairFeedback && previousPlan ? buildLlmRepairPrompt(previousPlan, repairFeedback) : ''
@@ -988,6 +991,34 @@ export const generateLlmBuildPlan = async ({ prompt, imageName, imageDataUrl, in
       stream: false,
       response_format: { type: 'json_object' },
     }, config.enableThinking), controller.signal)
+
+    if (!response.ok) {
+      throw new Error(await formatRequestError(response, config.requestMode, locale))
+    }
+
+    aiTasks.phase(signal, 'receiving')
+    const responseText = await withAbortSignal(controller.signal, () => response.text())
+    controller.signal.throwIfAborted()
+    if (!responseText.trim()) throw new Error(llmText[locale].emptyGenerationResponse)
+
+    aiTasks.phase(signal, 'validating')
+    const payload = JSON.parse(responseText) as unknown
+    const content = extractMessageContent(payload)
+    if (!content) throw new Error(formatEmptyContentError(payload, llmText[locale].responseContext, locale))
+
+    const rawPlan = parseJsonContent(content, locale)
+    const bricks = normalizeBricks(rawPlan.bricks, locale, inventoryOverrides, pack ?? 'lego')
+    const steps = normalizeSteps(bricks)
+
+    return {
+      id: createId('plan'),
+      title: asString(rawPlan.title, llmText[locale].generatedTitle),
+      prompt,
+      source: 'llm',
+      imageName,
+      bricks,
+      steps,
+    }
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       if (signal?.aborted) throw new Error(llmText[locale].generationCanceled)
@@ -995,32 +1026,11 @@ export const generateLlmBuildPlan = async ({ prompt, imageName, imageDataUrl, in
     }
     throw formatFetchError(error, config.requestMode, locale)
   } finally {
-    signal?.removeEventListener('abort', abortFromCaller)
-    window.clearTimeout(timeout)
-  }
-
-  if (!response.ok) {
-    throw new Error(await formatRequestError(response, config.requestMode, locale))
-  }
-
-  const responseText = await response.text()
-  if (!responseText.trim()) throw new Error(llmText[locale].emptyGenerationResponse)
-
-  const payload = JSON.parse(responseText) as unknown
-  const content = extractMessageContent(payload)
-  if (!content) throw new Error(formatEmptyContentError(payload, llmText[locale].responseContext, locale))
-
-  const rawPlan = parseJsonContent(content, locale)
-  const bricks = normalizeBricks(rawPlan.bricks, locale, inventoryOverrides, pack ?? 'lego')
-  const steps = normalizeSteps(bricks)
-
-  return {
-    id: createId('plan'),
-    title: asString(rawPlan.title, llmText[locale].generatedTitle),
-    prompt,
-    source: 'llm',
-    imageName,
-    bricks,
-    steps,
+    dispose()
   }
 }
+
+export const testLlmConnection = (config: LlmConfig, locale: LlmLocale = 'zh-CN', signal?: AbortSignal) => aiTasks.run('connection', signal, next => testLlmConnectionImpl(config, locale, next))
+export const requestLlmJsonContent = (input: LlmJsonRequestInput) => aiTasks.run('json', input.signal, signal => requestLlmJsonContentImpl({ ...input, signal }))
+export const requestLlmTextStream = (input: LlmStreamRequestInput) => aiTasks.run('story-stream', input.signal, signal => requestLlmTextStreamImpl({ ...input, signal, onDelta: text => { signal.throwIfAborted(); input.onDelta(text) }, onReasoningDelta: text => { signal.throwIfAborted(); input.onReasoningDelta?.(text) } }))
+export const generateLlmBuildPlan = (input: LlmGenerateInput) => aiTasks.run('build', input.signal, signal => generateLlmBuildPlanImpl({ ...input, signal }))

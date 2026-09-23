@@ -1,6 +1,7 @@
+import { isLlmConfigComplete } from './llmGenerator'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LlmConfig } from '../types/bricks'
-import { clearLlmConnection, defaultMaxRepairAttempts, hasPersistedLlmConnection, maxRepairAttemptsCeiling, normalizeMaxRepairAttempts, saveLlmConnection } from './llmConfig'
+import { loadLlmConfig, clearLlmConnection, defaultMaxRepairAttempts, hasPersistedLlmConnection, maxRepairAttemptsCeiling, normalizeMaxRepairAttempts, saveLlmConnection } from './llmConfig'
 
 const config: LlmConfig = {
   modelName: 'test-model',
@@ -50,6 +51,10 @@ describe('persisted LLM connection status', () => {
     clearLlmConnection()
     expect(hasPersistedLlmConnection(config)).toBe(false)
   })
+  it.each([123, [], {}, null])('normalizes malformed stored fields: %j', (value) => {
+    window.localStorage.setItem('brick-flow-agent:llm-config', JSON.stringify({ modelName: value, endpoint: value, apiKey: value }))
+    expect(isLlmConfigComplete(loadLlmConfig())).toBe(false)
+  })
 })
 
 describe('repair attempt budget', () => {
@@ -61,4 +66,6 @@ describe('repair attempt budget', () => {
     expect(normalizeMaxRepairAttempts(99)).toBe(maxRepairAttemptsCeiling)
     expect(normalizeMaxRepairAttempts('2')).toBe(2)
   })
+
+
 })

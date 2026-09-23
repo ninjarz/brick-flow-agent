@@ -17,10 +17,10 @@ if (canonicalPath) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <I18nProvider>
-      <AppErrorBoundary>
+    <AppErrorBoundary>
+      <I18nProvider>
         <App />
-      </AppErrorBoundary>
-    </I18nProvider>
+      </I18nProvider>
+    </AppErrorBoundary>
   </StrictMode>,
 )

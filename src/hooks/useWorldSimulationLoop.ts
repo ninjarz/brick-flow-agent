@@ -7,6 +7,7 @@ import { advanceWorldSimulationSteps } from '../lib/worldSimulationRuntime'
 import {
   appendWorldSimulationBacklog,
   isExpectedWorldSimulationWorkerResponse,
+  isWorldSimulationSnapshotCurrent,
   worldSimulationWorkerProtocolVersion,
   type WorldSimulationWorkerRequest,
   type WorldSimulationWorkerResponse,
@@ -53,10 +54,14 @@ export const useWorldSimulationLoop = ({
     let inFlightStepCount = 0
     let nextRequestId = 1
     let sentWorld: WorldState | undefined
+    let sentSnapshot: Parameters<typeof isWorldSimulationSnapshotCurrent>[0] | undefined
+    let workerPlan: Pick<BuildPlan, 'bricks' | 'structures'> | undefined
+    let planRevision = 0
     const canUseWorker = typeof Worker !== 'undefined'
-    let worker = canUseWorker
-      ? new Worker(new URL('../workers/worldSimulationWorker.ts', import.meta.url), { type: 'module' })
-      : undefined
+    let worker: Worker | undefined
+    try {
+      if (canUseWorker) worker = new Worker(new URL('../workers/worldSimulationWorker.ts', import.meta.url), { type: 'module' })
+    } catch { /* The main-thread loop remains available when Worker creation is denied. */ }
     const resetClock = () => {
       clock = createWorldFixedStepClock(performance.now())
     }
@@ -98,14 +103,19 @@ export const useWorldSimulationLoop = ({
           nextRequestId += 1
           inFlightStepCount = stepCount
           sentWorld = source.readWorld()
+          const plan = source.readPlan()
+          const planChanged = workerPlan?.bricks !== plan.bricks || workerPlan?.structures !== plan.structures
+          if (planChanged) { planRevision += 1; workerPlan = plan }
+          sentSnapshot = { world: sentWorld, plan, options: readOptions() }
           try {
             worker.postMessage({
               protocolVersion: worldSimulationWorkerProtocolVersion,
               requestId: inFlightRequestId,
               world: sentWorld,
-              plan: source.readPlan(),
+              planRevision,
+              ...(planChanged ? { plan } : {}),
               stepCount,
-              options: readOptions(),
+              options: sentSnapshot.options,
             } satisfies WorldSimulationWorkerRequest)
           } catch {
             inFlight = false
@@ -128,15 +138,18 @@ export const useWorldSimulationLoop = ({
         worker = undefined
       }
       worker.onmessage = (event: MessageEvent<WorldSimulationWorkerResponse>) => {
-        if (!sentWorld || !isExpectedWorldSimulationWorkerResponse(event.data, inFlightRequestId, sentWorld.id)) {
+        if (!sentWorld || !sentSnapshot || !isExpectedWorldSimulationWorkerResponse(event.data, inFlightRequestId, sentWorld.id, planRevision)) {
           disableWorker()
           return
         }
         inFlight = false
         const nextWorld = event.data.world
+        const snapshot = sentSnapshot
+        const completedSteps = inFlightStepCount
         setWorld((current) => {
-          if (current === sentWorld) return nextWorld
-          pendingStepCount = appendWorldSimulationBacklog(pendingStepCount, inFlightStepCount)
+          const source = sourcesRef.current
+          if (isWorldSimulationSnapshotCurrent(snapshot, { world: current, plan: source.readPlan(), options: readOptions() })) return nextWorld
+          pendingStepCount = appendWorldSimulationBacklog(pendingStepCount, completedSteps)
           return current
         })
       }

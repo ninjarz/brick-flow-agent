@@ -18,6 +18,19 @@ const brick = (id: string, brickId: string, x: number, y: number, z: number): Pl
 })
 
 describe('voxel block state', () => {
+  it('terminates for large finite imported coordinates', () => {
+    const source = brick('large', 'minecraft-oak-fence', 1e20, 1e20, -1e20)
+    expect(synchronizeVoxelBlockStates([source])[0].voxelState?.fenceConnections).toEqual(getFenceConnections(source, [source]))
+  })
+  it('matches exact neighbor scanning near bucket boundaries and reuses unchanged state', () => {
+    const blocks = Array.from({ length: 120 }, (_, index) => brick(String(index), index % 3 ? 'minecraft-oak-fence' : 'minecraft-stone',
+      index % 10 + (index % 2 ? 0.0005 : 0), index % 4 === 0 ? 0.0005 : 0, Math.floor(index / 10)))
+    const updated = synchronizeVoxelBlockStates(blocks)
+    for (const block of updated.filter((item) => item.brickId === 'minecraft-oak-fence')) {
+      expect(block.voxelState?.fenceConnections).toEqual(getFenceConnections(block, blocks))
+    }
+    expect(synchronizeVoxelBlockStates(updated)).toBe(updated)
+  })
   it('persists interactive door, chest, and lantern state on the placed block', () => {
     expect(toggleVoxelBlockInteraction(brick('door', 'minecraft-oak-door', 0, 0, 0)).voxelState?.open).toBe(true)
     expect(toggleVoxelBlockInteraction(brick('chest', 'minecraft-chest', 0, 0, 0)).voxelState?.open).toBe(true)

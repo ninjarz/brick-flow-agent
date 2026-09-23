@@ -46,6 +46,7 @@ describe('voxel block materials', () => {
     const materials = getVoxelBlockMaterials(visual)
     expect(materials).toHaveLength(6)
     expect(materials.every((material) => material.transparent && !material.depthWrite)).toBe(true)
+    expect(new Set(materials).size).toBe(1)
     expect(getVoxelBlockMaterials(visual)).toBe(materials)
   })
 

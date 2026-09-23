@@ -1,3 +1,5 @@
+import { safeStorage } from './safeStorage'
+import { coordinateStorageWrite } from './storageCoordinator'
 import type { FinishedAsset } from '../types/bricks'
 import { minecraftSceneAssets } from '../data/minecraftSceneAssets'
 import { indexedDbStorageMarker, isIndexedDbStorageMarker, localStorageComfortLimit, readLargeStoredValue, removeLargeStoredValue, writeLargeStoredValue } from './browserStorage'
@@ -127,16 +129,21 @@ const normalizeStoredAssets = (value: unknown) => {
 export const hasIndexedDbFinishedAssets = () => {
   if (typeof window === 'undefined') return false
   try {
-    return isIndexedDbStorageMarker(window.localStorage.getItem(storageKey))
+    return isIndexedDbStorageMarker(safeStorage.getItem(storageKey))
   } catch {
     return false
   }
 }
 
+export const needsFinishedAssetsRecovery = () => {
+  const inline = safeStorage.getItem(storageKey)
+  return !inline || isIndexedDbStorageMarker(inline)
+}
+
 export const loadFinishedAssets = (): FinishedAsset[] => {
   if (typeof window === 'undefined') return defaultFinishedAssets
 
-  const stored = window.localStorage.getItem(storageKey)
+  const stored = safeStorage.getItem(storageKey)
   if (!stored || isIndexedDbStorageMarker(stored)) return defaultFinishedAssets
 
   try {
@@ -165,7 +172,7 @@ const persistFinishedAssets = async (assets: FinishedAsset[]) => {
 
   if (serialized.length <= localStorageComfortLimit) {
     try {
-      window.localStorage.setItem(storageKey, serialized)
+      if (!safeStorage.setItem(storageKey, serialized)) throw new Error('LOCAL_STORAGE_UNAVAILABLE')
       await removeLargeStoredValue(indexedDbKey).catch(() => undefined)
       return true
     } catch {
@@ -175,8 +182,8 @@ const persistFinishedAssets = async (assets: FinishedAsset[]) => {
 
   try {
     await writeLargeStoredValue(indexedDbKey, customAssets)
-    window.localStorage.removeItem(storageKey)
-    window.localStorage.setItem(storageKey, indexedDbStorageMarker)
+    safeStorage.removeItem(storageKey)
+    safeStorage.setItem(storageKey, indexedDbStorageMarker)
     return true
   } catch {
     return false
@@ -184,7 +191,7 @@ const persistFinishedAssets = async (assets: FinishedAsset[]) => {
 }
 
 export const saveFinishedAssets = (assets: FinishedAsset[]) => {
-  const nextSave = finishedAssetsSaveQueue.then(() => persistFinishedAssets(assets))
+  const nextSave = finishedAssetsSaveQueue.then(() => coordinateStorageWrite(() => persistFinishedAssets(assets)))
   finishedAssetsSaveQueue = nextSave.catch(() => false)
   return nextSave
 }

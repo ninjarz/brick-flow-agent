@@ -20,6 +20,7 @@ import type { BuildPlan } from '../types/bricks'
 
 type Props = {
   plan: BuildPlan
+  projectId: string
   onInspect: (options: DisasterSimulationOptions) => void
 }
 
@@ -40,13 +41,13 @@ const scenarioLabel = (scenario: string, zh: boolean) => ({
   earthquake: zh ? '地震' : 'Earthquake',
 }[scenario] ?? scenario)
 
-export const StabilitySuitePanel = ({ plan, onInspect }: Props) => {
+export const StabilitySuitePanel = ({ plan, projectId, onInspect }: Props) => {
   const { locale } = useI18n()
   const zh = locale === 'zh-CN'
   const initialConfig = useMemo(loadStabilitySuiteConfig, [])
   const [preset, setPreset] = useState<StabilitySuitePreset>(initialConfig.preset)
   const [physicsProfile, setPhysicsProfile] = useState<DisasterPhysicsProfile>(initialConfig.physicsProfile)
-  const [result, setResult] = useState<StabilitySuiteResult | undefined>(() => loadStabilitySuiteResult(plan.id))
+  const [result, setResult] = useState<StabilitySuiteResult | undefined>(() => loadStabilitySuiteResult(plan.id, projectId))
   const [progress, setProgress] = useState<{ completed: number; total: number }>()
   const [error, setError] = useState('')
   const workerRef = useRef<Worker>()
@@ -66,10 +67,10 @@ export const StabilitySuitePanel = ({ plan, onInspect }: Props) => {
     workerRef.current?.terminate()
     workerRef.current = undefined
     requestIdRef.current += 1
-    setResult(loadStabilitySuiteResult(plan.id))
+    setResult(loadStabilitySuiteResult(plan.id, projectId))
     setProgress(undefined)
     setError('')
-  }, [plan.id])
+  }, [plan.id, projectId])
 
   const runSuite = () => {
     workerRef.current?.terminate()
@@ -92,7 +93,7 @@ export const StabilitySuitePanel = ({ plan, onInspect }: Props) => {
           setError(event.data.message)
           return
         }
-        setResult(saveStabilitySuiteResult(event.data.result))
+        setResult(saveStabilitySuiteResult(event.data.result, projectId))
       }
       worker.onerror = () => {
         if (requestId !== requestIdRef.current) return

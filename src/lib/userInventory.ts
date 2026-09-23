@@ -1,3 +1,4 @@
+import { safeStorage } from './safeStorage'
 import { brickById } from '../data/basicBricks'
 
 export type InventoryOverrides = Record<string, number>
@@ -17,7 +18,7 @@ export const normalizeInventoryOverrides = (value: unknown): InventoryOverrides 
 export const loadInventoryOverrides = (): InventoryOverrides => {
   if (typeof window === 'undefined') return {}
   try {
-    return normalizeInventoryOverrides(JSON.parse(window.localStorage.getItem(inventoryStorageKey) ?? '{}'))
+    return normalizeInventoryOverrides(JSON.parse(safeStorage.getItem(inventoryStorageKey) ?? '{}'))
   } catch {
     return {}
   }
@@ -25,10 +26,10 @@ export const loadInventoryOverrides = (): InventoryOverrides => {
 
 export const saveInventoryOverrides = (overrides: InventoryOverrides) => {
   if (Object.keys(overrides).length === 0) {
-    window.localStorage.removeItem(inventoryStorageKey)
+    safeStorage.removeItem(inventoryStorageKey)
     return
   }
-  window.localStorage.setItem(inventoryStorageKey, JSON.stringify(overrides))
+  safeStorage.setItem(inventoryStorageKey, JSON.stringify(overrides))
 }
 
 export const getEffectiveInventory = (

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createStabilitySuiteResult, formatStabilitySuiteMarkdown, getStabilitySuiteCases, loadStabilitySuiteResult, saveStabilitySuiteResult, type StabilitySuiteCaseResult } from './stabilitySuite'
+import { claimLegacyStabilitySuite, clearStabilitySuiteResult, createStabilitySuiteResult, formatStabilitySuiteMarkdown, getStabilitySuiteCases, loadStabilitySuiteResult, saveStabilitySuiteResult, type StabilitySuiteCaseResult } from './stabilitySuite'
 
 const storage = () => {
   const values = new Map<string, string>()
@@ -34,5 +34,18 @@ describe('stability test suites', () => {
     expect(formatStabilitySuiteMarkdown(result, 'en-US')).toContain('(weakest)')
     saveStabilitySuiteResult(result)
     expect(loadStabilitySuiteResult('plan')).toEqual(result)
+  })
+
+  it('migrates a legacy result to one project without sharing it with a copy', () => {
+    vi.stubGlobal('window', { localStorage: storage() })
+    const result = createStabilitySuiteResult({ id: 'same-plan', title: 'A', brickCount: 0, fingerprint: '0' }, 'quick', 'challenge', [])
+    saveStabilitySuiteResult(result)
+    claimLegacyStabilitySuite('project-a', 'same-plan')
+    claimLegacyStabilitySuite('project-b', 'same-plan')
+    expect(loadStabilitySuiteResult('same-plan', 'project-a')).toEqual(result)
+    expect(loadStabilitySuiteResult('same-plan', 'project-b')).toBeUndefined()
+    saveStabilitySuiteResult({ ...result, plan: { ...result.plan, title: 'B' } }, 'project-b')
+    clearStabilitySuiteResult('same-plan', 'project-a')
+    expect(loadStabilitySuiteResult('same-plan', 'project-b')?.plan.title).toBe('B')
   })
 })

@@ -1,0 +1,88 @@
+{
+  "sampleSeconds": 10,
+  "frameCount": 601,
+  "frameP50Ms": 16.699999999999818,
+  "frameP95Ms": 17.59999999999991,
+  "longTaskCount": 3,
+  "longestTaskMs": 155,
+  "heapBefore": 50523433,
+  "heapAfter": 40668013,
+  "resources": [
+    {
+      "name": "/brick-flow-agent/assets/index-CqQy3kR1.js",
+      "transferBytes": 177506,
+      "durationMs": 14.899999618530273
+    },
+    {
+      "name": "/brick-flow-agent/assets/index-Bs9Fh8Cz.css",
+      "transferBytes": 19047,
+      "durationMs": 5.399999618530273
+    },
+    {
+      "name": "/brick-flow-agent/assets/icons-vendor-CcdXhMlH.js",
+      "transferBytes": 6358,
+      "durationMs": 5
+    },
+    {
+      "name": "/brick-flow-agent/assets/react-vendor-BPYM-mxM.js",
+      "transferBytes": 47793,
+      "durationMs": 7.699999809265137
+    },
+    {
+      "name": "/brick-flow-agent/assets/BrickScene-Dr23muk3.js",
+      "transferBytes": 115477,
+      "durationMs": 9.199999809265137
+    },
+    {
+      "name": "/brick-flow-agent/assets/voxelBlockMaterials-K5hviP7w.js",
+      "transferBytes": 201540,
+      "durationMs": 15.90000057220459
+    },
+    {
+      "name": "/brick-flow-agent/assets/WorldStoryDock-DoHnoo-l.js",
+      "transferBytes": 12704,
+      "durationMs": 2.6000003814697266
+    },
+    {
+      "name": "/brick-flow-agent/assets/BrickGlyph-D8_rMRUR.js",
+      "transferBytes": 3776,
+      "durationMs": 1.3999996185302734
+    },
+    {
+      "name": "/brick-flow-agent/assets/generatedObjAssets-C5v0V8dI.js",
+      "transferBytes": 12712,
+      "durationMs": 3.1999998092651367
+    },
+    {
+      "name": "/brick-flow-agent/favicon.svg",
+      "transferBytes": 1186,
+      "durationMs": 1
+    },
+    {
+      "name": "/brick-flow-agent/assets/worldSimulationWorker-CNNk8z4o.js",
+      "transferBytes": 33482,
+      "durationMs": -20.199999809265137
+    },
+    {
+      "name": "/brick-flow-agent/assets/chunk-02-Dgb4qTPd.js",
+      "transferBytes": 21796,
+      "durationMs": 6.699999809265137
+    },
+    {
+      "name": "/brick-flow-agent/assets/chunk-01-DxCUoKkD.js",
+      "transferBytes": 28596,
+      "durationMs": 7.199999809265137
+    },
+    {
+      "name": "/brick-flow-agent/assets/chunk-06-KDbOCHdN.js",
+      "transferBytes": 32879,
+      "durationMs": 8.600000381469727
+    },
+    {
+      "name": "/brick-flow-agent/assets/chunk-07-D4VFLGZM.js",
+      "transferBytes": 34359,
+      "durationMs": 8.699999809265137
+    }
+  ],
+  "worldSeconds": 10.09999999999998
+}

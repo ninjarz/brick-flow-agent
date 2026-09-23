@@ -1,4 +1,4 @@
-import { isValidImportedPose, normalizeImportedPose, tryNormalizeImportedPlan } from './planImport'
+import { isValidImportedPose, normalizeImportedPose, normalizeImportedVoxelState, tryNormalizeImportedPlan } from './planImport'
 import type { BuildPlan, PlacedBrick } from '../types/bricks'
 import type { WorldState } from '../types/world'
 import { parseStoredWorldState } from './worldEntity'
@@ -36,7 +36,7 @@ const buildPlanFromManualJson = (
   value: unknown,
   text: ImportText,
 ): BuildPlan | undefined => {
-  if (!isRecord(value) || ![1, 2, 3, 4, 5].includes(Number(value.schemaVersion)) || !Array.isArray(value.steps)) return undefined
+  if (!isRecord(value) || ![1, 2, 3, 4, 5, 6].includes(Number(value.schemaVersion)) || !Array.isArray(value.steps)) return undefined
 
   const bricks: PlacedBrick[] = []
   const steps: BuildPlan['steps'] = []
@@ -54,6 +54,7 @@ const buildPlanFromManualJson = (
         brickId: rawPiece.brickId,
         color: rawPiece.color as PlacedBrick['color'],
         pose: normalizeImportedPose(rawPiece.pose),
+        ...(rawPiece.voxelState ? { voxelState: normalizeImportedVoxelState(rawPiece.voxelState) } : {}),
       })
       brickIds.push(rawPiece.instanceId)
     })

@@ -6062,3 +6062,14 @@ button:disabled {
     grid-column: 1 / -1;
   }
 }
+
+.workspace-storage-status { position: fixed; bottom: 6px; right: 12px; z-index: 70; padding: 4px 9px; border-radius: 6px; background: #f8fafcee; color: #475569; font-size: 11px; max-width: min(520px, 90vw); }
+.workspace-storage-status.recovery, .workspace-storage-status.unavailable { color: #92400e; background: #fffbeb; border: 1px solid #fcd34d; }
+.workspace-storage-status button { margin-left: 8px; cursor: pointer; }
+
+.project-manager { margin: 8px 16px; padding: 8px; border: 1px solid var(--border, #9995); border-radius: 8px; }
+.project-manager summary { cursor: pointer; }
+.project-manager fieldset { border: 0; padding: 8px 0; }
+.project-manager button, .project-manager input { margin: 4px; padding: 6px 10px; }
+.project-manager ul { max-height: 220px; overflow: auto; }
+.project-manager time { font-size: 12px; opacity: .7; }

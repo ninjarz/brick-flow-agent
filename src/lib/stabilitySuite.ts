@@ -1,3 +1,5 @@
+import { safeStorage } from './safeStorage'
+import { claimLegacyAnalysis } from './projectAnalysisStorage'
 import type { DisasterFailureMode, DisasterPhysicsProfile, DisasterScenario, DisasterSimulationOptions, DisasterSimulationResult } from './disasterSimulation'
 
 export type StabilitySuitePreset = 'quick' | 'standard' | 'stress'
@@ -32,7 +34,10 @@ export type StabilitySuiteResult = {
 
 const configKey = 'brick-flow-agent:stability-suite-config:v1'
 const resultPrefix = 'brick-flow-agent:stability-suite-result:v1:'
-const resultKey = (planId: string) => `${resultPrefix}${encodeURIComponent(planId)}`
+const projectResultPrefix = 'brick-flow-agent:stability-suite-result:v2:project:'
+const resultKey = (planId: string, projectId?: string) => `${projectId ? projectResultPrefix : resultPrefix}${encodeURIComponent(projectId ?? planId)}`
+export const claimLegacyStabilitySuite = (projectId: string, planId: string) =>
+  claimLegacyAnalysis(resultPrefix, projectResultPrefix, projectId, planId)
 
 const directions = [0, 90, 180, 270]
 
@@ -130,7 +135,7 @@ const isSuiteResult = (value: unknown): value is StabilitySuiteResult => {
 export const loadStabilitySuiteConfig = (): { preset: StabilitySuitePreset; physicsProfile: DisasterPhysicsProfile } => {
   if (typeof window === 'undefined') return { preset: 'quick', physicsProfile: 'challenge' }
   try {
-    const value = JSON.parse(window.localStorage.getItem(configKey) ?? '{}') as Record<string, unknown>
+    const value = JSON.parse(safeStorage.getItem(configKey) ?? '{}') as Record<string, unknown>
     return {
       preset: value.preset === 'standard' || value.preset === 'stress' ? value.preset : 'quick',
       physicsProfile: value.physicsProfile === 'realistic' ? 'realistic' : 'challenge',
@@ -141,26 +146,26 @@ export const loadStabilitySuiteConfig = (): { preset: StabilitySuitePreset; phys
 }
 
 export const saveStabilitySuiteConfig = (config: { preset: StabilitySuitePreset; physicsProfile: DisasterPhysicsProfile }) => {
-  try { window.localStorage.setItem(configKey, JSON.stringify(config)) } catch { /* Optional preference. */ }
+  try { safeStorage.setItem(configKey, JSON.stringify(config)) } catch { /* Optional preference. */ }
 }
 
-export const loadStabilitySuiteResult = (planId: string): StabilitySuiteResult | undefined => {
+export const loadStabilitySuiteResult = (planId: string, projectId?: string): StabilitySuiteResult | undefined => {
   if (typeof window === 'undefined') return undefined
   try {
-    const value = JSON.parse(window.localStorage.getItem(resultKey(planId)) ?? 'null') as unknown
+    const value = JSON.parse(safeStorage.getItem(resultKey(planId, projectId)) ?? 'null') as unknown
     return isSuiteResult(value) ? value : undefined
   } catch {
     return undefined
   }
 }
 
-export const saveStabilitySuiteResult = (result: StabilitySuiteResult) => {
-  try { window.localStorage.setItem(resultKey(result.plan.id), JSON.stringify(result)) } catch { /* Optional result cache. */ }
+export const saveStabilitySuiteResult = (result: StabilitySuiteResult, projectId?: string) => {
+  try { safeStorage.setItem(resultKey(result.plan.id, projectId), JSON.stringify(result)) } catch { /* Optional result cache. */ }
   return result
 }
 
-export const clearStabilitySuiteResult = (planId: string) => {
-  try { window.localStorage.removeItem(resultKey(planId)) } catch { /* Optional result cache. */ }
+export const clearStabilitySuiteResult = (planId: string, projectId?: string) => {
+  try { safeStorage.removeItem(resultKey(planId, projectId)) } catch { /* Optional result cache. */ }
 }
 
 export const suiteCaseToOptions = (testCase: StabilitySuiteCase): DisasterSimulationOptions => ({

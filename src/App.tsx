@@ -1,3 +1,10 @@
+import { aiTasks } from './lib/aiTasks'
+import { useAiTasks } from './hooks/useAiTasks'
+import { useLlmConnection } from './hooks/useLlmConnection'
+import { AiTaskPanel } from './components/AiTaskPanel'
+import { ProjectManager } from './components/ProjectManager'
+import { useWorkspacePersistence } from './hooks/useWorkspacePersistence'
+import { WorkspaceStorageStatus } from './components/WorkspaceStorageStatus'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BookOpen, Box, Boxes, ClipboardList, Download, Eye, EyeOff, FileUp, Gauge, Github, Globe2, Link, MessageCircle, MessageSquareText, Pause, Play, Plus, Redo2, RotateCcw, ScanLine, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
 import { BrickEditorPanel } from './components/BrickEditorPanel'
@@ -5,15 +12,16 @@ import { BrickCountsPanel } from './components/BrickCountsPanel'
 import type { WorldCommandTargetOption } from './components/WorldEntityEditorPanel'
 import type { BrickSceneViewMode } from './components/BrickScene'
 import { ControlPanel } from './components/ControlPanel'
+import { useWorkspace } from './hooks/useWorkspace'
 import { useWorldSimulationLoop } from './hooks/useWorldSimulationLoop'
 import { brickById, getDefaultBrickColor } from './data/basicBricks'
 import { worldEntityDefinitionById } from './data/worldEntityDefinitions'
 import { createDefaultWorldScenarios } from './data/worldScenarios'
 import { dropBrickGroupAtPoint, findNearestOpenBrickGroupAround, getBrickGroupDragPointerOffset, offsetBrickGroupDragPoint, rotationRepositionSearchRadiusStuds, type HorizontalDropPoint, type StationaryPlanSpatialData } from './lib/brickGroupPlacement'
 import { createEmptyBuildPlan, generateBuildPlan } from './lib/localGenerator'
-import { buildLlmUserPrompt, generateLlmBuildPlan, isLlmConfigComplete, llmSystemPrompt, requestLlmJsonContent, requestLlmTextStream, resetLlmThinkingCompatibility, testLlmConnection } from './lib/llmGenerator'
-import { clearLlmConnection, hasPersistedLlmConnection, loadLlmConfig, normalizeMaxRepairAttempts, saveLlmConfig, saveLlmConnection } from './lib/llmConfig'
-import { defaultFinishedAssets, hasIndexedDbFinishedAssets, isDefaultFinishedAsset, loadAllDefaultFinishedAssets, loadFinishedAssets, loadFinishedAssetsFromIndexedDb, mergeWithDefaultAssets, saveFinishedAssets } from './lib/finishedAssets'
+import { buildLlmUserPrompt, generateLlmBuildPlan, llmSystemPrompt, requestLlmJsonContent, requestLlmTextStream, testLlmConnection } from './lib/llmGenerator'
+import { clearLlmConnection, normalizeMaxRepairAttempts, saveLlmConnection } from './lib/llmConfig'
+import { defaultFinishedAssets, needsFinishedAssetsRecovery, isDefaultFinishedAsset, loadAllDefaultFinishedAssets, loadFinishedAssets, loadFinishedAssetsFromIndexedDb, mergeWithDefaultAssets, saveFinishedAssets } from './lib/finishedAssets'
 import { formatBuildManualHtml, formatBuildManualMarkdown, serializeBuildManual } from './lib/manualSerializer'
 import { getManualPageTabItems, getManualStepPage, manualStepPageSize } from './lib/manualPagination'
 import { countBricks, createBrickCollisionIndex, createPlanSpatialState, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickPlacementDiagnostics, getBrickRawOverlapScore, getConnectedBrickComponents, hasBrickCollision, isBrickAboveGround, makeBrick, repairBuildPlan, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
@@ -46,14 +54,14 @@ import { addWorldScenario, startWorldScenario } from './lib/worldScenarioImport'
 import { buildWorldScenarioAiPrompt, parseWorldScenarioAiResolution, worldScenarioAiSystemPrompt } from './lib/worldScenarioAi'
 import { advanceWorldScenarios, getActiveWorldScenarioStages, resolveWorldScenarioAi } from './lib/worldScenarioRuntime'
 import { beginWorldScenarioPlaytest } from './lib/worldScenarioPlaytest'
-import { clearWorkspaceDraft, hasIndexedDbWorkspaceDraft, loadWorkspaceDraft, loadWorkspaceDraftFromIndexedDb, saveWorkspaceDraft } from './lib/workspaceDraft'
+import { clearWorkspaceDraft, loadWorkspaceDraft } from './lib/workspaceDraft'
 import { applyVoxelPlacementSurface, isVoxelPlantSupported, synchronizePlanVoxelBlockStates, synchronizeVoxelBlockStates, type VoxelPlacementSurface } from './lib/voxelBlockState'
 import { applyPendingWorldObjectEvents } from './lib/worldObjectEventBridge'
 import { createWorldHiddenTargetIndex } from './lib/worldVisibility'
 import { createFeedbackUrl } from './lib/appDiagnostics'
 import { clearStabilityHistory, createPlanFingerprint, loadStabilityHistory } from './lib/stabilityHistory'
 import { loadImportDiagnostics, saveImportDiagnostic, type ImportDiagnostic } from './lib/importDiagnostics'
-import type { BrickStructure, BuildPlan, FinishedAsset, LlmConfig, PlacedBrick } from './types/bricks'
+import type { BrickStructure, BuildPlan, FinishedAsset, PlacedBrick } from './types/bricks'
 import type { WorldDirectorTurn, WorldEntity, WorldEntityCommand, WorldEntityControllerKind, WorldState } from './types/world'
 import './App.css'
 
@@ -93,7 +101,6 @@ type WorldEntityPlacementSession = {
 }
 type ScenarioPlaytestSession = { world: WorldState; plan: BuildPlan; scenarioTitle: string; stageTitle: string }
 type AssetLibraryKind = 'models' | 'scenarios'
-const workspaceDraftSaveDebounceMs = 120
 const tavernDirectorPlaybackTimeoutMs = 15_000
 const tavernScenarioDialogueTimeoutMs = 60_000
 const sceneViewModeOrder: BrickSceneViewMode[] = ['border', 'borderless', 'xray', 'voxel']
@@ -179,28 +186,15 @@ function App() {
     importedPlanTitle: t('manual.importedPlanTitle'),
     importedStepTitle: (stepNumber) => t('manual.importedStepTitle', { step: stepNumber }),
   }), [t])
-  const initialPlan = useMemo(
-    () => synchronizePlanVoxelBlockStates(workspaceDraft?.plan ?? generateBuildPlan({ prompt: defaultPrompt })),
-    [defaultPrompt, workspaceDraft?.plan],
-  )
-  const [prompt, setPrompt] = useState(workspaceDraft?.prompt ?? defaultPrompt)
+  const [initialPlan] = useState(() => synchronizePlanVoxelBlockStates(workspaceDraft?.plan ?? generateBuildPlan({ prompt: defaultPrompt })))
+  const { plan, world, prompt, planRef, worldRef, promptRef, setPlan, setWorld, editWorld, setPrompt, session: workspaceSession } = useWorkspace({
+    plan: initialPlan,
+    world: workspaceDraft?.world ?? createEmptyWorldState(initialPlan.id),
+    prompt: workspaceDraft?.prompt ?? defaultPrompt,
+  })
   const [imagePreview, setImagePreview] = useState<string>()
   const [imageName, setImageName] = useState<string>()
-  const [plan, setPlanState] = useState<BuildPlan>(initialPlan)
   const [scenarioPlaytest, setScenarioPlaytest] = useState<ScenarioPlaytestSession>()
-  const [world, setWorld] = useState(() => (
-    workspaceDraft?.world?.planId === initialPlan.id
-      ? workspaceDraft.world
-      : createEmptyWorldState(initialPlan.id)
-  ))
-  const worldRef = useRef(world)
-  const promptRef = useRef(prompt)
-  const [historyVersion, setHistoryVersion] = useState(0)
-  const planRef = useRef<BuildPlan>(initialPlan)
-  const planHistoryRef = useRef<{
-    past: BuildPlan[]
-    future: BuildPlan[]
-  }>({ past: [], future: [] })
   const stationarySpatialStateCacheRef = useRef<StationaryPlanSpatialData>()
   const placementPointerKeyRef = useRef('')
   const [selectedId, setSelectedId] = useState('')
@@ -208,17 +202,11 @@ function App() {
   const [selectedWorldEntityId, setSelectedWorldEntityId] = useState('')
   const [placementSession, setPlacementSession] = useState<PlacementSession>()
   const [worldEntityPlacement, setWorldEntityPlacement] = useState<WorldEntityPlacementSession>()
-  const [llmConfig, setLlmConfig] = useState<LlmConfig>(() => loadLlmConfig())
-  const [isLlmConnectionVerified, setIsLlmConnectionVerified] = useState(
-    () => hasPersistedLlmConnection(llmConfig),
-  )
+  const { llmConfig, llmConfigComplete, isLlmConnectionVerified, setIsLlmConnectionVerified,
+    isTestingLlmConfig, setIsTestingLlmConfig, llmConfigFeedback, setLlmConfigFeedback,
+    updateLlmConfig, handleTestLlmConfig, cancelConfigTest } = useLlmConnection(workspaceSession)
   const [inventoryOverrides, setInventoryOverrides] = useState(() => loadInventoryOverrides())
   const [catalogPack, setCatalogPack] = useState<CatalogPackPreference>(() => loadCatalogPreferences().pack)
-  const [isTestingLlmConfig, setIsTestingLlmConfig] = useState(false)
-  const [llmConfigFeedback, setLlmConfigFeedback] = useState<{
-    tone: 'error' | 'warning' | 'success'
-    text: string
-  }>()
   const [isGenerating, setIsGenerating] = useState(false)
   const generationAbortRef = useRef<AbortController | undefined>(undefined)
   const [generationError, setGenerationError] = useState<string>()
@@ -260,8 +248,11 @@ function App() {
   const [manualCopyStatus, setManualCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
   const [promptCopyStatus, setPromptCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
   const [finishedAssets, setFinishedAssets] = useState<FinishedAsset[]>(() => loadFinishedAssets())
-  const [isWorkspaceStorageHydrated, setIsWorkspaceStorageHydrated] = useState(() => !hasIndexedDbWorkspaceDraft())
-  const [isAssetStorageHydrated, setIsAssetStorageHydrated] = useState(() => !hasIndexedDbFinishedAssets())
+  const workspaceStorage = useWorkspacePersistence(workspaceSession)
+  const activeProjectId = workspaceStorage.current?.id
+  const aiTaskList = useAiTasks(workspaceSession, activeProjectId ?? 'loading', llmConfig)
+
+  const [isAssetStorageHydrated, setIsAssetStorageHydrated] = useState(() => !needsFinishedAssetsRecovery())
   const storageWarningShownRef = useRef(false)
   const [assetTitle, setAssetTitle] = useState('')
   const [assetCategory, setAssetCategory] = useState(() => t('asset.customCategory'))
@@ -285,16 +276,15 @@ function App() {
   const latestAnalysisSnapshot = useMemo(
     () => {
       void analysisHistoryVersion
-      return loadStabilityHistory(plan.id)[0]
+      return activeProjectId ? loadStabilityHistory(plan.id, activeProjectId)[0] : undefined
     },
-    [analysisHistoryVersion, plan.id],
+    [activeProjectId, analysisHistoryVersion, plan.id],
   )
   const analysisIsStale = Boolean(latestAnalysisSnapshot && latestAnalysisSnapshot.planFingerprint !== createPlanFingerprint(plan))
   const handleAnalysisSnapshotSaved = useCallback(() => {
     setAnalysisHistoryVersion((version) => version + 1)
   }, [])
   const defaultAssetCategoryLabels = useMemo(() => new Set(['自定义', 'Custom']), [])
-  const llmConfigComplete = isLlmConfigComplete(llmConfig)
   const llmEngineStatus: LlmEngineStatus = !llmConfigComplete
     ? 'incomplete'
     : isTestingLlmConfig
@@ -306,6 +296,29 @@ function App() {
           : 'untested'
   const llmEngineStatusLabel = t(`config.status.${llmEngineStatus}`)
   const llmEngineStatusTone = getLlmEngineStatusTone(llmEngineStatus)
+
+  useEffect(() => {
+    const unsubscribe = workspaceSession.onInvalidate(() => {
+      generationAbortRef.current?.abort()
+      generationAbortRef.current = undefined
+      tavernAiAbortRef.current?.abort()
+      tavernAiAbortRef.current = undefined
+      tavernDirectorAbortRef.current?.abort()
+      tavernDirectorAbortRef.current = undefined
+      tavernDirectorPlaybackRef.current?.controller.abort()
+      tavernDirectorPlaybackRef.current = undefined
+      worldScenarioAiAbortRef.current?.abort()
+      worldScenarioAiAbortRef.current = undefined
+      worldScenarioAiRequestKeyRef.current = ''
+      cancelConfigTest()
+      setIsGenerating(false)
+      setIsTavernAiThinking(false)
+      setIsTavernDirectorThinking(false)
+      setIsTestingLlmConfig(false)
+      setIsContinuousAiDirectorEnabled(false)
+    })
+    return () => { workspaceSession.invalidate(); unsubscribe() }
+  }, [cancelConfigTest, setIsTestingLlmConfig, workspaceSession])
 
   const closeManual = useCallback(() => {
     setIsManualOpen(false)
@@ -342,19 +355,6 @@ function App() {
     return () => window.clearTimeout(timeoutId)
   }, [generationError, generationFeedbackTone])
 
-  const setPlan = useCallback((nextPlan: BuildPlan | ((current: BuildPlan) => BuildPlan)) => {
-    const current = planRef.current
-    const candidatePlan = typeof nextPlan === 'function' ? nextPlan(current) : nextPlan
-    const resolvedPlan = synchronizePlanVoxelBlockStates(candidatePlan)
-    if (resolvedPlan === current) return
-
-    planHistoryRef.current.past = [...planHistoryRef.current.past.slice(-49), current]
-    planHistoryRef.current.future = []
-    planRef.current = resolvedPlan
-    setPlanState(resolvedPlan)
-    setHistoryVersion((version) => version + 1)
-  }, [])
-
   const applyStructuralReinforcement = useCallback((addedBricks: PlacedBrick[]) => {
     setPlan((current) => {
       const existingIds = new Set(current.bricks.map((brick) => brick.id))
@@ -373,40 +373,19 @@ function App() {
     })
   }, [locale, setPlan])
 
-  const undoPlan = useCallback(() => {
-    const current = planRef.current
-    const previous = planHistoryRef.current.past.at(-1)
-    if (!previous) return
-
-    planHistoryRef.current.past = planHistoryRef.current.past.slice(0, -1)
-    planHistoryRef.current.future = [current, ...planHistoryRef.current.future.slice(0, 49)]
-    planRef.current = previous
+  const clearWorkspaceSelection = useCallback(() => {
     placementPointerKeyRef.current = ''
     setPlacementSession(undefined)
+    setWorldEntityPlacement(undefined)
     setSelectedId('')
     setSelectedGroupIds([])
-    setPlanState(previous)
-    setHistoryVersion((version) => version + 1)
+    setSelectedWorldEntityId('')
   }, [])
-
-  const redoPlan = useCallback(() => {
-    const current = planRef.current
-    const next = planHistoryRef.current.future[0]
-    if (!next) return
-
-    planHistoryRef.current.future = planHistoryRef.current.future.slice(1)
-    planHistoryRef.current.past = [...planHistoryRef.current.past.slice(-49), current]
-    planRef.current = next
-    placementPointerKeyRef.current = ''
-    setPlacementSession(undefined)
-    setSelectedId('')
-    setSelectedGroupIds([])
-    setPlanState(next)
-    setHistoryVersion((version) => version + 1)
-  }, [])
-
-  const canUndo = historyVersion >= 0 && planHistoryRef.current.past.length > 0
-  const canRedo = historyVersion >= 0 && planHistoryRef.current.future.length > 0
+  useEffect(() => { setScenarioPlaytest(undefined); clearWorkspaceSelection(); closeManual() }, [workspaceStorage.current?.id, clearWorkspaceSelection, closeManual])
+  const undoPlan = useCallback(() => { workspaceSession.undo(); clearWorkspaceSelection() }, [workspaceSession, clearWorkspaceSelection])
+  const redoPlan = useCallback(() => { workspaceSession.redo(); clearWorkspaceSelection() }, [workspaceSession, clearWorkspaceSelection])
+  const canUndo = workspaceSession.getHistory().past.length > 0
+  const canRedo = workspaceSession.getHistory().future.length > 0
 
   const selectBrick = useCallback((id: string, options?: { toggle?: boolean }) => {
     setSelectedWorldEntityId('')
@@ -420,7 +399,7 @@ function App() {
     const nextSelection = toggleBrickSelection(selectedId, selectedGroupIds, id)
     setSelectedId(nextSelection.selectedId)
     setSelectedGroupIds(nextSelection.selectedGroupIds)
-  }, [selectedGroupIds, selectedId])
+  }, [planRef, selectedGroupIds, selectedId])
 
   const selectWorldEntity = useCallback((id: string) => {
     setSelectedId('')
@@ -439,7 +418,7 @@ function App() {
     )
     setSelectedId(id)
     setSelectedGroupIds(component?.map((brick) => brick.id) ?? [id])
-  }, [selectBrick])
+  }, [planRef, selectBrick])
 
   const selectedBrick = useMemo(
     () => plan.bricks.find((brick) => brick.id === selectedId),
@@ -601,18 +580,6 @@ function App() {
     [catalogPack, fallbackPrompt, imageName, inventoryOverrides, prompt],
   )
 
-  const updateLlmConfig = (nextConfig: LlmConfig) => {
-    resetLlmThinkingCompatibility()
-    clearLlmConnection()
-    setIsLlmConnectionVerified(false)
-    setLlmConfigFeedback(undefined)
-    setLlmConfig(nextConfig)
-  }
-
-  useEffect(() => {
-    saveLlmConfig(llmConfig)
-  }, [llmConfig])
-
   useEffect(() => {
     saveInventoryOverrides(inventoryOverrides)
   }, [inventoryOverrides])
@@ -629,27 +596,6 @@ function App() {
       isCanceled = true
     }
   }, [])
-
-  useEffect(() => {
-    if (isWorkspaceStorageHydrated) return
-    let isCanceled = false
-
-    loadWorkspaceDraftFromIndexedDb().then((storedDraft) => {
-      if (isCanceled) return
-      if (storedDraft && planRef.current === initialPlan && planHistoryRef.current.past.length === 0) {
-        const storedPlan = synchronizePlanVoxelBlockStates(storedDraft.plan)
-        planRef.current = storedPlan
-        setPlanState(storedPlan)
-        setPrompt(storedDraft.prompt)
-        setWorld(storedDraft.world)
-      }
-      setIsWorkspaceStorageHydrated(true)
-    })
-
-    return () => {
-      isCanceled = true
-    }
-  }, [initialPlan, isWorkspaceStorageHydrated])
 
   useEffect(() => {
     if (isAssetStorageHydrated) return
@@ -675,14 +621,6 @@ function App() {
     if (assetCategories.some((category) => category.value === assetCategoryFilter)) return
     setAssetCategoryFilter('all')
   }, [assetCategories, assetCategoryFilter])
-
-  useEffect(() => {
-    planRef.current = plan
-  }, [plan])
-
-  useEffect(() => {
-    worldRef.current = world
-  }, [world])
 
   const appliedWorldObjectEventIdsRef = useRef(new Set<string>())
   const appliedWorldObjectEventWorldIdRef = useRef(world.id)
@@ -716,7 +654,10 @@ function App() {
     worldScenarioAiRequestKeyRef.current = requestKey
     const prompt = buildWorldScenarioAiPrompt(world, scenario, locale)
 
-    void requestLlmJsonContent({
+    void aiTasks.run('scenario', controller.signal, async taskSignal => {
+      taskSignal.addEventListener('abort', () => controller.abort(), { once: true })
+      aiTasks.bind(taskSignal, controller.signal)
+      const content = await requestLlmJsonContent({
       config: llmConfig,
       systemPrompt: worldScenarioAiSystemPrompt,
       userPrompt: prompt,
@@ -724,13 +665,15 @@ function App() {
       locale,
       temperature: 0.65,
       maxTokens: 1_000,
-    }).then((content) => {
+    })
+      aiTasks.phase(controller.signal, 'validating')
       if (controller.signal.aborted) return
       const latest = worldRef.current
       const latestPending = latest.scenarios.find((candidate) => candidate.id === scenario.id)?.pendingAi
       if (!latestPending || latestPending.stageId !== pending.stageId || latestPending.eventId !== pending.eventId) return
       const resolved = resolveWorldScenarioAi(latest, scenario.id, parseWorldScenarioAiResolution(content))
-      worldRef.current = resolved
+
+      aiTasks.phase(controller.signal, 'executing')
       setWorld(resolved)
     }).catch(() => {
       if (controller.signal.aborted) return
@@ -738,49 +681,14 @@ function App() {
       const latestPending = latest.scenarios.find((candidate) => candidate.id === scenario.id)?.pendingAi
       if (!latestPending || latestPending.stageId !== pending.stageId || latestPending.eventId !== pending.eventId) return
       const fallback = resolveWorldScenarioAi(latest, scenario.id, {})
-      worldRef.current = fallback
+
       setWorld(fallback)
     }).finally(() => {
       if (worldScenarioAiAbortRef.current !== controller) return
       worldScenarioAiAbortRef.current = undefined
       worldScenarioAiRequestKeyRef.current = ''
     })
-  }, [llmConfig, llmConfigComplete, locale, world])
-
-  useEffect(() => {
-    promptRef.current = prompt
-  }, [prompt])
-
-  useEffect(() => {
-    if (world.planId === plan.id) return
-    setWorld(createEmptyWorldState(plan.id))
-    setWorldEntityPlacement(undefined)
-    setSelectedWorldEntityId('')
-  }, [plan.id, world.planId])
-
-  useEffect(() => {
-    if (!isWorkspaceStorageHydrated) return
-    const timeoutId = window.setTimeout(
-      () => {
-        void saveWorkspaceDraft(plan, prompt, worldRef.current).then((saved) => {
-          if (saved || storageWarningShownRef.current) return
-          storageWarningShownRef.current = true
-          setGenerationWarning(t('error.storageUnavailable'))
-        })
-      },
-      workspaceDraftSaveDebounceMs,
-    )
-
-    return () => window.clearTimeout(timeoutId)
-  }, [isWorkspaceStorageHydrated, plan, prompt, setGenerationWarning, t])
-
-  useEffect(() => {
-    if (!isWorkspaceStorageHydrated) return
-    const intervalId = window.setInterval(() => {
-      void saveWorkspaceDraft(planRef.current, promptRef.current, worldRef.current)
-    }, 2_000)
-    return () => window.clearInterval(intervalId)
-  }, [isWorkspaceStorageHydrated])
+  }, [llmConfig, llmConfigComplete, locale, setWorld, world, worldRef])
 
   useEffect(() => {
     if (isWorldStoryDockOpen && llmConfigComplete && world.entities.length > 0) return
@@ -791,9 +699,9 @@ function App() {
     if (!isContinuousAiDirectorEnabled) return
     const prepared = prepareWorldForDirectorPlayback(worldRef.current)
     if (prepared === worldRef.current) return
-    worldRef.current = prepared
+
     setWorld(prepared)
-  }, [isContinuousAiDirectorEnabled])
+  }, [isContinuousAiDirectorEnabled, setWorld, worldRef])
 
   useWorldSimulationLoop({
     active: world.entities.length > 0 && !world.paused && !placementSession && !worldEntityPlacement,
@@ -918,7 +826,6 @@ function App() {
   }, [isAssetLibraryOpen, isConfigOpen, isImportDiagnosticsOpen, isManualOpen, isObjImportOpen, isPromptPreviewOpen, isStabilityLabOpen, isTavernOpen, redoPlan, undoPlan])
 
 
-
   const handleImage = async (file?: File) => {
     if (!file) {
       setImageName(undefined)
@@ -944,8 +851,10 @@ function App() {
   const handleImportPlan = useCallback((file?: File) => {
     if (!file) return
 
+    const importEpoch = workspaceSession.getEpoch()
     const reader = new FileReader()
     reader.onload = () => {
+      if (workspaceSession.getEpoch() !== importEpoch) return
       const isLDrawFile = /\.(?:ldr|mpd)$/i.test(file.name)
       let parsedLDraw: ReturnType<typeof parseLDrawPlan> = undefined
       const recordFailure = (message: string) => {
@@ -991,9 +900,8 @@ function App() {
           return
         }
 
-        setPlan(importedPlan)
-        setWorld(importedProject.world ?? createEmptyWorldState(importedPlan.id))
-        setPrompt(importedPlan.prompt)
+        workspaceSession.replace({ plan: importedPlan, world: importedProject.world ?? createEmptyWorldState(importedPlan.id), prompt: importedPlan.prompt })
+        setScenarioPlaytest(undefined)
         selectBrick('')
         clearGenerationFeedback()
         const warnings = [
@@ -1039,7 +947,7 @@ function App() {
       }
     }
     reader.readAsText(file)
-  }, [clearGenerationFeedback, importText, locale, selectBrick, setGenerationFailure, setGenerationWarning, setPlan, t])
+  }, [clearGenerationFeedback, importText, locale, selectBrick, setGenerationFailure, setGenerationWarning, t, workspaceSession])
 
   useEffect(() => {
     const hasFiles = (event: DragEvent) => event.dataTransfer?.types.includes('Files') === true
@@ -1105,19 +1013,16 @@ function App() {
     worldScenarioAiRequestKeyRef.current = ''
 
     const clearedPlanId = planRef.current.id
-    void clearWorkspaceDraft()
-    clearStabilityHistory(clearedPlanId)
-    void import('./lib/stabilitySuite').then(({ clearStabilitySuiteResult }) => clearStabilitySuiteResult(clearedPlanId))
+    const clearedProjectId = activeProjectId
+    void clearWorkspaceDraft().catch(() => setGenerationWarning(t('error.storageUnavailable')))
+    if (clearedProjectId) {
+      clearStabilityHistory(clearedPlanId, clearedProjectId)
+      void import('./lib/stabilitySuite').then(({ clearStabilitySuiteResult }) => clearStabilitySuiteResult(clearedPlanId, clearedProjectId))
+    }
     setAnalysisHistoryVersion((version) => version + 1)
     const nextPlan = createEmptyBuildPlan({ title: t('control.planNamePlaceholder') })
     const nextWorld = createEmptyWorldState(nextPlan.id)
-    planHistoryRef.current = { past: [], future: [] }
-    planRef.current = nextPlan
-    worldRef.current = nextWorld
-    promptRef.current = ''
-    setPlanState(nextPlan)
-    setHistoryVersion((version) => version + 1)
-    setWorld(nextWorld)
+    workspaceSession.replace({ plan: nextPlan, world: nextWorld, prompt: '' }, false)
     setScenarioPlaytest(undefined)
     setPlacementSession(undefined)
     setWorldEntityPlacement(undefined)
@@ -1151,6 +1056,8 @@ function App() {
     }
 
     setIsGenerating(true)
+    generationAbortRef.current?.abort()
+    const requestEpoch = workspaceSession.getEpoch()
     const generationController = new AbortController()
     generationAbortRef.current = generationController
 
@@ -1173,6 +1080,7 @@ function App() {
       }
 
       const initialPlan = await generateLlmBuildPlan({ ...input, config: llmConfig, signal: generationController.signal, locale })
+      if (generationController.signal.aborted || workspaceSession.getEpoch() !== requestEpoch) return
       let candidatePlan = initialPlan
       let result = validateCandidate(candidatePlan)
       const firstFailureSummary = summarizeBuildPlanIssues(result.issues, locale)
@@ -1194,6 +1102,7 @@ function App() {
         result = validateCandidate(candidatePlan)
       }
 
+      if (generationController.signal.aborted || workspaceSession.getEpoch() !== requestEpoch) return
       if (!result.plan) {
         setGenerationFailure(t('error.generationBlocked', {
           summary: summarizeBuildPlanIssues(result.issues, locale),
@@ -1217,45 +1126,18 @@ function App() {
         setGenerationWarning(summarizeBuildPlanIssues(result.issues, locale))
       }
     } catch (error) {
+      if (workspaceSession.getEpoch() !== requestEpoch || generationAbortRef.current !== generationController) return
       setGenerationFailure(error instanceof Error ? error.message : t('error.generationFailed'))
     } finally {
       if (generationAbortRef.current === generationController) {
         generationAbortRef.current = undefined
+        setIsGenerating(false)
       }
-      setIsGenerating(false)
     }
   }
 
   const cancelGenerate = () => {
     generationAbortRef.current?.abort()
-  }
-
-  const handleTestLlmConfig = async () => {
-    resetLlmThinkingCompatibility()
-    setLlmConfigFeedback(undefined)
-
-    if (!llmConfigComplete) {
-      setLlmConfigFeedback({ tone: 'error', text: t('config.incomplete') })
-      return
-    }
-
-    setIsTestingLlmConfig(true)
-
-    try {
-      await testLlmConnection(llmConfig, locale)
-      saveLlmConnection(llmConfig)
-      setIsLlmConnectionVerified(true)
-      setLlmConfigFeedback({ tone: 'success', text: t('config.success') })
-    } catch (error) {
-      clearLlmConnection()
-      setIsLlmConnectionVerified(false)
-      setLlmConfigFeedback({
-        tone: 'error',
-        text: error instanceof Error ? error.message : t('config.failed'),
-      })
-    } finally {
-      setIsTestingLlmConfig(false)
-    }
   }
 
   const getStationarySpatialState = useCallback((bricks: PlacedBrick[], excludedIds: Set<string>) => {
@@ -1592,7 +1474,7 @@ function App() {
       previewBricks,
       dragPointerOffset,
     })
-  }, [activeSelectedIds, getStationarySpatialState, placementSession, worldEntityPlacement])
+  }, [activeSelectedIds, getStationarySpatialState, placementSession, planRef, worldEntityPlacement])
 
   const updatePlacementPoint = useCallback((point: VoxelPlacementSurface) => {
     const pointerKey = `${normalizeHorizontalStud(point.x)}:${normalizeYStud(point.y)}:${normalizeHorizontalStud(point.z)}:${point.normalX},${point.normalY},${point.normalZ}`
@@ -1649,7 +1531,7 @@ function App() {
         },
       },
     } : current)
-  }, [canAcceptBrickGroupPose, getStationarySpatialState])
+  }, [canAcceptBrickGroupPose, getStationarySpatialState, planRef, worldRef])
 
   const cancelPlacement = useCallback(() => {
     placementPointerKeyRef.current = ''
@@ -1692,7 +1574,7 @@ function App() {
     setSelectedGroupIds(placedIdSet.size > 1 ? placedIds : [])
     placementPointerKeyRef.current = ''
     setPlacementSession(undefined)
-  }, [manualStepDescription, manualStepTitle, placementSession, setGenerationFailure, setPlan, t])
+  }, [manualStepDescription, manualStepTitle, placementSession, planRef, setGenerationFailure, setPlan, t])
 
   const confirmActivePlacement = useCallback(() => {
     if (worldEntityPlacement) {
@@ -1717,7 +1599,7 @@ function App() {
           z: availablePoint.z,
         },
       }
-      setWorld((current) => ({
+      editWorld((current) => ({
         ...current,
         entities: [...current.entities, placedEntity],
       }))
@@ -1729,42 +1611,42 @@ function App() {
       return
     }
     confirmPlacement()
-  }, [confirmPlacement, worldEntityPlacement])
+  }, [confirmPlacement, planRef, editWorld, worldEntityPlacement, worldRef])
 
   const updateWorldEntity = useCallback((updated: WorldEntity) => {
-    setWorld((current) => ({
+    editWorld((current) => ({
       ...current,
       entities: current.entities.map((entity) => entity.id === updated.id ? updated : entity),
     }))
-  }, [])
+  }, [editWorld])
 
   const updateWorldScenario = useCallback((updated: WorldState['scenarios'][number]) => {
-    setWorld((current) => ({
+    editWorld((current) => ({
       ...current,
       scenarios: current.scenarios.map((scenario) => scenario.id === updated.id ? updated : scenario),
     }))
-  }, [])
+  }, [editWorld])
 
   const addAuthoredWorldScenario = useCallback((scenario: WorldState['scenarios'][number]) => {
-    setWorld((current) => ({
+    editWorld((current) => ({
       ...current,
       scenarios: [...current.scenarios, scenario],
     }))
-  }, [])
+  }, [editWorld])
 
   const deleteAuthoredWorldScenario = useCallback((scenarioId: string) => {
-    setWorld((current) => ({
+    editWorld((current) => ({
       ...current,
       scenarios: current.scenarios.filter((scenario) => scenario.id !== scenarioId),
       entities: current.entities.map((entity) => entity.storylineId === scenarioId
         ? { ...entity, storylineId: undefined }
         : entity),
     }))
-  }, [])
+  }, [editWorld])
 
   const setWorldTargetVisibility = useCallback((target: WorldState['hiddenTargets'][number], visible: boolean) => {
     const key = `${target.kind}:${target.id}`
-    setWorld((current) => ({
+    editWorld((current) => ({
       ...current,
       hiddenTargets: visible
         ? current.hiddenTargets.filter((item) => `${item.kind}:${item.id}` !== key)
@@ -1782,14 +1664,14 @@ function App() {
           } : entity)
         : current.entities,
     }))
-  }, [])
+  }, [editWorld])
 
   const updateAllWorldEntityControllers = useCallback((controller: WorldEntityControllerKind) => {
-    setWorld((current) => changeAllWorldEntityControllers(current, controller))
-  }, [])
+    editWorld((current) => changeAllWorldEntityControllers(current, controller))
+  }, [editWorld])
 
   const deleteWorldEntity = useCallback((entityId: string) => {
-    setWorld((current) => {
+    editWorld((current) => {
       const withoutPartyMembership = leaveWorldParty(current, entityId)
       return {
         ...withoutPartyMembership,
@@ -1797,7 +1679,7 @@ function App() {
       }
     })
     setSelectedWorldEntityId((current) => current === entityId ? '' : current)
-  }, [])
+  }, [editWorld])
 
   const issuePlayerWorldCommand = useCallback((entityId: string, command: WorldEntityCommand) => {
     const currentWorld = worldRef.current
@@ -1828,26 +1710,27 @@ function App() {
     if (!result.ok) return false
     setWorld(advanceWorldScenarios(result.world, { enableAi: llmConfigComplete }))
     return true
-  }, [llmConfigComplete])
+  }, [llmConfigComplete, planRef, setWorld, worldRef])
 
   const generateTavernStory = useCallback((focusEntityId?: string) => {
     setWorld((current) => addWorldStory(current, createLocalTavernStory(current, locale, focusEntityId)))
-  }, [locale])
+  }, [locale, setWorld])
 
   const runTavernActivity = useCallback((activity: TavernActivityKind, focusEntityId?: string) => {
     const result = playTavernActivity(worldRef.current, activity, locale, focusEntityId)
     if (!result) return undefined
-    worldRef.current = result.world
+
     setWorld(result.world)
     return result
-  }, [locale])
+  }, [locale, setWorld, worldRef])
 
   const runAiTavernActivity = useCallback(async (activity: TavernActivityKind, focusEntityId?: string) => {
     if (!llmConfigComplete || isTavernAiThinking) return undefined
+    const requestEpoch = workspaceSession.getEpoch()
     const startingWorld = worldRef.current
     const base = playTavernActivity(startingWorld, activity, locale, focusEntityId)
     if (!base) return undefined
-    worldRef.current = base.world
+
     setWorld(base.world)
     tavernAiAbortRef.current?.abort()
     const controller = new AbortController()
@@ -1862,8 +1745,9 @@ function App() {
         locale,
         signal: controller.signal,
       })
+      if (controller.signal.aborted || workspaceSession.getEpoch() !== requestEpoch || worldRef.current.id !== startingWorld.id) return undefined
       const result = applyTavernAiResponse(worldRef.current, base, response)
-      worldRef.current = result.world
+
       setWorld(result.world)
       return result
     } catch {
@@ -1881,7 +1765,7 @@ function App() {
         setIsTavernAiThinking(false)
       }
     }
-  }, [isTavernAiThinking, llmConfig, llmConfigComplete, locale])
+  }, [isTavernAiThinking, llmConfig, llmConfigComplete, locale, setWorld, workspaceSession, worldRef])
 
   const compactTavernDirectorHistory = useCallback(async ({
     currentRequest = '',
@@ -1890,6 +1774,7 @@ function App() {
     currentRequest?: string
     signal?: AbortSignal
   } = {}) => {
+    const requestEpoch = workspaceSession.getEpoch()
     const contextWorld = worldRef.current
     const compactionPlan = planDirectorCompaction({
       systemPrompt: tavernDirectorSystemPrompt,
@@ -1926,6 +1811,7 @@ function App() {
         locale,
       )
     }
+    if (signal?.aborted || workspaceSession.getEpoch() !== requestEpoch || worldRef.current.id !== contextWorld.id) return { compactedTurns: 0, triggered: false }
     const throughTurn = compactionPlan.candidateTurns[compactionPlan.candidateTurns.length - 1]
     if (!summary || !throughTurn) return { compactedTurns: 0, triggered: false }
     const latestWorld = worldRef.current
@@ -1944,10 +1830,10 @@ function App() {
         directorMemory: memory,
       },
     }
-    worldRef.current = compactedWorld
+
     setWorld(compactedWorld)
     return { compactedTurns: compactionPlan.candidateTurns.length, triggered: true, memory }
-  }, [llmConfig, llmConfigComplete, locale])
+  }, [llmConfig, llmConfigComplete, locale, setWorld, workspaceSession, worldRef])
 
   const runTavernDirectorTurn = useCallback(async (
     playerText: string,
@@ -1962,6 +1848,9 @@ function App() {
     tavernDirectorAbortRef.current?.abort()
     const controller = new AbortController()
     tavernDirectorAbortRef.current = controller
+    return aiTasks.run('director', controller.signal, async taskSignal => {
+    taskSignal.addEventListener('abort', () => controller.abort(), { once: true })
+    aiTasks.bind(taskSignal, controller.signal)
     const playbackStart = previousPlayback
       ? {
           world: worldRef.current.paused ? worldRef.current : { ...worldRef.current, paused: true },
@@ -1975,7 +1864,7 @@ function App() {
     }
     tavernDirectorPlaybackRef.current = playback
     if (playbackStart.world !== worldRef.current) {
-      worldRef.current = playbackStart.world
+
       setWorld(playbackStart.world)
     }
     setIsTavernDirectorThinking(true)
@@ -1991,7 +1880,7 @@ function App() {
     const sequenceRunner = createWorldDirectorSequenceRunner({
       getWorld: () => worldRef.current,
       setWorld: (nextWorld) => {
-        worldRef.current = nextWorld
+        if (controller.signal.aborted) return
         setWorld(nextWorld)
       },
       readPlan: () => planRef.current,
@@ -2022,11 +1911,13 @@ function App() {
         setIsTestingLlmConfig(true)
         setLlmConfigFeedback(undefined)
         try {
-          await testLlmConnection(llmConfig, locale)
+          await testLlmConnection(llmConfig, locale, controller.signal)
+          controller.signal.throwIfAborted()
           saveLlmConnection(llmConfig)
           setIsLlmConnectionVerified(true)
           setLlmConfigFeedback({ tone: 'success', text: t('config.success') })
         } catch (error) {
+          if (controller.signal.aborted) throw error
           clearLlmConnection()
           setIsLlmConnectionVerified(false)
           setLlmConfigFeedback({
@@ -2035,7 +1926,7 @@ function App() {
           })
           throw error
         } finally {
-          setIsTestingLlmConfig(false)
+          if (!controller.signal.aborted) setIsTestingLlmConfig(false)
         }
       }
       let contextWorld = worldRef.current
@@ -2104,8 +1995,11 @@ function App() {
         responseRetryCount: streamResult.retryCount,
         ...(streamResult.finishReason ? { finishReason: streamResult.finishReason } : {}),
       }
+      aiTasks.usage(controller.signal, streamResult.usage?.outputTokens)
+      aiTasks.phase(controller.signal, 'validating')
       validationIssues = parser.finish()
       streamFinished = true
+      aiTasks.phase(controller.signal, 'executing')
       await sequenceRunner.drain()
       if (eventCount === 0) {
         throw new Error(locale === 'zh-CN' ? 'AI 没有返回可执行的剧情事件。' : 'The AI returned no usable story events.')
@@ -2135,7 +2029,7 @@ function App() {
       ) {
         const scenarioWorld = advanceWorldScenarios(worldRef.current, { enableAi: llmConfigComplete })
         if (scenarioWorld !== worldRef.current) {
-          worldRef.current = scenarioWorld
+
           setWorld(scenarioWorld)
         }
         const scenarioDeadline = performance.now() + tavernScenarioDialogueTimeoutMs
@@ -2148,6 +2042,7 @@ function App() {
           await new Promise((resolve) => window.setTimeout(resolve, 100))
         }
       }
+      controller.signal.throwIfAborted()
       return { requestMessage, responseMessage, contextStats, validationIssues }
     } finally {
       if (tavernDirectorAbortRef.current === controller) {
@@ -2160,12 +2055,13 @@ function App() {
           enableAi: llmConfigComplete,
         })
         if (restoredWorld !== worldRef.current) {
-          worldRef.current = restoredWorld
+
           setWorld(restoredWorld)
         }
       }
     }
-  }, [compactTavernDirectorHistory, isLlmConnectionVerified, isTavernDirectorThinking, llmConfig, llmConfigComplete, locale, t])
+    })
+  }, [compactTavernDirectorHistory, isLlmConnectionVerified, isTavernDirectorThinking, llmConfig, llmConfigComplete, locale, planRef, setIsLlmConnectionVerified, setIsTestingLlmConfig, setLlmConfigFeedback, setWorld, t, worldRef])
 
   const stopTavernDirector = useCallback(() => {
     tavernDirectorAbortRef.current?.abort()
@@ -2191,7 +2087,7 @@ function App() {
       simulationStarted: false,
     }
     tavernDirectorPlaybackRef.current = playback
-    worldRef.current = playbackStart.world
+
     setWorld(playbackStart.world)
     setIsTavernDirectorThinking(true)
 
@@ -2204,7 +2100,7 @@ function App() {
     const sequenceRunner = createWorldDirectorSequenceRunner({
       getWorld: () => worldRef.current,
       setWorld: (nextWorld) => {
-        worldRef.current = nextWorld
+        if (controller.signal.aborted) return
         setWorld(nextWorld)
       },
       readPlan: () => planRef.current,
@@ -2246,13 +2142,13 @@ function App() {
       ) {
         await new Promise((resolve) => window.setTimeout(resolve, 100))
       }
-      if (replayedTargetEntry) {
+      if (replayedTargetEntry && !controller.signal.aborted) {
         const updatedWorld = replaceWorldDirectorTurnEntry(
           worldRef.current,
           turn.id,
           replayedTargetEntry,
         )
-        worldRef.current = updatedWorld
+
         setWorld(updatedWorld)
       }
     } finally {
@@ -2266,12 +2162,12 @@ function App() {
           enableAi: llmConfigComplete,
         })
         if (restoredAfterReplay !== worldRef.current) {
-          worldRef.current = restoredAfterReplay
+
           setWorld(restoredAfterReplay)
         }
       }
     }
-  }, [isTavernDirectorThinking, llmConfigComplete])
+  }, [isTavernDirectorThinking, llmConfigComplete, planRef, setWorld, worldRef])
 
   const commitTavernDirectorTurn = useCallback((turn: WorldDirectorTurn) => {
     const current = worldRef.current
@@ -2285,9 +2181,9 @@ function App() {
         ].slice(-100),
       },
     }
-    worldRef.current = next
+
     setWorld(next)
-  }, [])
+  }, [setWorld, worldRef])
 
   const clearTavernHistory = useCallback(() => {
     setWorld((current) => {
@@ -2296,10 +2192,10 @@ function App() {
         events: [],
         narrative: { processedEventIds: [], memoriesByEntityId: {}, cluesByEntityId: {}, relationshipsByEntityId: {}, stories: [], directorTurns: [] },
       }
-      worldRef.current = next
+
       return next
     })
-  }, [])
+  }, [setWorld])
 
   useEffect(() => {
     if (!placementSession && !worldEntityPlacement) return
@@ -2638,9 +2534,8 @@ function App() {
       return
     }
 
-    setPlan(result.plan)
-    setWorld(result.world)
-    if (mode === 'start') setPrompt(result.plan.prompt)
+    workspaceSession.replace({ plan: result.plan, world: result.world, prompt: mode === 'start' ? result.plan.prompt : promptRef.current })
+    setScenarioPlaytest(undefined)
     setSelectedId(result.importedBrickIds.at(-1) ?? '')
     setSelectedGroupIds(result.importedBrickIds.length > 1 ? result.importedBrickIds : [])
     setSelectedWorldEntityId('')
@@ -2702,8 +2597,8 @@ function App() {
       return
     }
 
-    setPlan(result.plan)
-    setPrompt(result.plan.prompt)
+    workspaceSession.replace({ plan: result.plan, world: createEmptyWorldState(result.plan.id), prompt: result.plan.prompt })
+    setScenarioPlaytest(undefined)
     selectBrick('')
     clearGenerationFeedback()
     setIsObjImportOpen(false)
@@ -2784,6 +2679,9 @@ function App() {
 
   return (
     <main className="app-shell">
+      <ProjectManager {...workspaceStorage} />
+      <AiTaskPanel tasks={aiTaskList} />
+      <WorkspaceStorageStatus {...workspaceStorage} />
       {isFileDragActive && (
         <div className="workspace-file-drop-overlay" role="status">
           <FileUp size={38} />
@@ -3379,7 +3277,9 @@ function App() {
       {isStabilityLabOpen && (
         <Suspense fallback={null}>
           <StabilityLab
+            key={activeProjectId}
             plan={plan}
+            projectId={activeProjectId ?? ''}
             inventoryOverrides={inventoryOverrides}
             onClose={() => setIsStabilityLabOpen(false)}
             onSnapshotSaved={handleAnalysisSnapshotSaved}
@@ -3409,8 +3309,7 @@ function App() {
                 scenarioTitle: scenario.title,
                 stageTitle: scenario.stages.find((stage) => stage.id === stageId)?.title ?? stageId,
               })
-              worldRef.current = result.world
-              setWorld(result.world)
+              workspaceSession.beginPlaytest(result.world)
               setIsTavernOpen(false)
             }}
             onClose={() => {
@@ -3426,13 +3325,11 @@ function App() {
           <span>{locale === 'zh-CN' ? `试演：${scenarioPlaytest.scenarioTitle} · ${scenarioPlaytest.stageTitle}` : `Playtest: ${scenarioPlaytest.scenarioTitle} · ${scenarioPlaytest.stageTitle}`}</span>
           <button type="button" onClick={() => setWorld((current) => ({ ...current, paused: !current.paused }))}>{world.paused ? (locale === 'zh-CN' ? '开始试演' : 'Start') : (locale === 'zh-CN' ? '暂停' : 'Pause')}</button>
           <button type="button" onClick={() => {
-            planRef.current = scenarioPlaytest.plan
-            setPlanState(scenarioPlaytest.plan)
+            workspaceSession.restorePlaytest()
             appliedWorldObjectEventIdsRef.current = new Set(scenarioPlaytest.world.events
               .filter((event) => event.type === 'object-interaction')
               .map((event) => event.id))
-            worldRef.current = scenarioPlaytest.world
-            setWorld(scenarioPlaytest.world)
+
             setScenarioPlaytest(undefined)
             setIsTavernOpen(true)
           }}>{locale === 'zh-CN' ? '退出并还原' : 'Exit and restore'}</button>

@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- Scope structural analysis history and suite results to local project IDs; migrate legacy plan-keyed records to the first opened project and remove scoped results when a project is deleted.
+- Update the active-project pointer in the same transaction as project deletion, and keep project-menu refresh from disabling user actions.
+- Run the production browser gate with a real WebKit project; reuse voxel texture colors and materials across repeated faces.
+- Move LLM connection configuration, verification, cancellation, and feedback into a dedicated hook so project transitions have a single cancellation entry point.
+- Preserve unfinished drafts and protect unreadable drafts from replacement autosaves, with recovery downloads and visible save status.
+- Restore complete projects on undo/redo, record explicit NPC/scenario edits, and isolate disposable playtest history and persistence.
+- Keep cancellation and timeouts active through response-body reads; invalidate stale AI work on workspace changes.
+- Tolerate unavailable browser storage and malformed API settings; coordinate local-data deletion with active saves.
+- Recover newer IndexedDB drafts even when the localStorage marker is missing or stale.
+- Preserve selected disaster settings across model changes and retain voxel interaction state in manual schema 6, while reading earlier schemas.
+- Version simulation snapshots and transfer model data to workers only when geometry changes.
+- Separate runtime entity operations, save parsing, and built-in scenario migrations; index fence neighbors for large scenes.
+- Add production browser smoke tests, large-scene browser performance samples, and regressions for recovery and asynchronous state boundaries.
+
 ## 0.4.0 — 2026-08-30
 
 - Added deterministic reinforcement proposals that turn an active hazard result into collision-free support-column options.

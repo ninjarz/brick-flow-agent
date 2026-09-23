@@ -1,0 +1,77 @@
+import { test, expect } from '@playwright/test'
+import { createEmptyWorldState, createWorldEntity } from '../../src/lib/worldEntity'
+import { worldEntityDefinitionById } from '../../src/data/worldEntityDefinitions'
+
+test('evidence: importing another project then undo loses original NPCs', async ({ page }) => {
+  const plan = { id: 'review-A', title: 'Review A', prompt: '', source: 'template-local', bricks: [{ id: 'b', brickId: 'brick-2x2', color: 'red', pose: { xStud: 0, yStud: 0, zStud: 0, rotationQuarterTurns: 0 } }], steps: [{ id: 's', title: 'Step', description: '', brickIds: ['b'] }] }
+  const world = { ...createEmptyWorldState(plan.id), paused: true, entities: [createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'review-npc', name: 'Review NPC' })] }
+  await page.addInitScript((draft) => {
+    localStorage.setItem('brick-flow-agent:locale:v1', 'en-US')
+    if (!localStorage.getItem('brick-flow-agent:workspace-draft:v1')) localStorage.setItem('brick-flow-agent:workspace-draft:v1', JSON.stringify(draft))
+  }, { plan, prompt: '', world })
+  await page.goto('./')
+  await expect(page.getByLabel('Plan name')).toHaveValue('Review A')
+  await page.evaluate((plan) => {
+    const transfer = new DataTransfer()
+    transfer.items.add(new File([JSON.stringify({ ...plan, id: 'review-B', title: 'Review B' })], 'b.json'))
+    window.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }))
+  }, plan)
+  await expect(page.getByLabel('Plan name')).toHaveValue('Review B')
+  await page.getByLabel('Undo').click()
+  await expect(page.getByLabel('Plan name')).toHaveValue('Review A')
+  await expect.poll(() => page.evaluate(() => {
+    const stored = JSON.parse(localStorage.getItem('brick-flow-agent:workspace-draft:v1')!)
+    return { id: stored.plan.id, entities: stored.world.entities.length }
+  })).toEqual({ id: 'review-A', entities: 0 })
+})
+
+test('evidence: storage access denial blanks root outside error boundary', async ({ page }) => {
+  await page.addInitScript(() => {
+    Storage.prototype.getItem = () => { throw new DOMException('Storage denied', 'SecurityError') }
+  })
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  await page.goto('./')
+  await expect.poll(() => errors.length).toBeGreaterThan(0)
+  await expect(page.locator('#root')).toBeEmpty()
+})
+
+test('evidence: unfinished saved draft is replaced by default and overwritten', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('brick-flow-agent:locale:v1', 'en-US')
+    localStorage.setItem('brick-flow-agent:workspace-draft:v1', JSON.stringify({ plan: {
+      id: 'unfinished-review', title: 'Unfinished review', prompt: '', source: 'template-local',
+      bricks: [{ id: 'floating', brickId: 'brick-2x2', color: 'red', pose: { xStud: 0, yStud: 1.2, zStud: 0, rotationQuarterTurns: 0 } }],
+      steps: [{ id: 's', title: 'Step', description: '', brickIds: ['floating'] }],
+    }, prompt: '' }))
+  })
+  await page.goto('./')
+  await expect(page.getByLabel('Plan name')).not.toHaveValue('Unfinished review')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('brick-flow-agent:workspace-draft:v1')!).plan.id)).not.toBe('unfinished-review')
+})
+
+test('evidence: plan changes recompute wind while earthquake remains selected', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('brick-flow-agent:locale:v1', 'en-US')
+    const original = Worker.prototype.postMessage
+    Worker.prototype.postMessage = function(message, ...args) {
+      if (message?.type === 'simulate') localStorage.setItem('review-last-scenario', message.options.scenario)
+      return original.call(this, message, ...args)
+    }
+  })
+  await page.goto('./')
+  await page.getByLabel('Stability disaster lab').click()
+  const quake = page.getByRole('button', { name: 'Earthquake', exact: true })
+  await quake.click()
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('review-last-scenario'))).toBe('earthquake')
+  await page.evaluate(() => {
+    const plan = { id: 'changed-review', title: 'Changed review', prompt: '', source: 'template-local',
+      bricks: [{ id: 'b', brickId: 'brick-2x2', color: 'red', pose: { xStud: 0, yStud: 0, zStud: 0, rotationQuarterTurns: 0 } }],
+      steps: [{ id: 's', title: 'Step', description: '', brickIds: ['b'] }] }
+    const transfer = new DataTransfer()
+    transfer.items.add(new File([JSON.stringify(plan)], 'changed.json'))
+    window.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }))
+  })
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('review-last-scenario'))).toBe('wind')
+  await expect(quake).toHaveAttribute('aria-pressed', 'true')
+})

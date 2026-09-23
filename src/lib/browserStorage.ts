@@ -1,11 +1,11 @@
 const databaseName = 'brick-flow-agent'
-const databaseVersion = 1
+const databaseVersion = 2
 const storeName = 'large-values'
 
 export const indexedDbStorageMarker = '__brick_flow_agent_indexeddb__'
 export const localStorageComfortLimit = 2_500_000
 
-const openDatabase = () => new Promise<IDBDatabase>((resolve, reject) => {
+export const openDatabase = () => new Promise<IDBDatabase>((resolve, reject) => {
   if (typeof indexedDB === 'undefined') {
     reject(new Error('INDEXED_DB_UNAVAILABLE'))
     return
@@ -14,8 +14,12 @@ const openDatabase = () => new Promise<IDBDatabase>((resolve, reject) => {
   const request = indexedDB.open(databaseName, databaseVersion)
   request.onupgradeneeded = () => {
     if (!request.result.objectStoreNames.contains(storeName)) request.result.createObjectStore(storeName)
+    for (const name of ['projects', 'project-content', 'project-checkpoints', 'project-meta']) {
+      if (!request.result.objectStoreNames.contains(name)) request.result.createObjectStore(name)
+    }
   }
-  request.onsuccess = () => resolve(request.result)
+  request.onsuccess = () => { request.result.onversionchange = () => request.result.close(); resolve(request.result) }
+  request.onblocked = () => reject(new Error('INDEXED_DB_UPGRADE_BLOCKED'))
   request.onerror = () => reject(request.error ?? new Error('INDEXED_DB_OPEN_FAILED'))
 })
 

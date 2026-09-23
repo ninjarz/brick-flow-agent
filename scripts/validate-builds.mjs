@@ -774,19 +774,19 @@ await writeFile(entry, `
       !approx(nestedMpdRoundTrip.plan.bricks[0].pose.zStud, 0)
       ? 'MPD import must recursively apply parent submodel transforms to supported parts'
       : '',
-    objImportManual.schemaVersion !== 5 || objImportManual.steps.length >= objImportRegression.plan.bricks.length
-      ? 'Manual schema v5 must group same-layer pieces into fewer build pages'
+    objImportManual.schemaVersion !== 6 || objImportManual.steps.length >= objImportRegression.plan.bricks.length
+      ? 'Manual schema v6 must group same-layer pieces into fewer build pages'
       : '',
     objImportManual.steps.at(-1)?.completedPieceCount !== objImportRegression.plan.bricks.length ||
       JSON.stringify(objImportManual).includes('cumulativePieces') ||
       JSON.stringify(objImportManual).includes('cumulativePieceIds')
-      ? 'Manual schema v5 must keep linear delta-only steps with a final completed piece count'
+      ? 'Manual schema v6 must keep linear delta-only steps with a final completed piece count'
       : '',
     objImportManual.steps.some((step) =>
       !Number.isFinite(step.cameraAzimuthDegrees) ||
       step.addPieces.some((piece) => !piece.assembly?.label || !piece.assembly?.explodedOffset)
     )
-      ? 'Manual schema v5 must include camera and exploded assembly guidance'
+      ? 'Manual schema v6 must include camera and exploded assembly guidance'
       : '',
     !smallScenePerformance.enableRealtimeShadows || smallScenePerformance.useSimplifiedView || smallScenePerformance.maxDevicePixelRatio !== 1.5
       ? 'Small scenes must retain detailed rendering, shadows, and 1.5 DPR'
@@ -1191,7 +1191,7 @@ await writeFile(entry, `
     result.planRoundTripBlockingIssues.length > 0 ||
     result.manualRoundTripBlockingIssues.length > 0 ||
     result.invalidManualSteps.length > 0 ||
-    (!result.manualSkipped && result.manualSchema !== 5),
+    (!result.manualSkipped && result.manualSchema !== 6),
   );
 
   console.log(JSON.stringify(results.map((result) => ({

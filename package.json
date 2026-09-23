@@ -17,9 +17,11 @@
     "generate:obj": "node scripts/generate-obj-assets.mjs",
     "profile:performance": "node scripts/profile-performance.mjs",
     "check:performance": "node scripts/profile-performance.mjs --check",
-    "verify:release": "npm run lint && npm run build && npm test && npm run test:e2e && npm run validate:builds && npm run audit:ldraw && npm run audit:obj-connectivity && npm run check:performance",
+    "verify:release": "npm run verify:quality && npm run check:performance",
     "validate:builds": "node scripts/validate-builds.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:production": "NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost playwright test --config=playwright.production.config.ts",
+    "verify:quality": "npm run lint && npm run build && npm test && npm run test:e2e && npm run test:production && npm run validate:builds && npm run audit:ldraw && npm run audit:obj-connectivity"
   },
   "dependencies": {
     "@react-three/drei": "9.122.0",

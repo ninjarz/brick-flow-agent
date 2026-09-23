@@ -1,3 +1,4 @@
+import { safeStorage } from './safeStorage'
 import { repositoryUrl } from './appDiagnostics'
 
 const storageKey = 'brick-flow-agent:import-diagnostics:v1'
@@ -44,7 +45,7 @@ const isDiagnostic = (value: unknown): value is ImportDiagnostic => {
 export const loadImportDiagnostics = (): ImportDiagnostic[] => {
   if (typeof window === 'undefined') return []
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(storageKey) ?? '[]') as unknown
+    const parsed = JSON.parse(safeStorage.getItem(storageKey) ?? '[]') as unknown
     return Array.isArray(parsed) ? parsed.filter(isDiagnostic).slice(0, maxEntries) : []
   } catch {
     return []
@@ -54,7 +55,7 @@ export const loadImportDiagnostics = (): ImportDiagnostic[] => {
 export const saveImportDiagnostic = (diagnostic: ImportDiagnostic) => {
   const next = [diagnostic, ...loadImportDiagnostics()].slice(0, maxEntries)
   try {
-    window.localStorage.setItem(storageKey, JSON.stringify(next))
+    safeStorage.setItem(storageKey, JSON.stringify(next))
   } catch {
     // Compatibility history is optional when browser storage is unavailable.
   }
@@ -64,8 +65,8 @@ export const saveImportDiagnostic = (diagnostic: ImportDiagnostic) => {
 export const deleteImportDiagnostic = (id: string) => {
   const next = loadImportDiagnostics().filter((item) => item.id !== id)
   try {
-    if (next.length === 0) window.localStorage.removeItem(storageKey)
-    else window.localStorage.setItem(storageKey, JSON.stringify(next))
+    if (next.length === 0) safeStorage.removeItem(storageKey)
+    else safeStorage.setItem(storageKey, JSON.stringify(next))
   } catch {
     // Optional browser history.
   }

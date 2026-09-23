@@ -33,7 +33,7 @@ export const StabilityReinforcementPanel = ({ plan, options, inventoryOverrides,
   const [error, setError] = useState('')
   const workerRef = useRef<Worker>()
   const requestIdRef = useRef(0)
-  const currentKey = `${createPlanFingerprint(plan)}:${optionsKey(options)}`
+  const currentKey = `${createPlanFingerprint(plan)}:${optionsKey(options)}:${JSON.stringify(Object.entries(inventoryOverrides).sort())}`
   const stale = Boolean(proposals.length > 0 && sourceKey !== currentKey)
   const usefulProposals = useMemo(
     () => proposals.filter((proposal) => proposal.scoreDelta > 0 || proposal.failureReduction > 0),

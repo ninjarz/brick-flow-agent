@@ -59,10 +59,41 @@ const sameFenceConnections = (
 )
 
 export const synchronizeVoxelBlockStates = (bricks: PlacedBrick[]) => {
+  if (!bricks.some(isFence)) return bricks
+  // Reuse a local-neighbor index across all fences instead of scanning N bricks
+  // for each fence. Exact connection rules remain in getFenceConnections.
+  const neighbors = new Map<string, PlacedBrick[]>()
+  for (const brick of bricks) {
+    if (!canFenceConnectTo(brick)) continue
+    const footprint = brickById.get(brick.brickId)!.footprint
+    const key = `${Math.floor(brick.pose.xStud + footprint.widthStuds / 2)}:${Math.floor(brick.pose.yStud)}:${Math.floor(brick.pose.zStud + footprint.depthStuds / 2)}`
+    const bucket = neighbors.get(key)
+    if (bucket) bucket.push(brick)
+    else neighbors.set(key, [brick])
+  }
   let changed = false
   const nextBricks = bricks.map((brick) => {
     if (!isFence(brick)) return brick
-    const fenceConnections = getFenceConnections(brick, bricks)
+    const candidates: PlacedBrick[] = []
+    const cx = brick.pose.xStud + 0.5
+    const cz = brick.pose.zStud + 0.5
+    const minX = Math.floor(cx - 1 - coordinateTolerance)
+    const minY = Math.floor(brick.pose.yStud - coordinateTolerance)
+    const minZ = Math.floor(cz - 1 - coordinateTolerance)
+    // Count offsets, not absolute coordinates: at huge finite imported coordinates
+    // adding one to the coordinate may no longer advance its floating-point value.
+    const nx = Math.min(4, Math.floor(cx + 1 + coordinateTolerance) - minX)
+    const ny = Math.min(2, Math.floor(brick.pose.yStud + coordinateTolerance) - minY)
+    const nz = Math.min(4, Math.floor(cz + 1 + coordinateTolerance) - minZ)
+    for (let x = 0; x <= nx; x += 1) {
+      for (let y = 0; y <= ny; y += 1) {
+        for (let z = 0; z <= nz; z += 1) {
+          const bucket = neighbors.get(`${minX + x}:${minY + y}:${minZ + z}`)
+          if (bucket) candidates.push(...bucket)
+        }
+      }
+    }
+    const fenceConnections = getFenceConnections(brick, candidates)
     if (sameFenceConnections(brick.voxelState?.fenceConnections, fenceConnections)) return brick
     changed = true
     return {

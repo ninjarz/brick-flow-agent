@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { compareStabilityReports, createPlanFingerprint, deleteStabilitySnapshot, loadStabilityHistory, maxStabilityHistoryEntries, renameStabilitySnapshot, saveStabilitySnapshot, type StabilitySnapshot } from './stabilityHistory'
+import { claimLegacyStabilityHistory, clearStabilityHistory, compareStabilityReports, createPlanFingerprint, deleteStabilitySnapshot, loadStabilityHistory, maxStabilityHistoryEntries, renameStabilitySnapshot, saveStabilitySnapshot, type StabilitySnapshot } from './stabilityHistory'
 import { generateBuildPlan } from './localGenerator'
 import { analyzeBuildStability } from './stabilityAnalysis'
 import { createStabilityReport } from './stabilityReport'
@@ -44,5 +44,20 @@ describe('stability history', () => {
     const comparison = compareStabilityReports(before, after)
     expect(comparison.find((item) => item.key === 'score')?.outcome).toBe('improved')
     expect(comparison.find((item) => item.key === 'criticalBrickCount')?.outcome).not.toBe('declined')
+  })
+
+  it('keeps copied projects with the same plan ID independent and claims old history once', () => {
+    vi.stubGlobal('window', { localStorage: createLocalStorage() })
+    const plan = generateBuildPlan({ prompt: '一座小桥' })
+    const report = createStabilityReport(plan, analyzeBuildStability(plan.bricks), 'en-US')
+    const snapshot: StabilitySnapshot = { id: 'legacy', planId: plan.id, name: 'Old', createdAt: '2026-08-30', planFingerprint: createPlanFingerprint(plan), report }
+    saveStabilitySnapshot(snapshot)
+    claimLegacyStabilityHistory('project-a', plan.id)
+    claimLegacyStabilityHistory('project-b', plan.id)
+    expect(loadStabilityHistory(plan.id, 'project-a')).toEqual([snapshot])
+    expect(loadStabilityHistory(plan.id, 'project-b')).toEqual([])
+    saveStabilitySnapshot({ ...snapshot, id: 'new', planFingerprint: 'new' }, 'project-b')
+    clearStabilityHistory(plan.id, 'project-a')
+    expect(loadStabilityHistory(plan.id, 'project-b')).toHaveLength(1)
   })
 })

@@ -1,7 +1,10 @@
+import { safeStorage } from './safeStorage'
+import { claimLegacyAnalysis } from './projectAnalysisStorage'
 import type { BuildPlan } from '../types/bricks'
 import type { StabilityReport } from './stabilityReport'
 
 const storagePrefix = 'brick-flow-agent:stability-history:v1:'
+const projectStoragePrefix = 'brick-flow-agent:stability-history:v2:project:'
 export const maxStabilityHistoryEntries = 10
 
 export type StabilitySnapshot = {
@@ -21,7 +24,9 @@ export type StabilityComparisonMetric = {
   outcome: 'improved' | 'declined' | 'unchanged' | 'unavailable'
 }
 
-const storageKey = (planId: string) => `${storagePrefix}${encodeURIComponent(planId)}`
+const storageKey = (planId: string, projectId?: string) => `${projectId ? projectStoragePrefix : storagePrefix}${encodeURIComponent(projectId ?? planId)}`
+export const claimLegacyStabilityHistory = (projectId: string, planId: string) =>
+  claimLegacyAnalysis(storagePrefix, projectStoragePrefix, projectId, planId)
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
 
 const isSnapshot = (value: unknown): value is StabilitySnapshot => {
@@ -47,10 +52,10 @@ export const createPlanFingerprint = (plan: BuildPlan) => {
   return `${plan.bricks.length}:${(hash >>> 0).toString(36)}`
 }
 
-export const loadStabilityHistory = (planId: string): StabilitySnapshot[] => {
+export const loadStabilityHistory = (planId: string, projectId?: string): StabilitySnapshot[] => {
   if (typeof window === 'undefined') return []
   try {
-    const value = JSON.parse(window.localStorage.getItem(storageKey(planId)) ?? '[]') as unknown
+    const value = JSON.parse(safeStorage.getItem(storageKey(planId, projectId)) ?? '[]') as unknown
     if (!Array.isArray(value)) return []
     return value.filter(isSnapshot).slice(0, maxStabilityHistoryEntries)
   } catch {
@@ -58,20 +63,20 @@ export const loadStabilityHistory = (planId: string): StabilitySnapshot[] => {
   }
 }
 
-const persist = (planId: string, snapshots: StabilitySnapshot[]) => {
+const persist = (planId: string, snapshots: StabilitySnapshot[], projectId?: string) => {
   if (typeof window === 'undefined') return snapshots
   const limited = snapshots.slice(0, maxStabilityHistoryEntries)
   try {
-    if (limited.length === 0) window.localStorage.removeItem(storageKey(planId))
-    else window.localStorage.setItem(storageKey(planId), JSON.stringify(limited))
+    if (limited.length === 0) safeStorage.removeItem(storageKey(planId, projectId))
+    else safeStorage.setItem(storageKey(planId, projectId), JSON.stringify(limited))
   } catch {
     // Analysis history is optional when browser storage is unavailable.
   }
   return limited
 }
 
-export const saveStabilitySnapshot = (snapshot: StabilitySnapshot) => {
-  const current = loadStabilityHistory(snapshot.planId)
+export const saveStabilitySnapshot = (snapshot: StabilitySnapshot, projectId?: string) => {
+  const current = loadStabilityHistory(snapshot.planId, projectId)
   const duplicate = current.find((item) => item.planFingerprint === snapshot.planFingerprint &&
     item.report.simulation?.scenario === snapshot.report.simulation?.scenario &&
     item.report.simulation?.intensity === snapshot.report.simulation?.intensity &&
@@ -80,20 +85,20 @@ export const saveStabilitySnapshot = (snapshot: StabilitySnapshot) => {
   if (duplicate) return { snapshot: duplicate, history: current, created: false }
   return {
     snapshot,
-    history: persist(snapshot.planId, [snapshot, ...current]),
+    history: persist(snapshot.planId, [snapshot, ...current], projectId),
     created: true,
   }
 }
 
-export const renameStabilitySnapshot = (planId: string, snapshotId: string, name: string) =>
-  persist(planId, loadStabilityHistory(planId).map((snapshot) => (
+export const renameStabilitySnapshot = (planId: string, snapshotId: string, name: string, projectId?: string) =>
+  persist(planId, loadStabilityHistory(planId, projectId).map((snapshot) => (
     snapshot.id === snapshotId ? { ...snapshot, name: name.trim().slice(0, 80) || snapshot.name } : snapshot
-  )))
+  )), projectId)
 
-export const deleteStabilitySnapshot = (planId: string, snapshotId: string) =>
-  persist(planId, loadStabilityHistory(planId).filter((snapshot) => snapshot.id !== snapshotId))
+export const deleteStabilitySnapshot = (planId: string, snapshotId: string, projectId?: string) =>
+  persist(planId, loadStabilityHistory(planId, projectId).filter((snapshot) => snapshot.id !== snapshotId), projectId)
 
-export const clearStabilityHistory = (planId: string) => persist(planId, [])
+export const clearStabilityHistory = (planId: string, projectId?: string) => persist(planId, [], projectId)
 
 const metric = (
   key: StabilityComparisonMetric['key'],

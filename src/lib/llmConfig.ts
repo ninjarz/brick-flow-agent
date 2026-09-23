@@ -1,3 +1,4 @@
+import { safeStorage } from './safeStorage'
 import type { LlmConfig } from '../types/bricks'
 
 const storageKey = 'brick-flow-agent:llm-config'
@@ -28,15 +29,17 @@ const isLlmRequestMode = (value: unknown): value is LlmConfig['requestMode'] =>
 export const loadLlmConfig = (): LlmConfig => {
   if (typeof window === 'undefined') return defaultLlmConfig
 
-  const stored = window.localStorage.getItem(storageKey)
+  const stored = safeStorage.getItem(storageKey)
   if (!stored) return defaultLlmConfig
 
   try {
-    const parsed = JSON.parse(stored) as Partial<LlmConfig>
+    const value: unknown = JSON.parse(stored)
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return defaultLlmConfig
+    const parsed = value as Partial<LlmConfig>
     return {
-      modelName: parsed.modelName ?? '',
-      endpoint: parsed.endpoint ?? '',
-      apiKey: parsed.apiKey ?? '',
+      modelName: typeof parsed.modelName === 'string' ? parsed.modelName : '',
+      endpoint: typeof parsed.endpoint === 'string' ? parsed.endpoint : '',
+      apiKey: typeof parsed.apiKey === 'string' ? parsed.apiKey : '',
       requestMode: isLlmRequestMode(parsed.requestMode) ? parsed.requestMode : defaultLlmConfig.requestMode,
       enableThinking: parsed.enableThinking === true,
       autoRepair: parsed.autoRepair !== false,
@@ -48,7 +51,7 @@ export const loadLlmConfig = (): LlmConfig => {
 }
 
 export const saveLlmConfig = (config: LlmConfig) => {
-  window.localStorage.setItem(storageKey, JSON.stringify(config))
+  safeStorage.setItem(storageKey, JSON.stringify(config))
 }
 
 const createLlmConfigFingerprint = (config: LlmConfig) => {
@@ -71,7 +74,7 @@ const createLlmConfigFingerprint = (config: LlmConfig) => {
 export const hasPersistedLlmConnection = (config: LlmConfig) => {
   if (typeof window === 'undefined') return false
   try {
-    const stored = JSON.parse(window.localStorage.getItem(connectionStorageKey) ?? '') as {
+    const stored = JSON.parse(safeStorage.getItem(connectionStorageKey) ?? '') as {
       configFingerprint?: string
     }
     return stored.configFingerprint === createLlmConfigFingerprint(config)
@@ -81,7 +84,7 @@ export const hasPersistedLlmConnection = (config: LlmConfig) => {
 }
 
 export const saveLlmConnection = (config: LlmConfig) => {
-  window.localStorage.setItem(connectionStorageKey, JSON.stringify({
+  safeStorage.setItem(connectionStorageKey, JSON.stringify({
     configFingerprint: createLlmConfigFingerprint(config),
     testedAt: new Date().toISOString(),
   }))
@@ -89,5 +92,5 @@ export const saveLlmConnection = (config: LlmConfig) => {
 
 export const clearLlmConnection = () => {
   if (typeof window === 'undefined') return
-  window.localStorage.removeItem(connectionStorageKey)
+  safeStorage.removeItem(connectionStorageKey)
 }

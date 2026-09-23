@@ -27,32 +27,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint
-        run: npm run lint
-
-      - name: Test
-        run: npm test
-
       - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium webkit
 
-      - name: Browser workflow tests
-        run: npm run test:e2e
+      - name: Verify quality including built browser workflows
+        run: npm run verify:quality
 
-      - name: Validate builds
-        run: npm run validate:builds
-
-      - name: Audit LDraw coverage
-        run: npm run audit:ldraw
-
-      - name: Audit OBJ connectivity
-        run: npm run audit:obj-connectivity
-
-      - name: Build
-        run: npm run build
-
-      # Informational only: shared runners vary too much for absolute ms
-      # thresholds, so regressions are reviewed from the timings table.
-      - name: Profile performance (informational)
+      - name: Profile performance (timings, not shared-runner thresholds)
         run: npm run profile:performance
-        continue-on-error: true
+
+      - name: Upload browser traces and performance samples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-results
+          path: test-results

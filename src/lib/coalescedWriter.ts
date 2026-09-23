@@ -1,5 +1,6 @@
 export type CoalescedAsyncWriter<T> = {
   write: (value: T) => Promise<boolean>
+  cancelPendingAndWait: () => Promise<void>
 }
 
 export const createCoalescedAsyncWriter = <T>(
@@ -7,6 +8,7 @@ export const createCoalescedAsyncWriter = <T>(
 ): CoalescedAsyncWriter<T> => {
   let running = false
   let pending: { value: T; resolve: Array<(result: boolean) => void> } | undefined
+  let completion: Promise<void> = Promise.resolve()
 
   const flush = async () => {
     if (running) return
@@ -33,7 +35,12 @@ export const createCoalescedAsyncWriter = <T>(
       } else {
         pending = { value, resolve: [resolve] }
       }
-      void flush()
+      if (!running) completion = flush()
     }),
+    cancelPendingAndWait: async () => {
+      pending?.resolve.forEach((resolve) => resolve(false))
+      pending = undefined
+      await completion
+    },
   }
 }
