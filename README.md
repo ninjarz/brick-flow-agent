@@ -9,6 +9,8 @@
 
 English README | [中文文档](docs/README_zh.md)
 
+[LEGO replica sources and verification / 乐高复刻来源与校验](docs/lego-replicas.md)
+
 **[Try the live demo](https://ninjarz.github.io/brick-flow-agent/)** — runs directly in the browser with no sign-up required
 
 brick-flow-agent, also named 积流工坊 in Chinese, turns prompts, imported plans, and hand-edited layouts into an interactive 3D building workspace. The goal is to bring different brick-like systems into one editor: LEGO-compatible LDraw parts today, Minecraft-style voxel blocks next, and more part packs later
@@ -34,6 +36,7 @@ The app uses React + Three.js for the editor, LDraw data for part rendering, and
 - JSON, Markdown, themed SVG, and PNG analysis reports with an embedded scene thumbnail
 - Editable per-part inventory limits shared by manual editing and LLM generation
 - Built-in asset library with IndexedDB-backed persistence for large user models
+- Three sourced LEGO set replicas in the asset library, including a 3,104-piece official set, with local LDraw geometry and step playback
 - Browser-side OBJ/MTL import with multi-material color mapping, size, brick-budget, edge-style, silhouette, and quality previews
 - JSON and LDraw/MPD import plus lossless LDraw export for application round trips
 - Workspace-wide drag-and-drop import for JSON, LDraw/MPD, and OBJ files
@@ -92,6 +95,7 @@ npm test                     # run focused Vitest regressions
 npm run test:e2e             # run browser workflows with Playwright
 npm run test:production      # test a previously built app, including browser performance sampling
 npm run validate:builds      # validate default assets and regression cases
+npm run verify:replicas      # verify replica counts, hashes, and all LDraw dependencies
 npm run audit:obj-connectivity # require every generated OBJ asset to stay connected
 npm run profile:performance  # profile performance-sensitive routines
 npm run verify:release       # run the complete release gate

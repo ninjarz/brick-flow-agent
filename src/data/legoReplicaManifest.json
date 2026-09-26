@@ -1,0 +1,44 @@
+[
+  {
+    "number": "10030",
+    "title": "Imperial Star Destroyer",
+    "modelAuthor": "Roland Dahl",
+    "officialPieceCount": 3104,
+    "modelPieceCount": 3037,
+    "primitiveInstances": 0,
+    "stepMarkers": 593,
+    "distinctPieces": 161,
+    "modelSha256": "64b86baafbc4b5b1c1026017f354eaf4107fd255e07010c46f3921a05ddbdd19",
+    "modelUrl": "lego-replicas/models/10030-1.mpd",
+    "officialInstructionsUrl": "https://www.lego.com/en-us/service/building-instructions/10030",
+    "modelSourceUrl": "https://library.ldraw.org/library/omr/10030-1.mpd"
+  },
+  {
+    "number": "8099",
+    "title": "Midi-scale Imperial Star Destroyer",
+    "modelAuthor": "Orion Pobursky",
+    "officialPieceCount": 423,
+    "modelPieceCount": 418,
+    "primitiveInstances": 0,
+    "stepMarkers": 117,
+    "distinctPieces": 69,
+    "modelSha256": "5c0eed47f0a9cbcfd9e697eb0ace9cadc55340965bd623460ecb03e6b7967332",
+    "modelUrl": "lego-replicas/models/8099-1.mpd",
+    "officialInstructionsUrl": "https://www.lego.com/en-us/service/building-instructions/8099",
+    "modelSourceUrl": "https://library.ldraw.org/library/omr/8099-1.mpd"
+  },
+  {
+    "number": "10124",
+    "title": "Wright Flyer",
+    "modelAuthor": "Marc Giraudet",
+    "officialPieceCount": 666,
+    "modelPieceCount": 677,
+    "primitiveInstances": 892,
+    "stepMarkers": 105,
+    "distinctPieces": 93,
+    "modelSha256": "35caad022a84e0a287709b0682c26a80f70dd7070d5d54d307bfa16c489e2b03",
+    "modelUrl": "lego-replicas/models/10124-1.mpd",
+    "officialInstructionsUrl": "https://www.lego.com/en-us/service/building-instructions/10124",
+    "modelSourceUrl": "https://library.ldraw.org/library/omr/10124-1.mpd"
+  }
+]

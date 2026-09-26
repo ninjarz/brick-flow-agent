@@ -1,0 +1,18 @@
+.lego-replica-gallery { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 16px; min-height: 590px; }
+.lego-replica-select { display: flex; flex-direction: column; gap: 8px; }
+.lego-replica-select button { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 12px; border: 1px solid var(--border, #586172); border-radius: 10px; background: transparent; color: inherit; cursor: pointer; }
+.lego-replica-select button.active { border-color: #e6af4b; background: #e6af4b22; }
+.lego-replica-select small { opacity: .72; }
+.lego-replica-detail { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.lego-replica-detail > header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.lego-replica-detail h3 { margin: 0 0 4px; }
+.lego-replica-detail p { margin: 0; }
+.lego-replica-links { display: flex; gap: 8px; flex-wrap: wrap; }
+.lego-replica-links a { color: #e6af4b; white-space: nowrap; }
+.lego-replica-canvas { position: relative; min-height: 400px; height: min(52vh, 560px); border-radius: 12px; overflow: hidden; background: #16243a; }
+.lego-replica-loading { position: absolute; inset: 0; display: grid; place-items: center; color: white; padding: 16px; text-align: center; }
+.lego-replica-steps { display: flex; gap: 8px; align-items: center; }
+.lego-replica-steps input { flex: 1; min-width: 50px; }
+.lego-replica-steps span { min-width: 70px; text-align: right; font-variant-numeric: tabular-nums; }
+.lego-replica-note { opacity: .75; font-size: 12px; line-height: 1.5; }
+@media (max-width: 700px) { .lego-replica-gallery { grid-template-columns: 1fr; } .lego-replica-select { flex-direction: row; overflow-x: auto; } .lego-replica-select button { min-width: 170px; } .lego-replica-detail > header { flex-direction: column; } }
