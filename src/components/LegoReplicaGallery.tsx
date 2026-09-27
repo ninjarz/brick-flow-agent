@@ -23,10 +23,20 @@ const loadFileMap = () => {
 const loadModel = async (replica: Replica): Promise<LoadedModel> => {
   const loader = new LDrawLoader()
   loader.setPartsLibraryPath(base)
-  loader.setFileMap(await loadFileMap())
+  const fileMap = { ...(await loadFileMap()) }
   await loader.preloadMaterials(`${base}LDConfig.ldr`)
+  const response = await fetch(`${base}models/${replica.number}-1.mpd`)
+  if (!response.ok) throw new Error(`模型文件加载失败 (${response.status})`)
+  // Three normalizes references but leaves embedded FILE names untouched.
+  // Normalize those headers in memory so MPDs using Windows paths still resolve.
+  const modelText = (await response.text()).replace(/^0 FILE (.+)$/gm, (_, name: string) => {
+    const normalized = name.trim().replaceAll('\\', '/')
+    fileMap[normalized] = normalized
+    return `0 FILE ${normalized}`
+  })
+  loader.setFileMap(fileMap)
   const group = await new Promise<Group>((resolve, reject) => {
-    loader.load(`${base}models/${replica.number}-1.mpd`, resolve, undefined, reject)
+    loader.parse(modelText, resolve, reject)
   })
   group.rotation.x = Math.PI
   group.updateMatrixWorld(true)
@@ -145,7 +155,7 @@ export function LegoReplicaGallery() {
         </div>
       </header>
       <div className="lego-replica-canvas" data-testid="lego-replica-canvas">
-        {!loaded && <div className="lego-replica-loading" role="status">{error || (selected.number === '10030' ? '正在组装 3,037 个零件的几何体，首次加载约需 30–60 秒…' : '正在加载模型和零件几何体…')}</div>}
+        {!loaded && <div className="lego-replica-loading" role="status">{error || (selected.modelPieceCount > 2500 ? `正在组装 ${selected.modelPieceCount.toLocaleString()} 个零件的几何体，首次加载约需 30–60 秒…` : '正在加载模型和零件几何体…')}</div>}
         {loaded && <Canvas key={selected.number} frameloop="demand" camera={{ position: [loaded.radius * 1.55, loaded.radius * 1.05, loaded.radius * 1.55], fov: 40, near: 1, far: loaded.radius * 20 }}>
           <color attach="background" args={['#16243a']} />
           <ambientLight intensity={2.2} />

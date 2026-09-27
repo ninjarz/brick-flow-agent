@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Extract the LDraw dependencies needed by the three curated OMR models.
+"""Extract the LDraw dependencies needed by the curated OMR models.
 
 Usage: python3 scripts/prepare-lego-replicas.py COMPLETE_ZIP SOURCE_MPD_DIR
-The source directory must contain 10030-1.mpd, 8099-1.mpd and 10124-1.mpd.
+The source directory must contain an MPD for every set in MODELS.
 """
 
 from __future__ import annotations
@@ -20,6 +20,9 @@ MODELS = (
     ("10030", "Imperial Star Destroyer", "Roland Dahl", 3104),
     ("8099", "Midi-scale Imperial Star Destroyer", "Orion Pobursky", 423),
     ("10124", "Wright Flyer", "Marc Giraudet", 666),
+    ("10182", "Café Corner", "Max Martin Richter", 2058),
+    ("10258", "London Bus", "Philippe Hurbain", 1686),
+    ("10134", "Y-wing Attack Starfighter", "Roland Dahl", 1489),
 )
 
 
@@ -39,7 +42,7 @@ def embedded_files(text: str):
         if line.startswith("0 FILE "):
             if current is not None:
                 files[current.lower()] = "\n".join(lines)
-            current = line[7:].strip()
+            current = line[7:].strip().replace("\\", "/")
             lines = []
         elif current is not None:
             lines.append(line)
@@ -95,6 +98,34 @@ def main():
             pieces = Counter()
             primitive_refs = Counter()
 
+            def is_embedded_piece(name):
+                return any(
+                    line.startswith("0 !LDRAW_ORG ") and
+                    ("Part" in line or "Shortcut" in line) and
+                    "Subpart" not in line
+                    for line in embedded[name.lower()].splitlines()
+                )
+
+            def add_external(ref):
+                target = ref.lower()
+                resolved = resolve(target)
+                if not resolved:
+                    raise RuntimeError(f"Missing library dependency: {ref} in {number}")
+                file_map[ref] = loader_path(resolved)
+                file_map[target] = loader_path(resolved)
+                pending.append(target)
+                return resolved
+
+            def scan_embedded_dependencies(name, ancestry=()):
+                key = name.lower()
+                if key in ancestry:
+                    raise RuntimeError(f"Cyclic embedded part: {ancestry} -> {key}")
+                for _, ref in references(embedded[key]):
+                    if ref.lower() in embedded:
+                        scan_embedded_dependencies(ref, (*ancestry, key))
+                    else:
+                        add_external(ref)
+
             def expand(name, ancestry=()):
                 key = name.lower()
                 if key in ancestry:
@@ -102,18 +133,17 @@ def main():
                 for color, ref in references(embedded[key]):
                     target = ref.lower()
                     if target in embedded:
-                        expand(target, (*ancestry, key))
+                        if is_embedded_piece(target):
+                            pieces[(target, color)] += 1
+                            scan_embedded_dependencies(target)
+                        else:
+                            expand(target, (*ancestry, key))
                     else:
-                        resolved = resolve(target)
-                        if not resolved:
-                            raise RuntimeError(f"Missing top-level piece: {ref} in {number}")
-                        file_map[ref] = loader_path(resolved)
-                        file_map[target] = loader_path(resolved)
+                        resolved = add_external(ref)
                         if resolved.startswith("ldraw/p/"):
                             primitive_refs[target] += 1
                         else:
                             pieces[(target, color)] += 1
-                        pending.append(target)
 
             expand(main_name)
             steps = sum(line.strip() == "0 STEP" for line in text.splitlines())
@@ -159,6 +189,14 @@ def main():
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
     )
     (OUTPUT / "fileMap.json").write_text(json.dumps(file_map, sort_keys=True) + "\n")
+    expected = {
+        *(OUTPUT / path.removeprefix("ldraw/") for path in all_needed),
+        *(OUTPUT / "models" / f"{number}-1.mpd" for number, *_ in MODELS),
+        *(OUTPUT / name for name in ("LDConfig.ldr", "CAreadme.txt", "CAlicense.txt", "CAlicense4.txt", "fileMap.json")),
+    }
+    for path in OUTPUT.rglob("*"):
+        if path.is_file() and path not in expected:
+            path.unlink()
     print(json.dumps({"models": manifest, "dependencyFiles": len(all_needed)}, indent=2))
 
 

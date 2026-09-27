@@ -16,6 +16,7 @@ import { useWorkspace } from './hooks/useWorkspace'
 import { useWorldSimulationLoop } from './hooks/useWorldSimulationLoop'
 import { brickById, getDefaultBrickColor } from './data/basicBricks'
 import { worldEntityDefinitionById } from './data/worldEntityDefinitions'
+import legoReplicas from './data/legoReplicaManifest.json'
 import { createDefaultWorldScenarios } from './data/worldScenarios'
 import { dropBrickGroupAtPoint, findNearestOpenBrickGroupAround, getBrickGroupDragPointerOffset, offsetBrickGroupDragPoint, rotationRepositionSearchRadiusStuds, type HorizontalDropPoint, type StationaryPlanSpatialData } from './lib/brickGroupPlacement'
 import { createEmptyBuildPlan, generateBuildPlan } from './lib/localGenerator'
@@ -3422,7 +3423,7 @@ function App() {
             <header>
               <div>
                 <h2 id="asset-library-title">{t('asset.title')}</h2>
-                <p>{assetLibraryKind === 'replicas' ? '3 款套装数字复刻 · 含 3,104 件官方大型套装' : assetLibraryKind === 'models'
+                <p>{assetLibraryKind === 'replicas' ? `${legoReplicas.length} 款套装数字复刻 · 含 3,104 件官方大型套装` : assetLibraryKind === 'models'
                   ? t('asset.count', { visible: visibleFinishedAssets.length, total: finishedAssets.length })
                   : t('asset.scenarioCount', { visible: visibleWorldScenarios.length, total: worldScenarios.length })}</p>
               </div>

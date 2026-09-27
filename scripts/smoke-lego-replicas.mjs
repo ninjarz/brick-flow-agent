@@ -11,11 +11,14 @@ page.on('response', (response) => {
   if (response.status() >= 400 && response.url().includes('lego-replicas')) {
     errors.push(`${response.status()} ${response.url()}`)
   }
+  if (response.url().includes('lego-replicas') && response.headers()['content-type']?.includes('text/html')) {
+    errors.push(`HTML instead of LDraw: ${response.url()}`)
+  }
 })
 await page.goto(process.env.REPLICA_BASE_URL || 'http://127.0.0.1:4174/brick-flow-agent/')
 await page.getByRole('button', { name: '素材库' }).click()
 await page.getByRole('button', { name: '乐高复刻' }).click()
-for (const number of (process.argv.slice(2).length ? process.argv.slice(2) : ['8099', '10124', '10030'])) {
+for (const number of (process.argv.slice(2).length ? process.argv.slice(2) : ['8099', '10124', '10182', '10258', '10134', '10030'])) {
   const started = Date.now()
   await page.locator('.lego-replica-select button').filter({ hasText: number }).click()
   await page.locator('.lego-replica-loading').waitFor({ state: 'visible', timeout: 10_000 })

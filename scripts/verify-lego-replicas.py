@@ -28,7 +28,7 @@ def embedded(text):
         if line.startswith("0 FILE "):
             if current is not None:
                 files[current.lower()] = "\n".join(lines)
-            current, lines = line[7:].strip(), []
+            current, lines = line[7:].strip().replace("\\", "/"), []
         elif current is not None:
             lines.append(line)
     if current is not None:
@@ -64,6 +64,24 @@ def main():
         piece_count = 0
         primitive_count = 0
 
+        def is_embedded_piece(name):
+            return any(
+                line.startswith("0 !LDRAW_ORG ") and
+                ("Part" in line or "Shortcut" in line) and
+                "Subpart" not in line
+                for line in files[name.lower()].splitlines()
+            )
+
+        def check_embedded_dependencies(name, ancestry=()):
+            key = name.lower()
+            if key in ancestry:
+                raise AssertionError(f"Cyclic embedded part {item['number']}: {key}")
+            for reference in refs(files[key]):
+                if reference.lower() in files:
+                    check_embedded_dependencies(reference, (*ancestry, key))
+                else:
+                    check_ref(reference)
+
         def expand(name, ancestry=()):
             nonlocal piece_count, primitive_count
             key = name.lower()
@@ -71,7 +89,11 @@ def main():
                 raise AssertionError(f"Cyclic model {item['number']}: {key}")
             for reference in refs(files[key]):
                 if reference.lower() in files:
-                    expand(reference, (*ancestry, key))
+                    if is_embedded_piece(reference):
+                        piece_count += 1
+                        check_embedded_dependencies(reference)
+                    else:
+                        expand(reference, (*ancestry, key))
                 else:
                     target = check_ref(reference)
                     if "p" == target.relative_to(DATA).parts[0]:
