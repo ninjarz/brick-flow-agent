@@ -1,6 +1,6 @@
 import { aiTasks } from './aiTasks'
 import { createRequestLifetime, withAbortSignal } from './requestLifetime'
-import { brickById, brickDefinitions } from '../data/basicBricks'
+import { brickById, brickDefinitions, colorHex } from '../data/basicBricks'
 import type { BrickColor, BrickPack, BuildPlan, GeneratorInput, LlmConfig, PlacedBrick } from '../types/bricks'
 import { generateBuildPlan } from './localGenerator'
 import { PLATE_HEIGHT_WORLD, WORLD_EDIT_STEP_STUDS, normalizeHorizontalStud, normalizeYStud, plateHeightToWorldStud } from './brickUnits'
@@ -161,7 +161,7 @@ const llmText: Record<LlmLocale, {
   },
 }
 
-const colors: BrickColor[] = ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink', 'trans-pink']
+const colors = Object.keys(colorHex) as BrickColor[]
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null

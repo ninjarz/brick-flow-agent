@@ -28,3 +28,6 @@ test-results
 *.sw?
 
 .workbuddy
+
+# Local documentation and review evidence
+/docs/

@@ -207,7 +207,7 @@ const housePlan = (prompt: string, imageName?: string) => {
     makeBrick('brick-1x2', 'tan', 0, 0.4, 1, 1),
     makeBrick('brick-1x2', 'tan', 5, 0.4, 1, 1),
     makeBrick('brick-1x2', 'brown', 1, 1.6, 0),
-    makeBrick('brick-trans-1x2', 'green', 3, 1.6, 0),
+    makeBrick('brick-trans-1x2', 'trans-green', 3, 1.6, 0),
     makeBrick('brick-1x4', 'tan', 1, 1.6, 2),
     makeBrick('plate-2x4', 'tan', 1, 2.8, 1),
     makeBrick('slope-2x2', 'red', 1, 3.2, 0),

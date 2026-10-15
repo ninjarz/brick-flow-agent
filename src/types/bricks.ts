@@ -13,6 +13,16 @@ export type BrickColor =
   | 'lime'
   | 'pink'
   | 'trans-pink'
+  | 'trans-red'
+  | 'trans-blue'
+  | 'trans-yellow'
+  | 'trans-green'
+  | 'trans-orange'
+  | 'trans-cyan'
+  | 'trans-lime'
+  | 'trans-brown'
+  | 'trans-black'
+  | 'trans-clear'
 
 export type BrickKind =
   | 'brick'

@@ -191,6 +191,16 @@ export const colorHex: Record<BrickColor, string> = {
   lime: '#84cc16',
   pink: '#ec4899',
   'trans-pink': '#f5a3c7',
+  'trans-red': '#C91A09',
+  'trans-blue': '#0020A0',
+  'trans-yellow': '#F5CD2F',
+  'trans-green': '#237841',
+  'trans-orange': '#F08F1C',
+  'trans-cyan': '#AEE9EF',
+  'trans-lime': '#56E646',
+  'trans-brown': '#635F52',
+  'trans-black': '#212121',
+  'trans-clear': '#FCFCFC',
 }
 
 export const colorOpacity: Record<BrickColor, number> = {
@@ -208,6 +218,16 @@ export const colorOpacity: Record<BrickColor, number> = {
   lime: 1,
   pink: 1,
   'trans-pink': 0.48,
+  'trans-red': 0.48,
+  'trans-blue': 0.48,
+  'trans-yellow': 0.48,
+  'trans-green': 0.48,
+  'trans-orange': 0.48,
+  'trans-cyan': 0.48,
+  'trans-lime': 0.48,
+  'trans-brown': 0.48,
+  'trans-black': 0.48,
+  'trans-clear': 0.48,
 }
 
 const classicColors: BrickColor[] = ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink']
@@ -558,7 +578,7 @@ const classic10696ExtraDefinitions: BrickDefinitionDraft[] = [
   makeSlopeDefinition('inverted-slope-3x2', '3747', '3x2 Inverted Slope', 3, 2, 3, ['orange'], 2),
   makeBrickDefinition('brick-1x6', '3009', '1x6 Brick', 6, 1, 3, ['cyan'], 2),
   makeBrickDefinition('brick-2x8', '3007', '2x8 Brick', 8, 2, 3, ['gray'], 2),
-  makeBrickDefinition('brick-trans-1x2', '3065', '1x2 Transparent Brick', 2, 1, 3, ['green'], 2),
+  makeBrickDefinition('brick-trans-1x2', '3065', '1x2 Transparent Brick', 2, 1, 3, ['trans-clear'], 2),
   makeBrickDefinition('brick-side-studs-1x1', '87087', '1x1 Brick with Stud on Side', 1, 1, 3, ['cyan'], 4, [makeSideStud('brick-side-studs-1x1', 0, 1.5, 0, 'z', { x: 0, y: 0, z: -1 })]),
   makeBrickDefinition('brick-side-studs-1x4', '30414', '1x4 Brick with Studs on Side', 4, 1, 3, ['yellow'], 2, Array.from({ length: 4 }).map((_, xStud) => makeSideStud(`brick-side-studs-1x4-${xStud}`, xStud, 1.5, 0, 'z', { x: 0, y: 0, z: -1 }))),
   makeBrickDefinition('brick-modified-1x2-bar', '30236', '1x2 Brick with Bar Handle on Side', 2, 1, 3, ['black'], 1),
@@ -1153,7 +1173,9 @@ export const brickDefinitions: BrickDefinition[] = fallbackBrickDefinitions
 export const brickById = new Map(brickDefinitions.map((brick) => [brick.id, brick]))
 
 export const getDefaultBrickColor = (definition: BrickDefinition): BrickColor => (
-  definition.pack === 'lego' && definition.colors.includes('gray')
-    ? 'gray'
-    : definition.colors[0]
+  definition.id === 'brick-trans-1x2' && definition.colors.includes('trans-clear')
+    ? 'trans-clear'
+    : definition.pack === 'lego' && definition.colors.includes('gray')
+      ? 'gray'
+      : definition.colors[0]
 )

@@ -1,4 +1,5 @@
 import { openDatabase } from './browserStorage'
+import { migrateLegacyTransparentColors } from './planImport'
 import { coordinateStorageWrite } from './storageCoordinator'
 import type { WorkspaceSnapshot } from './workspaceSession'
 
@@ -40,7 +41,7 @@ const readProject = async (tx: IDBTransaction, id: string): Promise<Project | un
   if (!index) return undefined
   const snapshot = await request(tx.objectStore('project-content').get(id)) as WorkspaceSnapshot | undefined
   if (!snapshot?.plan || !snapshot.world || index.schemaVersion !== 1) throw new Error('PROJECT_CONTENT_INVALID')
-  return { ...index, snapshot }
+  return { ...index, snapshot: { ...snapshot, plan: migrateLegacyTransparentColors(snapshot.plan) } }
 }
 const putProject = async (tx: IDBTransaction, project: Project) => {
   const { snapshot, ...index } = project
@@ -116,7 +117,7 @@ export const projectStore = {
     const saved = await request(tx.objectStore('project-checkpoints').get(checkpointId)) as ProjectCheckpoint | undefined
     if (!saved || saved.projectId !== id) throw new Error('CHECKPOINT_MISSING')
     await checkpoint(tx, { ...old, snapshot: current }, 'Before restore')
-    const next = { ...old, snapshot: saved.snapshot, revision: revision + 1, savedAt: Date.now() }
+    const next = { ...old, snapshot: { ...saved.snapshot, plan: migrateLegacyTransparentColors(saved.snapshot.plan) }, revision: revision + 1, savedAt: Date.now() }
     await putProject(tx, next)
     return next
   }),

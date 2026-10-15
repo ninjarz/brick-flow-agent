@@ -1,6 +1,6 @@
 import { Boxes, Copy, RotateCw, Trash2, Unlink2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { brickById } from '../data/basicBricks'
+import { brickById, colorHex } from '../data/basicBricks'
 import { WORLD_EDIT_STEP_STUDS, normalizeEditableStud, normalizeYStud } from '../lib/brickUnits'
 import { useI18n } from '../lib/i18n'
 import type { BrickColor, BrickStructure, BuildPlan, PlacedBrick } from '../types/bricks'
@@ -62,7 +62,7 @@ const StructureEditor = ({ structure, onUpdate, onDissolve }: {
   )
 }
 
-const colors: BrickColor[] = ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink', 'trans-pink']
+const colors = Object.keys(colorHex) as BrickColor[]
 
 export const BrickEditorPanel = ({
   plan,

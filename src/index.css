@@ -18,6 +18,16 @@
   --brick-lime: #84cc16;
   --brick-pink: #ec4899;
   --brick-trans-pink: #f5a3c7;
+  --brick-trans-red: #C91A09;
+  --brick-trans-blue: #0020A0;
+  --brick-trans-yellow: #F5CD2F;
+  --brick-trans-green: #237841;
+  --brick-trans-orange: #F08F1C;
+  --brick-trans-cyan: #AEE9EF;
+  --brick-trans-lime: #56E646;
+  --brick-trans-brown: #635F52;
+  --brick-trans-black: #212121;
+  --brick-trans-clear: #FCFCFC;
   --scrollbar-thumb: rgba(100, 116, 139, 0.5);
   --scrollbar-thumb-hover: rgba(71, 85, 105, 0.72);
   --scrollbar-thumb-active: rgba(51, 65, 85, 0.82);

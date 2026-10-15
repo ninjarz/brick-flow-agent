@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Restore all six Minecraft block faces by assigning cached materials as a mesh material array, including instanced blocks and compound shapes.
+- Preserve official transparent colors in LEGO palettes, thumbnails, scene materials and LDraw export; migrate legacy 3065 colors in projects, checkpoints and imported files.
+
+- Pause simulation and automatic scenario work until project hydration completes; preserve edits made during restoration in a separate project instead of overwriting the authoritative copy.
+- Retain edits made during save-as creation and activation, including changes that arrive during follow-up writes.
+- Isolate the local LLM proxy from Vite configuration; handle partial-stream failures and timeouts without rewriting sent headers, and cancel upstream work when clients disconnect.
 - Scope structural analysis history and suite results to local project IDs; migrate legacy plan-keyed records to the first opened project and remove scoped results when a project is deleted.
 - Update the active-project pointer in the same transaction as project deletion, and keep project-menu refresh from disabling user actions.
 - Run the production browser gate with a real WebKit project; reuse voxel texture colors and materials across repeated faces.

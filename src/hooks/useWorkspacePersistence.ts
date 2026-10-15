@@ -37,34 +37,52 @@ export const useWorkspacePersistence = (session: ReturnType<typeof createWorkspa
     setCurrent(project)
     setStatus('saved')
   }, [session])
+  // Editing stays available while storage is busy. Re-save changes made during
+  // creation or activation before installing the new project's snapshot.
+  const createCurrentProject = useCallback(async (name: string, canceled: () => boolean = () => false) => {
+    let revision = session.getRevision()
+    let project = await projectStore.create(session.getPersistentSnapshot(), name)
+    if (canceled()) return undefined
+    project = await projectStore.activate(project.id)
+    while (!canceled() && session.getRevision() !== revision) {
+      revision = session.getRevision()
+      project = await projectStore.save(project.id, project.revision, session.getPersistentSnapshot())
+    }
+    return canceled() ? undefined : project
+  }, [session])
   useEffect(() => {
     let canceled = false
+    const editing = session.getEditRevision()
+    const initial = session.getPersistentSnapshot()
     void enqueue(async () => {
-      const revision = session.getRevision()
       const existing = await projectStore.list()
       if (canceled) return
+      let project: Project
       if (existing.length) {
-        const project = await projectStore.initialize(session.getPersistentSnapshot())
-        if (canceled) return
-        if (session.getRevision() === revision) install(project)
-        else { active.current = project; setCurrent(project) }
+        project = await projectStore.initialize(initial)
       } else {
         const draft = await loadWorkspaceDraftFromIndexedDb()
         if (canceled) return
         if (getWorkspaceRecovery()) { setStatus('recovery'); setHydrated(true); return }
-        const snapshot = draft && session.getRevision() === revision ? draft : session.getPersistentSnapshot()
-        const project = await projectStore.initialize(snapshot)
-        if (canceled) return
-        if (session.getRevision() === revision) install(project)
-        else { active.current = project; setCurrent(project) }
+        project = await projectStore.initialize(draft ?? initial)
       }
+      if (canceled) return
+      if (session.getEditRevision() !== editing) {
+        // Never attach edits made before hydration to the authoritative project.
+        // Keep that project intact and preserve the edits in a separate copy.
+        const recovered = await createCurrentProject(session.getPersistentSnapshot().plan.title || project.name, () => canceled)
+        if (!recovered) return
+        project = recovered
+      }
+      install(project)
       const backup = session.getPersistentSnapshot()
       await saveWorkspaceDraft(backup.plan, backup.prompt, backup.world)
+      if (canceled) return
       setHydrated(true)
       await refresh()
     }).catch(() => { if (!canceled) { setStatus('unavailable'); setHydrated(true) } })
     return () => { canceled = true }
-  }, [session, enqueue, install, refresh])
+  }, [session, enqueue, install, refresh, createCurrentProject])
 
   const saveCurrent = useCallback(async () => {
     if (getWorkspaceRecovery() && !active.current) { setStatus('recovery'); return false }
@@ -123,7 +141,7 @@ export const useWorkspacePersistence = (session: ReturnType<typeof createWorkspa
     }).finally(() => setBusy(false))
   }, [enqueue])
   return {
-    status, retry: save, recovery: getWorkspaceRecovery(), projects, current, checkpoints, busy,
+    status, hydrated, retry: save, recovery: getWorkspaceRecovery(), projects, current, checkpoints, busy,
     refresh: () => enqueue(refresh).catch(error => {
       setStatus(error instanceof ProjectConflict ? 'conflict' : 'unavailable')
     }),
@@ -175,8 +193,9 @@ export const useWorkspacePersistence = (session: ReturnType<typeof createWorkspa
       install(await projectStore.activate(target), true); await refresh()
     }),
     saveAs: (name: string) => action(async () => {
-      const project = await projectStore.create(session.getPersistentSnapshot(), name)
-      install(await projectStore.activate(project.id)); await refresh()
+      const project = await createCurrentProject(name)
+      if (!project) return
+      install(project); await refresh()
     }),
   }
 }

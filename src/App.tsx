@@ -627,6 +627,7 @@ function App() {
   const appliedWorldObjectEventIdsRef = useRef(new Set<string>())
   const appliedWorldObjectEventWorldIdRef = useRef(world.id)
   useEffect(() => {
+    if (!workspaceStorage.hydrated) return
     if (appliedWorldObjectEventWorldIdRef.current !== world.id) {
       appliedWorldObjectEventWorldIdRef.current = world.id
       appliedWorldObjectEventIdsRef.current = new Set(world.events
@@ -635,7 +636,7 @@ function App() {
       return
     }
     setPlan((current) => applyPendingWorldObjectEvents(current, world.events, appliedWorldObjectEventIdsRef.current))
-  }, [setPlan, world.events, world.id])
+  }, [setPlan, world.events, world.id, workspaceStorage.hydrated])
 
   useEffect(() => {
     worldScenarioAiAbortRef.current?.abort()
@@ -644,7 +645,7 @@ function App() {
   }, [llmConfig])
 
   useEffect(() => {
-    if (!llmConfigComplete || worldScenarioAiAbortRef.current) return
+    if (!workspaceStorage.hydrated || !llmConfigComplete || worldScenarioAiAbortRef.current) return
     const scenario = world.scenarios.find((candidate) => Boolean(candidate.pendingAi))
     const pending = scenario?.pendingAi
     if (!scenario || !pending) return
@@ -690,7 +691,7 @@ function App() {
       worldScenarioAiAbortRef.current = undefined
       worldScenarioAiRequestKeyRef.current = ''
     })
-  }, [llmConfig, llmConfigComplete, locale, setWorld, world, worldRef])
+  }, [llmConfig, llmConfigComplete, locale, setWorld, world, worldRef, workspaceStorage.hydrated])
 
   useEffect(() => {
     if (isWorldStoryDockOpen && llmConfigComplete && world.entities.length > 0) return
@@ -698,15 +699,15 @@ function App() {
   }, [isWorldStoryDockOpen, llmConfigComplete, world.entities.length])
 
   useEffect(() => {
-    if (!isContinuousAiDirectorEnabled) return
+    if (!workspaceStorage.hydrated || !isContinuousAiDirectorEnabled) return
     const prepared = prepareWorldForDirectorPlayback(worldRef.current)
     if (prepared === worldRef.current) return
 
     setWorld(prepared)
-  }, [isContinuousAiDirectorEnabled, setWorld, worldRef])
+  }, [isContinuousAiDirectorEnabled, setWorld, worldRef, workspaceStorage.hydrated])
 
   useWorldSimulationLoop({
-    active: world.entities.length > 0 && !world.paused && !placementSession && !worldEntityPlacement,
+    active: workspaceStorage.hydrated && !workspaceStorage.busy && world.entities.length > 0 && !world.paused && !placementSession && !worldEntityPlacement,
     enableAi: llmConfigComplete,
     readPlan: () => planRef.current,
     readWorld: () => worldRef.current,

@@ -36,6 +36,16 @@ const brickColorOrder = [
   'lime',
   'pink',
   'trans-pink',
+  'trans-red',
+  'trans-blue',
+  'trans-yellow',
+  'trans-green',
+  'trans-orange',
+  'trans-cyan',
+  'trans-lime',
+  'trans-brown',
+  'trans-black',
+  'trans-clear',
 ]
 
 const partAliases = {
@@ -150,7 +160,7 @@ const loadCurrentPartNumbers = async () => {
     stdin: {
       contents: `
         import { brickDefinitions } from ${JSON.stringify(join(workspace, 'src/data/basicBricks.ts'))};
-        export const partNumbers = Array.from(new Set(brickDefinitions.map((definition) => definition.partNumber)));
+        export const partNumbers = Array.from(new Set(brickDefinitions.filter((definition) => definition.pack === 'lego').map((definition) => definition.partNumber)));
       `,
       loader: 'ts',
       resolveDir: workspace,
@@ -168,8 +178,15 @@ const loadCurrentPartNumbers = async () => {
   return (await import(moduleUrl)).partNumbers
 }
 
-const mapRebrickableColor = (name) => {
+const mapRebrickableColor = (name, isTransparent = false) => {
   const normalized = name.toLowerCase()
+  if (isTransparent || normalized.startsWith('trans-')) {
+    const baseColor = exactColorBuckets[normalized] ?? mapRebrickableColor(normalized.replace(/^trans-/, ''))
+    if (!baseColor) return undefined
+    if (baseColor.startsWith('trans-')) return baseColor
+    const transparentBase = { white: 'clear', gray: 'black', tan: 'brown' }[baseColor] ?? baseColor
+    return `trans-${transparentBase}`
+  }
   if (exactColorBuckets[normalized]) return exactColorBuckets[normalized]
   if (normalized.includes('silver') || normalized.includes('gray') || normalized.includes('grey') || normalized.includes('chrome')) return 'gray'
   if (normalized.includes('black')) return 'black'
@@ -243,7 +260,7 @@ const main = async () => {
     const color = rebrickableColors.get(element.color_id)
     if (!color || color.id === '-1') continue
 
-    const appColor = mapRebrickableColor(color.name)
+    const appColor = mapRebrickableColor(color.name, ['t', 'true', '1'].includes(String(color.is_trans).toLowerCase()))
     if (!appColor) {
       unmappedColorNames.add(color.name)
       continue

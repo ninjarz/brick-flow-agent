@@ -1,3 +1,4 @@
+import { colorHex } from '../data/basicBricks'
 import { officialPartColorsByPartNumber } from '../data/officialPartColors'
 import type { BrickColor, BuildPlan, PlacedBrick } from '../types/bricks'
 
@@ -169,23 +170,6 @@ const objBrickPartNumberById: Record<string, string> = {
   'slope-curved-2x1-low': '11477',
 }
 
-const colorHex: Record<BrickColor, string> = {
-  red: '#d62828',
-  blue: '#1d4ed8',
-  yellow: '#f7c948',
-  green: '#2f9e44',
-  white: '#f8fafc',
-  black: '#171717',
-  gray: '#8b949e',
-  brown: '#7c4a28',
-  orange: '#f97316',
-  tan: '#d6b98c',
-  cyan: '#06b6d4',
-  lime: '#84cc16',
-  pink: '#ec4899',
-  'trans-pink': '#f5a3c7',
-}
-
 const brickColorRgb = Object.fromEntries(Object.entries(colorHex).map(([color, hex]) => {
   const value = Number.parseInt(hex.slice(1), 16)
   return [color, { r: (value >> 16) & 255, g: (value >> 8) & 255, b: value & 255 }]
@@ -227,7 +211,7 @@ const colorDistance = (source: RgbColor, target: RgbColor) => (
 
 const mapMaterialColorToBrick = (source: RgbColor, brickId: string, fallback: BrickColor) => {
   const partNumber = objBrickPartNumberById[brickId]
-  const availableColors = (officialPartColorsByPartNumber[partNumber] ?? [fallback]).filter((color) => color !== 'trans-pink')
+  const availableColors = (officialPartColorsByPartNumber[partNumber] ?? [fallback]).filter((color) => !color.startsWith('trans-'))
   const initialColor: BrickColor = availableColors.find((color) => color === fallback) ?? availableColors[0] ?? 'gray'
   return availableColors.reduce<BrickColor>((closest, color) => (
     colorDistance(source, brickColorRgb[color]) < colorDistance(source, brickColorRgb[closest]) ? color : closest

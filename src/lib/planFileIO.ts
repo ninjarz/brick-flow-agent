@@ -88,7 +88,8 @@ export const parseImportedPlan = (
     const nestedPlan = parseImportedPlan(value.plan, text)
     if (nestedPlan) return nestedPlan
   }
-  return buildPlanFromManualJson(value, text)
+  const manualPlan = buildPlanFromManualJson(value, text)
+  return manualPlan ? tryNormalizeImportedPlan(manualPlan) : undefined
 }
 
 export type ImportedProject = {

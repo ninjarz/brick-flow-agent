@@ -426,23 +426,6 @@ const BrickBodyMaterial = ({
   </>
 )
 
-const VoxelBlockMaterials = ({ definition, opacity = 1, showEdges = true }: {
-  definition: BrickDefinition
-  opacity?: number
-  showEdges?: boolean
-}) => (
-  <>
-    {definition.voxelVisual && getVoxelBlockMaterials(definition.voxelVisual, opacity).map((material, index) => (
-      <primitive
-        key={`${material.name}:${index}:${opacity}`}
-        object={material}
-        attach={`material-${index}`}
-      />
-    ))}
-    {showEdges && <Edges color={edgeColor} threshold={15} />}
-  </>
-)
-
 const VoxelBlockMesh = ({
   definition,
   size,
@@ -459,13 +442,14 @@ const VoxelBlockMesh = ({
   showEdges: boolean
 }) => (
   <mesh
+    material={definition.voxelVisual ? [...getVoxelBlockMaterials(definition.voxelVisual, opacity)] : undefined}
     castShadow={definition.voxelVisual?.renderLayer !== 'translucent'}
     receiveShadow={definition.voxelVisual?.renderLayer === 'opaque'}
     position={position}
     rotation={rotation}
   >
     <boxGeometry args={size} />
-    <VoxelBlockMaterials definition={definition} opacity={opacity} showEdges={showEdges} />
+    {showEdges && <Edges color={edgeColor} threshold={15} />}
   </mesh>
 )
 
@@ -1410,7 +1394,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
               rotation={studRotation}
             >
               <cylinderGeometry args={[studRadius, studRadius, renderedStudHeight, 24]} />
-              <meshStandardMaterial color={bodyColor} roughness={0.42} />
+              <meshStandardMaterial color={bodyColor} roughness={0.42} transparent={bodyOpacity < 1} opacity={bodyOpacity} depthWrite={bodyOpacity >= 1} />
               <Edges color={edgeColor} threshold={20} />
             </mesh>
           )
@@ -1524,7 +1508,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
           ) : (
             <boxGeometry args={[baseWidth, baseHeight, baseDepth]} />
           )}
-          <BrickBodyMaterial color={bodyColor} isSlope={definition.kind === 'slope'} />
+          <BrickBodyMaterial color={bodyColor} opacity={bodyOpacity} isSlope={definition.kind === 'slope'} />
         </mesh>
         )
       )}
@@ -1550,7 +1534,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
             rotation={studRotation}
           >
             <cylinderGeometry args={[studRadius, studRadius, renderedStudHeight, 24]} />
-            <meshStandardMaterial color={bodyColor} roughness={0.42} />
+            <meshStandardMaterial color={bodyColor} roughness={0.42} transparent={bodyOpacity < 1} opacity={bodyOpacity} depthWrite={bodyOpacity >= 1} />
             <Edges color={edgeColor} threshold={20} />
           </mesh>
         )
@@ -1578,7 +1562,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
             rotation={pinRotation}
           >
             <cylinderGeometry args={[0.14, 0.14, pinLength, 18]} />
-            <meshStandardMaterial color={bodyColor} roughness={0.42} />
+            <meshStandardMaterial color={bodyColor} roughness={0.42} transparent={bodyOpacity < 1} opacity={bodyOpacity} depthWrite={bodyOpacity >= 1} />
             <Edges color={edgeColor} threshold={18} />
           </mesh>
         )
@@ -2101,12 +2085,12 @@ const VoxelBoxInstances = memo(function VoxelBoxInstances({
         ref={fillRef}
         args={[undefined, undefined, group.instances.length]}
         castShadow={visual.renderLayer !== 'translucent'}
+        material={[...getVoxelBlockMaterials(visual)]}
         receiveShadow={visual.renderLayer === 'opaque'}
         frustumCulled
         {...interactionHandlers}
       >
         <boxGeometry args={[1, 1, 1]} />
-        <VoxelBlockMaterials definition={group.definition} showEdges={false} />
       </instancedMesh>
       {showEdges && (
         <instancedMesh

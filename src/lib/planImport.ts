@@ -1,4 +1,4 @@
-import type { BuildPlan, PlacedBrick, VoxelBlockState } from '../types/bricks'
+import type { BrickColor, BuildPlan, PlacedBrick, VoxelBlockState } from '../types/bricks'
 import {
   normalizeHorizontalStud,
   normalizeQuarterTurns,
@@ -54,6 +54,30 @@ export const normalizeImportedVoxelState = (value: unknown): VoxelBlockState | u
   }
 }
 
+// Older palettes collapsed 3065's transparent colors into opaque color names.
+const legacyTransparentColors: Record<string, BrickColor> = {
+  red: 'trans-red', blue: 'trans-blue', yellow: 'trans-yellow', green: 'trans-green',
+  white: 'trans-clear', black: 'trans-black', brown: 'trans-brown', orange: 'trans-orange',
+  cyan: 'trans-cyan', lime: 'trans-lime', pink: 'trans-pink',
+}
+
+const migrateLegacyBrickColor = (brick: PlacedBrick): BrickColor => (
+  brick.brickId === 'brick-trans-1x2' && Object.hasOwn(legacyTransparentColors, brick.color)
+    ? legacyTransparentColors[brick.color]
+    : brick.color
+)
+
+export const migrateLegacyTransparentColors = (plan: BuildPlan): BuildPlan => {
+  let changed = false
+  const bricks = plan.bricks.map((brick) => {
+    const color = migrateLegacyBrickColor(brick)
+    if (color === brick.color) return brick
+    changed = true
+    return { ...brick, color }
+  })
+  return changed ? { ...plan, bricks } : plan
+}
+
 export const normalizeImportedPlan = (plan: BuildPlan): BuildPlan => pruneBrickStructures({
   ...plan,
   structures: Array.isArray(plan.structures)
@@ -66,6 +90,7 @@ export const normalizeImportedPlan = (plan: BuildPlan): BuildPlan => pruneBrickS
     : [],
   bricks: plan.bricks.map((brick) => ({
     ...brick,
+    color: migrateLegacyBrickColor(brick),
     pose: normalizeImportedPose(brick.pose as unknown as Record<string, unknown>),
     ...(brick.voxelState ? { voxelState: normalizeImportedVoxelState(brick.voxelState) } : {}),
   })),

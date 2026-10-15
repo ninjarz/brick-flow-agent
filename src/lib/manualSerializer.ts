@@ -1,4 +1,4 @@
-import { brickById } from '../data/basicBricks'
+import { brickById, colorHex } from '../data/basicBricks'
 import type { BrickColor, BrickPose, BuildPlan, PlacedBrick } from '../types/bricks'
 import { footprintToWorld } from './brickUnits'
 import {
@@ -464,6 +464,7 @@ const escapeHtml = (value: string | number) =>
     .replaceAll("'", '&#39;')
 
 const manualColorHex: Record<BrickColor, string> = {
+  ...colorHex,
   red: '#ef4444',
   blue: '#2563eb',
   yellow: '#facc15',

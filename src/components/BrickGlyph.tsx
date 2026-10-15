@@ -20,7 +20,7 @@ import {
   WebGLRenderer,
 } from 'three'
 import type { BrickColor, BrickFootprint, BrickKind, VoxelBlockVisual } from '../types/bricks'
-import { brickById, colorHex } from '../data/basicBricks'
+import { brickById, colorHex, colorOpacity } from '../data/basicBricks'
 import { createRound2x2AxleBodyGeometry, createRound2x2AxleGrilleBodyGeometry } from '../lib/csgBrickGeometry'
 import { createLoadedLDrawPartGeometry, loadLDrawPartGeometry } from '../lib/ldrawVisualGeometry'
 import {
@@ -62,8 +62,9 @@ const getCacheKey = (
   brickId?: string,
   bodyColor = previewColor,
   ldrawLoaded = false,
+  opacity = 1,
 ) =>
-  `${brickId ?? kind}:${kind}:${footprint.widthStuds}x${footprint.depthStuds}x${footprint.heightStuds}:${bodyColor}:${ldrawLoaded ? 'ldraw' : 'fallback'}`
+  `${brickId ?? kind}:${kind}:${footprint.widthStuds}x${footprint.depthStuds}x${footprint.heightStuds}:${bodyColor}:${opacity}:${ldrawLoaded ? 'ldraw' : 'fallback'}`
 
 const getRenderer = () => {
   if (!sharedRenderer) {
@@ -537,8 +538,9 @@ const renderGlyph = (
   brickId?: string,
   bodyColor = previewColor,
   ldrawLoaded = false,
+  opacity = 1,
 ) => {
-  const cacheKey = getCacheKey(kind, footprint, brickId, bodyColor, ldrawLoaded)
+  const cacheKey = getCacheKey(kind, footprint, brickId, bodyColor, ldrawLoaded, opacity)
   const cached = imageCache.get(cacheKey)
   if (cached) return cached
 
@@ -574,6 +576,17 @@ const renderGlyph = (
     scene.add(buildPreviewGroup(kind, footprint, brickId, bodyColor))
   }
 
+  if (opacity < 1 && ldrawDefinition?.pack !== 'minecraft') {
+    scene.traverse((object) => {
+      if (!(object instanceof Mesh)) return
+      for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+        material.transparent = true
+        material.opacity *= opacity
+        material.depthWrite = false
+      }
+    })
+  }
+
   const renderer = getRenderer()
   renderer.clear()
   renderer.render(scene, camera)
@@ -585,24 +598,25 @@ const renderGlyph = (
 
 export const BrickGlyph = ({ brickId, kind, footprint, color, className }: BrickGlyphProps) => {
   const bodyColor = color ? colorHex[color] : previewColor
-  const [imageUrl, setImageUrl] = useState(() => imageCache.get(getCacheKey(kind, footprint, brickId, bodyColor)))
+  const bodyOpacity = color ? colorOpacity[color] : 1
+  const [imageUrl, setImageUrl] = useState(() => imageCache.get(getCacheKey(kind, footprint, brickId, bodyColor, false, bodyOpacity)))
 
   useEffect(() => {
     let cancelled = false
-    setImageUrl(renderGlyph(kind, footprint, brickId, bodyColor))
+    setImageUrl(renderGlyph(kind, footprint, brickId, bodyColor, false, bodyOpacity))
     const ldrawDefinition = brickId ? brickById.get(brickId) : undefined
     if (!ldrawDefinition) return () => {
       cancelled = true
     }
 
     loadLDrawPartGeometry(ldrawDefinition.partNumber, ldrawDefinition.footprint).then(() => {
-      if (!cancelled) setImageUrl(renderGlyph(kind, footprint, brickId, bodyColor, true))
+      if (!cancelled) setImageUrl(renderGlyph(kind, footprint, brickId, bodyColor, true, bodyOpacity))
     })
 
     return () => {
       cancelled = true
     }
-  }, [bodyColor, brickId, footprint, kind])
+  }, [bodyColor, bodyOpacity, brickId, footprint, kind])
 
   return (
     <span className={className} aria-hidden="true">

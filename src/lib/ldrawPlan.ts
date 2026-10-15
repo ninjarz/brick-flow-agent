@@ -43,7 +43,17 @@ const colorToLDrawCode: Record<BrickColor, number> = {
   tan: 19,
   lime: 27,
   orange: 25,
-  'trans-pink': 41,
+  'trans-pink': 45,
+  'trans-red': 36,
+  'trans-blue': 33,
+  'trans-yellow': 46,
+  'trans-green': 34,
+  'trans-orange': 57,
+  'trans-cyan': 43,
+  'trans-lime': 35,
+  'trans-brown': 40,
+  'trans-black': 10375,
+  'trans-clear': 47,
 }
 
 const ldrawCodeToColor = new Map<number, BrickColor>(
