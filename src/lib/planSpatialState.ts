@@ -95,7 +95,7 @@ export class PlanSpatialState {
     const definition = brickById.get(brick.brickId)
     if (!definition) return []
 
-    const cacheKey = `${brick.id}:${brick.brickId}:${brick.pose.xStud},${brick.pose.yStud},${brick.pose.zStud},${brick.pose.rotationQuarterTurns},${brick.pose.verticalQuarterTurns ?? 0}`
+    const cacheKey = `${brick.id}:${brick.brickId}:${brick.pose.xStud},${brick.pose.yStud},${brick.pose.zStud},${brick.pose.rotationQuarterTurns},${brick.pose.verticalQuarterTurns ?? 0},${brick.pose.rollQuarterTurns ?? 0}`
     const cached = this.connectorCache.get(cacheKey)
     if (cached) return cached
 

@@ -49,10 +49,10 @@ const isMechanicalConnectorKind = (kind: WorldBrickConnector['kind']) =>
   kind === 'axle' || kind === 'bar' || kind === 'pin'
 
 const getConnectorCacheKey = (brick: PlacedBrick) =>
-  `${brick.id}:${brick.brickId}:${brick.pose.xStud},${brick.pose.yStud},${brick.pose.zStud},${brick.pose.rotationQuarterTurns},${brick.pose.verticalQuarterTurns ?? 0}`
+  `${brick.id}:${brick.brickId}:${brick.pose.xStud},${brick.pose.yStud},${brick.pose.zStud},${brick.pose.rotationQuarterTurns},${brick.pose.verticalQuarterTurns ?? 0},${brick.pose.rollQuarterTurns ?? 0}`
 
 const getBrickPoseGeometryCacheKey = (brick: PlacedBrick) =>
-  `${brick.brickId}:${brick.pose.xStud},${brick.pose.yStud},${brick.pose.zStud},${brick.pose.rotationQuarterTurns},${brick.pose.verticalQuarterTurns ?? 0}`
+  `${brick.brickId}:${brick.pose.xStud},${brick.pose.yStud},${brick.pose.zStud},${brick.pose.rotationQuarterTurns},${brick.pose.verticalQuarterTurns ?? 0},${brick.pose.rollQuarterTurns ?? 0}`
 
 const setLimitedBooleanCache = (cache: Map<string, boolean>, key: string, value: boolean) => {
   if (!cache.has(key) && cache.size >= verticalLoadContactCacheLimit) {
@@ -859,7 +859,7 @@ export const findOpenPose = (
 
   const bounds = getBounds(bricks)
   const definition = brickById.get(brick.brickId)
-  const footprint = definition ? footprintToWorld(definition, brick.pose.rotationQuarterTurns, brick.pose.verticalQuarterTurns ?? 0) : undefined
+  const footprint = definition ? footprintToWorld(definition, brick.pose.rotationQuarterTurns, brick.pose.verticalQuarterTurns ?? 0, brick.pose.rollQuarterTurns ?? 0) : undefined
   const maxX = Math.max(bounds.width + (footprint?.widthStuds ?? 1), 8)
   const maxZ = Math.max(bounds.depth + (footprint?.depthStuds ?? 1), 8)
 
@@ -934,6 +934,7 @@ export const findSupportedOpenPose = (
     brick.pose.zStud,
     brick.pose.rotationQuarterTurns,
     brick.pose.verticalQuarterTurns ?? 0,
+    brick.pose.rollQuarterTurns ?? 0,
     options.allowGroundFallback ? 1 : 0,
     options.preferGroundFallback ? 1 : 0,
   ].join(':')
@@ -950,7 +951,7 @@ export const findSupportedOpenPose = (
   }
   const definition = brickById.get(brick.brickId)
   const bounds = spatialState.bounds
-  const footprint = definition ? footprintToWorld(definition, brick.pose.rotationQuarterTurns, brick.pose.verticalQuarterTurns ?? 0) : undefined
+  const footprint = definition ? footprintToWorld(definition, brick.pose.rotationQuarterTurns, brick.pose.verticalQuarterTurns ?? 0, brick.pose.rollQuarterTurns ?? 0) : undefined
   const context = createPlanValidationContextFromSpatialState(spatialState)
   const tryCandidate = (candidate: PlacedBrick, knownSupport?: PlacedBrick) =>
     isBrickAboveGround(candidate) &&
@@ -969,6 +970,7 @@ export const findSupportedOpenPose = (
       candidate.pose.zStud,
       candidate.pose.rotationQuarterTurns,
       candidate.pose.verticalQuarterTurns ?? 0,
+      candidate.pose.rollQuarterTurns ?? 0,
       knownSupport.id,
     ].join(':')
     if (testedCandidatePoseKeys.has(poseKey)) return false
@@ -1271,12 +1273,14 @@ export const snapBrickToPlan = (
     brick.pose.zStud,
     brick.pose.rotationQuarterTurns,
     brick.pose.verticalQuarterTurns ?? 0,
+    brick.pose.rollQuarterTurns ?? 0,
     options.previousBrick?.brickId ?? '',
     options.previousBrick?.pose.xStud ?? '',
     options.previousBrick?.pose.yStud ?? '',
     options.previousBrick?.pose.zStud ?? '',
     options.previousBrick?.pose.rotationQuarterTurns ?? '',
     options.previousBrick?.pose.verticalQuarterTurns ?? '',
+    options.previousBrick?.pose.rollQuarterTurns ?? '',
   ].join(':')
   const cachedSnapPose = spatialState.snapResults.get(snapCacheKey)
   if (cachedSnapPose) {
@@ -1324,6 +1328,7 @@ export const snapBrickToPlan = (
         zStud: normalizeHorizontalStud(brick.pose.zStud + (target.pose.zStud - source.pose.zStud)),
         rotationQuarterTurns: brick.pose.rotationQuarterTurns,
         verticalQuarterTurns: brick.pose.verticalQuarterTurns ?? 0,
+        ...(brick.pose.rollQuarterTurns ? { rollQuarterTurns: brick.pose.rollQuarterTurns } : {}),
       }
 
       if (!best || distance < best.score) {
@@ -1376,6 +1381,7 @@ export const duplicateBrick = (brick: PlacedBrick): PlacedBrick => ({
             brickById.get(brick.brickId)!,
             brick.pose.rotationQuarterTurns,
             brick.pose.verticalQuarterTurns ?? 0,
+            brick.pose.rollQuarterTurns ?? 0,
           ).height
         : 1.2
     ),
@@ -1395,6 +1401,7 @@ const cloneBrickWithUniqueId = (brick: PlacedBrick, usedIds: Set<string>): Place
       zStud: normalizeHorizontalStud(brick.pose.zStud),
       rotationQuarterTurns: normalizeQuarterTurns(brick.pose.rotationQuarterTurns),
       verticalQuarterTurns: normalizeVerticalQuarterTurns(brick.pose.verticalQuarterTurns ?? 0),
+      ...(brick.pose.rollQuarterTurns ? { rollQuarterTurns: normalizeQuarterTurns(brick.pose.rollQuarterTurns) } : {}),
     },
   }
 }
@@ -1583,7 +1590,8 @@ export const validateBuildPlanBasics = (plan: BuildPlan): BuildPlanIssue[] => {
       brick.pose.yStud < 0 ||
       (definition ? !isBrickAboveGround(brick) : false) ||
       ![0, 1, 2, 3].includes(brick.pose.rotationQuarterTurns) ||
-      ![0, 1, 2, 3].includes(brick.pose.verticalQuarterTurns ?? 0)
+      ![0, 1, 2, 3].includes(brick.pose.verticalQuarterTurns ?? 0) ||
+      ![0, 1, 2, 3].includes(brick.pose.rollQuarterTurns ?? 0)
     if (hasInvalidPose) {
       issues.push({ type: 'invalid-pose', brickId: brick.id })
     }

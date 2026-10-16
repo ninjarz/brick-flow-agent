@@ -1,6 +1,6 @@
 import { brickById, colorHex } from '../data/basicBricks'
 import type { BrickColor, BrickPose, BuildPlan, PlacedBrick } from '../types/bricks'
-import { footprintToWorld } from './brickUnits'
+import { footprintToWorld, transformBrickLocalPoint } from './brickUnits'
 import {
   createSingleBrickSteps,
   getBlockingBuildPlanIssues,
@@ -23,6 +23,7 @@ const manualText: Record<ManualLocale, {
   addedParts: string
   horizontal: string
   vertical: string
+  roll: string
   newPieceCaption: string
   placementDirection: Record<ManualPlacementDirection, string>
   sourceTemplateLocal: string
@@ -48,6 +49,7 @@ const manualText: Record<ManualLocale, {
     addedParts: '新增零件',
     horizontal: '水平',
     vertical: '垂直',
+    roll: '轴向',
     newPieceCaption: '橙色描边为本步新增零件；箭头表示安装方向',
     placementDirection: {
       down: '从上向下安装',
@@ -80,6 +82,7 @@ const manualText: Record<ManualLocale, {
     addedParts: 'Added parts',
     horizontal: 'Horizontal',
     vertical: 'Vertical',
+    roll: 'Roll',
     newPieceCaption: 'Orange outlines mark new parts; arrows show installation direction',
     placementDirection: {
       down: 'Install downward from above',
@@ -126,6 +129,7 @@ export type ManualPiece = {
   }
   rotationDegrees: number
   verticalRotationDegrees: number
+  rollRotationDegrees: number
   assembly: ManualAssemblyGuide
 }
 
@@ -201,16 +205,15 @@ const getAssemblyGuide = (
   brick: BuildPlan['bricks'][number],
   locale: ManualLocale,
 ): ManualAssemblyGuide => {
-  const vertical = brick.pose.verticalQuarterTurns ?? 0
+  const definition = brickById.get(brick.brickId)
   let direction: ManualPlacementDirection = 'down'
-
-  if (vertical === 2) {
-    direction = 'up'
-  } else if (vertical === 1 || vertical === 3) {
-    const horizontalDirections: ManualPlacementDirection[] = vertical === 1
-      ? ['back', 'right', 'front', 'left']
-      : ['front', 'left', 'back', 'right']
-    direction = horizontalDirections[brick.pose.rotationQuarterTurns]
+  if (definition) {
+    const origin = transformBrickLocalPoint(definition, brick.pose, { x: 0, y: 0, z: 0 })
+    const top = transformBrickLocalPoint(definition, brick.pose, { x: 0, y: 1, z: 0 })
+    const normal = { x: top.x - origin.x, y: top.y - origin.y, z: top.z - origin.z }
+    direction = normal.y > 0.5 ? 'down' : normal.y < -0.5 ? 'up'
+      : normal.x > 0.5 ? 'right' : normal.x < -0.5 ? 'left'
+      : normal.z > 0.5 ? 'front' : 'back'
   }
 
   const offsetByDirection: Record<ManualPlacementDirection, ManualAssemblyGuide['explodedOffset']> = {
@@ -232,7 +235,7 @@ const getAssemblyGuide = (
 const toManualPiece = (brick: BuildPlan['bricks'][number], locale: ManualLocale): ManualPiece => {
   const definition = brickById.get(brick.brickId)
   const footprint = definition
-    ? footprintToWorld(definition, brick.pose.rotationQuarterTurns, brick.pose.verticalQuarterTurns ?? 0)
+    ? footprintToWorld(definition, brick.pose.rotationQuarterTurns, brick.pose.verticalQuarterTurns ?? 0, brick.pose.rollQuarterTurns ?? 0)
     : undefined
 
   return {
@@ -249,6 +252,7 @@ const toManualPiece = (brick: BuildPlan['bricks'][number], locale: ManualLocale)
     },
     rotationDegrees: brick.pose.rotationQuarterTurns * 90,
     verticalRotationDegrees: (brick.pose.verticalQuarterTurns ?? 0) * 90,
+    rollRotationDegrees: (brick.pose.rollQuarterTurns ?? 0) * 90,
     assembly: getAssemblyGuide(brick, locale),
   }
 }
@@ -450,7 +454,7 @@ export const formatBuildManualMarkdown = (manual: BuildManual, locale: ManualLoc
     lines.push(`### ${labels.addedParts}`)
     for (const piece of step.addPieces) {
       lines.push(
-        `- ${piece.name} (${piece.brickId}) · ${piece.color} · x${piece.pose.xStud} y${piece.pose.yStud} z${piece.pose.zStud} · ${labels.horizontal} ${piece.rotationDegrees}° · ${labels.vertical} ${piece.verticalRotationDegrees}° · ${piece.assembly.label}`,
+        `- ${piece.name} (${piece.brickId}) · ${piece.color} · x${piece.pose.xStud} y${piece.pose.yStud} z${piece.pose.zStud} · ${labels.horizontal} ${piece.rotationDegrees}° · ${labels.vertical} ${piece.verticalRotationDegrees}°${piece.rollRotationDegrees ? ` · ${labels.roll} ${piece.rollRotationDegrees}°` : ''} · ${piece.assembly.label}`,
       )
     }
     lines.push('')
@@ -624,7 +628,7 @@ export const formatBuildManualHtml = (manual: BuildManual, locale: ManualLocale 
       <p class="count">${escapeHtml(labels.stepCount(step.addPieces.length, step.completedPieceCount))}</p>
       ${renderStepDiagram(step, cumulativePieces, locale)}
       <ul>
-        ${step.addPieces.map((piece) => `<li><strong>${escapeHtml(piece.name)}</strong><br /><small>${escapeHtml(piece.brickId)} · ${escapeHtml(piece.color)} · x${piece.pose.xStud} y${piece.pose.yStud} z${piece.pose.zStud} · ${escapeHtml(labels.horizontal)} ${piece.rotationDegrees}° · ${escapeHtml(labels.vertical)} ${piece.verticalRotationDegrees}° · ${escapeHtml(piece.assembly.label)}</small></li>`).join('\n        ')}
+        ${step.addPieces.map((piece) => `<li><strong>${escapeHtml(piece.name)}</strong><br /><small>${escapeHtml(piece.brickId)} · ${escapeHtml(piece.color)} · x${piece.pose.xStud} y${piece.pose.yStud} z${piece.pose.zStud} · ${escapeHtml(labels.horizontal)} ${piece.rotationDegrees}° · ${escapeHtml(labels.vertical)} ${piece.verticalRotationDegrees}°${piece.rollRotationDegrees ? ` · ${escapeHtml(labels.roll)} ${piece.rollRotationDegrees}°` : ''} · ${escapeHtml(piece.assembly.label)}</small></li>`).join('\n        ')}
       </ul>
     </section>`
   }).join('\n    ')

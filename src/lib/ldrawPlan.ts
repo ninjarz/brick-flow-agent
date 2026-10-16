@@ -41,6 +41,7 @@ const colorToLDrawCode: Record<BrickColor, number> = {
   gray: 7,
   'light-gray': 71,
   'dark-gray': 72,
+  'dark-green': 288,
   pink: 13,
   yellow: 14,
   white: 15,
@@ -96,17 +97,21 @@ const appMatrixToLDraw = (matrix: Matrix3): Matrix3 => {
   return multiplyMatrices(multiplyMatrices(flipY, matrix), flipY)
 }
 
-const getLDrawMatrix = (horizontal: number, vertical: number) => appMatrixToLDraw(
-  multiplyMatrices(horizontalMatrices[horizontal % 4], verticalMatrices[vertical % 4]),
+const rollMatrices: Matrix3[] = [identity, [0, -1, 0, 1, 0, 0, 0, 0, 1], [-1, 0, 0, 0, -1, 0, 0, 0, 1], [0, 1, 0, -1, 0, 0, 0, 0, 1]]
+const getLDrawMatrix = (horizontal: number, vertical: number, roll = 0) => appMatrixToLDraw(
+  multiplyMatrices(multiplyMatrices(horizontalMatrices[horizontal % 4], verticalMatrices[vertical % 4]), rollMatrices[roll % 4]),
 )
 
-const poseByMatrix = Array.from({ length: 4 }, (_, horizontal) =>
-  Array.from({ length: 4 }, (_, vertical) => ({
-    horizontal: horizontal as BrickRotationQuarterTurns,
-    vertical: vertical as BrickVerticalQuarterTurns,
-    matrix: getLDrawMatrix(horizontal, vertical),
-  })),
-).flat()
+const poseByMatrix = Array.from({ length: 4 }, (_, roll) =>
+  Array.from({ length: 4 }, (_, horizontal) =>
+    Array.from({ length: 4 }, (_, vertical) => ({
+      horizontal: horizontal as BrickRotationQuarterTurns,
+      vertical: vertical as BrickVerticalQuarterTurns,
+      roll: roll as BrickRotationQuarterTurns,
+      matrix: getLDrawMatrix(horizontal, vertical, roll),
+    })),
+  ),
+).flat(2)
 
 const matrixDistance = (source: Matrix3, target: Matrix3) => source.reduce(
   (total, value, index) => total + Math.abs(value - target[index]),
@@ -174,11 +179,11 @@ export const formatLDrawPlan = (plan: BuildPlan) => {
     const definition = brickDefinitions.find((candidate) => candidate.id === brick.brickId)
     if (!definition || definition.pack !== 'lego') continue
     const vertical = brick.pose.verticalQuarterTurns ?? 0
-    const footprint = footprintToWorld(definition, brick.pose.rotationQuarterTurns, vertical)
+    const footprint = footprintToWorld(definition, brick.pose.rotationQuarterTurns, vertical, brick.pose.rollQuarterTurns ?? 0)
     const centerX = brick.pose.xStud + footprint.widthStuds / 2
     const centerZ = brick.pose.zStud + footprint.depthStuds / 2
     const topY = brick.pose.yStud + footprint.heightStuds
-    const matrix = getLDrawMatrix(brick.pose.rotationQuarterTurns, vertical)
+    const matrix = getLDrawMatrix(brick.pose.rotationQuarterTurns, vertical, brick.pose.rollQuarterTurns ?? 0)
     lines.push([
       1,
       colorToLDrawCode[brick.color],
@@ -332,7 +337,7 @@ export const parseLDrawPlan = (text: string, fallbackTitle = 'Imported LDraw'): 
       unsupportedPoseCount += 1
       continue
     }
-    const footprint = footprintToWorld(definition, poseMatch.horizontal, poseMatch.vertical)
+    const footprint = footprintToWorld(definition, poseMatch.horizontal, poseMatch.vertical, poseMatch.roll)
     if (!ldrawCodeToColor.has(colorCode) && colorCode !== 16) unsupportedColorCodes.add(colorCode)
     const color = ldrawCodeToColor.get(colorCode) ?? definition.colors[0]
     const safeColor = definition.colors.includes(color) ? color : definition.colors[0]
@@ -346,6 +351,7 @@ export const parseLDrawPlan = (text: string, fallbackTitle = 'Imported LDraw'): 
         zStud: normalizeHorizontalStud(zLDraw / ldrawUnitsPerStud - footprint.depthStuds / 2),
         rotationQuarterTurns: poseMatch.horizontal,
         verticalQuarterTurns: poseMatch.vertical,
+        ...(poseMatch.roll ? { rollQuarterTurns: poseMatch.roll } : {}),
       },
     })
   }

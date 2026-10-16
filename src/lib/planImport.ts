@@ -22,7 +22,8 @@ export const isValidImportedPose = (value: unknown): value is Record<string, unk
       : typeof value.yPlate === 'number' && isWorldCoordinate(plateHeightToWorldStud(value.yPlate))) &&
     isWorldCoordinate(value.zStud) &&
     [0, 1, 2, 3].includes(Number(value.rotationQuarterTurns)) &&
-    (value.verticalQuarterTurns === undefined || [0, 1, 2, 3].includes(Number(value.verticalQuarterTurns)))
+    (value.verticalQuarterTurns === undefined || [0, 1, 2, 3].includes(Number(value.verticalQuarterTurns))) &&
+    (value.rollQuarterTurns === undefined || [0, 1, 2, 3].includes(Number(value.rollQuarterTurns)))
   )
 }
 
@@ -34,6 +35,7 @@ export const normalizeImportedPose = (pose: Record<string, unknown>): PlacedBric
   zStud: normalizeHorizontalStud(Number(pose.zStud)),
   rotationQuarterTurns: normalizeQuarterTurns(Number(pose.rotationQuarterTurns)),
   verticalQuarterTurns: normalizeVerticalQuarterTurns(Number(pose.verticalQuarterTurns ?? 0)),
+  ...(pose.rollQuarterTurns ? { rollQuarterTurns: normalizeQuarterTurns(Number(pose.rollQuarterTurns)) } : {}),
 })
 
 export const normalizeImportedVoxelState = (value: unknown): VoxelBlockState | undefined => {

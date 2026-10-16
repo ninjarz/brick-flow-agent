@@ -139,12 +139,13 @@ for (const profile of partProfiles) {
   await readLDrawFile(`parts/${profile.partNumber}.dat`)
 }
 
-const parseFile = async (relativePath, transform = identityTransform, stack = [], inverted = false) => {
+const parseFile = async (relativePath, transform = identityTransform, stack = [], inverted = false, inheritedColor = 16) => {
   const normalizedPath = normalizeReference(relativePath)
-  if (stack.includes(normalizedPath)) return { triangles: [], connectorReferences: [] }
+  if (stack.includes(normalizedPath)) return { triangles: [], triangleColors: [], connectorReferences: [] }
 
   const source = await readLDrawFile(normalizedPath)
   const triangles = []
+  const triangleColors = []
   const connectorReferences = []
   const certifiedCw = source.split(/\r?\n/).some((line) => /^0\s+BFC\s+CERTIFY\s+CW\b/i.test(line.trim()))
   let invertNext = false
@@ -161,6 +162,7 @@ const parseFile = async (relativePath, transform = identityTransform, stack = []
 
     const tokens = trimmed.split(/\s+/)
     const type = tokens[0]
+    const color = tokens[1] === '16' ? inheritedColor : Number(tokens[1])
 
     if (type === '1' && tokens.length >= 15) {
       const values = tokens.slice(2, 14).map(Number)
@@ -187,8 +189,9 @@ const parseFile = async (relativePath, transform = identityTransform, stack = []
       const child = await parseFile(resolvedReference, childGlobalTransform, [
         ...stack,
         normalizedPath,
-      ], childInverted)
+      ], childInverted, color)
       triangles.push(...child.triangles)
+      triangleColors.push(...child.triangleColors)
       connectorReferences.push(...child.connectorReferences)
       invertNext = false
     }
@@ -202,6 +205,7 @@ const parseFile = async (relativePath, transform = identityTransform, stack = []
         transformPoint(values.slice(6, 9), transform),
       ]
       triangles.push(fileInverted ? [triangle[0], triangle[2], triangle[1]] : triangle)
+      triangleColors.push(color)
     }
 
     if (type === '4' && tokens.length >= 14) {
@@ -213,6 +217,7 @@ const parseFile = async (relativePath, transform = identityTransform, stack = []
         transformPoint(values.slice(6, 9), transform),
         transformPoint(values.slice(9, 12), transform),
       ]
+      triangleColors.push(color, color)
       triangles.push(
         fileInverted ? [points[0], points[2], points[1]] : [points[0], points[1], points[2]],
         fileInverted ? [points[0], points[3], points[2]] : [points[0], points[2], points[3]],
@@ -220,7 +225,7 @@ const parseFile = async (relativePath, transform = identityTransform, stack = []
     }
   }
 
-  return { triangles, connectorReferences }
+  return { triangles, triangleColors, connectorReferences }
 }
 
 const getBounds = (triangles) => {
@@ -481,7 +486,18 @@ const makeGeneratedConnectors = (profile, frame, horizontalAxisMapping, connecto
     const directionVector = ldrawVectorToLocal(getConnectorOutwardVector(connectorReference), horizontalAxisMapping)
     const { axis, direction } = dominantAxisDirection(directionVector)
 
-    for (const socketCenter of expandSocketCenters(connectorReference, center, axis, profile)) {
+    // The central open tube also accepts a stud (the four clock plates in 21013).
+    const centers = expandSocketCenters(connectorReference, center, axis, profile)
+    if (profile.partNumber === '3022' && /^stud4\.dat$/.test(connectorReference.source)) centers.push(center)
+    // A 1x2 plate's underside pin fits the hollow stud of a Travis brick.
+    // Keep the mechanical pin and bore separate from the surrounding stud sockets.
+    const pin = profile.partNumber === '3023' && /^stud3\.dat$/.test(connectorReference.source)
+    const bore = profile.partNumber === '4733' && /^stud2a\.dat$/.test(connectorReference.source)
+    if (pin || bore) {
+      connectors.push({ idSuffix: `bar-${connectors.length}`, kind: 'bar', gender: pin ? 'male' : 'female', axis, direction,
+        pose: { xStud: center.x, yStud: center.y, zStud: center.z } })
+    }
+    for (const socketCenter of centers) {
       const connector = {
         source: connectorReference.source,
         point: connectorReference.point,
@@ -517,15 +533,34 @@ const mapTriangleToLocal = (triangle, frame, horizontalAxisMapping) => {
 const generatedVisualProfiles = []
 const generatedConnectorProfiles = []
 const auditRows = []
+const printedParts = {}
+const printColorHex = new Map((await readFile(join(publicLDrawDir, 'LDConfig.ldr'), 'utf8')).split(/\r?\n/).flatMap((line) => {
+  const match = line.match(/!COLOUR.*?\sCODE\s+(\d+)\s+VALUE\s+(#[0-9A-Fa-f]{6})/)
+  return match ? [[Number(match[1]), match[2]]] : []
+}))
 
 for (const profile of partProfiles) {
-  const { triangles, connectorReferences } = await parseFile(`parts/${profile.partNumber}.dat`)
+  const { triangles, triangleColors, connectorReferences } = await parseFile(`parts/${profile.partNumber}.dat`)
   if (triangles.length === 0) continue
 
   const frame = getBounds(triangles)
   const horizontalAxisMapping = getHorizontalAxisMapping(frame, profile)
   const alignedFrame = getAlignedFrame(frame, profile, horizontalAxisMapping, connectorReferences)
   const visualTriangles = triangles.map((triangle) => mapTriangleToLocal(triangle, alignedFrame, horizontalAxisMapping))
+  if (/p[0-9a-z]+$/.test(profile.partNumber)) {
+    const layers = new Map()
+    visualTriangles.forEach((triangle, index) => {
+      const color = triangleColors[index]
+      if (color === 16) return
+      if (!layers.has(color)) layers.set(color, [])
+      layers.get(color).push(...triangle.flatMap((point) => [point.x, point.y, point.z]))
+    })
+    printedParts[profile.partNumber] = [...layers].map(([color, positions]) => {
+      const hex = printColorHex.get(color)
+      if (!hex) throw new Error(`Missing printed colour ${color} in ${profile.partNumber}`)
+      return { color, hex, positions }
+    })
+  }
   const connectors = makeGeneratedConnectors(profile, alignedFrame, horizontalAxisMapping, connectorReferences)
 
   generatedVisualProfiles.push({
@@ -706,3 +741,5 @@ console.log(JSON.stringify({
     frame: Object.fromEntries(Object.entries(row.frame).map(([key, value]) => [key, round(value)])),
   })),
 }, null, 2))
+
+await writeFile(join(workspace, 'src/data/ldrawPrintedParts.json'), JSON.stringify(printedParts) + '\n')

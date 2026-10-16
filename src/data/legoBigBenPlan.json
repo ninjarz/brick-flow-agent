@@ -1,0 +1,4728 @@
+{
+  "id": "lego-21013-big-ben",
+  "title": "LEGO 21013 大本钟",
+  "prompt": "LEGO Architecture 21013 大本钟官方套装复刻",
+  "source": "template-local",
+  "bricks": [
+    {
+      "id": "big-ben-1",
+      "brickId": "plate-6x10",
+      "color": "black",
+      "pose": {
+        "xStud": 6,
+        "yStud": 0,
+        "zStud": 0,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-2",
+      "brickId": "tile-1x2",
+      "color": "black",
+      "pose": {
+        "xStud": 10,
+        "yStud": 0.4,
+        "zStud": 9,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-3",
+      "brickId": "tile-1x2",
+      "color": "black",
+      "pose": {
+        "xStud": 10,
+        "yStud": 0.4,
+        "zStud": 0,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-4",
+      "brickId": "tile-1x8",
+      "color": "black",
+      "pose": {
+        "xStud": 11,
+        "yStud": 0.4,
+        "zStud": 1,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-5",
+      "brickId": "plate-6x10",
+      "color": "black",
+      "pose": {
+        "xStud": 0,
+        "yStud": 0,
+        "zStud": 0,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-6",
+      "brickId": "tile-1x8",
+      "color": "black",
+      "pose": {
+        "xStud": 2,
+        "yStud": 0.4,
+        "zStud": 9,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-7",
+      "brickId": "tile-big-ben-nameplate",
+      "color": "black",
+      "pose": {
+        "xStud": 2,
+        "yStud": 0.4,
+        "zStud": 0,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-8",
+      "brickId": "tile-1x2",
+      "color": "black",
+      "pose": {
+        "xStud": 0,
+        "yStud": 0.4,
+        "zStud": 9,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-9",
+      "brickId": "tile-1x2",
+      "color": "black",
+      "pose": {
+        "xStud": 0,
+        "yStud": 0.4,
+        "zStud": 0,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-10",
+      "brickId": "tile-1x8",
+      "color": "black",
+      "pose": {
+        "xStud": 0,
+        "yStud": 0.4,
+        "zStud": 1,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-11",
+      "brickId": "tile-1x8",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 2,
+        "yStud": 0.4,
+        "zStud": 1,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-12",
+      "brickId": "tile-1x8",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 10,
+        "yStud": 0.4,
+        "zStud": 1,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-13",
+      "brickId": "tile-1x8",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 1,
+        "yStud": 0.4,
+        "zStud": 1,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-14",
+      "brickId": "plate-jumper-1x2-3794",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 8,
+        "yStud": 0.4,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-15",
+      "brickId": "plate-jumper-1x2-3794",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 8,
+        "yStud": 0.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-16",
+      "brickId": "plate-jumper-1x2-3794",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 8,
+        "yStud": 0.4,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-17",
+      "brickId": "plate-jumper-1x2-3794",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 8,
+        "yStud": 0.4,
+        "zStud": 5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-18",
+      "brickId": "plate-jumper-1x2-3794",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 8,
+        "yStud": 0.4,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-19",
+      "brickId": "plate-jumper-1x2-3794",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 8,
+        "yStud": 0.4,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-20",
+      "brickId": "plate-jumper-1x2-3794",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 8,
+        "yStud": 0.4,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-21",
+      "brickId": "plate-jumper-1x2-3794",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 6,
+        "yStud": 0.4,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-22",
+      "brickId": "plate-jumper-1x2-3794",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 6,
+        "yStud": 0.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-23",
+      "brickId": "plate-jumper-1x2-3794",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 6,
+        "yStud": 0.4,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-24",
+      "brickId": "plate-jumper-1x2-3794",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 4,
+        "yStud": 0.4,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-25",
+      "brickId": "plate-jumper-1x2-3794",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 4,
+        "yStud": 0.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-26",
+      "brickId": "plate-jumper-1x2-3794",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 4,
+        "yStud": 0.4,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-27",
+      "brickId": "plate-jumper-1x2-3794",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 2,
+        "yStud": 0.4,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-28",
+      "brickId": "plate-jumper-1x2-3794",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 2,
+        "yStud": 0.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-29",
+      "brickId": "plate-jumper-1x2-3794",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 2,
+        "yStud": 0.4,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-30",
+      "brickId": "plate-2x3",
+      "color": "dark-green",
+      "pose": {
+        "xStud": 4,
+        "yStud": 0.4,
+        "zStud": 2,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-31",
+      "brickId": "plate-2x3",
+      "color": "dark-green",
+      "pose": {
+        "xStud": 2,
+        "yStud": 0.4,
+        "zStud": 2,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-32",
+      "brickId": "tile-1x4",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 7,
+        "yStud": 0.4,
+        "zStud": 2,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-33",
+      "brickId": "tile-1x4",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 6,
+        "yStud": 0.4,
+        "zStud": 2,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-34",
+      "brickId": "tile-1x4",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 2,
+        "yStud": 0.4,
+        "zStud": 5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-35",
+      "brickId": "plate-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 0.8,
+        "zStud": 6,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-36",
+      "brickId": "plate-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 0.8,
+        "zStud": 6,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-37",
+      "brickId": "plate-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 0.8,
+        "zStud": 6,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-38",
+      "brickId": "plate-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 3.5,
+        "yStud": 0.8,
+        "zStud": 6,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-39",
+      "brickId": "plate-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 0.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-40",
+      "brickId": "plate-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 0.8,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-41",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 1.2,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-42",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 1.2,
+        "zStud": 5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-43",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 1.2,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-44",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 1.2,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-45",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 3.5,
+        "yStud": 1.2,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-46",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 1.2,
+        "zStud": 5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-47",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 1.2,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-48",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 1.2,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-49",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 3.5,
+        "yStud": 1.2,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-50",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 1.2,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-51",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 1.2,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-52",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 1.2,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-53",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 1.2,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-54",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 1.2,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-55",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 1.2,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-56",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 4.5,
+        "yStud": 1.2,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-57",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 1.2,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-58",
+      "brickId": "brick-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 1.2,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-59",
+      "brickId": "brick-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 1.2,
+        "zStud": 7,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-60",
+      "brickId": "brick-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 1.2,
+        "zStud": 5,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-61",
+      "brickId": "brick-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 1.2,
+        "zStud": 3,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-62",
+      "brickId": "brick-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 4.5,
+        "yStud": 1.2,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-63",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 1.2,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-64",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 1.2,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-65",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 1.2,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-66",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 4.5,
+        "yStud": 1.2,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-67",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 1.2,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-68",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 2.4,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-69",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 2.4,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-70",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 2.4,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-71",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 2.4,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-72",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 2.4,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-73",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 2.4,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-74",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 4.5,
+        "yStud": 2.4,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-75",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 2.4,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-76",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 2.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-77",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 4.5,
+        "yStud": 2.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-78",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 2.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-79",
+      "brickId": "brick-side-studs-1x1",
+      "color": "white",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 2.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-80",
+      "brickId": "brick-side-studs-opposite-1x1",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 2.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-81",
+      "brickId": "brick-side-studs-opposite-1x1",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 3.5,
+        "yStud": 2.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-82",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 2.4,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-83",
+      "brickId": "brick-side-studs-opposite-1x1",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 2.4,
+        "zStud": 5,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-84",
+      "brickId": "brick-side-studs-four-1x1",
+      "color": "black",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 2.4,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-85",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 2.4,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-86",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 2.4,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-87",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 2.4,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-88",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 4.5,
+        "yStud": 2.4,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-89",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 2.4,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-90",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 1.6,
+        "zStud": 2.6,
+        "rotationQuarterTurns": 1,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-91",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 1.6,
+        "zStud": 2.2,
+        "rotationQuarterTurns": 1,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-92",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 1.6,
+        "zStud": 6.6,
+        "rotationQuarterTurns": 1,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-93",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 1.6,
+        "zStud": 6.2,
+        "rotationQuarterTurns": 1,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-94",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 3.5,
+        "yStud": 1.6,
+        "zStud": 6.6,
+        "rotationQuarterTurns": 1,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-95",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 3.5,
+        "yStud": 1.6,
+        "zStud": 6.2,
+        "rotationQuarterTurns": 1,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-96",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 1.6,
+        "zStud": 7,
+        "rotationQuarterTurns": 2,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-97",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.9,
+        "yStud": 1.6,
+        "zStud": 7,
+        "rotationQuarterTurns": 2,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-98",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 1.6,
+        "zStud": 5,
+        "rotationQuarterTurns": 2,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-99",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.9,
+        "yStud": 1.6,
+        "zStud": 5,
+        "rotationQuarterTurns": 2,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-100",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 1.6,
+        "zStud": 3,
+        "rotationQuarterTurns": 2,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-101",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.9,
+        "yStud": 1.6,
+        "zStud": 3,
+        "rotationQuarterTurns": 2,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-102",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.1,
+        "yStud": 1.6,
+        "zStud": 5,
+        "rotationQuarterTurns": 0,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-103",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.7,
+        "yStud": 1.6,
+        "zStud": 5,
+        "rotationQuarterTurns": 0,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-104",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.1,
+        "yStud": 1.6,
+        "zStud": 3,
+        "rotationQuarterTurns": 0,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-105",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.7,
+        "yStud": 1.6,
+        "zStud": 3,
+        "rotationQuarterTurns": 0,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-106",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 1.6,
+        "zStud": 8,
+        "rotationQuarterTurns": 3,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-107",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 1.6,
+        "zStud": 8.4,
+        "rotationQuarterTurns": 3,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-108",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 3.5,
+        "yStud": 1.6,
+        "zStud": 8,
+        "rotationQuarterTurns": 3,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-109",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 3.5,
+        "yStud": 1.6,
+        "zStud": 8.4,
+        "rotationQuarterTurns": 3,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-110",
+      "brickId": "plate-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 3.6,
+        "zStud": 6,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-111",
+      "brickId": "plate-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 3.6,
+        "zStud": 6,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-112",
+      "brickId": "plate-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 3.6,
+        "zStud": 6,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-113",
+      "brickId": "plate-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 3.5,
+        "yStud": 3.6,
+        "zStud": 6,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-114",
+      "brickId": "plate-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 3.6,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-115",
+      "brickId": "plate-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 3.6,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-116",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 4,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-117",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 4,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-118",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 4,
+        "zStud": 5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-119",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 4,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-120",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 4,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-121",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 4,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-122",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 3.5,
+        "yStud": 4,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-123",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 4,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-124",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 4,
+        "zStud": 5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-125",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 4,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-126",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 4,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-127",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 3.5,
+        "yStud": 4,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-128",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 4,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-129",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 4,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-130",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 4,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-131",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 4.5,
+        "yStud": 4,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-132",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 4,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-133",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 4,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-134",
+      "brickId": "brick-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 3.5,
+        "yStud": 4,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-135",
+      "brickId": "brick-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 4,
+        "zStud": 5,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-136",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 4,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-137",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 4,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-138",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 4.5,
+        "yStud": 4,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-139",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 4,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-140",
+      "brickId": "brick-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 4,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-141",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 4,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-142",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 4,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-143",
+      "brickId": "brick-side-studs-four-1x1",
+      "color": "black",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 5.2,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-144",
+      "brickId": "tile-1x2",
+      "color": "dark-gray",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 5.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 2,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-145",
+      "brickId": "brick-side-studs-four-1x1",
+      "color": "black",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 5.2,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-146",
+      "brickId": "brick-side-studs-four-1x1",
+      "color": "black",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 5.2,
+        "zStud": 5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-147",
+      "brickId": "brick-side-studs-four-1x1",
+      "color": "black",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 5.2,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-148",
+      "brickId": "brick-side-studs-four-1x1",
+      "color": "black",
+      "pose": {
+        "xStud": 3.5,
+        "yStud": 5.2,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-149",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 3.1,
+        "yStud": 4.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 0,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-150",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.7,
+        "yStud": 4.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 0,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-151",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 4.4,
+        "zStud": 8,
+        "rotationQuarterTurns": 3,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-152",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 4.4,
+        "zStud": 8.4,
+        "rotationQuarterTurns": 3,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-153",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 4.4,
+        "zStud": 2.6,
+        "rotationQuarterTurns": 1,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-154",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 4.4,
+        "zStud": 2.2,
+        "rotationQuarterTurns": 1,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-155",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 4.4,
+        "zStud": 6.6,
+        "rotationQuarterTurns": 1,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-156",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 4.4,
+        "zStud": 6.2,
+        "rotationQuarterTurns": 1,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-157",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 3.5,
+        "yStud": 4.4,
+        "zStud": 6.6,
+        "rotationQuarterTurns": 1,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-158",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 3.5,
+        "yStud": 4.4,
+        "zStud": 6.2,
+        "rotationQuarterTurns": 1,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-159",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 4.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 2,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-160",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.9,
+        "yStud": 4.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 2,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-161",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 4.4,
+        "zStud": 5,
+        "rotationQuarterTurns": 2,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-162",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.9,
+        "yStud": 4.4,
+        "zStud": 5,
+        "rotationQuarterTurns": 2,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-163",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 4.4,
+        "zStud": 3,
+        "rotationQuarterTurns": 2,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-164",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.9,
+        "yStud": 4.4,
+        "zStud": 3,
+        "rotationQuarterTurns": 2,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-165",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.1,
+        "yStud": 4.4,
+        "zStud": 5,
+        "rotationQuarterTurns": 0,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-166",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.7,
+        "yStud": 4.4,
+        "zStud": 5,
+        "rotationQuarterTurns": 0,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-167",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.1,
+        "yStud": 4.4,
+        "zStud": 3,
+        "rotationQuarterTurns": 0,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-168",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.7,
+        "yStud": 4.4,
+        "zStud": 3,
+        "rotationQuarterTurns": 0,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-169",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 4.4,
+        "zStud": 8,
+        "rotationQuarterTurns": 3,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-170",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 4.4,
+        "zStud": 8.4,
+        "rotationQuarterTurns": 3,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-171",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 3.5,
+        "yStud": 4.4,
+        "zStud": 8,
+        "rotationQuarterTurns": 3,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-172",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 3.5,
+        "yStud": 4.4,
+        "zStud": 8.4,
+        "rotationQuarterTurns": 3,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-173",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 5.2,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-174",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 5.2,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-175",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 5.2,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-176",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 5.2,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-177",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 5.2,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-178",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 5.2,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-179",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 4.5,
+        "yStud": 5.2,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-180",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 5.2,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-181",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 5.2,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-182",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 5.2,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-183",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 4.5,
+        "yStud": 5.2,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-184",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 5.2,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-185",
+      "brickId": "plate-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 6.4,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-186",
+      "brickId": "cone-1x1-stop",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 6.8,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-187",
+      "brickId": "plate-1x1",
+      "color": "dark-gray",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 6.8,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-188",
+      "brickId": "round-1x1-plate",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 6.8,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-189",
+      "brickId": "tile-1x1",
+      "color": "dark-gray",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 7.2,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-190",
+      "brickId": "plate-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 4.5,
+        "yStud": 6.4,
+        "zStud": 6,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-191",
+      "brickId": "cone-1x1-stop",
+      "color": "tan",
+      "pose": {
+        "xStud": 4.5,
+        "yStud": 6.8,
+        "zStud": 6,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-192",
+      "brickId": "plate-1x1",
+      "color": "dark-gray",
+      "pose": {
+        "xStud": 4.5,
+        "yStud": 6.8,
+        "zStud": 7,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-193",
+      "brickId": "round-1x1-plate",
+      "color": "tan",
+      "pose": {
+        "xStud": 4.5,
+        "yStud": 6.8,
+        "zStud": 8,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-194",
+      "brickId": "tile-1x1",
+      "color": "dark-gray",
+      "pose": {
+        "xStud": 4.5,
+        "yStud": 7.2,
+        "zStud": 7,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-195",
+      "brickId": "plate-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 6.4,
+        "zStud": 6,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-196",
+      "brickId": "cone-1x1-stop",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 6.8,
+        "zStud": 6,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-197",
+      "brickId": "plate-1x1",
+      "color": "dark-gray",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 6.8,
+        "zStud": 7,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-198",
+      "brickId": "round-1x1-plate",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 6.8,
+        "zStud": 8,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-199",
+      "brickId": "tile-1x1",
+      "color": "dark-gray",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 7.2,
+        "zStud": 7,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-200",
+      "brickId": "plate-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 6.4,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-201",
+      "brickId": "cone-1x1-stop",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 6.8,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-202",
+      "brickId": "cone-1x1-stop",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 6.8,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-203",
+      "brickId": "plate-1x1",
+      "color": "dark-gray",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 6.8,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-204",
+      "brickId": "tile-1x1",
+      "color": "dark-gray",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 7.2,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-205",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 6.4,
+        "zStud": 5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-206",
+      "brickId": "slope-double-1x2",
+      "color": "dark-gray",
+      "pose": {
+        "xStud": 7,
+        "yStud": 6.8,
+        "zStud": 5,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-207",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 6.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-208",
+      "brickId": "slope-double-1x2",
+      "color": "dark-gray",
+      "pose": {
+        "xStud": 7,
+        "yStud": 6.8,
+        "zStud": 7,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-209",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 6.4,
+        "zStud": 6.5,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-210",
+      "brickId": "slope-double-1x2",
+      "color": "dark-gray",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 6.8,
+        "zStud": 6.5,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "big-ben-211",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 3.5,
+        "yStud": 6.4,
+        "zStud": 6.5,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-212",
+      "brickId": "slope-double-1x2",
+      "color": "dark-gray",
+      "pose": {
+        "xStud": 3.5,
+        "yStud": 6.8,
+        "zStud": 6.5,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "big-ben-213",
+      "brickId": "plate-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 6.4,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-214",
+      "brickId": "plate-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 6.4,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-215",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 6.8,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-216",
+      "brickId": "brick-side-studs-four-1x1",
+      "color": "black",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 8,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-217",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 6.8,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-218",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 6.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-219",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 6.8,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-220",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 6.8,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-221",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 7.2,
+        "zStud": 2.6,
+        "rotationQuarterTurns": 1,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-222",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 7.2,
+        "zStud": 2.2,
+        "rotationQuarterTurns": 1,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-223",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 7.2,
+        "zStud": 3,
+        "rotationQuarterTurns": 2,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-224",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.9,
+        "yStud": 7.2,
+        "zStud": 3,
+        "rotationQuarterTurns": 2,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-225",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 7.2,
+        "zStud": 4,
+        "rotationQuarterTurns": 3,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-226",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 7.2,
+        "zStud": 4.4,
+        "rotationQuarterTurns": 3,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-227",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.1,
+        "yStud": 7.2,
+        "zStud": 3,
+        "rotationQuarterTurns": 0,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-228",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.7,
+        "yStud": 7.2,
+        "zStud": 3,
+        "rotationQuarterTurns": 0,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-229",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 6.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-230",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 8,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-231",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 6.8,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-232",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 8,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-233",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 6.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-234",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 8,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-235",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 6.8,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-236",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 8,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-237",
+      "brickId": "plate-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 9.2,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-238",
+      "brickId": "plate-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 9.2,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-239",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 9.6,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-240",
+      "brickId": "brick-side-studs-four-1x1",
+      "color": "black",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 10.8,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-241",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 9.6,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-242",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 9.6,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-243",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 9.6,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-244",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 9.6,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-245",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 10,
+        "zStud": 2.6,
+        "rotationQuarterTurns": 1,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-246",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 10,
+        "zStud": 2.2,
+        "rotationQuarterTurns": 1,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-247",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 10,
+        "zStud": 3,
+        "rotationQuarterTurns": 2,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-248",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.9,
+        "yStud": 10,
+        "zStud": 3,
+        "rotationQuarterTurns": 2,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-249",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 10,
+        "zStud": 4,
+        "rotationQuarterTurns": 3,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-250",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 10,
+        "zStud": 4.4,
+        "rotationQuarterTurns": 3,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-251",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.1,
+        "yStud": 10,
+        "zStud": 3,
+        "rotationQuarterTurns": 0,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-252",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.7,
+        "yStud": 10,
+        "zStud": 3,
+        "rotationQuarterTurns": 0,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-253",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 9.6,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-254",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 10.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-255",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 9.6,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-256",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 10.8,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-257",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 9.6,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-258",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 10.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-259",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 9.6,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-260",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 10.8,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-261",
+      "brickId": "plate-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 12,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-262",
+      "brickId": "plate-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 12,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-263",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 12.4,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-264",
+      "brickId": "brick-side-studs-four-1x1",
+      "color": "black",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 13.6,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-265",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 12.4,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-266",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 12.4,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-267",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 12.4,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-268",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 12.4,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-269",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 12.8,
+        "zStud": 2.6,
+        "rotationQuarterTurns": 1,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-270",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 12.8,
+        "zStud": 2.2,
+        "rotationQuarterTurns": 1,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-271",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 12.8,
+        "zStud": 3,
+        "rotationQuarterTurns": 2,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-272",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.9,
+        "yStud": 12.8,
+        "zStud": 3,
+        "rotationQuarterTurns": 2,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-273",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 12.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 3,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-274",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 12.8,
+        "zStud": 4.4,
+        "rotationQuarterTurns": 3,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-275",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.1,
+        "yStud": 12.8,
+        "zStud": 3,
+        "rotationQuarterTurns": 0,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-276",
+      "brickId": "tile-grille-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.7,
+        "yStud": 12.8,
+        "zStud": 3,
+        "rotationQuarterTurns": 0,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-277",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 12.4,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-278",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 13.6,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-279",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 12.4,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-280",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 13.6,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-281",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 12.4,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-282",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 13.6,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-283",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 12.4,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-284",
+      "brickId": "brick-round-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 13.6,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-285",
+      "brickId": "plate-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 14.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-286",
+      "brickId": "plate-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 14.8,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-287",
+      "brickId": "round-1x1-plate",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 15.2,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-288",
+      "brickId": "round-1x1-plate",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 15.2,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-289",
+      "brickId": "round-1x1-plate",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 15.2,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-290",
+      "brickId": "round-1x1-plate",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 15.2,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-291",
+      "brickId": "round-1x1-plate",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 15.2,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-292",
+      "brickId": "round-1x1-plate",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 15.2,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-293",
+      "brickId": "round-1x1-plate",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 15.2,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-294",
+      "brickId": "round-1x1-plate",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 15.2,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-295",
+      "brickId": "plate-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 15.6,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-296",
+      "brickId": "plate-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 15.6,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-297",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 16,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-298",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 16,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-299",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 16,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-300",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 16,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-301",
+      "brickId": "brick-side-studs-1x1",
+      "color": "white",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 16,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-302",
+      "brickId": "brick-side-studs-1x1",
+      "color": "white",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 16,
+        "zStud": 3,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-303",
+      "brickId": "brick-side-studs-1x1",
+      "color": "white",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 16,
+        "zStud": 4,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "big-ben-304",
+      "brickId": "brick-side-studs-1x1",
+      "color": "white",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 16,
+        "zStud": 3,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-305",
+      "brickId": "plate-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 17.2,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-306",
+      "brickId": "plate-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 17.2,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-307",
+      "brickId": "plate-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 17.6,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-308",
+      "brickId": "plate-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 17.6,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-309",
+      "brickId": "round-1x1-plate",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 18,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-310",
+      "brickId": "round-1x1-plate",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 18,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-311",
+      "brickId": "round-1x1-plate",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 18,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-312",
+      "brickId": "round-1x1-plate",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 18,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-313",
+      "brickId": "round-1x1-plate",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 18,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-314",
+      "brickId": "round-1x1-plate",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 18,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-315",
+      "brickId": "round-1x1-plate",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 18,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-316",
+      "brickId": "round-1x1-plate",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 18,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-317",
+      "brickId": "round-1x1-plate",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 18,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-318",
+      "brickId": "plate-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 18.4,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-319",
+      "brickId": "plate-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 18.4,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-320",
+      "brickId": "plate-1x1",
+      "color": "dark-gray",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 18.8,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-321",
+      "brickId": "plate-1x1",
+      "color": "dark-gray",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 18.8,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-322",
+      "brickId": "round-1x1-plate",
+      "color": "dark-gray",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 18.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-323",
+      "brickId": "round-1x1-plate",
+      "color": "dark-gray",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 18.8,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-324",
+      "brickId": "round-1x1-plate",
+      "color": "dark-gray",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 18.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-325",
+      "brickId": "round-1x1-plate",
+      "color": "dark-gray",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 18.8,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-326",
+      "brickId": "plate-1x3",
+      "color": "dark-gray",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 18.8,
+        "zStud": 2,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "big-ben-327",
+      "brickId": "plate-1x1",
+      "color": "black",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 19.2,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-328",
+      "brickId": "tile-1x1",
+      "color": "dark-gray",
+      "pose": {
+        "xStud": 8.5,
+        "yStud": 19.2,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-329",
+      "brickId": "tile-1x1",
+      "color": "dark-gray",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 19.2,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-330",
+      "brickId": "tile-1x1",
+      "color": "dark-gray",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 19.2,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-331",
+      "brickId": "tile-1x1",
+      "color": "dark-gray",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 19.2,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-332",
+      "brickId": "plate-2x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 19.6,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-333",
+      "brickId": "round-1x1-plate",
+      "color": "tan",
+      "pose": {
+        "xStud": 8,
+        "yStud": 20,
+        "zStud": 3.5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-334",
+      "brickId": "round-1x1-plate",
+      "color": "tan",
+      "pose": {
+        "xStud": 8,
+        "yStud": 20,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-335",
+      "brickId": "round-1x1-plate",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 20,
+        "zStud": 3.5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-336",
+      "brickId": "round-1x1-plate",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 20,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-337",
+      "brickId": "slope-quadruple-2x2x2",
+      "color": "dark-gray",
+      "pose": {
+        "xStud": 7,
+        "yStud": 20.4,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-338",
+      "brickId": "cone-1x1-stop",
+      "color": "dark-gray",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 22.8,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "big-ben-339",
+      "brickId": "plate-2x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 15.7,
+        "zStud": 1.6,
+        "rotationQuarterTurns": 1,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-340",
+      "brickId": "tile-round-clock-2x2",
+      "color": "white",
+      "pose": {
+        "xStud": 7,
+        "yStud": 15.7,
+        "zStud": 1.2,
+        "rotationQuarterTurns": 0,
+        "verticalQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-341",
+      "brickId": "plate-2x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 9.5,
+        "yStud": 15.7,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 2,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-342",
+      "brickId": "tile-round-clock-2x2",
+      "color": "white",
+      "pose": {
+        "xStud": 9.9,
+        "yStud": 15.7,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 1,
+        "verticalQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-343",
+      "brickId": "plate-2x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 15.7,
+        "zStud": 5,
+        "rotationQuarterTurns": 3,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-344",
+      "brickId": "tile-round-clock-2x2",
+      "color": "white",
+      "pose": {
+        "xStud": 7,
+        "yStud": 15.7,
+        "zStud": 5.4,
+        "rotationQuarterTurns": 2,
+        "verticalQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-345",
+      "brickId": "plate-2x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.1,
+        "yStud": 15.7,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 0,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "big-ben-346",
+      "brickId": "tile-round-clock-2x2",
+      "color": "white",
+      "pose": {
+        "xStud": 5.7,
+        "yStud": 15.7,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 3,
+        "verticalQuarterTurns": 1
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "big-ben-step-1",
+      "title": "官方第 1 步：底板右半",
+      "description": "LEGO 21013 官方说明书 6115609，第 20 页。",
+      "instructionStep": 1,
+      "brickIds": [
+        "big-ben-1"
+      ]
+    },
+    {
+      "id": "big-ben-step-2",
+      "title": "官方第 2 步：底板右侧收边",
+      "description": "LEGO 21013 官方说明书 6115609，第 20 页。",
+      "instructionStep": 2,
+      "brickIds": [
+        "big-ben-2",
+        "big-ben-3",
+        "big-ben-4"
+      ]
+    },
+    {
+      "id": "big-ben-step-3",
+      "title": "官方第 3 步：底板左半",
+      "description": "LEGO 21013 官方说明书 6115609，第 21 页。",
+      "instructionStep": 3,
+      "brickIds": [
+        "big-ben-5"
+      ]
+    },
+    {
+      "id": "big-ben-step-4",
+      "title": "官方第 4 步：中央收边与铭牌",
+      "description": "LEGO 21013 官方说明书 6115609，第 22 页。",
+      "instructionStep": 4,
+      "brickIds": [
+        "big-ben-6",
+        "big-ben-7"
+      ]
+    },
+    {
+      "id": "big-ben-step-5",
+      "title": "官方第 5 步：底板左侧收边",
+      "description": "LEGO 21013 官方说明书 6115609，第 22 页。",
+      "instructionStep": 5,
+      "brickIds": [
+        "big-ben-8",
+        "big-ben-9",
+        "big-ben-10"
+      ]
+    },
+    {
+      "id": "big-ben-step-6",
+      "title": "官方第 6 步：外围石铺路",
+      "description": "LEGO 21013 官方说明书 6115609，第 23 页。",
+      "instructionStep": 6,
+      "brickIds": [
+        "big-ben-11",
+        "big-ben-12",
+        "big-ben-13"
+      ]
+    },
+    {
+      "id": "big-ben-step-7",
+      "title": "官方第 7 步：东侧定位板",
+      "description": "LEGO 21013 官方说明书 6115609，第 23 页。",
+      "instructionStep": 7,
+      "brickIds": [
+        "big-ben-14",
+        "big-ben-15",
+        "big-ben-16",
+        "big-ben-17",
+        "big-ben-18",
+        "big-ben-19",
+        "big-ben-20"
+      ]
+    },
+    {
+      "id": "big-ben-step-8",
+      "title": "官方第 8 步：前庭定位板",
+      "description": "LEGO 21013 官方说明书 6115609，第 24 页。",
+      "instructionStep": 8,
+      "brickIds": [
+        "big-ben-21",
+        "big-ben-22",
+        "big-ben-23",
+        "big-ben-24",
+        "big-ben-25",
+        "big-ben-26",
+        "big-ben-27",
+        "big-ben-28",
+        "big-ben-29"
+      ]
+    },
+    {
+      "id": "big-ben-step-9",
+      "title": "官方第 9 步：草坪与内侧铺路",
+      "description": "LEGO 21013 官方说明书 6115609，第 24 页。",
+      "instructionStep": 9,
+      "brickIds": [
+        "big-ben-30",
+        "big-ben-31",
+        "big-ben-32",
+        "big-ben-33",
+        "big-ben-34"
+      ]
+    },
+    {
+      "id": "big-ben-step-10",
+      "title": "官方第 10 步：建筑地基",
+      "description": "LEGO 21013 官方说明书 6115609，第 25 页。",
+      "instructionStep": 10,
+      "brickIds": [
+        "big-ben-35",
+        "big-ben-36",
+        "big-ben-37",
+        "big-ben-38",
+        "big-ben-39",
+        "big-ben-40"
+      ]
+    },
+    {
+      "id": "big-ben-step-11",
+      "title": "官方第 11 步：地基光面板",
+      "description": "LEGO 21013 官方说明书 6115609，第 26 页。",
+      "instructionStep": 11,
+      "brickIds": [
+        "big-ben-41",
+        "big-ben-42",
+        "big-ben-43",
+        "big-ben-44",
+        "big-ben-45"
+      ]
+    },
+    {
+      "id": "big-ben-step-12",
+      "title": "官方第 12 步：前庭光面板",
+      "description": "LEGO 21013 官方说明书 6115609，第 26 页。",
+      "instructionStep": 12,
+      "brickIds": [
+        "big-ben-46",
+        "big-ben-47",
+        "big-ben-48",
+        "big-ben-49"
+      ]
+    },
+    {
+      "id": "big-ben-step-13",
+      "title": "官方第 13 步：首层墙柱",
+      "description": "LEGO 21013 官方说明书 6115609，第 27 页。",
+      "instructionStep": 13,
+      "brickIds": [
+        "big-ben-50",
+        "big-ben-51",
+        "big-ben-52",
+        "big-ben-53",
+        "big-ben-54",
+        "big-ben-55",
+        "big-ben-56",
+        "big-ben-57"
+      ]
+    },
+    {
+      "id": "big-ben-step-14",
+      "title": "官方第 14 步：首层内部连接",
+      "description": "LEGO 21013 官方说明书 6115609，第 27 页。",
+      "instructionStep": 14,
+      "brickIds": [
+        "big-ben-58",
+        "big-ben-59",
+        "big-ben-60",
+        "big-ben-61",
+        "big-ben-62"
+      ]
+    },
+    {
+      "id": "big-ben-step-15",
+      "title": "官方第 15 步：首层圆柱",
+      "description": "LEGO 21013 官方说明书 6115609，第 28 页。",
+      "instructionStep": 15,
+      "brickIds": [
+        "big-ben-63",
+        "big-ben-64",
+        "big-ben-65",
+        "big-ben-66",
+        "big-ben-67"
+      ]
+    },
+    {
+      "id": "big-ben-step-16",
+      "title": "官方第 16 步：第二层外墙柱",
+      "description": "LEGO 21013 官方说明书 6115609，第 28 页。",
+      "instructionStep": 16,
+      "brickIds": [
+        "big-ben-68",
+        "big-ben-69",
+        "big-ben-70",
+        "big-ben-71",
+        "big-ben-72",
+        "big-ben-73",
+        "big-ben-74",
+        "big-ben-75"
+      ]
+    },
+    {
+      "id": "big-ben-step-17",
+      "title": "官方第 17 步：第二层侧向连接砖",
+      "description": "LEGO 21013 官方说明书 6115609，第 29 页。",
+      "instructionStep": 17,
+      "brickIds": [
+        "big-ben-76",
+        "big-ben-77",
+        "big-ben-78",
+        "big-ben-79",
+        "big-ben-80",
+        "big-ben-81"
+      ]
+    },
+    {
+      "id": "big-ben-step-18",
+      "title": "官方第 18 步：钟塔底部连接",
+      "description": "LEGO 21013 官方说明书 6115609，第 29 页。",
+      "instructionStep": 18,
+      "brickIds": [
+        "big-ben-82",
+        "big-ben-83",
+        "big-ben-84"
+      ]
+    },
+    {
+      "id": "big-ben-step-19",
+      "title": "官方第 19 步：第二层墙体",
+      "description": "LEGO 21013 官方说明书 6115609，第 30 页。",
+      "instructionStep": 19,
+      "brickIds": [
+        "big-ben-85",
+        "big-ben-86",
+        "big-ben-87",
+        "big-ben-88",
+        "big-ben-89"
+      ]
+    },
+    {
+      "id": "big-ben-step-20",
+      "title": "官方第 20 步：外墙竖向格栅",
+      "description": "LEGO 21013 官方说明书 6115609，第 30 页。",
+      "instructionStep": 20,
+      "brickIds": [
+        "big-ben-90",
+        "big-ben-91",
+        "big-ben-92",
+        "big-ben-93",
+        "big-ben-94",
+        "big-ben-95",
+        "big-ben-96",
+        "big-ben-97",
+        "big-ben-98",
+        "big-ben-99",
+        "big-ben-100",
+        "big-ben-101",
+        "big-ben-102",
+        "big-ben-103",
+        "big-ben-104",
+        "big-ben-105",
+        "big-ben-106",
+        "big-ben-107",
+        "big-ben-108",
+        "big-ben-109"
+      ]
+    },
+    {
+      "id": "big-ben-step-21",
+      "title": "官方第 21 步：楼层压顶",
+      "description": "LEGO 21013 官方说明书 6115609，第 31 页。",
+      "instructionStep": 21,
+      "brickIds": [
+        "big-ben-110",
+        "big-ben-111",
+        "big-ben-112",
+        "big-ben-113",
+        "big-ben-114",
+        "big-ben-115"
+      ]
+    },
+    {
+      "id": "big-ben-step-22",
+      "title": "官方第 22 步：檐口与装饰",
+      "description": "LEGO 21013 官方说明书 6115609，第 31 页。",
+      "instructionStep": 22,
+      "brickIds": [
+        "big-ben-116",
+        "big-ben-117",
+        "big-ben-118",
+        "big-ben-119",
+        "big-ben-120",
+        "big-ben-121",
+        "big-ben-122"
+      ]
+    },
+    {
+      "id": "big-ben-step-23",
+      "title": "官方第 23 步：檐口光面板",
+      "description": "LEGO 21013 官方说明书 6115609，第 32 页。",
+      "instructionStep": 23,
+      "brickIds": [
+        "big-ben-123",
+        "big-ben-124",
+        "big-ben-125",
+        "big-ben-126",
+        "big-ben-127",
+        "big-ben-128"
+      ]
+    },
+    {
+      "id": "big-ben-step-24",
+      "title": "官方第 24 步：檐口圆柱",
+      "description": "LEGO 21013 官方说明书 6115609，第 32 页。",
+      "instructionStep": 24,
+      "brickIds": [
+        "big-ben-129",
+        "big-ben-130",
+        "big-ben-131",
+        "big-ben-132"
+      ]
+    },
+    {
+      "id": "big-ben-step-25",
+      "title": "官方第 25 步：内侧支撑",
+      "description": "LEGO 21013 官方说明书 6115609，第 33 页。",
+      "instructionStep": 25,
+      "brickIds": [
+        "big-ben-133",
+        "big-ben-134",
+        "big-ben-135"
+      ]
+    },
+    {
+      "id": "big-ben-step-26",
+      "title": "官方第 26 步：内墙收口",
+      "description": "LEGO 21013 官方说明书 6115609，第 33 页。",
+      "instructionStep": 26,
+      "brickIds": [
+        "big-ben-136",
+        "big-ben-137",
+        "big-ben-138",
+        "big-ben-139",
+        "big-ben-140"
+      ]
+    },
+    {
+      "id": "big-ben-step-27",
+      "title": "官方第 27 步：钟塔墙角",
+      "description": "LEGO 21013 官方说明书 6115609，第 34 页。",
+      "instructionStep": 27,
+      "brickIds": [
+        "big-ben-141",
+        "big-ben-142"
+      ]
+    },
+    {
+      "id": "big-ben-step-28",
+      "title": "官方第 28 步：屋顶侧向支撑",
+      "description": "LEGO 21013 官方说明书 6115609，第 34 页。",
+      "instructionStep": 28,
+      "brickIds": [
+        "big-ben-143",
+        "big-ben-144",
+        "big-ben-145",
+        "big-ben-146",
+        "big-ben-147",
+        "big-ben-148"
+      ]
+    },
+    {
+      "id": "big-ben-step-29",
+      "title": "官方第 29 步：屋顶端面",
+      "description": "LEGO 21013 官方说明书 6115609，第 35 页。",
+      "instructionStep": 29,
+      "brickIds": [
+        "big-ben-149",
+        "big-ben-150",
+        "big-ben-151",
+        "big-ben-152"
+      ]
+    },
+    {
+      "id": "big-ben-step-30",
+      "title": "官方第 30 步：上层墙面格栅",
+      "description": "LEGO 21013 官方说明书 6115609，第 36 页。",
+      "instructionStep": 30,
+      "brickIds": [
+        "big-ben-153",
+        "big-ben-154",
+        "big-ben-155",
+        "big-ben-156",
+        "big-ben-157",
+        "big-ben-158",
+        "big-ben-159",
+        "big-ben-160",
+        "big-ben-161",
+        "big-ben-162",
+        "big-ben-163",
+        "big-ben-164",
+        "big-ben-165",
+        "big-ben-166",
+        "big-ben-167",
+        "big-ben-168",
+        "big-ben-169",
+        "big-ben-170",
+        "big-ben-171",
+        "big-ben-172"
+      ]
+    },
+    {
+      "id": "big-ben-step-31",
+      "title": "官方第 31 步：屋檐底座",
+      "description": "LEGO 21013 官方说明书 6115609，第 36 页。",
+      "instructionStep": 31,
+      "brickIds": [
+        "big-ben-173",
+        "big-ben-174",
+        "big-ben-175",
+        "big-ben-176",
+        "big-ben-177",
+        "big-ben-178",
+        "big-ben-179",
+        "big-ben-180",
+        "big-ben-181",
+        "big-ben-182",
+        "big-ben-183",
+        "big-ben-184"
+      ]
+    },
+    {
+      "id": "big-ben-step-32",
+      "title": "官方第 32 步：侧墙格栅",
+      "description": "LEGO 21013 官方说明书 6115609，第 37 页。",
+      "instructionStep": 32,
+      "brickIds": [
+        "big-ben-185",
+        "big-ben-186",
+        "big-ben-187",
+        "big-ben-188",
+        "big-ben-189",
+        "big-ben-190",
+        "big-ben-191",
+        "big-ben-192",
+        "big-ben-193",
+        "big-ben-194",
+        "big-ben-195",
+        "big-ben-196",
+        "big-ben-197",
+        "big-ben-198",
+        "big-ben-199"
+      ]
+    },
+    {
+      "id": "big-ben-step-33",
+      "title": "官方第 33 步：前墙格栅",
+      "description": "LEGO 21013 官方说明书 6115609，第 38 页。",
+      "instructionStep": 33,
+      "brickIds": [
+        "big-ben-200",
+        "big-ben-201",
+        "big-ben-202",
+        "big-ben-203",
+        "big-ben-204"
+      ]
+    },
+    {
+      "id": "big-ben-step-34",
+      "title": "官方第 34 步：四角屋檐",
+      "description": "LEGO 21013 官方说明书 6115609，第 39 页。",
+      "instructionStep": 34,
+      "brickIds": [
+        "big-ben-205",
+        "big-ben-206",
+        "big-ben-207",
+        "big-ben-208",
+        "big-ben-209",
+        "big-ben-210",
+        "big-ben-211",
+        "big-ben-212"
+      ]
+    },
+    {
+      "id": "big-ben-step-35",
+      "title": "官方第 35 步：钟塔楼板",
+      "description": "LEGO 21013 官方说明书 6115609，第 40 页。",
+      "instructionStep": 35,
+      "brickIds": [
+        "big-ben-213",
+        "big-ben-214"
+      ]
+    },
+    {
+      "id": "big-ben-step-36",
+      "title": "官方第 36 步：钟塔内部连接",
+      "description": "LEGO 21013 官方说明书 6115609，第 40 页。",
+      "instructionStep": 36,
+      "brickIds": [
+        "big-ben-215",
+        "big-ben-216",
+        "big-ben-217",
+        "big-ben-218",
+        "big-ben-219",
+        "big-ben-220"
+      ]
+    },
+    {
+      "id": "big-ben-step-37",
+      "title": "官方第 37 步：第一段竖向格栅",
+      "description": "LEGO 21013 官方说明书 6115609，第 41 页。",
+      "instructionStep": 37,
+      "brickIds": [
+        "big-ben-221",
+        "big-ben-222",
+        "big-ben-223",
+        "big-ben-224",
+        "big-ben-225",
+        "big-ben-226",
+        "big-ben-227",
+        "big-ben-228"
+      ]
+    },
+    {
+      "id": "big-ben-step-38",
+      "title": "官方第 38 步：第一段四角圆柱",
+      "description": "LEGO 21013 官方说明书 6115609，第 42 页。",
+      "instructionStep": 38,
+      "brickIds": [
+        "big-ben-229",
+        "big-ben-230",
+        "big-ben-231",
+        "big-ben-232",
+        "big-ben-233",
+        "big-ben-234",
+        "big-ben-235",
+        "big-ben-236"
+      ]
+    },
+    {
+      "id": "big-ben-step-39",
+      "title": "官方第 39 步：中层楼板",
+      "description": "LEGO 21013 官方说明书 6115609，第 42 页。",
+      "instructionStep": 39,
+      "brickIds": [
+        "big-ben-237",
+        "big-ben-238"
+      ]
+    },
+    {
+      "id": "big-ben-step-40",
+      "title": "官方第 40 步：中层连接结构",
+      "description": "LEGO 21013 官方说明书 6115609，第 43 页。",
+      "instructionStep": 40,
+      "brickIds": [
+        "big-ben-239",
+        "big-ben-240",
+        "big-ben-241",
+        "big-ben-242",
+        "big-ben-243",
+        "big-ben-244"
+      ]
+    },
+    {
+      "id": "big-ben-step-41",
+      "title": "官方第 41 步：第二段竖向格栅",
+      "description": "LEGO 21013 官方说明书 6115609，第 44 页。",
+      "instructionStep": 41,
+      "brickIds": [
+        "big-ben-245",
+        "big-ben-246",
+        "big-ben-247",
+        "big-ben-248",
+        "big-ben-249",
+        "big-ben-250",
+        "big-ben-251",
+        "big-ben-252"
+      ]
+    },
+    {
+      "id": "big-ben-step-42",
+      "title": "官方第 42 步：第二段四角圆柱",
+      "description": "LEGO 21013 官方说明书 6115609，第 45 页。",
+      "instructionStep": 42,
+      "brickIds": [
+        "big-ben-253",
+        "big-ben-254",
+        "big-ben-255",
+        "big-ben-256",
+        "big-ben-257",
+        "big-ben-258",
+        "big-ben-259",
+        "big-ben-260"
+      ]
+    },
+    {
+      "id": "big-ben-step-43",
+      "title": "官方第 43 步：上层楼板",
+      "description": "LEGO 21013 官方说明书 6115609，第 46 页。",
+      "instructionStep": 43,
+      "brickIds": [
+        "big-ben-261",
+        "big-ben-262"
+      ]
+    },
+    {
+      "id": "big-ben-step-44",
+      "title": "官方第 44 步：上层连接结构",
+      "description": "LEGO 21013 官方说明书 6115609，第 47 页。",
+      "instructionStep": 44,
+      "brickIds": [
+        "big-ben-263",
+        "big-ben-264",
+        "big-ben-265",
+        "big-ben-266",
+        "big-ben-267",
+        "big-ben-268"
+      ]
+    },
+    {
+      "id": "big-ben-step-45",
+      "title": "官方第 45 步：第三段竖向格栅",
+      "description": "LEGO 21013 官方说明书 6115609，第 48 页。",
+      "instructionStep": 45,
+      "brickIds": [
+        "big-ben-269",
+        "big-ben-270",
+        "big-ben-271",
+        "big-ben-272",
+        "big-ben-273",
+        "big-ben-274",
+        "big-ben-275",
+        "big-ben-276"
+      ]
+    },
+    {
+      "id": "big-ben-step-46",
+      "title": "官方第 46 步：第三段四角圆柱",
+      "description": "LEGO 21013 官方说明书 6115609，第 49 页。",
+      "instructionStep": 46,
+      "brickIds": [
+        "big-ben-277",
+        "big-ben-278",
+        "big-ben-279",
+        "big-ben-280",
+        "big-ben-281",
+        "big-ben-282",
+        "big-ben-283",
+        "big-ben-284"
+      ]
+    },
+    {
+      "id": "big-ben-step-47",
+      "title": "官方第 47 步：钟室底板",
+      "description": "LEGO 21013 官方说明书 6115609，第 50 页。",
+      "instructionStep": 47,
+      "brickIds": [
+        "big-ben-285",
+        "big-ben-286"
+      ]
+    },
+    {
+      "id": "big-ben-step-48",
+      "title": "官方第 48 步：钟室装饰圆板",
+      "description": "LEGO 21013 官方说明书 6115609，第 51 页。",
+      "instructionStep": 48,
+      "brickIds": [
+        "big-ben-287",
+        "big-ben-288",
+        "big-ben-289",
+        "big-ben-290",
+        "big-ben-291",
+        "big-ben-292",
+        "big-ben-293",
+        "big-ben-294"
+      ]
+    },
+    {
+      "id": "big-ben-step-49",
+      "title": "官方第 49 步：钟室楼板",
+      "description": "LEGO 21013 官方说明书 6115609，第 52 页。",
+      "instructionStep": 49,
+      "brickIds": [
+        "big-ben-295",
+        "big-ben-296"
+      ]
+    },
+    {
+      "id": "big-ben-step-50",
+      "title": "官方第 50 步：四面钟盘连接砖",
+      "description": "LEGO 21013 官方说明书 6115609，第 53 页。",
+      "instructionStep": 50,
+      "brickIds": [
+        "big-ben-297",
+        "big-ben-298",
+        "big-ben-299",
+        "big-ben-300",
+        "big-ben-301",
+        "big-ben-302",
+        "big-ben-303",
+        "big-ben-304"
+      ]
+    },
+    {
+      "id": "big-ben-step-51",
+      "title": "官方第 51 步：钟室与尖塔总成",
+      "description": "LEGO 21013 官方说明书 6115609，第 59 页。包含钟室和尖塔的 10 个装配子步骤。",
+      "instructionStep": 51,
+      "brickIds": [
+        "big-ben-305",
+        "big-ben-306",
+        "big-ben-307",
+        "big-ben-308",
+        "big-ben-309",
+        "big-ben-310",
+        "big-ben-311",
+        "big-ben-312",
+        "big-ben-313",
+        "big-ben-314",
+        "big-ben-315",
+        "big-ben-316",
+        "big-ben-317",
+        "big-ben-318",
+        "big-ben-319",
+        "big-ben-320",
+        "big-ben-321",
+        "big-ben-322",
+        "big-ben-323",
+        "big-ben-324",
+        "big-ben-325",
+        "big-ben-326",
+        "big-ben-327",
+        "big-ben-328",
+        "big-ben-329",
+        "big-ben-330",
+        "big-ben-331",
+        "big-ben-332",
+        "big-ben-333",
+        "big-ben-334",
+        "big-ben-335",
+        "big-ben-336",
+        "big-ben-337",
+        "big-ben-338"
+      ]
+    },
+    {
+      "id": "big-ben-step-52",
+      "title": "官方第 52 步：四面钟盘",
+      "description": "LEGO 21013 官方说明书 6115609，第 60 页。",
+      "instructionStep": 52,
+      "brickIds": [
+        "big-ben-339",
+        "big-ben-340",
+        "big-ben-341",
+        "big-ben-342",
+        "big-ben-343",
+        "big-ben-344",
+        "big-ben-345",
+        "big-ben-346"
+      ]
+    }
+  ]
+}

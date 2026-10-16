@@ -8,6 +8,7 @@ export type BrickColor =
   | 'gray'
   | 'light-gray'
   | 'dark-gray'
+  | 'dark-green'
   | 'brown'
   | 'orange'
   | 'tan'
@@ -114,6 +115,7 @@ export type BrickPose = {
   zStud: number
   rotationQuarterTurns: BrickRotationQuarterTurns
   verticalQuarterTurns?: BrickVerticalQuarterTurns
+  rollQuarterTurns?: BrickRotationQuarterTurns
 }
 
 export type VoxelFenceConnections = {

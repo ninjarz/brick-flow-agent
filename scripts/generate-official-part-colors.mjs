@@ -49,6 +49,8 @@ const brickColorOrder = [
 ]
 
 const partAliases = {
+  '4150p03': ['4150'],
+  '4162p0g': ['4162'],
   // Rebrickable lists the modern 1x1 round plate under 6141 variants.
   '4073': ['6141', '6141a', '6141b'],
 }

@@ -10,7 +10,7 @@ import { createRound2x2AxleBodyGeometry, createRound2x2AxleGrilleBodyGeometry } 
 import { getBrickWorldBoundsFrame } from '../lib/ldrawBounds'
 import { loadLDrawGeneratedVisual } from '../lib/ldrawGeneratedVisualLoader'
 import { normalizeLDrawPartNumber } from '../lib/ldrawPartNumbers'
-import { createLoadedLDrawPartGeometry } from '../lib/ldrawVisualGeometry'
+import { createLoadedLDrawPartGeometry, createLDrawPrintGeometries } from '../lib/ldrawVisualGeometry'
 import { getVisibleBricksDuringPlacement } from '../lib/brickPlacementPreview'
 import { createBuildGraph, getBrickBounds } from '../lib/planUtils'
 import { getScenePerformanceSettings, getWorldAnimationFps, shouldInstanceVoxelGroup } from '../lib/scenePerformance'
@@ -645,15 +645,17 @@ const getHorizontalRotationRadians = (rotationQuarterTurns: number) =>
 const BrickPoseRotation = ({
   rotationQuarterTurns,
   verticalQuarterTurns,
+  rollQuarterTurns = 0,
   children,
 }: {
   rotationQuarterTurns: number
   verticalQuarterTurns: number
+  rollQuarterTurns?: number
   children: ReactNode
 }) => (
   <group rotation={[0, getHorizontalRotationRadians(rotationQuarterTurns), 0]}>
     <group rotation={[getVerticalRotationRadians(verticalQuarterTurns), 0, 0]}>
-      {children}
+      <group rotation={[0, 0, rollQuarterTurns * Math.PI / 2]}>{children}</group>
     </group>
   </group>
 )
@@ -1131,6 +1133,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
     <BrickPoseRotation
       rotationQuarterTurns={brick.pose.rotationQuarterTurns}
       verticalQuarterTurns={verticalQuarterTurns}
+      rollQuarterTurns={brick.pose.rollQuarterTurns ?? 0}
     >
       {children}
     </BrickPoseRotation>
@@ -1206,6 +1209,11 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
               />
             </mesh>
             {isEyeTile && <RoundEyeTilePrints variant={brick.brickId} height={baseHeight} />}
+            {createLDrawPrintGeometries(definition.partNumber, definition.footprint).map((layer) => (
+              <mesh key={layer.color} geometry={layer.geometry} renderOrder={1}>
+                <meshStandardMaterial color={layer.color} roughness={0.4} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-1} transparent={bodyOpacity < 1} opacity={bodyOpacity} />
+              </mesh>
+            ))}
           </>,
         )}
         {renderSelectedConnectorMarkers()}
@@ -2045,7 +2053,7 @@ const VoxelBoxInstances = memo(function VoxelBoxInstances({
         matrixObject.rotation.set(
           getVerticalRotationRadians(brick.pose.verticalQuarterTurns ?? 0),
           getHorizontalRotationRadians(brick.pose.rotationQuarterTurns),
-          0,
+          (brick.pose.rollQuarterTurns ?? 0) * Math.PI / 2,
           'YXZ',
         )
         matrixObject.scale.set(

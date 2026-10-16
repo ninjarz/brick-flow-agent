@@ -1289,6 +1289,7 @@ function App() {
         definition,
         nextRotation,
         brick.pose.verticalQuarterTurns ?? 0,
+        brick.pose.rollQuarterTurns ?? 0,
       )
       const offsetX = frame.x - pivot.x
       const offsetZ = frame.z - pivot.z
@@ -1335,6 +1336,7 @@ function App() {
         definition,
         brick.pose.rotationQuarterTurns,
         nextVerticalRotation,
+        brick.pose.rollQuarterTurns ?? 0,
       )
       const offsetY = frame.y - pivot.y
       const offsetZ = frame.z - pivot.z

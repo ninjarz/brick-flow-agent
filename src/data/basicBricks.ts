@@ -1,6 +1,7 @@
 import type { BrickColor, BrickConnector, BrickDefinition, VoxelBlockVisual } from '../types/bricks'
 import { getLDrawConnectors } from '../lib/ldrawPartRegistry'
 import { legoPlateFootprint, plateHeightToWorldStud } from '../lib/brickUnits'
+import { architectureBricks } from './architectureBricks'
 import { getOfficialPartColors } from './officialPartColors'
 
 const makeStudGrid = (
@@ -186,6 +187,7 @@ export const colorHex: Record<BrickColor, string> = {
   gray: '#8b949e',
   'light-gray': '#969696',
   'dark-gray': '#646464',
+  'dark-green': '#184632',
   brown: '#7c4a28',
   orange: '#f97316',
   tan: '#d6b98c',
@@ -215,6 +217,7 @@ export const colorOpacity: Record<BrickColor, number> = {
   gray: 1,
   'light-gray': 1,
   'dark-gray': 1,
+  'dark-green': 1,
   brown: 1,
   orange: 1,
   tan: 1,
@@ -629,12 +632,21 @@ const classic10696ExtraDefinitions: BrickDefinitionDraft[] = [
 ]
 
 const usesFixedPrintedColors = (definition: BrickDefinitionDraft) =>
-  definition.id.startsWith('tile-eye')
+  definition.id.startsWith('tile-eye') || definition.id === 'tile-round-clock-2x2' || definition.id === 'tile-big-ben-nameplate'
+
+const replicaColors: Record<string, BrickColor[]> = {
+  '3039': ['light-gray'], '2419': ['light-gray'], '3700': ['dark-gray'],
+  '4162': ['light-gray'], '3794b': ['light-gray'], '47905': ['light-gray'],
+  '3023': ['dark-gray'], '3024': ['dark-gray'], '59900': ['dark-gray'],
+  '3688': ['dark-gray'], '3021': ['dark-green'],
+  '2431': ['light-gray'], '3069': ['dark-gray'], '3070': ['dark-gray'],
+  '3044b': ['dark-gray'], '4073': ['dark-gray'], '3623': ['dark-gray'],
+}
 
 const withOfficialColors = (definition: BrickDefinitionDraft): BrickDefinitionDraft => (
   usesFixedPrintedColors(definition)
     ? definition
-    : { ...definition, colors: [...new Set([...getOfficialPartColors(definition.partNumber, definition.colors), ...(definition.partNumber === '3039' || definition.partNumber === '2419' ? ['light-gray' as const] : definition.partNumber === '3700' ? ['dark-gray' as const] : [])])] }
+    : { ...definition, colors: [...new Set([...getOfficialPartColors(definition.partNumber, definition.colors), ...(replicaColors[definition.partNumber] ?? [])])] }
 )
 
 const withDefaultPack = (definition: BrickDefinitionDraft): BrickDefinition => ({
@@ -1170,6 +1182,7 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
   { id: 'brick-round-corner-2x2', partNumber: '85080', name: '2x2 Macaroni Brick', kind: 'round', footprint: legoPlateFootprint(2, 2, 3), connectors: [], colors: ['red'], inventory: 16 },
   { id: 'plate-cut-corners-3x6', partNumber: '2419', name: '3x6 Cut Corner Plate', kind: 'plate', footprint: legoPlateFootprint(6, 3, 1), connectors: [], colors: ['gray'], inventory: 16 },
   { id: 'dish-3x3', partNumber: '43898', name: '3x3 Inverted Dish', kind: 'round', footprint: legoPlateFootprint(3, 3, 2), connectors: [], colors: ['black'], inventory: 16 },
+  ...architectureBricks,
   ...classic10696ExtraDefinitions,
 ]
 

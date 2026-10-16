@@ -5,6 +5,7 @@ import {
   loadLDrawGeneratedVisualTriangles,
 } from './ldrawGeneratedVisualLoader'
 import { normalizeLDrawPartNumber } from './ldrawPartNumbers'
+import printedParts from '../data/ldrawPrintedParts.json'
 import type { MeshTriangle } from './structuralVoxelizer'
 
 const geometryCache = new Map<string, BufferGeometry>()
@@ -65,4 +66,22 @@ export const loadLDrawPartGeometry = async (partNumber: string, footprint: Brick
     })
   geometryLoadCache.set(cacheKey, loading)
   return loading
+}
+
+// Fixed printed triangles retain the original LDraw pattern instead of a replacement texture.
+export const createLDrawPrintGeometries = (partNumber: string, footprint: BrickFootprint) => {
+  const patterns = printedParts as Record<string, Array<{ color: number; hex: string; positions: number[] }>>
+  return (patterns[normalizeLDrawPartNumber(partNumber)] ?? []).map((layer) => {
+    const key = `print:${makeCacheKey(partNumber, footprint)}:${layer.color}`
+    let geometry = geometryCache.get(key)
+    if (!geometry) {
+      const triangles: MeshTriangle[] = []
+      for (let i = 0; i < layer.positions.length; i += 9) {
+        const n = layer.positions
+        triangles.push([{ x: n[i], y: n[i + 1], z: n[i + 2] }, { x: n[i + 3], y: n[i + 4], z: n[i + 5] }, { x: n[i + 6], y: n[i + 7], z: n[i + 8] }])
+      }
+      geometry = createGeometryFromTriangles(key, footprint, triangles)
+    }
+    return { color: layer.hex, geometry }
+  })
 }

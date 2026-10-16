@@ -1,5 +1,6 @@
 import { safeStorage } from './safeStorage'
 import { coordinateStorageWrite } from './storageCoordinator'
+import bigBenPlan from '../data/legoBigBenPlan.json'
 import lighthousePlan from '../data/legoLighthousePlan.json'
 import type { BuildPlan, FinishedAsset } from '../types/bricks'
 import { minecraftSceneAssets } from '../data/minecraftSceneAssets'
@@ -21,6 +22,7 @@ const retiredDefaultAssetIds = new Set([
   'finished-arch-gate',
 ])
 const defaultAssetIds = new Set([
+  'finished-lego-21013',
   'finished-ghost',
   'finished-lego-30023',
   'finished-bridge',
@@ -75,6 +77,12 @@ const createDefaultAsset = (
 }
 
 export const defaultFinishedAssets: FinishedAsset[] = [
+  {
+    id: 'finished-lego-21013', title: 'LEGO 21013 大本钟', category: 'Classic',
+    description: 'LEGO Architecture 大本钟，346 个可编辑零件、52 个官方主步骤，保留四面钟盘、侧向格栅、屋顶尖塔与 Big Ben 铭牌。',
+    instructionUrl: 'https://www.lego.com/cdn/product-assets/product.bi.core.pdf/6115609.pdf',
+    instructionStatus: 'mapped', plan: bigBenPlan as BuildPlan,
+  },
   {
     id: 'finished-lego-30023', title: 'LEGO 30023 灯塔', category: 'Classic',
     description: '按 LEGO Creator 30023 官方说明书 4650618 逐步复刻，25 个可编辑零件，包括红白圆塔、八边平台、透明黄色灯室和底座小屋。',

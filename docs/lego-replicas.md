@@ -1,6 +1,29 @@
 # 乐高套装数字复刻
 
-## 当前模型：LEGO 30023 灯塔
+## LEGO 21013 大本钟
+
+在「素材库 → 模型 → Classic」中选择「LEGO 21013 大本钟」，使用与小幽灵、灯塔相同的「加载」「手册」「说明书」。模型有 346 个可编辑零件、52 个官方主步骤；第 51 步包含说明书第 54–58 页的 10 个钟室与尖塔装配子步骤，应用在主步骤中整体展示该总成。零件未预先固化。
+
+[官方手册页面](https://www.lego.com/en-us/service/building-instructions/21013) · [官方 PDF 6115609](https://www.lego.com/cdn/product-assets/product.bi.core.pdf/6115609.pdf)。颜色数量为 tan 264、dark-gray 26、light-gray 25、black 20、white 9、dark-green 2，不包含备用件。
+
+装配来自 Greg Teft 的 [LDraw OMR 21013-1.mpd](https://library.ldraw.org/library/omr/21013-1.mpd)，按 CC BY 2.0 授权；原文件、作者与许可头保留在 `public/lego-replicas/models/21013-1.mpd`。转换脚本展开子模型、保留主步骤，依据生成几何的原点校准坐标，保留 3794b、3044b 和印刷件的具体型号；52 个主步骤已逐步在原有手册中回放并对照官方图示。
+
+模型使用 24 种正交朝向中的侧转姿态，JSON/手册与带元数据的 LDraw 往返保留这些姿态。钟面和铭牌使用原 LDraw 文件中的固定色三角形。补齐了 2×2 板中央管座、1×2 板底部销与空心凸点连接，未通过禁用碰撞或结构检查来载入模型。
+
+重建原生模型（所需零件与依赖已随仓库保存）：
+
+```bash
+node scripts/generate-ldraw-structural.mjs > /tmp/architecture-geometry.json
+node scripts/build-big-ben-asset.mjs /tmp/architecture-geometry.json
+npm test
+npm run validate:builds
+npm run audit:ldraw
+npm run build
+```
+
+截图、官方 PDF 与本地核验记录位于忽略的 `docs/replicas/21013/`，不随代码分发。LDraw 库许可和原文件署名保留。
+
+## LEGO 30023 灯塔
 
 在「素材库 → 模型」中选择「LEGO 30023 灯塔」。它与「Classic 小幽灵」共用模型卡片：点击「加载」进入主画布，可以选择、移动、编辑每个零件并撤销；点击「手册」使用原有搭建手册逐步查看。独立复刻查看器已移除。
 

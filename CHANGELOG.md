@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add LEGO Architecture 21013 Big Ben as an editable 346-piece model with 52 official main steps, four printed clock faces and its original nameplate.
+- Support all 24 orthogonal part orientations, preserving roll through rendering, connectors, editing, JSON, LDraw metadata and manuals; recognize the audited central tube and hollow-stud connections used by this model.
+
 - Remove the project manager and AI task panels from the header while retaining workspace autosave and request lifetime protection.
 
 - Add LEGO 30023 Lighthouse as a standard editable model with 25 pieces and nine official instruction steps, using the same model cards, main canvas and building manual as Classic Ghost.

@@ -188,6 +188,7 @@ await writeFile(entry, `
   const defaultAssetIds = defaultFinishedAssets.map((asset) => asset.id);
   const duplicateDefaultAssetIds = defaultAssetIds.filter((id, index, ids) => ids.indexOf(id) !== index);
   const expectedDefaultAssetIds = new Set([
+    'finished-lego-21013',
     'finished-lego-30023',
     'finished-ghost',
     'finished-bridge',
@@ -210,6 +211,7 @@ await writeFile(entry, `
     'finished-obj-armadillo-s',
   ]);
   const expectedDefaultAssetPieceCounts = {
+    'finished-lego-21013': 346,
     'finished-lego-30023': 25,
     'finished-ghost': 26,
     'finished-bridge': 19,
@@ -240,7 +242,7 @@ await writeFile(entry, `
   const missingDefaultAssetIds = [...expectedDefaultAssetIds].filter((id) => !defaultAssetIds.includes(id));
   const resurfacedRetiredDefaultAssetIds = defaultAssetIds.filter((id) => retiredDefaultAssetIds.has(id));
   const unexpectedClassicDefaultAssets = defaultFinishedAssets.filter((asset) =>
-    asset.category === 'Classic' && !['finished-ghost', 'finished-lego-30023'].includes(asset.id),
+    asset.category === 'Classic' && !['finished-ghost', 'finished-lego-30023', 'finished-lego-21013'].includes(asset.id),
   );
   const changedDefaultAssetPieceCounts = defaultFinishedAssets
     .map((asset) => ({

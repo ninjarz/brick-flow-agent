@@ -70,39 +70,31 @@ export const poseToWorld = (pose: BrickPose) => ({
   z: pose.zStud * STUD_PITCH_WORLD,
 })
 
-const getVerticalSize = (definition: BrickDefinition, verticalQuarterTurns: BrickVerticalQuarterTurns) => {
-  const isVertical = verticalQuarterTurns % 2 === 1
-  const baseHeightStuds = definition.footprint.heightStuds
-
-  return {
-    widthStuds: definition.footprint.widthStuds,
-    depthStuds: isVertical ? baseHeightStuds : definition.footprint.depthStuds,
-    heightStuds: isVertical ? definition.footprint.depthStuds : baseHeightStuds,
-  }
-}
+const getRolledFootprint = (footprint: BrickFootprint, roll: number): BrickFootprint => roll % 2 === 1
+  ? { widthStuds: footprint.heightStuds, heightStuds: footprint.widthStuds, depthStuds: footprint.depthStuds }
+  : footprint
 
 export const footprintToWorld = (
   definition: BrickDefinition,
   rotationQuarterTurns: BrickRotationQuarterTurns,
   verticalQuarterTurns: BrickVerticalQuarterTurns = 0,
+  rollQuarterTurns: BrickRotationQuarterTurns = 0,
 ) => {
-  const vertical = getVerticalSize(definition, verticalQuarterTurns)
+  const base = getRolledFootprint(definition.footprint, rollQuarterTurns)
+  const tilted = verticalQuarterTurns % 2 === 1
+  const depth = tilted ? base.heightStuds : base.depthStuds
+  const height = tilted ? base.depthStuds : base.heightStuds
   const rotated = rotationQuarterTurns % 2 === 1
-  const widthStuds = rotated ? vertical.depthStuds : vertical.widthStuds
-  const depthStuds = rotated ? vertical.widthStuds : vertical.depthStuds
-
+  const widthStuds = rotated ? depth : base.widthStuds
+  const depthStuds = rotated ? base.widthStuds : depth
   return {
-    width: widthStuds * STUD_PITCH_WORLD,
-    depth: depthStuds * STUD_PITCH_WORLD,
-    height: vertical.heightStuds * STUD_PITCH_WORLD,
-    widthStuds,
-    depthStuds,
-    heightStuds: vertical.heightStuds,
+    width: widthStuds * STUD_PITCH_WORLD, depth: depthStuds * STUD_PITCH_WORLD,
+    height: height * STUD_PITCH_WORLD, widthStuds, depthStuds, heightStuds: height,
   }
 }
 
 export const getBrickWorldFrame = (definition: BrickDefinition, pose: BrickPose) => {
-  const footprint = footprintToWorld(definition, pose.rotationQuarterTurns, pose.verticalQuarterTurns ?? 0)
+  const footprint = footprintToWorld(definition, pose.rotationQuarterTurns, pose.verticalQuarterTurns ?? 0, pose.rollQuarterTurns ?? 0)
   const origin = poseToWorld(pose)
 
   return {
@@ -208,14 +200,34 @@ const rotateYawVector = (
   }
 }
 
+const rotateRollPoint = (point: WorldPoint, turns: number, footprint: BrickFootprint): WorldPoint => {
+  switch (turns) {
+    case 1: return { x: footprint.heightStuds - point.y, y: point.x, z: point.z }
+    case 2: return { x: footprint.widthStuds - point.x, y: footprint.heightStuds - point.y, z: point.z }
+    case 3: return { x: point.y, y: footprint.widthStuds - point.x, z: point.z }
+    default: return point
+  }
+}
+
+const rotateRollVector = (point: WorldVector, turns: number): WorldVector => {
+  switch (turns) {
+    case 1: return { x: -point.y, y: point.x, z: point.z }
+    case 2: return { x: -point.x, y: -point.y, z: point.z }
+    case 3: return { x: point.y, y: -point.x, z: point.z }
+    default: return point
+  }
+}
+
 export const transformBrickLocalPoint = (
   definition: BrickDefinition,
   pose: BrickPose,
   point: WorldPoint,
 ) => {
   const verticalQuarterTurns = normalizeVerticalQuarterTurns(pose.verticalQuarterTurns ?? 0)
-  const verticalPoint = rotateVerticalPoint(point, verticalQuarterTurns, definition.footprint)
-  const verticalFootprint = footprintToWorld(definition, 0, verticalQuarterTurns)
+  const roll = normalizeQuarterTurns(pose.rollQuarterTurns ?? 0)
+  const rolled = rotateRollPoint(point, roll, definition.footprint)
+  const verticalPoint = rotateVerticalPoint(rolled, verticalQuarterTurns, getRolledFootprint(definition.footprint, roll))
+  const verticalFootprint = footprintToWorld(definition, 0, verticalQuarterTurns, pose.rollQuarterTurns ?? 0)
   const rotated = rotateYawPoint(verticalPoint, pose.rotationQuarterTurns, verticalFootprint)
 
   return {
@@ -268,7 +280,7 @@ export const getBrickConnectors = (definition: BrickDefinition, pose: BrickPose)
     const baseDirection = connector.direction ?? axisVector[connector.axis]
     const direction = normaliseVector(
       rotateYawVector(
-        rotateVerticalVector(baseDirection, verticalQuarterTurns),
+        rotateVerticalVector(rotateRollVector(baseDirection, pose.rollQuarterTurns ?? 0), verticalQuarterTurns),
         pose.rotationQuarterTurns,
       ),
     )
@@ -286,4 +298,4 @@ export const getBrickConnectors = (definition: BrickDefinition, pose: BrickPose)
   })
 
 export const poseToLabel = (pose: BrickPose) =>
-  `${pose.xStud}, ${pose.yStud}, ${pose.zStud} • 水平 ${pose.rotationQuarterTurns * 90}° · 垂直 ${(pose.verticalQuarterTurns ?? 0) * 90}°`
+  `${pose.xStud}, ${pose.yStud}, ${pose.zStud} • 水平 ${pose.rotationQuarterTurns * 90}° · 垂直 ${(pose.verticalQuarterTurns ?? 0) * 90}°${pose.rollQuarterTurns ? ` · 轴向 ${pose.rollQuarterTurns * 90}°` : ''}`

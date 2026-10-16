@@ -682,7 +682,7 @@ const getCellHashKeys = (
 }
 
 const getPlacedBrickCacheKey = (brick: PlacedBrick) =>
-  `${brick.brickId}:${brick.pose.xStud},${brick.pose.yStud},${brick.pose.zStud},${brick.pose.rotationQuarterTurns},${brick.pose.verticalQuarterTurns ?? 0}:${brick.voxelState?.slabHalf ?? ''}:${brick.voxelState?.open ? 1 : 0}:${brick.voxelState?.fenceConnections ? Object.values(brick.voxelState.fenceConnections).map(Number).join('') : ''}`
+  `${brick.brickId}:${brick.pose.xStud},${brick.pose.yStud},${brick.pose.zStud},${brick.pose.rotationQuarterTurns},${brick.pose.verticalQuarterTurns ?? 0},${brick.pose.rollQuarterTurns ?? 0}:${brick.voxelState?.slabHalf ?? ''}:${brick.voxelState?.open ? 1 : 0}:${brick.voxelState?.fenceConnections ? Object.values(brick.voxelState.fenceConnections).map(Number).join('') : ''}`
 
 const getOpenDoorStructuralCells = (definition: BrickDefinition): StructuralCell[] => {
   const { widthStuds: width, heightStuds: height, depthStuds: depth } = definition.footprint
@@ -975,7 +975,7 @@ export const getBrickWorldSupportFaces = (brick: PlacedBrick): WorldStructuralSu
   const definition = brickById.get(brick.brickId)
   if (!definition) return makeSupportFaces([], [])
 
-  if ((brick.pose.verticalQuarterTurns ?? 0) === 0 &&
+  if ((brick.pose.verticalQuarterTurns ?? 0) === 0 && (brick.pose.rollQuarterTurns ?? 0) === 0 &&
     !(brick.brickId === 'minecraft-oak-door' && brick.voxelState?.open) &&
     !(definition.voxelVisual?.shape === 'fence' && brick.voxelState?.fenceConnections)) {
     const faces = getBrickWorldHorizontalSupportFaces(definition, brick)

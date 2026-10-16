@@ -189,6 +189,28 @@ export const BrickEditorPanel = ({
             <option value={3}>270°</option>
           </select>
         </label>
+        {selectedCount <= 1 && selectedDefinition?.pack === 'lego' && (
+          <label>
+            {t('control.rollRotation')}
+            <select
+              value={selectedBrick.pose.rollQuarterTurns ?? 0}
+              onChange={(event) =>
+                onUpdateBrick({
+                  ...selectedBrick,
+                  pose: {
+                    ...selectedBrick.pose,
+                    rollQuarterTurns: Number(event.target.value) as 0 | 1 | 2 | 3,
+                  },
+                })
+              }
+            >
+              <option value={0}>0°</option>
+              <option value={1}>90°</option>
+              <option value={2}>180°</option>
+              <option value={3}>270°</option>
+            </select>
+          </label>
+        )}
       </div>
 
       <div className="swatches" aria-label={t('control.colors')}>
