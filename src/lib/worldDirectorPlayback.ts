@@ -1,4 +1,4 @@
-import type { BrickStructure, PlacedBrick } from '../types/bricks'
+import type { BrickStructure, BuildPlan, PlacedBrick } from '../types/bricks'
 import type { WorldDirectorEvent, WorldEntityCommand, WorldState } from '../types/world'
 import { advanceWorldScenarios } from './worldScenarioRuntime'
 import { applyTavernDirectorEvent } from './worldTavernDirector'
@@ -45,7 +45,7 @@ export const beginWorldDirectorPlayback = (world: WorldState): {
 export const finishWorldDirectorPlayback = (
   world: WorldState,
   session: WorldDirectorPlaybackSession,
-  options: { enableAi?: boolean } = {},
+  options: { enableAi?: boolean; plan?: Pick<BuildPlan, 'bricks' | 'structures'> } = {},
 ): WorldState => {
   const suspendedScenarioIds = new Set(session.suspendedScenarioIds)
   const suspendedDurationSeconds = Math.max(0, world.elapsedSeconds - session.suspendedAtSeconds)
@@ -74,6 +74,7 @@ export const finishWorldDirectorPlayback = (
     : { ...world, paused: session.restorePaused, scenarios }
   if (suspendedScenarioIds.size === 0) return restored
   return advanceWorldScenarios(restored, {
+    plan: options.plan,
     allowNewStages: false,
     enableAi: options.enableAi,
   })

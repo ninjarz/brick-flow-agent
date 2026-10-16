@@ -1,3 +1,4 @@
+import { gridCellIndices } from './worldCoordinates'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import type { WorldEntity } from '../types/world'
 
@@ -14,7 +15,6 @@ const placementGridStuds = 0.5
 const placementSearchRadiusStuds = 20
 const overlapToleranceStuds = 0.02
 const separatingToleranceStuds = 0.0001
-const toCell = (value: number) => Math.floor(value / occupancyCellSizeStuds)
 const cellKey = (x: number, z: number) => `${x}:${z}`
 
 export const getWorldEntityCollisionRadius = (entity: WorldEntity) => {
@@ -28,8 +28,8 @@ export const getWorldEntityCollisionRadius = (entity: WorldEntity) => {
 const getOccupiedCellKeys = (entity: WorldEntity) => {
   const radius = getWorldEntityCollisionRadius(entity)
   const keys: string[] = []
-  for (let x = toCell(entity.transform.x - radius); x <= toCell(entity.transform.x + radius); x += 1) {
-    for (let z = toCell(entity.transform.z - radius); z <= toCell(entity.transform.z + radius); z += 1) {
+  for (const x of gridCellIndices(entity.transform.x - radius, entity.transform.x + radius, occupancyCellSizeStuds)) {
+    for (const z of gridCellIndices(entity.transform.z - radius, entity.transform.z + radius, occupancyCellSizeStuds)) {
       keys.push(cellKey(x, z))
     }
   }
@@ -70,8 +70,8 @@ const queryNearbyEntities = (
 ) => {
   const radius = getWorldEntityCollisionRadius(entity)
   const candidateIds = new Set<string>()
-  for (let x = toCell(point.x - radius); x <= toCell(point.x + radius); x += 1) {
-    for (let z = toCell(point.z - radius); z <= toCell(point.z + radius); z += 1) {
+  for (const x of gridCellIndices(point.x - radius, point.x + radius, occupancyCellSizeStuds)) {
+    for (const z of gridCellIndices(point.z - radius, point.z + radius, occupancyCellSizeStuds)) {
       for (const entityId of index.entityIdsByCell.get(cellKey(x, z)) ?? []) candidateIds.add(entityId)
     }
   }

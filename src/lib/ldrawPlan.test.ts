@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatLDrawPlan, parseLDrawPlan } from './ldrawPlan'
+import { formatLDrawPlan, ldrawImportLimits, parseLDrawPlan } from './ldrawPlan'
 import { makeBrick } from './planUtils'
 import type { BuildPlan } from '../types/bricks'
 
@@ -46,4 +46,19 @@ describe('LDraw plan interchange', () => {
     expect(imported?.unsupportedPoseCount).toBe(1)
     expect(imported?.ignoredParts).toBe(3)
   })
+
+  it('rejects exponential MPD expansion before it can exhaust the main thread', () => {
+    const reference = (name: string) => `1 4 0 0 0 1 0 0 0 1 0 0 0 1 ${name}`
+    const text = Array.from({ length: 25 }, (_, level) => [
+      `0 FILE level-${level}.ldr`,
+      ...(level === 24 ? [reference('3005.dat')] : [reference(`level-${level + 1}.ldr`), reference(`level-${level + 1}.ldr`)]),
+    ].join('\n')).join('\n')
+    expect(text.length).toBeLessThan(4000)
+    expect(() => parseLDrawPlan(text)).toThrow('LDRAW_IMPORT_LIMIT_EXCEEDED')
+  })
+
+  it('rejects oversized input before decoding metadata or splitting sections', () => {
+    expect(() => parseLDrawPlan(' '.repeat(ldrawImportLimits.sourceCharacters + 1))).toThrow('LDRAW_IMPORT_LIMIT_EXCEEDED')
+  })
+
 })

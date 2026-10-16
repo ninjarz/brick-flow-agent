@@ -108,6 +108,33 @@ export const useWorkspacePersistence = (session: ReturnType<typeof createWorkspa
       return false
     }
   }, [session])
+  const saveUntilStable = useCallback(async () => {
+    while (true) {
+      const revision = session.getRevision()
+      const saved = await saveCurrent()
+      if (session.getRevision() === revision) return saved
+      if (blocked.current) return false
+    }
+  }, [saveCurrent, session])
+  const installAfterSaving = useCallback(async (project: Project) => {
+    if (!await saveUntilStable()) return
+    // Opening the current project must use the revision just saved above.
+    install(project.id === active.current?.id ? active.current : project)
+  }, [install, saveUntilStable])
+  const preserveLateEdits = useCallback(async (project: Project, revision: number) => {
+    let recovered: Project | undefined
+    while (session.getRevision() !== revision) {
+      revision = session.getRevision()
+      const snapshot = session.getPersistentSnapshot()
+      if (project.id === active.current?.id) {
+        await projectStore.checkpoint(project.id, project.revision, snapshot, 'Edits made during project replacement')
+      } else if (recovered) {
+        recovered = await projectStore.save(recovered.id, recovered.revision, snapshot)
+      } else {
+        recovered = await projectStore.create(snapshot, `${active.current?.name ?? snapshot.plan.title} (recovered edits)`)
+      }
+    }
+  }, [session])
   const save = useCallback(() => enqueue(saveCurrent), [enqueue, saveCurrent])
   useEffect(() => {
     if (!hydrated) return
@@ -148,18 +175,16 @@ export const useWorkspacePersistence = (session: ReturnType<typeof createWorkspa
     open: (id: string) => action(async () => {
       const target = await projectStore.read(id)
       if (!target) throw new ProjectConflict()
-      if (!await saveCurrent()) return
-      if (!await saveCurrent()) return
-      install(await projectStore.activate(id)); await refresh()
+      if (!await saveUntilStable()) return
+      await installAfterSaving(await projectStore.activate(id)); await refresh()
     }),
     create: (name: string, duplicate = false) => action(async () => {
-      if (!await saveCurrent()) return
+      if (!await saveUntilStable()) return
       const snapshot = session.getPersistentSnapshot()
       const id = crypto.randomUUID()
       const next = duplicate ? snapshot : { plan: { ...snapshot.plan, id, title: name, bricks: [], steps: [], prompt: '' }, world: createEmptyWorldState(id), prompt: '' }
       const created = await projectStore.create(next, name)
-      if (!await saveCurrent()) return
-      install(await projectStore.activate(created.id)); await refresh()
+      await installAfterSaving(await projectStore.activate(created.id)); await refresh()
     }),
     rename: (name: string) => action(async () => {
       if (!await saveCurrent() || !active.current) return
@@ -168,12 +193,16 @@ export const useWorkspacePersistence = (session: ReturnType<typeof createWorkspa
     }),
     remove: () => action(async () => {
       if (!await saveCurrent() || !active.current) return
-      const old = active.current
+      let old = active.current
       const others = (await projectStore.list()).filter(item => item.id !== old.id)
       // Keep a formal project available so a legacy backup is never re-migrated.
       const id = crypto.randomUUID()
       const target = others[0] ?? await projectStore.create({ ...old.snapshot, plan: { ...old.snapshot.plan, id, bricks: [], steps: [], prompt: '', title: 'Untitled' }, prompt: '', world: createEmptyWorldState(id) }, 'Untitled')
+      if (!await saveUntilStable() || !active.current) return
+      old = active.current
+      const revision = session.getRevision()
       const selected = await projectStore.removeAndActivate(old.id, old.revision, target.id)
+      await preserveLateEdits(selected, revision)
       clearProjectAnalysis(old.id)
       install(selected); histories.current.delete(old.id); await refresh()
     }),
@@ -183,14 +212,20 @@ export const useWorkspacePersistence = (session: ReturnType<typeof createWorkspa
     }),
     restore: (id: string) => action(async () => {
       if (!await saveCurrent() || !active.current) return
-      install(await projectStore.restore(active.current.id, active.current.revision, id, session.getPersistentSnapshot()), true); await refresh()
+      const revision = session.getRevision()
+      const restored = await projectStore.restore(active.current.id, active.current.revision, id, session.getPersistentSnapshot())
+      await preserveLateEdits(restored, revision)
+      install(restored, true); await refresh()
     }),
     reload: () => action(async () => {
       if (!active.current) return
+      const revision = session.getRevision()
       const found = await projectStore.read(active.current.id)
       const target = found?.id ?? (await projectStore.list())[0]?.id
       if (!target) throw new ProjectConflict()
-      install(await projectStore.activate(target), true); await refresh()
+      const restored = await projectStore.activate(target)
+      await preserveLateEdits(restored, revision)
+      install(restored, true); await refresh()
     }),
     saveAs: (name: string) => action(async () => {
       const project = await createCurrentProject(name)

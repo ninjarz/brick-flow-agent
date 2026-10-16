@@ -22,7 +22,8 @@
     "verify:replicas": "python3 scripts/verify-lego-replicas.py",
     "preview": "vite preview",
     "test:production": "NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost playwright test --config=playwright.production.config.ts",
-    "verify:quality": "npm run lint && npm run build && npm test && npm run test:e2e && npm run test:production && npm run validate:builds && npm run verify:replicas && npm run audit:ldraw && npm run audit:obj-connectivity"
+    "verify:quality": "npm run audit:dependencies && npm run lint && npm run build && npm test && npm run test:e2e && npm run test:production && npm run validate:builds && npm run verify:replicas && npm run audit:ldraw && npm run audit:obj-connectivity",
+    "audit:dependencies": "npm audit --audit-level=moderate"
   },
   "dependencies": {
     "@react-three/drei": "9.122.0",
@@ -45,8 +46,8 @@
     "eslint-plugin-react-refresh": "0.4.16",
     "globals": "15.14.0",
     "typescript": "5.7.2",
-    "typescript-eslint": "8.18.2",
+    "typescript-eslint": "^8.71.2",
     "vite": "^6.4.3",
-    "vitest": "^3.2.6"
+    "vitest": "^4.1.11"
   }
 }

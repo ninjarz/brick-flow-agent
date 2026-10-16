@@ -1,9 +1,13 @@
+import type { BuildPlan } from '../types/bricks'
+import { visibleScenarioDialogue } from './worldScenarioDialogue'
 import type { WorldEvent, WorldScenarioAction, WorldScenarioBranch, WorldScenarioDialogueLine, WorldScenarioRuntime, WorldScenarioStage, WorldScenarioTrigger, WorldState } from '../types/world'
 import { issueWorldEntityCommand, joinWorldParty, leaveWorldParty } from './worldEntity'
 import { grantWorldClue } from './worldClues'
 import { makeScenarioDialogueStoryId } from './worldNarrativeFeed'
 import { getWorldScenarioPlaybackLane, orderWorldScenariosForEvaluation } from './worldScenarioScheduler'
 import { createWorldHiddenTargetIndex } from './worldVisibility'
+
+type ScenarioPlan = Pick<BuildPlan, 'bricks' | 'structures'>
 
 export const evaluateWorldScenarioConditions = (
   world: WorldState,
@@ -93,6 +97,7 @@ const applyScenarioAction = (
   scenario: WorldScenarioRuntime,
   action: WorldScenarioAction,
   event: WorldEvent,
+  plan?: ScenarioPlan,
 ): WorldState => {
   if (action.type === 'set-faction') {
     return {
@@ -129,10 +134,21 @@ const applyScenarioAction = (
       world,
       action.entityId,
       action.command,
-      (target) => target.kind === 'entity' && world.entities.some((entity) => entity.id === target.id),
+      (target) => {
+        if (world.hiddenTargets.some((hidden) => hidden.kind === target.kind && hidden.id === target.id)) return false
+        if (target.kind === 'entity') return world.entities.some((entity) => entity.id === target.id)
+        if (target.kind === 'brick') return Boolean(plan?.bricks.some((brick) => brick.id === target.id))
+        if (target.kind === 'structure') return Boolean(plan?.structures?.some((structure) => structure.id === target.id))
+        return false
+      },
       'replace',
     )
-    return result.ok ? result.world : world
+    if (result.ok) return result.world
+    return { ...world, narrative: { ...world.narrative, stories: [...world.narrative.stories, {
+      id: `scenario-command-rejected-${scenario.id}-${event.id}-${world.narrative.stories.length}`,
+      title: 'Scenario command rejected', body: `${action.entityId}: ${'issue' in result ? result.issue : 'COMMAND_REJECTED'}`,
+      createdAtSeconds: world.elapsedSeconds, eventIds: [event.id], source: 'local' as const,
+    }].slice(-40) } }
   }
   if (action.type === 'set-visibility') {
     const key = `${action.target.kind}:${action.target.id}`
@@ -277,6 +293,7 @@ const completeStage = (
   dialogueOverride?: WorldScenarioDialogueLine[],
   source: 'authored' | 'ai' = 'authored',
   applyActions = true,
+  plan?: ScenarioPlan,
 ) => {
   const activeStage = scenario.stages[activeStageIndex]
   const nextStageIndex = branch
@@ -310,7 +327,7 @@ const completeStage = (
   )
   if (applyActions) {
     for (const action of branch?.actions ?? activeStage.actions ?? []) {
-      nextWorld = applyScenarioAction(nextWorld, updatedScenario, action, event)
+      nextWorld = applyScenarioAction(nextWorld, updatedScenario, action, event, plan)
     }
   }
   return { world: nextWorld, scenario: updatedScenario }
@@ -324,11 +341,12 @@ const startTimelineOrCompleteStage = (
   branch?: WorldScenarioBranch,
   dialogueOverride?: WorldScenarioDialogueLine[],
   source: 'authored' | 'ai' = 'authored',
+  plan?: ScenarioPlan,
 ): { world: WorldState; scenario: WorldScenarioRuntime } => {
   const activeStage = scenario.stages[activeStageIndex]
   const actions = branch?.actions ?? activeStage.actions ?? []
   if (!actions.some((action) => (action.delaySeconds ?? 0) > 0)) {
-    return completeStage(world, scenario, activeStageIndex, event, branch, dialogueOverride, source)
+    return completeStage(world, scenario, activeStageIndex, event, branch, dialogueOverride, source, true, plan)
   }
   const stagedScenario: WorldScenarioRuntime = {
     ...scenario,
@@ -350,6 +368,7 @@ const startTimelineOrCompleteStage = (
     activeStageIndex,
     event,
     branch,
+    plan,
   )
 }
 
@@ -359,6 +378,7 @@ const advanceScenarioTimeline = (
   activeStageIndex: number,
   event: WorldEvent,
   branch?: WorldScenarioBranch,
+  plan?: ScenarioPlan,
 ): { world: WorldState; scenario: WorldScenarioRuntime } => {
   const timeline = scenario.activeTimeline
   const activeStage = scenario.stages[activeStageIndex]
@@ -370,7 +390,7 @@ const advanceScenarioTimeline = (
   let actionIndex = timeline.actionIndex
   let nextActionAtSeconds = timeline.nextActionAtSeconds
   while (actionIndex < actions.length && world.elapsedSeconds >= nextActionAtSeconds) {
-    nextWorld = applyScenarioAction(nextWorld, scenario, actions[actionIndex], event)
+    nextWorld = applyScenarioAction(nextWorld, scenario, actions[actionIndex], event, plan)
     actionIndex += 1
     if (actionIndex < actions.length) {
       nextActionAtSeconds += Math.max(0, actions[actionIndex].delaySeconds ?? 0)
@@ -386,6 +406,7 @@ const advanceScenarioTimeline = (
       timeline.generatedDialogue,
       timeline.source,
       false,
+      plan,
     )
   }
   return {
@@ -414,6 +435,7 @@ export const resolveWorldScenarioAi = (
   world: WorldState,
   scenarioId: string,
   resolution: WorldScenarioAiResolution,
+  plan?: ScenarioPlan,
 ): WorldState => {
   const scenarioIndex = world.scenarios.findIndex((scenario) => scenario.id === scenarioId)
   const scenario = world.scenarios[scenarioIndex]
@@ -503,7 +525,7 @@ export const resolveWorldScenarioAi = (
     }
   }
 
-  const completed = startTimelineOrCompleteStage(world, clearedScenario, activeStageIndex, event, branch, undefined, source)
+  const completed = startTimelineOrCompleteStage(world, clearedScenario, activeStageIndex, event, branch, undefined, source, plan)
   return {
     ...completed.world,
     scenarios: completed.world.scenarios.map((candidate, index) => index === scenarioIndex ? completed.scenario : candidate),
@@ -512,7 +534,7 @@ export const resolveWorldScenarioAi = (
 
 export const advanceWorldScenarios = (
   world: WorldState,
-  options: { allowNewStages?: boolean; enableAi?: boolean; suspendActivePlayback?: boolean } = {},
+  options: { allowNewStages?: boolean; enableAi?: boolean; suspendActivePlayback?: boolean; plan?: ScenarioPlan } = {},
 ): WorldState => {
   if (options.suspendActivePlayback) return world
   let nextWorld = world
@@ -531,7 +553,7 @@ export const advanceWorldScenarios = (
     if (scenario.pendingAi) {
       if (options.enableAi !== false) return scenario
       scenariosChanged = true
-      nextWorld = resolveWorldScenarioAi(nextWorld, scenario.id, {})
+      nextWorld = resolveWorldScenarioAi(nextWorld, scenario.id, {}, options.plan)
       return nextWorld.scenarios.find((candidate) => candidate.id === scenario.id) ?? scenario
     }
     const activeStageIndex = scenario.stages.findIndex((stage) => stage.status === 'active')
@@ -549,7 +571,7 @@ export const advanceWorldScenarios = (
         targetId: activeStage.trigger.targetId,
         commandType: activeStage.trigger.commandType,
       }
-      const advanced = advanceScenarioTimeline(nextWorld, scenario, activeStageIndex, event, activeBranch)
+      const advanced = advanceScenarioTimeline(nextWorld, scenario, activeStageIndex, event, activeBranch, options.plan)
       if (advanced.world !== nextWorld || advanced.scenario !== scenario) scenariosChanged = true
       nextWorld = advanced.world
       return advanced.scenario
@@ -558,14 +580,9 @@ export const advanceWorldScenarios = (
       const activeBranch = scenario.activeDialogue.branchId
         ? activeStage.branches?.find((branch) => branch.id === scenario.activeDialogue?.branchId)
         : undefined
-      const dialogue = scenario.activeDialogue.generatedDialogue ?? activeBranch?.dialogue ?? activeStage.dialogue ?? []
-      const hiddenEntityIds = createWorldHiddenTargetIndex(world.hiddenTargets, []).hiddenEntityIds
-      const visibleDialogue = dialogue.filter((line) => {
-        const speaker = world.entities.find((entity) => entity.id === line.speakerId)
-        return speaker && !hiddenEntityIds.has(speaker.id)
-      })
-      if (visibleDialogue.length === 0) return { ...scenario, activeDialogue: undefined }
-      const currentLineIndex = Math.min(scenario.activeDialogue.lineIndex, dialogue.length - 1)
+      const visibleDialogue = visibleScenarioDialogue(world, activeStage, scenario.activeDialogue)
+      if (visibleDialogue.length === 0) { scenariosChanged = true; return { ...scenario, activeDialogue: undefined } }
+      const currentLineIndex = Math.min(scenario.activeDialogue.lineIndex, visibleDialogue.length - 1)
       nextWorld = stopDialogueParticipants(nextWorld, scenario, visibleDialogue, currentLineIndex, scenario.activeDialogue.lineEndsAtSeconds)
       if (world.elapsedSeconds < scenario.activeDialogue.lineEndsAtSeconds) return scenario
       if (currentLineIndex + 1 < visibleDialogue.length) {
@@ -580,7 +597,7 @@ export const advanceWorldScenarios = (
             lineEndsAtSeconds: world.elapsedSeconds + Math.max(0.5, nextLine.durationSeconds),
           },
         }
-        nextWorld = stopDialogueParticipants(nextWorld, updatedScenario, dialogue, nextLineIndex, updatedScenario.activeDialogue.lineEndsAtSeconds)
+        nextWorld = stopDialogueParticipants(nextWorld, updatedScenario, visibleDialogue, nextLineIndex, updatedScenario.activeDialogue.lineEndsAtSeconds)
         return updatedScenario
       }
       scenariosChanged = true
@@ -600,6 +617,7 @@ export const advanceWorldScenarios = (
         activeBranch,
         scenario.activeDialogue.generatedDialogue,
         scenario.activeDialogue.source,
+        options.plan,
       )
       nextWorld = completed.world
       return completed.scenario
@@ -705,7 +723,7 @@ export const advanceWorldScenarios = (
       nextWorld = stopDialogueParticipants(nextWorld, updatedScenario, visibleDialogue, 0, updatedScenario.activeDialogue!.lineEndsAtSeconds)
       return updatedScenario
     }
-    const completed = startTimelineOrCompleteStage(nextWorld, consumedScenario, activeStageIndex, event, branch)
+    const completed = startTimelineOrCompleteStage(nextWorld, consumedScenario, activeStageIndex, event, branch, undefined, 'authored', options.plan)
     nextWorld = completed.world
     return completed.scenario
   })

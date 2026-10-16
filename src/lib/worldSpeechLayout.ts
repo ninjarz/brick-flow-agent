@@ -1,3 +1,5 @@
+import type { WorldEntity } from '../types/world'
+
 export type WorldSpeechLayoutInput = {
   id: string
   anchorX: number
@@ -167,3 +169,11 @@ export const layoutWorldSpeechBubbles = (
 
   return placed
 }
+
+/** Keep dense crowds readable while preserving the selected actor and authored/AI dialogue. */
+export const selectWorldSpeechEntities = (entities: WorldEntity[], selectedId?: string, limit = 8) => entities
+  .filter((entity) => entity.speech && entity.health > 0)
+  .map((entity, index) => ({ entity, index, priority: entity.id === selectedId ? 0 : entity.speech?.message === 'scenario-dialogue' ? 1 : 2 }))
+  .sort((left, right) => left.priority - right.priority || left.index - right.index)
+  .slice(0, Math.max(0, limit))
+  .map(({ entity }) => entity)

@@ -1,5 +1,8 @@
+import type { WorldEntity } from '../types/world'
+import { createWorldEntity } from './worldEntity'
+import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { describe, expect, it } from 'vitest'
-import { layoutWorldSpeechBubbles } from './worldSpeechLayout'
+import { layoutWorldSpeechBubbles, selectWorldSpeechEntities } from './worldSpeechLayout'
 
 const overlaps = (
   left: ReturnType<typeof layoutWorldSpeechBubbles>[number]['rect'],
@@ -87,4 +90,17 @@ describe('world speech bubble layout', () => {
       expect(Math.abs(nextCenterY - previousPosition.centerY)).toBeLessThan(2)
     }
   })
+
+  it('caps dense speech crowds while retaining selected actors and scenario dialogue', () => {
+    const entities: WorldEntity[] = Array.from({ length: 60 }, (_, index) => ({
+      ...createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: `actor-${index}` }),
+      speech: { message: 'chat-greeting' as const, text: 'Hello', expiresAtSeconds: 10 },
+    }))
+    entities[58].speech!.message = 'scenario-dialogue'
+    const selected = selectWorldSpeechEntities(entities, 'actor-59')
+    expect(selected).toHaveLength(8)
+    expect(selected.slice(0, 2).map((entity) => entity.id)).toEqual(['actor-59', 'actor-58'])
+    expect(selectWorldSpeechEntities(entities.slice(0, 3))).toEqual(entities.slice(0, 3))
+  })
+
 })

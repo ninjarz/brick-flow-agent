@@ -3,6 +3,7 @@ import { OrbitControls } from '@react-three/drei'
 import { useEffect, useState } from 'react'
 import { Box3, Group, Mesh, PerspectiveCamera, Sphere, Vector3 } from 'three'
 import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js'
+import { disposeOwnedObjectResources } from '../lib/objectResources'
 import replicas from '../data/legoReplicaManifest.json'
 import './LegoReplicaGallery.css'
 
@@ -16,7 +17,7 @@ const loadFileMap = () => {
   fileMapPromise ??= fetch(`${base}fileMap.json`).then((response) => {
     if (!response.ok) throw new Error(`零件索引加载失败 (${response.status})`)
     return response.json() as Promise<Record<string, string>>
-  })
+  }).catch((error: unknown) => { fileMapPromise = undefined; throw error })
   return fileMapPromise
 }
 
@@ -41,7 +42,7 @@ const loadModel = async (replica: Replica): Promise<LoadedModel> => {
   group.rotation.x = Math.PI
   group.updateMatrixWorld(true)
   const bounds = new Box3().setFromObject(group)
-  if (bounds.isEmpty()) throw new Error(`模型没有可显示的几何体（根节点 ${group.children.length} 个子节点）`)
+  if (bounds.isEmpty()) { disposeOwnedObjectResources(group); throw new Error('模型没有可显示的几何体') }
   const center = bounds.getCenter(new Vector3())
   const sphere = bounds.getBoundingSphere(new Sphere())
   group.position.sub(center)
@@ -95,6 +96,7 @@ export function LegoReplicaGallery() {
   const [selected, setSelected] = useState<Replica>(replicas[1])
   const [loaded, setLoaded] = useState<LoadedModel | null>(null)
   const [error, setError] = useState('')
+  const [loadAttempt, setLoadAttempt] = useState(0)
   const [step, setStep] = useState(0)
   const [play, setPlay] = useState(false)
   const [showEdges, setShowEdges] = useState(false)
@@ -102,19 +104,21 @@ export function LegoReplicaGallery() {
 
   useEffect(() => {
     let active = true
+    let owned: LoadedModel | undefined
     setLoaded(null)
     setError('')
     setPlay(false)
     setFocusToken(0)
     loadModel(selected).then((result) => {
-      if (!active) return
+      if (!active) { disposeOwnedObjectResources(result.group); return }
+      owned = result
       setLoaded(result)
       setStep(result.steps - 1)
     }).catch((cause: unknown) => {
       if (active) setError(cause instanceof Error ? cause.message : String(cause))
     })
-    return () => { active = false }
-  }, [selected])
+    return () => { active = false; if (owned) disposeOwnedObjectResources(owned.group) }
+  }, [loadAttempt, selected])
 
   useEffect(() => {
     if (!play || !loaded) return
@@ -155,7 +159,7 @@ export function LegoReplicaGallery() {
         </div>
       </header>
       <div className="lego-replica-canvas" data-testid="lego-replica-canvas">
-        {!loaded && <div className="lego-replica-loading" role="status">{error || (selected.modelPieceCount > 2500 ? `正在组装 ${selected.modelPieceCount.toLocaleString()} 个零件的几何体，首次加载约需 30–60 秒…` : '正在加载模型和零件几何体…')}</div>}
+        {!loaded && <div className="lego-replica-loading" role="status">{error || (selected.modelPieceCount > 2500 ? `正在组装 ${selected.modelPieceCount.toLocaleString()} 个零件的几何体，首次加载约需 30–60 秒…` : '正在加载模型和零件几何体…')}{error && <button type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>重试加载</button>}</div>}
         {loaded && <Canvas key={selected.number} frameloop="demand" camera={{ position: [loaded.radius * 1.55, loaded.radius * 1.05, loaded.radius * 1.55], fov: 40, near: 1, far: loaded.radius * 20 }}>
           <color attach="background" args={['#16243a']} />
           <ambientLight intensity={2.2} />

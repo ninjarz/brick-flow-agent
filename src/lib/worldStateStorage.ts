@@ -1,3 +1,4 @@
+import { isWorldCoordinate } from './worldCoordinates'
 import type { WorldEntity, WorldEntityCommand, WorldEntityControllerKind, WorldEntityGoal, WorldDirectorEntry, WorldDirectorEvent, WorldDirectorCheckpoint, WorldScenarioAction, WorldScenarioStage, WorldState, WorldTargetRef } from '../types/world'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { createWorldEntityGoal, normalizeWorldCharacterSpark, normalizeWorldEntityGoals } from './worldCharacter'
@@ -112,7 +113,7 @@ const parseStoredEntity = (value: unknown): WorldEntity | undefined => {
   if (typeof value.definitionId !== 'string' || typeof value.name !== 'string' || !value.name.trim()) return undefined
   const definition = worldEntityDefinitionById.get(value.definitionId)
   if (!definition || !isRecord(value.transform)) return undefined
-  if (!isFiniteNumber(value.transform.x) || !isFiniteNumber(value.transform.y) || !isFiniteNumber(value.transform.z)) return undefined
+  if (!isWorldCoordinate(value.transform.x) || !isWorldCoordinate(value.transform.y) || !isWorldCoordinate(value.transform.z)) return undefined
   if (!isFiniteNumber(value.transform.rotationRadians)) return undefined
   const entity = createWorldEntity(definition, {
     id: value.id.trim(),
@@ -189,7 +190,7 @@ const parseStoredEntity = (value: unknown): WorldEntity | undefined => {
         ? Math.max(0, value.autonomy.nextDecisionAtSeconds)
         : 2 + (stableEntityNumber(entity.id) % 5),
       home: isRecord(value.autonomy) && isRecord(value.autonomy.home)
-        && isFiniteNumber(value.autonomy.home.x) && isFiniteNumber(value.autonomy.home.z)
+        && isWorldCoordinate(value.autonomy.home.x) && isWorldCoordinate(value.autonomy.home.z)
         ? { x: value.autonomy.home.x, z: value.autonomy.home.z }
         : { x: entity.transform.x, z: entity.transform.z },
     },
@@ -209,12 +210,27 @@ const eventTypes = new Set<WorldState['events'][number]['type']>([
   'attack', 'damage', 'miss', 'defeated', 'revive', 'brick-hit', 'structure-hit', 'interaction', 'object-interaction', 'command-issued', 'command-complete',
 ])
 
-const parseStoredEvents = (value: unknown): WorldState['events'] => Array.isArray(value)
-  ? value.filter((event): event is WorldState['events'][number] => (
-      isRecord(event) && typeof event.id === 'string' && isFiniteNumber(event.timeSeconds) &&
-      eventTypes.has(event.type as WorldState['events'][number]['type']) && typeof event.actorId === 'string'
-    )).slice(-500)
-  : []
+const parseStoredEvents = (value: unknown): WorldState['events'] => !Array.isArray(value) ? [] : value.slice(-500).flatMap((event): WorldState['events'] => {
+  if (!isRecord(event) || typeof event.id !== 'string' || !event.id.trim() || !isFiniteNumber(event.timeSeconds) ||
+    !eventTypes.has(event.type as WorldState['events'][number]['type']) || typeof event.actorId !== 'string') return []
+  const parsed: WorldState['events'][number] = {
+    id: event.id.slice(0, 180), timeSeconds: Math.max(0, event.timeSeconds),
+    type: event.type as WorldState['events'][number]['type'], actorId: event.actorId.slice(0, 180),
+  }
+  for (const key of ['actorName', 'targetId', 'targetName', 'dialogueText', 'dialogueSpeakerId', 'dialogueListenerId'] as const) {
+    if (typeof event[key] === 'string') parsed[key] = event[key].slice(0, key === 'dialogueText' ? 2000 : 180)
+  }
+  if (isFiniteNumber(event.amount)) parsed.amount = event.amount
+  if (typeof event.commandType === 'string' && ['stop', 'wander', 'move', 'attack', 'revive', 'guard', 'follow', 'interact', 'patrol'].includes(event.commandType)) parsed.commandType = event.commandType as WorldEntityCommand['type']
+  if (isController(event.commandSource)) parsed.commandSource = event.commandSource
+  if (typeof event.objectAction === 'string' && ['open', 'close', 'toggle', 'power-on', 'power-off', 'inspect'].includes(event.objectAction)) parsed.objectAction = event.objectAction as NonNullable<typeof parsed.objectAction>
+  if (event.projectileKind === 'arrow' || event.projectileKind === 'stone') parsed.projectileKind = event.projectileKind
+  for (const key of ['origin', 'impactPoint'] as const) {
+    const point = event[key]
+    if (isRecord(point) && isWorldCoordinate(point.x) && isWorldCoordinate(point.y) && isWorldCoordinate(point.z)) parsed[key] = { x: point.x, y: point.y, z: point.z }
+  }
+  return [parsed]
+})
 
 const normalizeArrayRecord = <T>(value: unknown, predicate: (item: unknown) => item is T) => {
   if (!isRecord(value)) return {} as Record<string, T[]>
@@ -472,8 +488,8 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
     Boolean(parseTargetRef(impact.target)) && isRecord(impact.target) && ['entity', 'brick', 'structure'].includes(String(impact.target.kind)) &&
     isFiniteNumber(impact.damage) && impact.damage > 0 &&
     (impact.projectileKind === 'arrow' || impact.projectileKind === 'stone') && isFiniteNumber(impact.impactAtSeconds) &&
-    isRecord(impact.impactPoint) && isFiniteNumber(impact.impactPoint.x) &&
-    isFiniteNumber(impact.impactPoint.y) && isFiniteNumber(impact.impactPoint.z)
+    isRecord(impact.impactPoint) && isWorldCoordinate(impact.impactPoint.x) &&
+    isWorldCoordinate(impact.impactPoint.y) && isWorldCoordinate(impact.impactPoint.z)
   )).slice(-100) : []
   const narrative = isRecord(value.narrative) ? value.narrative : {}
 
@@ -1018,6 +1034,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
     entities: restoredEntities,
     parties,
     events: migratedEvents,
+    ...(Array.isArray(value.appliedObjectEventIds) ? { appliedObjectEventIds: value.appliedObjectEventIds.filter((id): id is string => typeof id === 'string').slice(-1_000) } : {}),
     pendingImpacts,
     scenarios,
     hiddenTargets,

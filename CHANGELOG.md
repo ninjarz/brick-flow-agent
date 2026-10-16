@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Preserve edits made during project activation, deletion, checkpoint restoration and reload; retain late replacement edits as recoverable checkpoints or projects.
+- Stop asset autosaves after failed recovery, preserve damaged copies, support retries and merge edits made while loading.
+- Commit world-object changes with persisted event consumption and reject stale director-turn finalizers across workspace replacements.
+- Bound imported coordinates and LDraw expansion, move LDraw parsing/validation into a cancellable worker, sanitize recovered world events and validate OBJ files before reads.
+- Isolate scene shortcuts and focus while dialogs are open; repair copied AI fallback references, generated dialogue display and scenario brick/structure commands.
+- Release owned replica resources on cancellation/unmount, allow loading retries and limit crowded speech overlays while prioritizing selected actors and scenario dialogue.
+- Update audited dependencies, include dependency auditing in release/CI gates and correct the 1500-block production fixture with validity and obstacle-count assertions.
+
 - Restore all six Minecraft block faces by assigning cached materials as a mesh material array, including instanced blocks and compound shapes.
 - Preserve official transparent colors in LEGO palettes, thumbnails, scene materials and LDraw export; migrate legacy 3065 colors in projects, checkpoints and imported files.
 

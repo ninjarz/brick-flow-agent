@@ -167,6 +167,10 @@ export const duplicateWorldScenarioStage = (
     id: `${stageId}-branch-${index + 1}`,
     dialogue: branch.dialogue?.map((line, lineIndex) => ({ ...line, id: `${stageId}-branch-${index + 1}-line-${lineIndex + 1}` })),
   }))
+  if (copied.ai?.fallbackBranchId) {
+    const index = source.branches?.findIndex((branch) => branch.id === copied.ai?.fallbackBranchId) ?? -1
+    if (index >= 0 && copied.branches?.[index]) copied.ai = { ...copied.ai, fallbackBranchId: copied.branches[index].id }
+  }
   const stages = [...scenario.stages]
   if (source.nextStageId !== undefined) stages[sourceIndex] = { ...source, nextStageId: stageId }
   stages.splice(sourceIndex + 1, 0, copied)

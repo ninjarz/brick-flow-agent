@@ -6,12 +6,16 @@ import {
   type ObjImportWorkerResponse,
 } from '../lib/objImport'
 
+import { validateObjImportFiles } from '../lib/objImportFiles'
+
 const workerScope = self as unknown as DedicatedWorkerGlobalScope
 
 workerScope.onmessage = async (event: MessageEvent<ObjImportWorkerRequest>) => {
   if (event.data.type !== 'import') return
 
   try {
+    const invalid = validateObjImportFiles(event.data.file, event.data.materialFiles)
+    if (invalid) throw new Error(invalid)
     let text: string
     try {
       text = await event.data.file.text()

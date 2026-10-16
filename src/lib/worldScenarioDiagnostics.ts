@@ -1,3 +1,4 @@
+import type { BuildPlan } from '../types/bricks'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import type { WorldEvent, WorldState } from '../types/world'
 import { advanceWorldScenarios } from './worldScenarioRuntime'
@@ -101,7 +102,7 @@ const nextPerformanceTime = (world: WorldState) => Math.min(
 
 export const settleWorldScenarioPerformance = (
   initialWorld: WorldState,
-  options: { maxSteps?: number; enableAi?: boolean } = {},
+  options: { maxSteps?: number; enableAi?: boolean; plan?: Pick<BuildPlan, 'bricks' | 'structures'> } = {},
 ): WorldScenarioSimulationResult => {
   const maxSteps = Math.max(1, options.maxSteps ?? 200)
   let world = initialWorld
@@ -113,7 +114,7 @@ export const settleWorldScenarioPerformance = (
       : world.elapsedSeconds
     const next = advanceWorldScenarios(
       elapsedSeconds === world.elapsedSeconds ? world : { ...world, elapsedSeconds },
-      { enableAi: options.enableAi ?? false },
+      { enableAi: options.enableAi ?? false, plan: options.plan },
     )
     steps += 1
     if (next === world) break
@@ -130,7 +131,7 @@ export const settleWorldScenarioPerformance = (
 export const runWorldScenarioScript = (
   initialWorld: WorldState,
   events: WorldEvent[],
-  options: { maxStepsPerEvent?: number; enableAi?: boolean } = {},
+  options: { maxStepsPerEvent?: number; enableAi?: boolean; plan?: Pick<BuildPlan, 'bricks' | 'structures'> } = {},
 ): WorldScenarioSimulationResult => {
   let world = initialWorld
   let steps = 0
@@ -139,8 +140,9 @@ export const runWorldScenarioScript = (
       ...world,
       elapsedSeconds: Math.max(world.elapsedSeconds, event.timeSeconds),
       events: [...world.events, event].slice(-500),
-    }, { enableAi: options.enableAi ?? false })
+    }, { enableAi: options.enableAi ?? false, plan: options.plan })
     const settled = settleWorldScenarioPerformance(world, {
+      plan: options.plan,
       maxSteps: options.maxStepsPerEvent,
       enableAi: options.enableAi,
     })

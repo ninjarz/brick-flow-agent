@@ -1,3 +1,4 @@
+import { isWorldCoordinate } from './worldCoordinates'
 import type { BrickColor, BuildPlan, PlacedBrick, VoxelBlockState } from '../types/bricks'
 import {
   normalizeHorizontalStud,
@@ -15,9 +16,11 @@ export const isValidImportedPose = (value: unknown): value is Record<string, unk
   if (!isRecord(value)) return false
 
   return (
-    Number.isFinite(value.xStud) &&
-    (Number.isFinite(value.yStud) || Number.isFinite(value.yPlate)) &&
-    Number.isFinite(value.zStud) &&
+    isWorldCoordinate(value.xStud) &&
+    (Number.isFinite(value.yStud)
+      ? isWorldCoordinate(value.yStud)
+      : typeof value.yPlate === 'number' && isWorldCoordinate(plateHeightToWorldStud(value.yPlate))) &&
+    isWorldCoordinate(value.zStud) &&
     [0, 1, 2, 3].includes(Number(value.rotationQuarterTurns)) &&
     (value.verticalQuarterTurns === undefined || [0, 1, 2, 3].includes(Number(value.verticalQuarterTurns)))
   )

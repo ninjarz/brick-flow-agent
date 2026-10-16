@@ -1,5 +1,5 @@
 import { openDatabase } from './browserStorage'
-import { migrateLegacyTransparentColors } from './planImport'
+import { normalizeProjectSnapshot } from './projectSnapshot'
 import { coordinateStorageWrite } from './storageCoordinator'
 import type { WorkspaceSnapshot } from './workspaceSession'
 
@@ -36,12 +36,16 @@ const transact = async <T>(write: boolean, run: (tx: IDBTransaction) => Promise<
   if (!saved) throw failure ?? new Error('STORAGE_PAUSED')
   return result
 }
-const readProject = async (tx: IDBTransaction, id: string): Promise<Project | undefined> => {
+const readProjectRecord = async (tx: IDBTransaction, id: string): Promise<Project | undefined> => {
   const index = await request(tx.objectStore('projects').get(id)) as ProjectIndex | undefined
   if (!index) return undefined
   const snapshot = await request(tx.objectStore('project-content').get(id)) as WorkspaceSnapshot | undefined
   if (!snapshot?.plan || !snapshot.world || index.schemaVersion !== 1) throw new Error('PROJECT_CONTENT_INVALID')
-  return { ...index, snapshot: { ...snapshot, plan: migrateLegacyTransparentColors(snapshot.plan) } }
+  return { ...index, snapshot }
+}
+const readProject = async (tx: IDBTransaction, id: string): Promise<Project | undefined> => {
+  const project = await readProjectRecord(tx, id)
+  return project ? { ...project, snapshot: normalizeProjectSnapshot(project.snapshot) } : undefined
 }
 const putProject = async (tx: IDBTransaction, project: Project) => {
   const { snapshot, ...index } = project
@@ -102,34 +106,34 @@ export const projectStore = {
     return project
   }),
   save: (id: string, revision: number, snapshot: WorkspaceSnapshot, name?: string) => transact(true, async tx => {
-    const old = assertRevision(await readProject(tx, id), revision)
+    const old = assertRevision(await readProjectRecord(tx, id), revision)
     const next = { ...old, snapshot, name: name?.trim().slice(0, 120) || old.name, revision: revision + 1, savedAt: Date.now() }
     await putProject(tx, next)
     return next
   }),
   checkpoint: (id: string, revision: number, snapshot: WorkspaceSnapshot, name: string) => transact(true, async tx => {
-    const old = assertRevision(await readProject(tx, id), revision)
+    const old = assertRevision(await readProjectRecord(tx, id), revision)
     await checkpoint(tx, { ...old, snapshot }, name)
   }),
   checkpoints: (id: string) => transact(false, async tx => (await request(tx.objectStore('project-checkpoints').getAll()) as ProjectCheckpoint[]).filter(item => item.projectId === id).sort((a, b) => b.savedAt - a.savedAt)),
   restore: (id: string, revision: number, checkpointId: string, current: WorkspaceSnapshot) => transact(true, async tx => {
-    const old = assertRevision(await readProject(tx, id), revision)
+    const old = assertRevision(await readProjectRecord(tx, id), revision)
     const saved = await request(tx.objectStore('project-checkpoints').get(checkpointId)) as ProjectCheckpoint | undefined
     if (!saved || saved.projectId !== id) throw new Error('CHECKPOINT_MISSING')
     await checkpoint(tx, { ...old, snapshot: current }, 'Before restore')
-    const next = { ...old, snapshot: { ...saved.snapshot, plan: migrateLegacyTransparentColors(saved.snapshot.plan) }, revision: revision + 1, savedAt: Date.now() }
+    const next = { ...old, snapshot: normalizeProjectSnapshot(saved.snapshot), revision: revision + 1, savedAt: Date.now() }
     await putProject(tx, next)
     return next
   }),
   remove: (id: string, revision: number) => transact(true, async tx => {
-    assertRevision(await readProject(tx, id), revision)
+    assertRevision(await readProjectRecord(tx, id), revision)
     await request(tx.objectStore('projects').delete(id))
     await request(tx.objectStore('project-content').delete(id))
     const all = await request(tx.objectStore('project-checkpoints').getAll()) as ProjectCheckpoint[]
     for (const item of all.filter(item => item.projectId === id)) await request(tx.objectStore('project-checkpoints').delete(item.id))
   }),
   removeAndActivate: (id: string, revision: number, targetId: string) => transact(true, async tx => {
-    assertRevision(await readProject(tx, id), revision)
+    assertRevision(await readProjectRecord(tx, id), revision)
     if (id === targetId) throw new ProjectConflict()
     const target = await readProject(tx, targetId)
     if (!target) throw new ProjectConflict()

@@ -32,6 +32,8 @@ const defaultAssetIds = new Set([
   'finished-duck',
   ...minecraftSceneAssets.map((asset) => asset.id),
 ])
+let recoveryBlocked = false
+
 let generatedObjAssetsPromise: Promise<FinishedAsset[]> | undefined
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -117,14 +119,25 @@ export const loadAllDefaultFinishedAssets = async () => {
   return [...defaultFinishedAssets, ...await generatedObjAssetsPromise]
 }
 
-const normalizeStoredAssets = (value: unknown) => {
-  if (!Array.isArray(value)) return []
-  return value
-      .filter(isFinishedAsset)
-      .map(normalizeAsset)
-      .filter((asset): asset is FinishedAsset => Boolean(asset))
-      .filter((asset) => getBlockingBuildPlanIssues(validateBuildPlan(asset.plan)).length === 0)
+const normalizeStoredAssets = (value: unknown): FinishedAsset[] => {
+  if (!Array.isArray(value)) throw new Error('INVALID_ASSET_STORAGE')
+  return value.map((item) => {
+    if (!isFinishedAsset(item)) throw new Error('INVALID_ASSET_STORAGE')
+    const asset = normalizeAsset(item)
+    if (!asset || getBlockingBuildPlanIssues(validateBuildPlan(asset.plan)).length > 0) throw new Error('INVALID_ASSET_STORAGE')
+    return asset
+  })
 }
+
+export const mergeRecoveredFinishedAssets = (stored: FinishedAsset[], current: FinishedAsset[]) => {
+  const custom = new Map(stored.filter((asset) => !isDefaultFinishedAsset(asset)).map((asset) => [asset.id, asset]))
+  for (const asset of current) if (!isDefaultFinishedAsset(asset)) custom.set(asset.id, asset)
+  return mergeWithDefaultAssets([...custom.values()], current.filter(isDefaultFinishedAsset))
+}
+
+export type FinishedAssetsLoadResult =
+  | { status: 'loaded'; assets: FinishedAsset[] }
+  | { status: 'missing' | 'unavailable' | 'invalid' }
 
 export const hasIndexedDbFinishedAssets = () => {
   if (typeof window === 'undefined') return false
@@ -137,36 +150,56 @@ export const hasIndexedDbFinishedAssets = () => {
 
 export const needsFinishedAssetsRecovery = () => {
   const inline = safeStorage.getItem(storageKey)
-  return !inline || isIndexedDbStorageMarker(inline)
+  if (!inline || isIndexedDbStorageMarker(inline)) return true
+  try { normalizeStoredAssets(JSON.parse(inline)); return false } catch { return true }
 }
 
 export const loadFinishedAssets = (): FinishedAsset[] => {
   if (typeof window === 'undefined') return defaultFinishedAssets
 
   const stored = safeStorage.getItem(storageKey)
-  if (!stored || isIndexedDbStorageMarker(stored)) return defaultFinishedAssets
+  if (!stored || isIndexedDbStorageMarker(stored)) { recoveryBlocked = true; return defaultFinishedAssets }
 
   try {
     const validStoredAssets = normalizeStoredAssets(JSON.parse(stored) as unknown)
+    recoveryBlocked = false
 
     return mergeWithDefaultAssets(validStoredAssets)
   } catch {
+    recoveryBlocked = true
     return defaultFinishedAssets
   }
 }
 
-export const loadFinishedAssetsFromIndexedDb = async () => {
-  try {
-    const stored = await readLargeStoredValue<unknown>(indexedDbKey)
-    return stored === undefined ? undefined : mergeWithDefaultAssets(normalizeStoredAssets(stored))
-  } catch {
-    return undefined
+export const loadFinishedAssetsFromIndexedDb = async (): Promise<FinishedAssetsLoadResult> => {
+  recoveryBlocked = true
+  const inline = safeStorage.getItem(storageKey)
+  if (inline && !isIndexedDbStorageMarker(inline)) {
+    try {
+      const assets = mergeWithDefaultAssets(normalizeStoredAssets(JSON.parse(inline)))
+      recoveryBlocked = false
+      return { status: 'loaded', assets }
+    } catch { return { status: 'invalid' } }
   }
+  let stored: unknown
+  try { stored = await readLargeStoredValue<unknown>(indexedDbKey) }
+  catch { return { status: 'unavailable' } }
+  if (stored === undefined) {
+    if (isIndexedDbStorageMarker(inline)) return { status: 'invalid' }
+    recoveryBlocked = false
+    return { status: 'missing' }
+  }
+  try {
+    const assets = mergeWithDefaultAssets(normalizeStoredAssets(stored))
+    recoveryBlocked = false
+    return { status: 'loaded', assets }
+  } catch { return { status: 'invalid' } }
 }
 
 let finishedAssetsSaveQueue = Promise.resolve(true)
 
 const persistFinishedAssets = async (assets: FinishedAsset[]) => {
+  if (recoveryBlocked) return false
   const customAssets = assets.filter((asset) => !isDefaultFinishedAsset(asset))
   const serialized = JSON.stringify(customAssets)
 

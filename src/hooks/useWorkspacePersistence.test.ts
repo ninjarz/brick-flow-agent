@@ -6,7 +6,7 @@ import { useWorkspacePersistence } from './useWorkspacePersistence'
 
 const mocks = vi.hoisted(() => ({
   effects: [] as Array<() => void | (() => void)>,
-  store: { list: vi.fn(), initialize: vi.fn(), create: vi.fn(), activate: vi.fn(), checkpoints: vi.fn(), save: vi.fn() },
+  store: { list: vi.fn(), initialize: vi.fn(), create: vi.fn(), activate: vi.fn(), checkpoints: vi.fn(), checkpoint: vi.fn(), read: vi.fn(), restore: vi.fn(), removeAndActivate: vi.fn(), save: vi.fn() },
   backup: vi.fn(), draft: vi.fn(),
 }))
 vi.mock('react', () => ({
@@ -143,4 +143,104 @@ describe('workspace persistence across asynchronous storage', () => {
     expect(session.getSnapshot().plan.title).toBe('Initial')
     expect(mocks.backup).not.toHaveBeenCalled()
   })
+
+  it('saves source edits made during activation and the final catch-up write before opening another project', async () => {
+    const activated = deferred<Project>()
+    const written = deferred<Project>()
+    const target = { ...project('Target'), id: 'target' }
+    mocks.store.read.mockResolvedValue(target)
+    mocks.store.activate.mockReturnValueOnce(activated.promise)
+    const session = createWorkspaceSession(snapshot('Initial'))
+    const persistence = useWorkspacePersistence(session)
+    mocks.effects[0]()
+    await persistence.retry()
+    mocks.store.save.mockReturnValueOnce(written.promise)
+    const opened = persistence.open(target.id)
+    await tick()
+    session.setPrompt('During activation')
+    activated.resolve(target)
+    await tick()
+    const first = session.getPersistentSnapshot()
+    session.setPlan((plan) => ({ ...plan, title: 'During catch-up' }))
+    written.resolve({ ...project('Authoritative'), revision: 2, snapshot: first })
+    await opened
+    expect(mocks.store.save.mock.calls.at(-1)?.[0]).toBe('formal')
+    expect(mocks.store.save.mock.calls.at(-1)?.[2]).toMatchObject({ plan: { title: 'During catch-up' }, prompt: 'During activation' })
+    expect(session.getSnapshot().plan.title).toBe('Target')
+  })
+
+  it('preserves edits during new-project activation in the source project', async () => {
+    const activated = deferred<Project>()
+    mocks.store.activate.mockReturnValueOnce(activated.promise)
+    const session = createWorkspaceSession(snapshot('Initial'))
+    const persistence = useWorkspacePersistence(session)
+    mocks.effects[0]()
+    await persistence.retry()
+    const created = persistence.create('New')
+    await tick()
+    session.setPrompt('Late source edit')
+    activated.resolve({ ...project('New'), id: 'copy' })
+    await created
+    expect(mocks.store.save.mock.calls.at(-1)?.[2].prompt).toBe('Late source edit')
+    expect(session.getSnapshot().plan.title).toBe('New')
+  })
+
+  it('checkpoints edits arriving during restore and during checkpoint creation', async () => {
+    const restored = deferred<Project>()
+    const checkpoint = deferred<void>()
+    mocks.store.restore.mockReturnValueOnce(restored.promise)
+    mocks.store.checkpoint.mockReturnValueOnce(checkpoint.promise).mockResolvedValue(undefined)
+    const session = createWorkspaceSession(snapshot('Initial'))
+    const persistence = useWorkspacePersistence(session)
+    mocks.effects[0]()
+    await persistence.retry()
+    const restoring = persistence.restore('checkpoint')
+    await tick()
+    session.setPrompt('During restore')
+    restored.resolve({ ...project('Restored'), revision: 2 })
+    await tick()
+    session.setPrompt('During checkpoint')
+    checkpoint.resolve()
+    await restoring
+    expect(mocks.store.checkpoint).toHaveBeenCalledTimes(2)
+    expect(mocks.store.checkpoint.mock.calls.at(-1)?.[2].prompt).toBe('During checkpoint')
+    expect(session.getSnapshot().plan.title).toBe('Restored')
+  })
+
+  it('checkpoints new edits made while reloading the current project', async () => {
+    const activated = deferred<Project>()
+    mocks.store.read.mockResolvedValue(project('Reloaded'))
+    mocks.store.activate.mockReturnValueOnce(activated.promise)
+    mocks.store.checkpoint.mockResolvedValue(undefined)
+    const session = createWorkspaceSession(snapshot('Initial'))
+    const persistence = useWorkspacePersistence(session)
+    mocks.effects[0]()
+    await persistence.retry()
+    const reloading = persistence.reload()
+    await tick()
+    session.setPrompt('During reload')
+    activated.resolve(project('Reloaded'))
+    await reloading
+    expect(mocks.store.checkpoint.mock.calls[0][2].prompt).toBe('During reload')
+    expect(session.getSnapshot().plan.title).toBe('Reloaded')
+  })
+
+  it('keeps edits arriving during deletion in a separate recoverable project', async () => {
+    const removed = deferred<Project>()
+    const target = { ...project('Target'), id: 'target' }
+    mocks.store.list.mockResolvedValue([project('Authoritative'), target])
+    mocks.store.removeAndActivate.mockReturnValueOnce(removed.promise)
+    const session = createWorkspaceSession(snapshot('Initial'))
+    const persistence = useWorkspacePersistence(session)
+    mocks.effects[0]()
+    await persistence.retry()
+    const removing = persistence.remove()
+    await tick()
+    session.setPrompt('Arrived during delete')
+    removed.resolve(target)
+    await removing
+    expect(mocks.store.create.mock.calls.at(-1)?.[0].prompt).toBe('Arrived during delete')
+    expect(session.getSnapshot().plan.title).toBe('Target')
+  })
+
 })

@@ -1,13 +1,14 @@
+import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { describe, expect, it } from 'vitest'
 import type { WorldState } from '../types/world'
-import { createEmptyWorldState } from './worldEntity'
+import { createEmptyWorldState, createWorldEntity } from './worldEntity'
 import {
   buildWorldNarrativeFeed,
   makeScenarioDialogueStoryId,
   upsertWorldDirectorEntry,
 } from './worldNarrativeFeed'
 
-const makeWorld = (): WorldState => createEmptyWorldState('feed-test')
+const makeWorld = (): WorldState => ({ ...createEmptyWorldState('feed-test'), entities: ['roland', 'eileen'].map((id) => createWorldEntity(worldEntityDefinitionById.get('knight')!, { id })) })
 
 describe('buildWorldNarrativeFeed', () => {
   it('updates a streamed director entry in place without duplicating it', () => {

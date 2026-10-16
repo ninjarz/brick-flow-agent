@@ -1,5 +1,8 @@
 import { expect, test } from '@playwright/test'
 import { createEmptyWorldState, createWorldEntity } from '../../src/lib/worldEntity'
+import { brickById } from '../../src/data/basicBricks'
+import { createWorldObstacleIndex } from '../../src/lib/worldObstacleIndex'
+import type { BuildPlan } from '../../src/types/bricks'
 import { worldEntityDefinitionById } from '../../src/data/worldEntityDefinitions'
 
 test('built app loads lazy geometry, simulation workers and survives reload', async ({ page }) => {
@@ -25,9 +28,11 @@ test('built app loads lazy geometry, simulation workers and survives reload', as
 test('records browser frame, heap and resource baselines for 1500 blocks and 60 NPCs', async ({ page }, info) => {
   test.skip(info.project.name !== 'chromium', 'Chromium-only heap and long-task instrumentation')
   test.setTimeout(60_000)
-  const plan = { id: 'browser-profile', title: 'Browser profile', prompt: '', source: 'template-local', steps: [],
-    bricks: Array.from({ length: 1500 }, (_, i) => ({ id: String(i), brickId: 'minecraft-stone', color: 'gray',
+  const plan: BuildPlan = { id: 'browser-profile', title: 'Browser profile', prompt: '', source: 'template-local', steps: [],
+    bricks: Array.from({ length: 1500 }, (_, i) => ({ id: String(i), brickId: 'minecraft-stone-block', color: 'gray',
       pose: { xStud: i % 50, yStud: 0, zStud: Math.floor(i / 50), rotationQuarterTurns: 0 } })) }
+  expect(plan.bricks.every((brick) => brickById.has(brick.brickId))).toBe(true)
+  expect(createWorldObstacleIndex(plan.bricks).bounds).toHaveLength(1500)
   const world = { ...createEmptyWorldState(plan.id), entities: Array.from({ length: 60 }, (_, i) => createWorldEntity(worldEntityDefinitionById.get('knight')!, {
     id: `profile-${i}`, transform: { x: i % 10 * 3 - 35, z: Math.floor(i / 10) * 3 - 25 },
   })) }

@@ -1,5 +1,5 @@
 import type { BuildPlan } from '../types/bricks'
-import type { WorldEvent } from '../types/world'
+import type { WorldEvent, WorldState } from '../types/world'
 import { applyWorldObjectActionToBrick } from './worldObjectInteraction'
 import { isVoxelDoorStateClear } from './voxelBlockState'
 
@@ -25,4 +25,18 @@ export const applyPendingWorldObjectEvents = (
     updatedBricks[index] = updated
   }
   return updatedBricks ? { ...plan, bricks: updatedBricks } : plan
+}
+
+/** New snapshots consume events and update the model in one workspace commit.
+ * Legacy snapshots have no cursor: their historical events are treated as
+ * already applied, avoiding another non-idempotent toggle during migration.
+ */
+export const consumeWorldObjectEvents = (plan: BuildPlan, world: WorldState) => {
+  const eventIds = world.events.filter((event) => event.type === 'object-interaction').map((event) => event.id)
+  const applied = new Set(world.appliedObjectEventIds ?? eventIds)
+  const nextPlan = applyPendingWorldObjectEvents(plan, world.events, applied)
+  const retained = eventIds.filter((id) => applied.has(id))
+  const previous = world.appliedObjectEventIds
+  const unchanged = previous && previous.length === retained.length && previous.every((id, index) => id === retained[index])
+  return { plan: nextPlan, world: unchanged ? world : { ...world, appliedObjectEventIds: retained } }
 }

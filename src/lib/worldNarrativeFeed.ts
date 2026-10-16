@@ -1,3 +1,4 @@
+import { visibleScenarioDialogue } from './worldScenarioDialogue'
 import type {
   WorldDirectorEntry,
   WorldDirectorTurn,
@@ -113,10 +114,7 @@ const activeDialogueFeedItems = (
 
   const stage = scenario.stages.find((candidate) => candidate.id === active.stageId)
   if (!stage) return []
-  const branch = active.branchId
-    ? stage.branches?.find((candidate) => candidate.id === active.branchId)
-    : undefined
-  const dialogue = branch?.dialogue ?? stage.dialogue ?? []
+  const dialogue = visibleScenarioDialogue(world, stage, active)
   const visibleDialogue = dialogue.slice(0, Math.min(dialogue.length, active.lineIndex + 1))
   if (visibleDialogue.length === 0) return []
 

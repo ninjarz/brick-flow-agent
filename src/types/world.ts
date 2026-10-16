@@ -472,6 +472,8 @@ export type WorldState = {
   entities: WorldEntity[]
   parties: WorldParty[]
   events: WorldEvent[]
+  /** Persisted with plan changes so object toggles cannot replay after recovery. */
+  appliedObjectEventIds?: string[]
   pendingImpacts: WorldPendingImpact[]
   narrative: WorldNarrativeState
   scenarios: WorldScenarioRuntime[]

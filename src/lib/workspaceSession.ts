@@ -1,6 +1,7 @@
 import type { BuildPlan } from '../types/bricks'
-import type { WorldState } from '../types/world'
+import type { WorldDirectorTurn, WorldState } from '../types/world'
 import { createEmptyWorldState } from './worldEntity'
+import { consumeWorldObjectEvents } from './worldObjectEventBridge'
 import { synchronizePlanVoxelBlockStates } from './voxelBlockState'
 
 export type WorkspaceSnapshot = { plan: BuildPlan; world: WorldState; prompt: string }
@@ -11,7 +12,11 @@ export type WorkspaceHistory = { past: HistoryEntry[]; future: HistoryEntry[] }
  * Simulation updates intentionally do not create undo entries.
  */
 export const createWorkspaceSession = (initial: WorkspaceSnapshot) => {
-  let snapshot = initial
+  const synchronize = (value: WorkspaceSnapshot): WorkspaceSnapshot => {
+    const next = consumeWorldObjectEvents(value.plan, value.world)
+    return next.plan === value.plan && next.world === value.world ? value : { ...value, ...next }
+  }
+  let snapshot = synchronize(initial)
   let history: WorkspaceHistory = { past: [], future: [] }
   let epoch = 0
   let revision = 0
@@ -23,7 +28,7 @@ export const createWorkspaceSession = (initial: WorkspaceSnapshot) => {
   const invalidate = () => { epoch += 1; invalidationListeners.forEach((listener) => listener()) }
   const commit = (next: WorkspaceSnapshot, editing = true) => {
     if (next === snapshot) return
-    snapshot = next
+    snapshot = synchronize(next)
     revision += 1
     if (editing) editRevision += 1
     listeners.forEach((listener) => listener())
@@ -84,6 +89,14 @@ export const createWorkspaceSession = (initial: WorkspaceSnapshot) => {
       if (world === snapshot.world) return
       remember('workspace')
       commit({ ...snapshot, world })
+    },
+    commitDirectorTurn: (requestEpoch: number, turn: WorldDirectorTurn) => {
+      if (requestEpoch !== epoch) return false
+      commit({ ...snapshot, world: { ...snapshot.world, narrative: {
+        ...snapshot.world.narrative,
+        directorTurns: [...snapshot.world.narrative.directorTurns.filter((entry) => entry.id !== turn.id), turn].slice(-100),
+      } } }, false)
+      return true
     },
     setPrompt: (value: string | ((current: string) => string)) => {
       const prompt = typeof value === 'function' ? value(snapshot.prompt) : value

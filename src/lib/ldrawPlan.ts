@@ -28,6 +28,8 @@ export type LDrawImportResult = {
 const ldrawUnitsPerStud = 20
 const metadataPrefix = '0 !BRICK_FLOW_AGENT_PLAN'
 const metadataChunkLength = 180
+export const ldrawImportLimits = { sourceCharacters: 10_000_000, parts: 10_000, references: 50_000, lines: 200_000, milliseconds: 1_000 } as const
+const importLimitExceeded = () => { throw new RangeError('LDRAW_IMPORT_LIMIT_EXCEEDED') }
 
 const colorToLDrawCode: Record<BrickColor, number> = {
   black: 0,
@@ -147,6 +149,7 @@ const parseEmbeddedPlan = (text: string) => {
 
   try {
     const decoded = JSON.parse(decodeBase64([...chunks].sort((a, b) => a.index - b.index).map((chunk) => chunk.value).join(''))) as BuildPlan
+    if (!Array.isArray(decoded.bricks) || decoded.bricks.length > ldrawImportLimits.parts) return undefined
     return tryNormalizeImportedPlan(decoded)
   } catch {
     return undefined
@@ -239,6 +242,9 @@ const expandLDrawReferences = (text: string) => {
   const unknownPartNumbers = new Set<string>()
   const unknownPartCounts = new Map<string, number>()
   const rootName = firstFileName ?? rootSectionName
+  const startedAt = performance.now()
+  let visitedReferences = 0
+  let visitedLines = 0
 
   const visit = (
     sectionName: string,
@@ -256,12 +262,16 @@ const expandLDrawReferences = (text: string) => {
     const nextAncestors = new Set(ancestors).add(sectionName)
 
     for (const rawLine of lines) {
+      visitedLines += 1
+      if (visitedLines > ldrawImportLimits.lines || (visitedLines % 256 === 0 && performance.now() - startedAt > ldrawImportLimits.milliseconds)) importLimitExceeded()
       if (rawLine.trim().startsWith('1 ') && !parseTypeOneReference(rawLine)) {
         ignoredParts += 1
         continue
       }
       const reference = parseTypeOneReference(rawLine)
       if (!reference) continue
+      visitedReferences += 1
+      if (visitedReferences > ldrawImportLimits.references || references.length >= ldrawImportLimits.parts) importLimitExceeded()
       const normalizedReferenceName = normalizeLDrawFileName(reference.partName)
       const worldMatrix = multiplyMatrices(parentMatrix, reference.matrix)
       const transformedTranslation = transformVector(parentMatrix, reference.translation)
@@ -294,6 +304,7 @@ const expandLDrawReferences = (text: string) => {
 }
 
 export const parseLDrawPlan = (text: string, fallbackTitle = 'Imported LDraw'): LDrawImportResult | undefined => {
+  if (text.length > ldrawImportLimits.sourceCharacters) importLimitExceeded()
   const embeddedPlan = parseEmbeddedPlan(text)
   if (embeddedPlan) {
     return { plan: embeddedPlan, usedEmbeddedPlan: true, ignoredParts: 0, unknownPartNumbers: [], unknownPartCounts: {}, unsupportedColorCodes: [], unsupportedPoseCount: 0 }

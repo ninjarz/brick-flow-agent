@@ -3,6 +3,8 @@ import { createWorkspaceSession } from './workspaceSession'
 import { createEmptyWorldState, createWorldEntity } from './worldEntity'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { makeBrick } from './planUtils'
+import { parseImportedProject } from './planFileIO'
+import type { WorldDirectorTurn } from '../types/world'
 import type { BuildPlan } from '../types/bricks'
 
 const plan: BuildPlan = { id: 'a', title: 'A', prompt: 'A prompt', source: 'template-local', bricks: [makeBrick('minecraft-chest', 'brown', 0, 0, 0)], steps: [] }
@@ -73,4 +75,42 @@ describe('workspace transactions', () => {
     expect(controller.signal.aborted).toBe(true)
     expect(session.getEpoch()).not.toBe(epoch)
   })
+
+  it('persists object toggles and their consumption marker in the same snapshot', () => {
+    const session = createWorkspaceSession(initial())
+    const targetId = plan.bricks[0].id
+    const commits: ReturnType<typeof session.getSnapshot>[] = []
+    session.subscribe(() => commits.push(session.getSnapshot()))
+    session.setWorld((world) => ({ ...world, events: [{ id: 'toggle', timeSeconds: 1, type: 'object-interaction', actorId: 'hero', targetId, objectAction: 'toggle' }] }))
+    expect(commits).toHaveLength(1)
+    expect(commits[0].plan.bricks[0].voxelState?.open).toBe(true)
+    expect(commits[0].world.appliedObjectEventIds).toEqual(['toggle'])
+    const file = parseImportedProject(JSON.parse(JSON.stringify(commits[0])))!
+    const restored = createWorkspaceSession({ ...file, world: file.world!, prompt: '' })
+    expect(restored.getSnapshot().plan.bricks[0].voxelState?.open).toBe(true)
+    restored.setWorld((world) => ({ ...world, elapsedSeconds: 2 }))
+    expect(restored.getSnapshot().plan.bricks[0].voxelState?.open).toBe(true)
+  })
+
+  it('applies explicitly pending events during restore, while migrating legacy history without replay', () => {
+    const a = initial()
+    a.world.events = [{ id: 'toggle', timeSeconds: 1, type: 'object-interaction', actorId: 'hero', targetId: a.plan.bricks[0].id, objectAction: 'toggle' }]
+    expect(createWorkspaceSession(a).getSnapshot().plan.bricks[0].voxelState?.open).toBe(true)
+    const legacy = { ...a, plan: { ...a.plan, bricks: [{ ...a.plan.bricks[0], voxelState: { open: true } }] }, world: { ...a.world, appliedObjectEventIds: undefined } }
+    const migrated = createWorkspaceSession(legacy).getSnapshot()
+    expect(migrated.plan.bricks[0].voxelState?.open).toBe(true)
+    expect(migrated.world.appliedObjectEventIds).toEqual(['toggle'])
+  })
+
+  it('rejects manual and autonomous final AI commits after a workspace replacement, even for identical IDs', () => {
+    const session = createWorkspaceSession(initial())
+    const epoch = session.getEpoch()
+    const turn = { id: 'old-turn', playerText: 'old project', entries: [], createdAtSeconds: 0, status: 'stopped' } as WorldDirectorTurn
+    expect(session.commitDirectorTurn(epoch, turn)).toBe(true)
+    session.replace(initial())
+    expect(session.commitDirectorTurn(epoch, turn)).toBe(false)
+    expect(session.commitDirectorTurn(epoch, { ...turn, origin: 'autonomous' })).toBe(false)
+    expect(session.getSnapshot().world.narrative.directorTurns).toEqual([])
+  })
+
 })

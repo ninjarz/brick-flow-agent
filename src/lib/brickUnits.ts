@@ -1,3 +1,4 @@
+import { clampWorldCoordinate } from './worldCoordinates'
 import type {
   BrickConnector,
   BrickDefinition,
@@ -32,7 +33,7 @@ export const normalizeVerticalQuarterTurns = (
 
 export const roundToGrid = (value: number, step: number) => {
   if (!Number.isFinite(value)) return 0
-  return Number((Math.round(value / step) * step).toFixed(6))
+  return Number((Math.round(clampWorldCoordinate(value) / step) * step).toFixed(6))
 }
 
 export const normalizeHorizontalStud = (value: number) =>

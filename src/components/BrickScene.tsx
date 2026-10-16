@@ -16,7 +16,7 @@ import { createBuildGraph, getBrickBounds } from '../lib/planUtils'
 import { getScenePerformanceSettings, getWorldAnimationFps, shouldInstanceVoxelGroup } from '../lib/scenePerformance'
 import { getSceneCameraFrameRequestKey } from '../lib/sceneCamera'
 import { getWorldProjectileVisuals, sampleWorldProjectilePosition, type WorldProjectileVisual } from '../lib/worldProjectiles'
-import { layoutWorldSpeechBubbles } from '../lib/worldSpeechLayout'
+import { layoutWorldSpeechBubbles, selectWorldSpeechEntities } from '../lib/worldSpeechLayout'
 import { analyzeBuildStability, getStabilityRiskColor, type StabilityAnalysis } from '../lib/stabilityAnalysis'
 import { getBrickWorldRenderStructuralCellBoxes, type StructuralCellKind, type WorldStructuralCellBox } from '../lib/structuralGrid'
 import { WORLD_EDIT_STEP_STUDS, getBrickConnectors, getBrickWorldFrame, poseToWorld } from '../lib/brickUnits'
@@ -73,6 +73,7 @@ type BrickSceneProps = {
   placementPreviewBricks?: PlacedBrick[]
   placementSourceBrickIds?: string[]
   placementActive?: boolean
+  keyboardEnabled?: boolean
   onCameraAzimuthChange?: (degrees: number) => void
   onSelect: (id: string, options?: BrickSelectionOptions) => void
   onSelectConnected?: (id: string) => void
@@ -842,6 +843,7 @@ const KeyboardShortcuts = ({
 
     const triggerNudge = (key: string) => {
       const delta = getNudgeDelta(key)
+      if (document.querySelector('[aria-modal="true"]')) { clearHeldNudge(); return }
       if (delta && selectedIdRef.current) onNudgeSelectedRef.current(delta)
     }
 
@@ -859,6 +861,7 @@ const KeyboardShortcuts = ({
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (document.querySelector('[aria-modal="true"]')) { clearHeldNudge(); return }
       if (!selectedIdRef.current || isTypingTarget(event.target)) return
 
       const key = event.key.toLowerCase()
@@ -2455,7 +2458,7 @@ const calculateSpeechOverlayPosition = (
   size: { width: number; height: number },
 ) => [size.width / 2, size.height / 2] as [number, number]
 
-const WorldEntitySpeechLayer = ({ entities }: { entities: WorldEntity[] }) => {
+const WorldEntitySpeechLayer = ({ entities, selectedId }: { entities: WorldEntity[]; selectedId?: string }) => {
   const { t } = useI18n()
   const bubbleRefs = useRef(new Map<string, HTMLDivElement>())
   const bubbleSizeRefs = useRef(new Map<string, { width: number; height: number }>())
@@ -2469,8 +2472,8 @@ const WorldEntitySpeechLayer = ({ entities }: { entities: WorldEntity[] }) => {
   const lastStylesRef = useRef(new Map<string, { transform: string; visibility: string; tailOffsetX: string; tailSide: string }>())
   const projectedPoint = useMemo(() => new Vector3(), [])
   const speakingEntities = useMemo(
-    () => entities.filter((entity) => Boolean(entity.speech) && entity.health > 0),
-    [entities],
+    () => selectWorldSpeechEntities(entities, selectedId),
+    [entities, selectedId],
   )
   const getBubbleRef = useCallback((entityId: string) => {
     const existing = bubbleRefCallbacksRef.current.get(entityId)
@@ -2704,7 +2707,7 @@ const WorldEntityScene = ({ entities, events, elapsedSeconds, paused, preview, s
         onSelect={onSelect}
       />
     ))}
-    <WorldEntitySpeechLayer entities={renderedEntities.filter((entity) => !hiddenEntityIdSet.has(entity.id))} />
+    <WorldEntitySpeechLayer selectedId={selectedId} entities={renderedEntities.filter((entity) => !hiddenEntityIdSet.has(entity.id))} />
     {preview && <WorldEntityMesh entity={preview} ghost />}
     {projectiles.map((projectile) => (
       <WorldProjectileMesh
@@ -2835,6 +2838,7 @@ export const BrickScene = ({
   placementPreviewBricks = [],
   placementSourceBrickIds = [],
   placementActive = false,
+  keyboardEnabled = true,
   onCameraAzimuthChange,
   onSelect,
   onSelectConnected,
@@ -3089,7 +3093,7 @@ export const BrickScene = ({
           </Text>
         )}
       </group>
-      {!placementActive && (
+      {!placementActive && keyboardEnabled && (
         <KeyboardShortcuts
           selectedId={selectedId}
           onNudgeSelected={onNudgeSelected}

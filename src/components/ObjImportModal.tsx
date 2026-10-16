@@ -12,6 +12,7 @@ import {
   type ObjImportWorkerRequest,
   type ObjImportWorkerResponse,
 } from '../lib/objImport'
+import { maxMtlFileBytes, validateObjImportFiles } from '../lib/objImportFiles'
 import { useI18n } from '../lib/i18n'
 
 type ObjImportModalProps = {
@@ -21,8 +22,6 @@ type ObjImportModalProps = {
   onImported: (result: ObjImportResult, saveToLibrary: boolean, fileName: string) => void
 }
 
-const maxObjFileBytes = 100 * 1024 * 1024
-const maxMtlFileBytes = 20 * 1024 * 1024
 
 const stripObjExtension = (fileName: string) => fileName.replace(/\.obj$/i, '')
 
@@ -69,7 +68,8 @@ export const ObjImportModal = ({ open, initialFile, onClose, onImported }: ObjIm
 
   useEffect(() => {
     if (open) {
-      setFile(initialFile)
+      const invalidInitialFile = initialFile && validateObjImportFiles(initialFile)
+      setFile(invalidInitialFile ? undefined : initialFile)
       setMaterialFiles([])
       setTitle(initialFile ? stripObjExtension(initialFile.name) : '')
       setProfileId('s')
@@ -79,7 +79,7 @@ export const ObjImportModal = ({ open, initialFile, onClose, onImported }: ObjIm
       setBrickBudget('2000')
       setSaveToLibrary(false)
       setProgress({ stage: 'parse', progress: 0 })
-      setError('')
+      setError(invalidInitialFile ? t(invalidInitialFile === 'OBJ_FILE_TYPE' ? 'objImport.error.fileType' : 'objImport.error.fileSize') : '')
       setResult(undefined)
       return
     }
@@ -87,7 +87,7 @@ export const ObjImportModal = ({ open, initialFile, onClose, onImported }: ObjIm
     importRunRef.current += 1
     stopWorker()
     setIsImporting(false)
-  }, [initialFile, open])
+  }, [initialFile, open, t])
 
   useEffect(() => () => {
     importRunRef.current += 1
@@ -108,14 +108,10 @@ export const ObjImportModal = ({ open, initialFile, onClose, onImported }: ObjIm
     setError('')
     setResult(undefined)
     if (!nextFile) return
-    if (!/\.obj$/i.test(nextFile.name)) {
+    const invalid = validateObjImportFiles(nextFile)
+    if (invalid) {
       setFile(undefined)
-      setError(t('objImport.error.fileType'))
-      return
-    }
-    if (nextFile.size > maxObjFileBytes) {
-      setFile(undefined)
-      setError(t('objImport.error.fileSize'))
+      setError(t(invalid === 'OBJ_FILE_TYPE' ? 'objImport.error.fileType' : 'objImport.error.fileSize'))
       return
     }
     setFile(nextFile)
@@ -123,6 +119,10 @@ export const ObjImportModal = ({ open, initialFile, onClose, onImported }: ObjIm
   }
 
   const getWorkerError = (code: string) => {
+    if (code === 'OBJ_FILE_TYPE') return t('objImport.error.fileType')
+    if (code === 'OBJ_FILE_SIZE') return t('objImport.error.fileSize')
+    if (code === 'MTL_FILE_TYPE') return t('objImport.error.mtlType')
+    if (code === 'MTL_FILE_SIZE') return t('objImport.error.mtlSize')
     if (code === 'OBJ_READ_FAILED') return t('objImport.error.readFailed')
     if (code === 'OBJ_EMPTY_GEOMETRY') return t('objImport.error.emptyGeometry')
     if (code === 'OBJ_DEGENERATE_GEOMETRY') return t('objImport.error.degenerateGeometry')
@@ -153,6 +153,8 @@ export const ObjImportModal = ({ open, initialFile, onClose, onImported }: ObjIm
       return
     }
 
+    const invalid = validateObjImportFiles(file, materialFiles)
+    if (invalid) { setError(getWorkerError(invalid)); return }
     setError('')
     setIsImporting(true)
     setProgress({ stage: 'parse', progress: 0.02 })

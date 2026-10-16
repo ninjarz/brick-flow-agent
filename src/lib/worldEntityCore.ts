@@ -1,3 +1,4 @@
+import { clampWorldCoordinate } from './worldCoordinates'
 import type { WorldEntity, WorldEntityCommand, WorldEntityControllerKind, WorldEntityDefinition, WorldEntityTransform, WorldState, WorldTargetRef } from '../types/world'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { createDefaultWorldCharacterSpark, createWorldEntityGoal, updateWorldEntityGoals, worldEntityCommandGoalSummary } from './worldCharacter'
@@ -72,9 +73,9 @@ export const createWorldEntity = (
     health: definition.combat.maxHealth,
     maxHealth: definition.combat.maxHealth,
     transform: {
-      x: options.transform?.x ?? 0,
-      y: options.transform?.y ?? 0,
-      z: options.transform?.z ?? 0,
+      x: clampWorldCoordinate(options.transform?.x ?? 0),
+      y: clampWorldCoordinate(options.transform?.y ?? 0),
+      z: clampWorldCoordinate(options.transform?.z ?? 0),
       rotationRadians: options.transform?.rotationRadians ?? 0,
     },
     commandQueue: [],
@@ -88,8 +89,8 @@ export const createWorldEntity = (
     autonomy: {
       nextDecisionAtSeconds: 2 + (stableEntityNumber(id) % 5),
       home: {
-        x: options.transform?.x ?? 0,
-        z: options.transform?.z ?? 0,
+        x: clampWorldCoordinate(options.transform?.x ?? 0),
+        z: clampWorldCoordinate(options.transform?.z ?? 0),
       },
     },
     mind: {
@@ -108,6 +109,7 @@ export const createEmptyWorldState = (planId: string): WorldState => ({
   entities: [],
   parties: [],
   events: [],
+  appliedObjectEventIds: [],
   pendingImpacts: [],
   scenarios: [],
   hiddenTargets: [],

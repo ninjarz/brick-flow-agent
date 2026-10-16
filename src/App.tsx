@@ -1,3 +1,5 @@
+import { useModalFocus } from './hooks/useModalFocus'
+import { importLDrawInWorker } from './lib/ldrawImportWorkerClient'
 import { aiTasks } from './lib/aiTasks'
 import { useAiTasks } from './hooks/useAiTasks'
 import { useLlmConnection } from './hooks/useLlmConnection'
@@ -22,7 +24,7 @@ import { dropBrickGroupAtPoint, findNearestOpenBrickGroupAround, getBrickGroupDr
 import { createEmptyBuildPlan, generateBuildPlan } from './lib/localGenerator'
 import { buildLlmUserPrompt, generateLlmBuildPlan, llmSystemPrompt, requestLlmJsonContent, requestLlmTextStream, testLlmConnection } from './lib/llmGenerator'
 import { clearLlmConnection, normalizeMaxRepairAttempts, saveLlmConnection } from './lib/llmConfig'
-import { defaultFinishedAssets, needsFinishedAssetsRecovery, isDefaultFinishedAsset, loadAllDefaultFinishedAssets, loadFinishedAssets, loadFinishedAssetsFromIndexedDb, mergeWithDefaultAssets, saveFinishedAssets } from './lib/finishedAssets'
+import { defaultFinishedAssets, needsFinishedAssetsRecovery, isDefaultFinishedAsset, mergeRecoveredFinishedAssets, loadAllDefaultFinishedAssets, loadFinishedAssets, loadFinishedAssetsFromIndexedDb, mergeWithDefaultAssets, saveFinishedAssets } from './lib/finishedAssets'
 import { formatBuildManualHtml, formatBuildManualMarkdown, serializeBuildManual } from './lib/manualSerializer'
 import { getManualPageTabItems, getManualStepPage, manualStepPageSize } from './lib/manualPagination'
 import { countBricks, createBrickCollisionIndex, createPlanSpatialState, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickPlacementDiagnostics, getBrickRawOverlapScore, getConnectedBrickComponents, hasBrickCollision, isBrickAboveGround, makeBrick, repairBuildPlan, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
@@ -48,7 +50,7 @@ import { applyTavernAiResponse, requestTavernAiActivity } from './lib/worldTaver
 import { buildTavernDirectorPrompt, createTavernDirectorStreamParser, tavernDirectorSystemPrompt, type TavernDirectorEntry, type TavernDirectorEvent, type TavernDirectorStreamPreview } from './lib/worldTavernDirector'
 import { createWorldAiSnapshot } from './lib/worldAi'
 import { analyzeBuildStability } from './lib/stabilityAnalysis'
-import { formatLDrawPlan, parseLDrawPlan } from './lib/ldrawPlan'
+import { formatLDrawPlan, ldrawImportLimits, parseLDrawPlan } from './lib/ldrawPlan'
 import { getEffectiveInventory, loadInventoryOverrides, saveInventoryOverrides } from './lib/userInventory'
 import { importAssetPlanIncrementally } from './lib/incrementalAssetImport'
 import { addWorldScenario, startWorldScenario } from './lib/worldScenarioImport'
@@ -57,7 +59,6 @@ import { advanceWorldScenarios, getActiveWorldScenarioStages, resolveWorldScenar
 import { beginWorldScenarioPlaytest } from './lib/worldScenarioPlaytest'
 import { clearWorkspaceDraft, loadWorkspaceDraft } from './lib/workspaceDraft'
 import { applyVoxelPlacementSurface, isVoxelDoorStateClear, isVoxelPlantSupported, synchronizePlanVoxelBlockStates, synchronizeVoxelBlockStates, type VoxelPlacementSurface } from './lib/voxelBlockState'
-import { applyPendingWorldObjectEvents } from './lib/worldObjectEventBridge'
 import { createWorldHiddenTargetIndex } from './lib/worldVisibility'
 import { createFeedbackUrl } from './lib/appDiagnostics'
 import { clearStabilityHistory, createPlanFingerprint, loadStabilityHistory } from './lib/stabilityHistory'
@@ -178,6 +179,7 @@ const isTypingElement = (target: EventTarget | null) => {
 }
 
 function App() {
+  useModalFocus()
   const { locale, t } = useI18n()
   const workspaceDraft = useMemo(() => loadWorkspaceDraft(), [])
   const defaultPrompt = t('prompt.default')
@@ -255,6 +257,8 @@ function App() {
   const aiTaskList = useAiTasks(workspaceSession, activeProjectId ?? 'loading', llmConfig)
 
   const [isAssetStorageHydrated, setIsAssetStorageHydrated] = useState(() => !needsFinishedAssetsRecovery())
+  const [assetRecoveryAttempt, setAssetRecoveryAttempt] = useState(0)
+  const [assetRecoveryFailed, setAssetRecoveryFailed] = useState(false)
   const storageWarningShownRef = useRef(false)
   const [assetTitle, setAssetTitle] = useState('')
   const [assetCategory, setAssetCategory] = useState(() => t('asset.customCategory'))
@@ -603,16 +607,18 @@ function App() {
     if (isAssetStorageHydrated) return
     let isCanceled = false
 
-    loadFinishedAssetsFromIndexedDb().then((storedAssets) => {
+    loadFinishedAssetsFromIndexedDb().then((result) => {
       if (isCanceled) return
-      if (storedAssets) setFinishedAssets((current) => mergeWithDefaultAssets(storedAssets, current.filter(isDefaultFinishedAsset)))
+      if (result.status === 'unavailable' || result.status === 'invalid') { setAssetRecoveryFailed(true); return }
+      if (result.status === 'loaded') setFinishedAssets((current) => mergeRecoveredFinishedAssets(result.assets, current))
+      setAssetRecoveryFailed(false)
       setIsAssetStorageHydrated(true)
     })
 
     return () => {
       isCanceled = true
     }
-  }, [isAssetStorageHydrated])
+  }, [assetRecoveryAttempt, isAssetStorageHydrated])
 
   useEffect(() => {
     setAssetCategory((current) => defaultAssetCategoryLabels.has(current) ? t('asset.customCategory') : current)
@@ -624,19 +630,6 @@ function App() {
     setAssetCategoryFilter('all')
   }, [assetCategories, assetCategoryFilter])
 
-  const appliedWorldObjectEventIdsRef = useRef(new Set<string>())
-  const appliedWorldObjectEventWorldIdRef = useRef(world.id)
-  useEffect(() => {
-    if (!workspaceStorage.hydrated) return
-    if (appliedWorldObjectEventWorldIdRef.current !== world.id) {
-      appliedWorldObjectEventWorldIdRef.current = world.id
-      appliedWorldObjectEventIdsRef.current = new Set(world.events
-        .filter((event) => event.type === 'object-interaction')
-        .map((event) => event.id))
-      return
-    }
-    setPlan((current) => applyPendingWorldObjectEvents(current, world.events, appliedWorldObjectEventIdsRef.current))
-  }, [setPlan, world.events, world.id, workspaceStorage.hydrated])
 
   useEffect(() => {
     worldScenarioAiAbortRef.current?.abort()
@@ -674,7 +667,7 @@ function App() {
       const latest = worldRef.current
       const latestPending = latest.scenarios.find((candidate) => candidate.id === scenario.id)?.pendingAi
       if (!latestPending || latestPending.stageId !== pending.stageId || latestPending.eventId !== pending.eventId) return
-      const resolved = resolveWorldScenarioAi(latest, scenario.id, parseWorldScenarioAiResolution(content))
+      const resolved = resolveWorldScenarioAi(latest, scenario.id, parseWorldScenarioAiResolution(content), planRef.current)
 
       aiTasks.phase(controller.signal, 'executing')
       setWorld(resolved)
@@ -683,7 +676,7 @@ function App() {
       const latest = worldRef.current
       const latestPending = latest.scenarios.find((candidate) => candidate.id === scenario.id)?.pendingAi
       if (!latestPending || latestPending.stageId !== pending.stageId || latestPending.eventId !== pending.eventId) return
-      const fallback = resolveWorldScenarioAi(latest, scenario.id, {})
+      const fallback = resolveWorldScenarioAi(latest, scenario.id, {}, planRef.current)
 
       setWorld(fallback)
     }).finally(() => {
@@ -691,7 +684,7 @@ function App() {
       worldScenarioAiAbortRef.current = undefined
       worldScenarioAiRequestKeyRef.current = ''
     })
-  }, [llmConfig, llmConfigComplete, locale, setWorld, world, worldRef, workspaceStorage.hydrated])
+  }, [llmConfig, llmConfigComplete, locale, planRef, setWorld, world, worldRef, workspaceStorage.hydrated])
 
   useEffect(() => {
     if (isWorldStoryDockOpen && llmConfigComplete && world.entities.length > 0) return
@@ -854,9 +847,13 @@ function App() {
   const handleImportPlan = useCallback((file?: File) => {
     if (!file) return
 
+    if (/\.(?:ldr|mpd)$/i.test(file.name) && file.size > ldrawImportLimits.sourceCharacters * 2) {
+      setGenerationFailure(locale === 'zh-CN' ? 'LDraw 文件超过导入大小上限。' : 'LDraw file exceeds the import size limit.')
+      return
+    }
     const importEpoch = workspaceSession.getEpoch()
     const reader = new FileReader()
-    reader.onload = () => {
+    reader.onload = async () => {
       if (workspaceSession.getEpoch() !== importEpoch) return
       const isLDrawFile = /\.(?:ldr|mpd)$/i.test(file.name)
       let parsedLDraw: ReturnType<typeof parseLDrawPlan> = undefined
@@ -879,9 +876,14 @@ function App() {
       }
       try {
         const text = String(reader.result)
-        const ldrawResult = isLDrawFile
-          ? parseLDrawPlan(text, file.name.replace(/\.(?:ldr|mpd)$/i, ''))
-          : undefined
+        const controller = new AbortController()
+        const unsubscribe = workspaceSession.onInvalidate(() => controller.abort())
+        let workerResult: Awaited<ReturnType<typeof importLDrawInWorker>> | undefined
+        try {
+          if (isLDrawFile) workerResult = await importLDrawInWorker(text, file.name.replace(/\.(?:ldr|mpd)$/i, ''), controller.signal)
+        } finally { unsubscribe() }
+        if (workspaceSession.getEpoch() !== importEpoch) return
+        const ldrawResult = workerResult?.result
         parsedLDraw = ldrawResult
         const importedProject = isLDrawFile
           ? ldrawResult?.plan ? { plan: ldrawResult.plan } : undefined
@@ -894,7 +896,7 @@ function App() {
           return
         }
 
-        const issues = validateBuildPlan(importedPlan)
+        const issues = workerResult?.issues ?? validateBuildPlan(importedPlan)
         const blockingIssues = getBlockingBuildPlanIssues(issues)
         if (blockingIssues.length > 0) {
           const message = t('error.importIssues', { summary: summarizeBuildPlanIssues(issues, locale) })
@@ -943,8 +945,11 @@ function App() {
         if (warnings.length > 0) {
           setGenerationWarning(warnings.join('；'))
         }
-      } catch {
-        const message = t(isLDrawFile ? 'error.importLDrawInvalid' : 'error.importParse')
+      } catch (error) {
+        if (workspaceSession.getEpoch() !== importEpoch) return
+        const message = error instanceof RangeError && error.message === 'LDRAW_IMPORT_LIMIT_EXCEEDED'
+          ? (locale === 'zh-CN' ? 'LDraw 文件过大，或子模型展开超过了零件和处理预算。' : 'LDraw input exceeds the file, expansion or processing budget.')
+          : t(isLDrawFile ? 'error.importLDrawInvalid' : 'error.importParse')
         recordFailure(message)
         setGenerationFailure(message)
       }
@@ -1714,7 +1719,7 @@ function App() {
       'replace',
     )
     if (!result.ok) return false
-    setWorld(advanceWorldScenarios(result.world, { enableAi: llmConfigComplete }))
+    setWorld(advanceWorldScenarios(result.world, { enableAi: llmConfigComplete, plan: planRef.current }))
     return true
   }, [llmConfigComplete, planRef, setWorld, worldRef])
 
@@ -2033,7 +2038,7 @@ function App() {
         && !worldRef.current.paused
         && playback.session.suspendedScenarioIds.length === 0
       ) {
-        const scenarioWorld = advanceWorldScenarios(worldRef.current, { enableAi: llmConfigComplete })
+        const scenarioWorld = advanceWorldScenarios(worldRef.current, { enableAi: llmConfigComplete, plan: planRef.current })
         if (scenarioWorld !== worldRef.current) {
 
           setWorld(scenarioWorld)
@@ -2058,6 +2063,7 @@ function App() {
       if (tavernDirectorPlaybackRef.current === playback) {
         tavernDirectorPlaybackRef.current = undefined
         const restoredWorld = finishWorldDirectorPlayback(worldRef.current, playback.session, {
+          plan: planRef.current,
           enableAi: llmConfigComplete,
         })
         if (restoredWorld !== worldRef.current) {
@@ -2165,6 +2171,7 @@ function App() {
       if (tavernDirectorPlaybackRef.current === playback) {
         tavernDirectorPlaybackRef.current = undefined
         const restoredAfterReplay = finishWorldDirectorPlayback(worldRef.current, playback.session, {
+          plan: planRef.current,
           enableAi: llmConfigComplete,
         })
         if (restoredAfterReplay !== worldRef.current) {
@@ -2175,21 +2182,10 @@ function App() {
     }
   }, [isTavernDirectorThinking, llmConfigComplete, planRef, setWorld, worldRef])
 
+  const directorCommitEpoch = workspaceSession.getEpoch()
   const commitTavernDirectorTurn = useCallback((turn: WorldDirectorTurn) => {
-    const current = worldRef.current
-    const next = {
-      ...current,
-      narrative: {
-        ...current.narrative,
-        directorTurns: [
-          ...current.narrative.directorTurns.filter((candidate) => candidate.id !== turn.id),
-          turn,
-        ].slice(-100),
-      },
-    }
-
-    setWorld(next)
-  }, [setWorld, worldRef])
+    workspaceSession.commitDirectorTurn(directorCommitEpoch, turn)
+  }, [directorCommitEpoch, workspaceSession])
 
   const clearTavernHistory = useCallback(() => {
     setWorld((current) => {
@@ -3086,6 +3082,7 @@ function App() {
               onBeginDragSelected={beginSelectedPlacement}
               onNudgeSelected={nudgeSelected}
               onRotateSelected={rotateSelected}
+              keyboardEnabled={!isConfigOpen && !isPromptPreviewOpen && !isAssetLibraryOpen && !isObjImportOpen && !isImportDiagnosticsOpen && !isManualOpen && !isStabilityLabOpen && !isTavernOpen}
               onDeleteSelected={deleteSelected}
             />
           </Suspense>
@@ -3332,10 +3329,6 @@ function App() {
           <button type="button" onClick={() => setWorld((current) => ({ ...current, paused: !current.paused }))}>{world.paused ? (locale === 'zh-CN' ? '开始试演' : 'Start') : (locale === 'zh-CN' ? '暂停' : 'Pause')}</button>
           <button type="button" onClick={() => {
             workspaceSession.restorePlaytest()
-            appliedWorldObjectEventIdsRef.current = new Set(scenarioPlaytest.world.events
-              .filter((event) => event.type === 'object-interaction')
-              .map((event) => event.id))
-
             setScenarioPlaytest(undefined)
             setIsTavernOpen(true)
           }}>{locale === 'zh-CN' ? '退出并还原' : 'Exit and restore'}</button>
@@ -3433,6 +3426,12 @@ function App() {
               </button>
             </header>
 
+            {assetRecoveryFailed && <p role="alert">
+              {locale === 'zh-CN' ? '素材库读取失败，已暂停保存并保留原数据。' : 'Asset recovery failed. Saving is paused and stored data is preserved.'}
+              <button type="button" onClick={() => { setAssetRecoveryFailed(false); setAssetRecoveryAttempt((attempt) => attempt + 1) }}>
+                {locale === 'zh-CN' ? '重试读取素材库' : 'Retry asset recovery'}
+              </button>
+            </p>}
             <nav className="asset-kind-tabs" aria-label={t('asset.libraryKinds')}>
               <button
                 type="button"

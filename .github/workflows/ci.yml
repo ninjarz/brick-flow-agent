@@ -30,7 +30,7 @@ jobs:
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium webkit
 
-      - name: Verify quality including built browser workflows
+      - name: Verify quality, dependency audit and built browser workflows
         run: npm run verify:quality
 
       - name: Profile performance (timings, not shared-runner thresholds)
