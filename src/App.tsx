@@ -59,6 +59,7 @@ import { applyVoxelPlacementSurface, isVoxelDoorStateClear, isVoxelPlantSupporte
 import { createWorldHiddenTargetIndex } from './lib/worldVisibility'
 import { createFeedbackUrl } from './lib/appDiagnostics'
 import { clearStabilityHistory, createPlanFingerprint, loadStabilityHistory } from './lib/stabilityHistory'
+import { isDebugModeEnabled } from './lib/debugMode'
 import { loadImportDiagnostics, saveImportDiagnostic, type ImportDiagnostic } from './lib/importDiagnostics'
 import type { BrickStructure, BuildPlan, FinishedAsset, PlacedBrick } from './types/bricks'
 import type { WorldDirectorTurn, WorldEntity, WorldEntityCommand, WorldEntityControllerKind, WorldState } from './types/world'
@@ -218,6 +219,7 @@ function App() {
   const [isPromptPreviewOpen, setIsPromptPreviewOpen] = useState(false)
   const [isAssetLibraryOpen, setIsAssetLibraryOpen] = useState(false)
   const [isObjImportOpen, setIsObjImportOpen] = useState(false)
+  const debugMode = isDebugModeEnabled(window.location.search)
   const [isImportDiagnosticsOpen, setIsImportDiagnosticsOpen] = useState(false)
   const [importDiagnostics, setImportDiagnostics] = useState<ImportDiagnostic[]>(loadImportDiagnostics)
   const [droppedObjFile, setDroppedObjFile] = useState<File>()
@@ -2778,15 +2780,17 @@ function App() {
                 >
                   <FileUp size={18} />
                 </button>
-                <button
-                  className={`icon-button ${importDiagnostics.some((item) => item.status === 'warning' || item.status === 'error') ? 'has-warning' : ''}`}
-                  type="button"
-                  aria-label={locale === 'zh-CN' ? '导入兼容性中心' : 'Import Compatibility Center'}
-                  title={locale === 'zh-CN' ? '导入兼容性中心' : 'Import Compatibility Center'}
-                  onClick={() => setIsImportDiagnosticsOpen(true)}
-                >
-                  <ClipboardList size={18} />
-                </button>
+                {debugMode && (
+                  <button
+                    className={`icon-button ${importDiagnostics.some((item) => item.status === 'warning' || item.status === 'error') ? 'has-warning' : ''}`}
+                    type="button"
+                    aria-label={locale === 'zh-CN' ? '导入兼容性中心' : 'Import Compatibility Center'}
+                    title={locale === 'zh-CN' ? '导入兼容性中心' : 'Import Compatibility Center'}
+                    onClick={() => setIsImportDiagnosticsOpen(true)}
+                  >
+                    <ClipboardList size={18} />
+                  </button>
+                )}
                 <button
                   className={`icon-button ${analysisIsStale ? 'analysis-stale' : ''}`}
                   type="button"
@@ -3261,7 +3265,7 @@ function App() {
         </Suspense>
       )}
 
-      {isImportDiagnosticsOpen && (
+      {debugMode && isImportDiagnosticsOpen && (
         <Suspense fallback={null}>
           <ImportDiagnosticsModal
             diagnostics={importDiagnostics}

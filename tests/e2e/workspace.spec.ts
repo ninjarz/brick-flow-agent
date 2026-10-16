@@ -98,7 +98,9 @@ test('a verified reinforcement can be previewed, applied, and undone', async ({ 
   await expect(page.getByText('2 parts', { exact: true })).toBeVisible()
 })
 
-test('LDraw compatibility details remain available after import', async ({ page }) => {
+test('LDraw compatibility details remain available in debug mode after import', async ({ page }) => {
+  await expect(page.getByLabel('Import Compatibility Center')).toHaveCount(0)
+  await page.goto('./?debug=1')
   await page.evaluate(() => {
     const ldraw = [
       '0 FILE compatibility-demo.ldr',
