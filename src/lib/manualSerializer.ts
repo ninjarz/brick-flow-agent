@@ -351,12 +351,14 @@ const sequenceBricksForManual = (plan: BuildPlan, locale: ManualLocale) => {
   return ordered
 }
 
-const groupManualSequence = (sequence: ReturnType<typeof sequenceBricksForManual>) => {
+const groupManualSequence = (sequence: ReturnType<typeof sequenceBricksForManual>, instructionSteps: Map<string, BuildPlan['steps'][number]>) => {
   const groups: Array<typeof sequence> = []
   for (const item of sequence) {
     const current = groups.at(-1)
     const currentLayer = current?.[0]?.brick.pose.yStud
-    if (current && current.length < maxPiecesPerManualStep && Math.abs((currentLayer ?? 0) - item.brick.pose.yStud) < 0.000001) {
+    const authored = instructionSteps.get(item.brick.id)
+    const previousAuthored = current && instructionSteps.get(current[0].brick.id)
+    if (current && (authored ? authored === previousAuthored : !previousAuthored && current.length < maxPiecesPerManualStep && Math.abs((currentLayer ?? 0) - item.brick.pose.yStud) < 0.000001)) {
       current.push(item)
     } else {
       groups.push([item])
@@ -371,7 +373,9 @@ export const serializeBuildManual = (plan: BuildPlan, locale: ManualLocale = 'zh
   const planCenterX = plan.bricks.reduce((total, brick) => total + brick.pose.xStud, 0) / Math.max(1, plan.bricks.length)
   const planCenterZ = plan.bricks.reduce((total, brick) => total + brick.pose.zStud, 0) / Math.max(1, plan.bricks.length)
 
-  const steps: ManualStepPage[] = groupManualSequence(sequenceBricksForManual(plan, locale)).map((group, index) => {
+  const instructionSteps = new Map(plan.steps.filter((step) => Number.isInteger(step.instructionStep) && step.instructionStep! > 0).flatMap((step) => step.brickIds.map((id) => [id, step] as const)))
+  const steps: ManualStepPage[] = groupManualSequence(sequenceBricksForManual(plan, locale), instructionSteps).map((group, index) => {
+    const authored = instructionSteps.get(group[0].brick.id)
     const addPieces = group.map(({ brick }) => toManualPiece(brick, locale))
     const layer = Math.max(0, Math.round(Math.min(...group.map(({ brick }) => brick.pose.yStud)) / 0.4))
     const singlePiece = addPieces.length === 1 ? addPieces[0] : undefined
@@ -385,8 +389,8 @@ export const serializeBuildManual = (plan: BuildPlan, locale: ManualLocale = 'zh
 
     return {
       stepNumber: index + 1,
-      title: singlePiece ? labels.placeTitle(singlePiece.name) : labels.placeGroupTitle(addPieces.length, layer),
-      description: singlePiece ? labels.placeDescription(completedPieceCount - 1, singlePiece.name) : labels.placeGroupDescription(addPieces.length, layer),
+      title: authored?.title ?? (singlePiece ? labels.placeTitle(singlePiece.name) : labels.placeGroupTitle(addPieces.length, layer)),
+      description: authored?.description ?? (singlePiece ? labels.placeDescription(completedPieceCount - 1, singlePiece.name) : labels.placeGroupDescription(addPieces.length, layer)),
       addPieces,
       stepInventory: countPieces(addPieces),
       completedPieceCount,

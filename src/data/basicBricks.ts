@@ -184,6 +184,8 @@ export const colorHex: Record<BrickColor, string> = {
   white: '#f8fafc',
   black: '#171717',
   gray: '#8b949e',
+  'light-gray': '#969696',
+  'dark-gray': '#646464',
   brown: '#7c4a28',
   orange: '#f97316',
   tan: '#d6b98c',
@@ -211,6 +213,8 @@ export const colorOpacity: Record<BrickColor, number> = {
   white: 1,
   black: 1,
   gray: 1,
+  'light-gray': 1,
+  'dark-gray': 1,
   brown: 1,
   orange: 1,
   tan: 1,
@@ -630,7 +634,7 @@ const usesFixedPrintedColors = (definition: BrickDefinitionDraft) =>
 const withOfficialColors = (definition: BrickDefinitionDraft): BrickDefinitionDraft => (
   usesFixedPrintedColors(definition)
     ? definition
-    : { ...definition, colors: getOfficialPartColors(definition.partNumber, definition.colors) }
+    : { ...definition, colors: [...new Set([...getOfficialPartColors(definition.partNumber, definition.colors), ...(definition.partNumber === '3039' || definition.partNumber === '2419' ? ['light-gray' as const] : definition.partNumber === '3700' ? ['dark-gray' as const] : [])])] }
 )
 
 const withDefaultPack = (definition: BrickDefinitionDraft): BrickDefinition => ({
@@ -1161,6 +1165,11 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
     colors: ['red', 'blue', 'yellow', 'white', 'black', 'gray', 'orange'],
     inventory: 18,
   },
+  { id: 'technic-brick-1x2-hole', partNumber: '3700', name: '1x2 Technic Brick with Hole', kind: 'brick', footprint: legoPlateFootprint(2, 1, 3), connectors: [...makeStudGrid('technic-brick-1x2-hole', 2, 1, 3), ...makeTubeGrid('technic-brick-1x2-hole', 2, 1, 0)], colors: ['gray'], inventory: 16 },
+  { id: 'brick-round-4x4-hole', partNumber: '87081', name: '4x4 Round Brick with Hole', kind: 'round', footprint: legoPlateFootprint(4, 4, 3), connectors: [], colors: ['white', 'black'], inventory: 16 },
+  { id: 'brick-round-corner-2x2', partNumber: '85080', name: '2x2 Macaroni Brick', kind: 'round', footprint: legoPlateFootprint(2, 2, 3), connectors: [], colors: ['red'], inventory: 16 },
+  { id: 'plate-cut-corners-3x6', partNumber: '2419', name: '3x6 Cut Corner Plate', kind: 'plate', footprint: legoPlateFootprint(6, 3, 1), connectors: [], colors: ['gray'], inventory: 16 },
+  { id: 'dish-3x3', partNumber: '43898', name: '3x3 Inverted Dish', kind: 'round', footprint: legoPlateFootprint(3, 3, 2), connectors: [], colors: ['black'], inventory: 16 },
   ...classic10696ExtraDefinitions,
 ]
 

@@ -3333,7 +3333,6 @@ button.status-pill:hover {
   background: #f1f5f9;
 }
 
-.asset-modal-replicas { width: min(1080px, calc(100vw - 32px)); }
 
 .asset-kind-tabs button {
   min-height: 40px;
@@ -3437,13 +3436,7 @@ button.status-pill:hover {
   line-height: 1;
 }
 
-.asset-card .asset-status.mapped {
-  border-color: #bbf7d0;
-  background: #f0fdf4;
-  color: #15803d;
-}
-
-.asset-card .asset-status.inspired {
+.asset-card .asset-status.replica {
   border-color: #fed7aa;
   background: #fff7ed;
   color: #c2410c;
@@ -6068,10 +6061,3 @@ button:disabled {
 .workspace-storage-status { position: fixed; bottom: 6px; right: 12px; z-index: 70; padding: 4px 9px; border-radius: 6px; background: #f8fafcee; color: #475569; font-size: 11px; max-width: min(520px, 90vw); }
 .workspace-storage-status.recovery, .workspace-storage-status.unavailable { color: #92400e; background: #fffbeb; border: 1px solid #fcd34d; }
 .workspace-storage-status button { margin-left: 8px; cursor: pointer; }
-
-.project-manager { margin: 8px 16px; padding: 8px; border: 1px solid var(--border, #9995); border-radius: 8px; }
-.project-manager summary { cursor: pointer; }
-.project-manager fieldset { border: 0; padding: 8px 0; }
-.project-manager button, .project-manager input { margin: 4px; padding: 6px 10px; }
-.project-manager ul { max-height: 220px; overflow: auto; }
-.project-manager time { font-size: 12px; opacity: .7; }

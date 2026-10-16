@@ -188,6 +188,7 @@ await writeFile(entry, `
   const defaultAssetIds = defaultFinishedAssets.map((asset) => asset.id);
   const duplicateDefaultAssetIds = defaultAssetIds.filter((id, index, ids) => ids.indexOf(id) !== index);
   const expectedDefaultAssetIds = new Set([
+    'finished-lego-30023',
     'finished-ghost',
     'finished-bridge',
     'finished-house',
@@ -209,6 +210,7 @@ await writeFile(entry, `
     'finished-obj-armadillo-s',
   ]);
   const expectedDefaultAssetPieceCounts = {
+    'finished-lego-30023': 25,
     'finished-ghost': 26,
     'finished-bridge': 19,
     'finished-house': 19,
@@ -237,8 +239,8 @@ await writeFile(entry, `
   const unexpectedDefaultAssetIds = defaultAssetIds.filter((id) => !expectedDefaultAssetIds.has(id));
   const missingDefaultAssetIds = [...expectedDefaultAssetIds].filter((id) => !defaultAssetIds.includes(id));
   const resurfacedRetiredDefaultAssetIds = defaultAssetIds.filter((id) => retiredDefaultAssetIds.has(id));
-  const nonGhostClassicDefaultAssets = defaultFinishedAssets.filter((asset) =>
-    asset.category === 'Classic' && asset.id !== 'finished-ghost',
+  const unexpectedClassicDefaultAssets = defaultFinishedAssets.filter((asset) =>
+    asset.category === 'Classic' && !['finished-ghost', 'finished-lego-30023'].includes(asset.id),
   );
   const changedDefaultAssetPieceCounts = defaultFinishedAssets
     .map((asset) => ({
@@ -1175,8 +1177,8 @@ await writeFile(entry, `
     resurfacedRetiredDefaultAssetIds.length > 0
       ? 'Retired default assets resurfaced: ' + resurfacedRetiredDefaultAssetIds.join(', ')
       : '',
-    nonGhostClassicDefaultAssets.length > 0
-      ? 'Only finished-ghost may remain in the Classic default category: ' + nonGhostClassicDefaultAssets.map((asset) => asset.id).join(', ')
+    unexpectedClassicDefaultAssets.length > 0
+      ? 'Unexpected model in the Classic default category: ' + unexpectedClassicDefaultAssets.map((asset) => asset.id).join(', ')
       : '',
     changedDefaultAssetPieceCounts.length > 0
       ? 'Default finished asset piece counts changed unexpectedly: ' + JSON.stringify(changedDefaultAssetPieceCounts)

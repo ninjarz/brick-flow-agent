@@ -2,7 +2,8 @@
 """Extract the LDraw dependencies needed by the curated OMR models.
 
 Usage: python3 scripts/prepare-lego-replicas.py COMPLETE_ZIP SOURCE_MPD_DIR
-The source directory must contain an MPD for every set in MODELS.
+The source directory must contain the six community MPDs. Generate the local
+30023 model first with build-lighthouse-replica.py; it is read from OUTPUT.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ MODELS = (
     ("10182", "Café Corner", "Max Martin Richter", 2058),
     ("10258", "London Bus", "Philippe Hurbain", 1686),
     ("10134", "Y-wing Attack Starfighter", "Roland Dahl", 1489),
+    ("30023", "Lighthouse · 灯塔", "brick-flow-agent（按官方手册逐步重建）", 25),
 )
 
 
@@ -57,6 +59,7 @@ def main():
     archive_path, source_dir = Path(sys.argv[1]), Path(sys.argv[2])
     OUTPUT.mkdir(parents=True, exist_ok=True)
     manifest = []
+    previous = {item['number']: item for item in json.loads((ROOT / 'src/data/legoReplicaManifest.json').read_text())}
     all_needed = set()
     file_map = {}
 
@@ -88,7 +91,8 @@ def main():
 
         pending = []
         for number, title, author, official_count in MODELS:
-            source_path = source_dir / f"{number}-1.mpd"
+            # The independently authored lighthouse is generated locally, not downloaded from OMR.
+            source_path = (OUTPUT / 'models' if number == '30023' else source_dir) / f"{number}-1.mpd"
             raw = source_path.read_bytes()
             text = raw.decode("utf-8-sig")
             embedded = embedded_files(text)
@@ -164,6 +168,9 @@ def main():
                 "officialInstructionsUrl": f"https://www.lego.com/en-us/service/building-instructions/{number}",
                 "modelSourceUrl": f"https://library.ldraw.org/library/omr/{number}-1.mpd",
             })
+            if number == '30023':
+                for key in ('manualSteps', 'instructionsPdfUrl', 'modelSourceUrl'):
+                    manifest[-1][key] = previous[number][key]
 
         while pending:
             reference = pending.pop()

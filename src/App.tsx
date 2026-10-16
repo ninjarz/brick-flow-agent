@@ -1,10 +1,8 @@
 import { useModalFocus } from './hooks/useModalFocus'
 import { importLDrawInWorker } from './lib/ldrawImportWorkerClient'
 import { aiTasks } from './lib/aiTasks'
-import { useAiTasks } from './hooks/useAiTasks'
+import { useAiTaskContext } from './hooks/useAiTaskContext'
 import { useLlmConnection } from './hooks/useLlmConnection'
-import { AiTaskPanel } from './components/AiTaskPanel'
-import { ProjectManager } from './components/ProjectManager'
 import { useWorkspacePersistence } from './hooks/useWorkspacePersistence'
 import { WorkspaceStorageStatus } from './components/WorkspaceStorageStatus'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -18,7 +16,6 @@ import { useWorkspace } from './hooks/useWorkspace'
 import { useWorldSimulationLoop } from './hooks/useWorldSimulationLoop'
 import { brickById, getDefaultBrickColor } from './data/basicBricks'
 import { worldEntityDefinitionById } from './data/worldEntityDefinitions'
-import legoReplicas from './data/legoReplicaManifest.json'
 import { createDefaultWorldScenarios } from './data/worldScenarios'
 import { dropBrickGroupAtPoint, findNearestOpenBrickGroupAround, getBrickGroupDragPointerOffset, offsetBrickGroupDragPoint, rotationRepositionSearchRadiusStuds, type HorizontalDropPoint, type StationaryPlanSpatialData } from './lib/brickGroupPlacement'
 import { createEmptyBuildPlan, generateBuildPlan } from './lib/localGenerator'
@@ -75,7 +72,6 @@ const ConfigModal = lazy(() => import('./components/ConfigModal').then((module) 
 const WorldEntityEditorPanel = lazy(() => import('./components/WorldEntityEditorPanel').then((module) => ({ default: module.WorldEntityEditorPanel })))
 const WorldTavern = lazy(() => import('./components/WorldTavern').then((module) => ({ default: module.WorldTavern })))
 const WorldStoryDock = lazy(() => import('./components/WorldStoryDock').then((module) => ({ default: module.WorldStoryDock })))
-const LegoReplicaGallery = lazy(() => import('./components/LegoReplicaGallery').then((module) => ({ default: module.LegoReplicaGallery })))
 
 const defaultFinishedAssetI18nKeys = new Map(
   defaultFinishedAssets
@@ -103,7 +99,7 @@ type WorldEntityPlacementSession = {
   entity: WorldEntity
 }
 type ScenarioPlaytestSession = { world: WorldState; plan: BuildPlan; scenarioTitle: string; stageTitle: string }
-type AssetLibraryKind = 'models' | 'scenarios' | 'replicas'
+type AssetLibraryKind = 'models' | 'scenarios'
 const tavernDirectorPlaybackTimeoutMs = 15_000
 const tavernScenarioDialogueTimeoutMs = 60_000
 const sceneViewModeOrder: BrickSceneViewMode[] = ['border', 'borderless', 'xray', 'voxel']
@@ -254,7 +250,7 @@ function App() {
   const [finishedAssets, setFinishedAssets] = useState<FinishedAsset[]>(() => loadFinishedAssets())
   const workspaceStorage = useWorkspacePersistence(workspaceSession)
   const activeProjectId = workspaceStorage.current?.id
-  const aiTaskList = useAiTasks(workspaceSession, activeProjectId ?? 'loading', llmConfig)
+  useAiTaskContext(workspaceSession, activeProjectId ?? 'loading', llmConfig)
 
   const [isAssetStorageHydrated, setIsAssetStorageHydrated] = useState(() => !needsFinishedAssetsRecovery())
   const [assetRecoveryAttempt, setAssetRecoveryAttempt] = useState(0)
@@ -2681,8 +2677,6 @@ function App() {
 
   return (
     <main className="app-shell">
-      <ProjectManager {...workspaceStorage} />
-      <AiTaskPanel tasks={aiTaskList} />
       <WorkspaceStorageStatus {...workspaceStorage} />
       {isFileDragActive && (
         <div className="workspace-file-drop-overlay" role="status">
@@ -3408,7 +3402,7 @@ function App() {
       {isAssetLibraryOpen && (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setIsAssetLibraryOpen(false)}>
           <section
-            className={`asset-modal${assetLibraryKind === 'replicas' ? ' asset-modal-replicas' : ''}`}
+            className="asset-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="asset-library-title"
@@ -3417,7 +3411,7 @@ function App() {
             <header>
               <div>
                 <h2 id="asset-library-title">{t('asset.title')}</h2>
-                <p>{assetLibraryKind === 'replicas' ? `${legoReplicas.length} 款套装数字复刻 · 含 3,104 件官方大型套装` : assetLibraryKind === 'models'
+                <p>{assetLibraryKind === 'models'
                   ? t('asset.count', { visible: visibleFinishedAssets.length, total: finishedAssets.length })
                   : t('asset.scenarioCount', { visible: visibleWorldScenarios.length, total: worldScenarios.length })}</p>
               </div>
@@ -3449,17 +3443,9 @@ function App() {
                 <BookOpen size={16} />
                 {t('asset.kind.scenarios')}
               </button>
-              <button
-                type="button"
-                className={assetLibraryKind === 'replicas' ? 'active' : ''}
-                onClick={() => setAssetLibraryKind('replicas')}
-              >
-                <Boxes size={16} />
-                乐高复刻
-              </button>
             </nav>
 
-            {assetLibraryKind === 'replicas' ? <Suspense fallback={<p role="status">正在载入复刻视图…</p>}><LegoReplicaGallery /></Suspense> : assetLibraryKind === 'models' ? <>
+            {assetLibraryKind === 'models' ? <>
             <section className="asset-create">
               <div className="asset-create-fields">
                 <input value={assetTitle} onChange={(event) => setAssetTitle(event.target.value)} placeholder={t('asset.titlePlaceholder', { title: plan.title })} />
@@ -3505,8 +3491,8 @@ function App() {
                   <div>
                     <span>{asset.displayCategory}</span>
                     {asset.source.instructionStatus && (
-                      <span className={`asset-status ${asset.source.instructionStatus}`}>
-                        {asset.source.instructionStatus === 'mapped' ? t('asset.mapped') : t('asset.inspired')}
+                      <span className="asset-status replica">
+                        {t('asset.replica')}
                       </span>
                     )}
                     <h3>{asset.displayTitle}</h3>
@@ -3532,8 +3518,7 @@ function App() {
                   </div>
                 </article>
               ))}
-              {finishedAssets.length === 0 && <p className="muted">{t('asset.empty')}</p>}
-              {finishedAssets.length > 0 && visibleFinishedAssets.length === 0 && <p className="muted">{t('asset.noMatches')}</p>}
+              {visibleFinishedAssets.length === 0 && <p className="muted">{t('asset.noMatches')}</p>}
             </div>
             </> : <>
               <section className="asset-tools">

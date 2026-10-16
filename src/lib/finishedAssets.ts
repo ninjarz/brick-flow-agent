@@ -1,6 +1,7 @@
 import { safeStorage } from './safeStorage'
 import { coordinateStorageWrite } from './storageCoordinator'
-import type { FinishedAsset } from '../types/bricks'
+import lighthousePlan from '../data/legoLighthousePlan.json'
+import type { BuildPlan, FinishedAsset } from '../types/bricks'
 import { minecraftSceneAssets } from '../data/minecraftSceneAssets'
 import { indexedDbStorageMarker, isIndexedDbStorageMarker, localStorageComfortLimit, readLargeStoredValue, removeLargeStoredValue, writeLargeStoredValue } from './browserStorage'
 import { generateBuildPlan } from './localGenerator'
@@ -21,6 +22,7 @@ const retiredDefaultAssetIds = new Set([
 ])
 const defaultAssetIds = new Set([
   'finished-ghost',
+  'finished-lego-30023',
   'finished-bridge',
   'finished-house',
   'finished-castle',
@@ -73,6 +75,12 @@ const createDefaultAsset = (
 }
 
 export const defaultFinishedAssets: FinishedAsset[] = [
+  {
+    id: 'finished-lego-30023', title: 'LEGO 30023 灯塔', category: 'Classic',
+    description: '按 LEGO Creator 30023 官方说明书 4650618 逐步复刻，25 个可编辑零件，包括红白圆塔、八边平台、透明黄色灯室和底座小屋。',
+    instructionUrl: 'https://www.lego.com/cdn/product-assets/product.bi.core.pdf/4650618.pdf',
+    instructionStatus: 'mapped', plan: lighthousePlan as BuildPlan,
+  },
   createDefaultAsset('finished-ghost', 'asset.default.ghost', 'Classic', '一个 Classic 小幽灵', '按 LEGO Classic 10696 Ghost 官方说明复刻并经用户校准的 Classic 小幽灵，包含 2x6 底座、白色弧脚、青色身体、透明粉色 1x2 砖、侧向眼睛、白色手臂和头罩。', 'https://www.lego.com/cdn/product-assets/product.bi.additional.extra.pdf/10696_X_Ghost.pdf', 'inspired'),
   createDefaultAsset('finished-bridge', 'asset.default.bridge', '结构', '一座小桥', '带双层桥墩、拱形支撑、灰色桥面铺装、红色双侧护栏、端点灯和蓝色水面点的小桥。'),
   createDefaultAsset('finished-house', 'asset.default.house', '建筑', '一个小房子', '带侧墙、棕色门、透明绿色窗、红色坡屋顶、烟囱烟点和院内花树的紧凑房屋。'),

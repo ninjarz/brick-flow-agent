@@ -63,6 +63,7 @@ def main():
         assert files, model
         piece_count = 0
         primitive_count = 0
+        distinct_pieces = set()
 
         def is_embedded_piece(name):
             return any(
@@ -91,6 +92,7 @@ def main():
                 if reference.lower() in files:
                     if is_embedded_piece(reference):
                         piece_count += 1
+                        distinct_pieces.add(reference.lower())
                         check_embedded_dependencies(reference)
                     else:
                         expand(reference, (*ancestry, key))
@@ -100,11 +102,24 @@ def main():
                         primitive_count += 1
                     else:
                         piece_count += 1
+                        distinct_pieces.add(reference.lower())
 
         expand(next(iter(files)))
         assert piece_count == item["modelPieceCount"], (model, piece_count)
         assert primitive_count == item["primitiveInstances"], (model, primitive_count)
+        assert len(distinct_pieces) == item['distinctPieces'], (model, len(distinct_pieces))
         assert sum(line.strip() == "0 STEP" for line in text.splitlines()) == item["stepMarkers"]
+        if 'manualSteps' in item:
+            # These models intentionally have one flat assembly step per official diagram.
+            assembly_steps = text.split('\n0 STEP\n')
+            assert len(assembly_steps) == len(item['manualSteps']), model
+            total = 0
+            for assembly, description in zip(assembly_steps, item['manualSteps']):
+                added = len(list(refs(assembly)))
+                total += added
+                assert added == description['addedPieces'], (model, description['title'])
+                assert total == description['totalPieces'], (model, description['title'])
+            assert total == item['officialPieceCount'], model
         print(f"#{item['number']}: {piece_count} pieces, {len(files)} submodels, {item['stepMarkers']} step markers")
 
     print(f"All models and {len(checked)} library dependencies verified")

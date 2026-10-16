@@ -543,6 +543,7 @@ for (const profile of partProfiles) {
     triangles: visualTriangles.length,
     connectors: connectors.length,
     frame,
+    alignedFrame,
     horizontalAxisMapping,
   })
 }
@@ -590,17 +591,22 @@ export const ${exportName} = (partNumber: string) => {
 }
 `
 
-const visualChunkTargetSourceLength = 300_000
-const generatedVisualChunks = []
+// Keep existing geometry chunks stable when adding catalogue parts.
+const previousManifest = existsSync(visualOutputPath) ? await readFile(visualOutputPath, 'utf8') : ''
+const previousChunkByPart = new Map([...previousManifest.matchAll(/"(\d+)": loadVisualChunk(\d+),/g)].map((match) => [match[1], Number(match[2])]))
+const previousChunkCount = previousChunkByPart.size ? Math.max(...previousChunkByPart.values()) + 1 : 0
+const generatedVisualChunks = Array.from({ length: previousChunkCount }, () => [])
+const newProfiles = []
+for (const profile of generatedVisualProfiles) {
+  const index = previousChunkByPart.get(profile.partNumber)
+  if (index === undefined) newProfiles.push(profile)
+  else generatedVisualChunks[index].push(profile)
+}
 let currentVisualChunk = []
 let currentVisualChunkSourceLength = 0
-
-for (const profile of generatedVisualProfiles) {
+for (const profile of newProfiles) {
   const profileSourceLength = serializeTriangleValueProfiles([profile]).length
-  if (
-    currentVisualChunk.length > 0
-    && currentVisualChunkSourceLength + profileSourceLength > visualChunkTargetSourceLength
-  ) {
+  if (currentVisualChunk.length && currentVisualChunkSourceLength + profileSourceLength > 300_000) {
     generatedVisualChunks.push(currentVisualChunk)
     currentVisualChunk = []
     currentVisualChunkSourceLength = 0
@@ -608,7 +614,7 @@ for (const profile of generatedVisualProfiles) {
   currentVisualChunk.push(profile)
   currentVisualChunkSourceLength += profileSourceLength
 }
-if (currentVisualChunk.length > 0) generatedVisualChunks.push(currentVisualChunk)
+if (currentVisualChunk.length) generatedVisualChunks.push(currentVisualChunk)
 
 const visualChunkNames = generatedVisualChunks.map((_, index) => `chunk-${String(index).padStart(2, '0')}`)
 const makeGeneratedVisualManifest = () => {
@@ -696,6 +702,7 @@ console.log(JSON.stringify({
     triangles: row.triangles,
     connectors: row.connectors,
     horizontalAxisMapping: row.horizontalAxisMapping,
+    alignedFrame: row.alignedFrame,
     frame: Object.fromEntries(Object.entries(row.frame).map(([key, value]) => [key, round(value)])),
   })),
 }, null, 2))

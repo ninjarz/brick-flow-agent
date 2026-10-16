@@ -1,6 +1,28 @@
 # 乐高套装数字复刻
 
-在素材库中打开「乐高复刻」，可查看完整三维模型、旋转缩放、按 LDraw 步骤标记回放，并打开 LEGO 官方说明书进行人工对照。「聚焦当前」可放大正在检查的阶段。数字模型与零件定义已随应用打包，查看模型不依赖第三方服务。10030 在本机 Chrome 的首次解析约 45–50 秒，界面会显示等待提示。
+## 当前模型：LEGO 30023 灯塔
+
+在「素材库 → 模型」中选择「LEGO 30023 灯塔」。它与「Classic 小幽灵」共用模型卡片：点击「加载」进入主画布，可以选择、移动、编辑每个零件并撤销；点击「手册」使用原有搭建手册逐步查看。独立复刻查看器已移除。
+
+本款按 LEGO 官方说明书 4650618 独立转录 25 件装配坐标，使用 LDraw 零件几何。原生模型包含 9 个官方步骤，累计件数依次为 2、5、8、12、18、19、20、23、25；不包含备用件。第 1–7 步位于官方 PDF 第 1 页，第 8–9 步位于第 2 页。原有手册保留明确标记的官方步骤，不会按高度重新分组。
+
+[官方页面](https://www.lego.com/en-us/service/building-instructions/30023) · [官方 PDF](https://www.lego.com/cdn/product-assets/product.bi.core.pdf/4650618.pdf)。PDF 不随仓库分发。本地逐步操作记录位于忽略的 `docs/replicas/30023/native/`。
+
+重新生成装配、原生几何及模型：
+
+```bash
+python3 scripts/build-lighthouse-replica.py
+node scripts/generate-ldraw-structural.mjs > /tmp/lighthouse-geometry.json
+node scripts/build-lighthouse-asset.mjs /tmp/lighthouse-geometry.json
+npm run verify:replicas
+npm run validate:builds
+npm test
+npm run build
+```
+
+## 历史 LDraw 资料
+
+以下六份社区 MPD 及其依赖仍保留在 `public/lego-replicas/` 作为源资料。它们尚未转换成主画布可编辑模型，也未逐步核准与官方手册完全一致，不作为当前模型列表中的复刻成品展示。
 
 | 套装 | LEGO 官方件数 | 数字模型零件实例 | MPD 步骤标记 | 官方说明书 | 数字模型 |
 | --- | ---: | ---: | ---: | --- | --- |
@@ -11,25 +33,18 @@
 | 10258 London Bus | 1,686 | 1,682 | 102 | [LEGO](https://www.lego.com/en-us/service/building-instructions/10258) | [LDraw OMR](https://library.ldraw.org/omr/sets/871) |
 | 10134 Y-wing Attack Starfighter | 1,489 | 1,493 | 168 | [LEGO](https://www.lego.com/en-us/service/building-instructions/10134) | [LDraw OMR](https://library.ldraw.org/omr/sets/322) |
 
-数字模型是 LDraw 社区制作的 MPD，六款作者依次为 Roland Dahl、Orion Pobursky、Marc Giraudet、Max Martin Richter、Philippe Hurbain、Roland Dahl。模型和 LEGO 官方说明书分别来自上表的原始来源。模型按 MPD 子模型及 `STEP` 标记回放；浏览器中展开重复子模型后得到的回放阶段数可能多于 MPD 文件里的标记数，也不等于官方 PDF 页码。数字模型的实例计数与 LEGO 官方件数不一致；原因没有逐件核准，因此界面分别展示两种统计，未将它们视为完全一致。
 
-已下载并抽查原有三份官方说明书的封面与中间步骤页：10030 为 228 页，8099 为 48 页，10124 为 68 页。新增三款均核对了 LEGO 官方说明书页面；10182 分为两册（48、76 页），10258 与 10134 各一册。PDF 没有放入仓库。
+六款作者依次为 Roland Dahl、Orion Pobursky、Marc Giraudet、Max Martin Richter、Philippe Hurbain、Roland Dahl。表中实例数、STEP 标记不等于官方件数或 PDF 步数。保留这些差异，不能据此宣称完整复刻。
 
-浏览器视图是独立的完整装配预览，不会把数千个复杂零件送入当前编辑器的碰撞与体素系统。现有编辑器只覆盖少量零件及部分旋转，直接导入会丢失零件与姿态。此视图用于模型和说明书验收，不能在编辑器里逐块改动或做结构仿真。
-
-LDraw OMR 将 10030、10258 和 10134 标记为缺少贴纸，但零件与印刷图案齐全。三维模型外观因此可能与带贴纸的实物略有差别。候选 10143 虽有 3,449 件，但其 OMR 模型没有 `STEP` 标记，因此未加入这个以步骤回放为核心的画廊。
-
-## 复现与校验
-
-官方说明书 PDF 不放入仓库；可从上表的 LEGO 页面下载。LDraw MPD 和所需零件已放在 `public/lego-replicas/`。需要重建资源时，下载 [LDraw 完整零件库](https://library.ldraw.org/library/updates/complete.zip) 与上表六个 MPD，按套装编号命名为 `<编号>-1.mpd` 并放在同一目录，然后执行：
+重建归档依赖时，下载 LDraw 完整零件库与上述 MPD，按 `<编号>-1.mpd` 命名，然后执行：
 
 ```bash
 python3 scripts/prepare-lego-replicas.py /path/to/complete.zip /path/to/mpds
 npm run verify:replicas
 ```
 
-校验脚本会核对 MPD 的 SHA-256、模型实例数、步骤标记、每个零件的递归依赖及实际文件。当前裁剪零件库有 1,205 个依赖文件，模型与库合计约 8.5 MB。浏览器回归检查应确认六款模型加载后没有缺失文件、控制条可播放，10030 在目标设备上能够旋转。10258 的 MPD 内嵌子零件名使用反斜杠；加载时会在内存中规范化文件名，仓库中的原始 MPD 保持不变。
+校验脚本核对 SHA-256、模型实例数、STEP 标记及递归零件依赖。
 
 ## 授权
 
-六个 MPD 的文件头标为 `CCAL version 2.0`，即 CC BY 2.0。LDraw 零件库文件分别按文件头标明的 CC BY 2.0、CC BY 4.0 或两者授权；作者信息与许可文本保留在原文件及 `public/lego-replicas/CAreadme.txt`、`CAlicense.txt`、`CAlicense4.txt`。仓库对源 MPD 与零件几何文件仅做选取和打包，未改写内容。LEGO 官方说明书只通过链接展示，没有再分发 PDF。LEGO® 为 LEGO Group 的商标，LDraw 社区模型不代表 LEGO 官方授权。
+六份社区 MPD 按文件头 CC BY 2.0 授权；独立编写的 30023 装配文件按 CC BY 4.0 授权。LDraw 零件几何按各文件头的 CC BY 2.0、CC BY 4.0 或两者授权，原作者、许可头及许可文本均保留。LEGO 官方说明书只提供链接，不再分发 PDF。LEGO® 为 LEGO Group 的商标。

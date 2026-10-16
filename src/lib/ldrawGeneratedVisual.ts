@@ -20,6 +20,8 @@ const loadVisualChunk12 = () => import('./ldrawGeneratedVisualChunks/chunk-12')
 const loadVisualChunk13 = () => import('./ldrawGeneratedVisualChunks/chunk-13')
 const loadVisualChunk14 = () => import('./ldrawGeneratedVisualChunks/chunk-14')
 const loadVisualChunk15 = () => import('./ldrawGeneratedVisualChunks/chunk-15')
+const loadVisualChunk16 = () => import('./ldrawGeneratedVisualChunks/chunk-16')
+const loadVisualChunk17 = () => import('./ldrawGeneratedVisualChunks/chunk-17')
 
 export const ldrawGeneratedVisualChunkLoaders: Record<
   string,
@@ -120,6 +122,11 @@ export const ldrawGeneratedVisualChunkLoaders: Record<
   "98100": loadVisualChunk14,
   "98138": loadVisualChunk14,
   "98263": loadVisualChunk15,
+  "2419": loadVisualChunk16,
+  "3700": loadVisualChunk16,
+  "43898": loadVisualChunk16,
+  "85080": loadVisualChunk16,
+  "87081": loadVisualChunk17,
 }
 
 export const ldrawGeneratedVisualPartNumbers = Object.keys(ldrawGeneratedVisualChunkLoaders)

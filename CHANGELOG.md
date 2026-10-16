@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Remove the project manager and AI task panels from the header while retaining workspace autosave and request lifetime protection.
+
+- Add LEGO 30023 Lighthouse as a standard editable model with 25 pieces and nine official instruction steps, using the same model cards, main canvas and building manual as Classic Ghost.
+- Add the required LDraw part geometry and gray colors, and preserve official step groups in the existing manual; remove the custom replica viewer.
 - Preserve edits made during project activation, deletion, checkpoint restoration and reload; retain late replacement edits as recoverable checkpoints or projects.
 - Stop asset autosaves after failed recovery, preserve damaged copies, support retries and merge edits made while loading.
 - Commit world-object changes with persisted event consumption and reject stale director-turn finalizers across workspace replacements.

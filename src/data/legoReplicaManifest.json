@@ -82,5 +82,85 @@
     "modelUrl": "lego-replicas/models/10134-1.mpd",
     "officialInstructionsUrl": "https://www.lego.com/en-us/service/building-instructions/10134",
     "modelSourceUrl": "https://library.ldraw.org/library/omr/10134-1.mpd"
+  },
+  {
+    "number": "30023",
+    "title": "Lighthouse · 灯塔",
+    "modelAuthor": "brick-flow-agent（按官方手册逐步重建）",
+    "officialPieceCount": 25,
+    "modelPieceCount": 25,
+    "primitiveInstances": 0,
+    "stepMarkers": 8,
+    "distinctPieces": 11,
+    "modelSha256": "0ee4229242aecaeaa96a02898f6ffd0aabdf13a95ec42e870a5390709697902f",
+    "modelUrl": "lego-replicas/models/30023-1.mpd",
+    "officialInstructionsUrl": "https://www.lego.com/en-us/service/building-instructions/30023",
+    "modelSourceUrl": "lego-replicas/models/30023-1.mpd",
+    "instructionsPdfUrl": "https://www.lego.com/cdn/product-assets/product.bi.core.pdf/4650618.pdf",
+    "manualSteps": [
+      {
+        "title": "底板与带孔砖",
+        "page": 1,
+        "check": "绿色 4×4 底板；深灰带孔砖位于后侧，两个凸点与底板对齐，圆孔所在的长面可见。",
+        "addedPieces": 2,
+        "totalPieces": 2
+      },
+      {
+        "title": "底座与棕色小屋",
+        "page": 1,
+        "check": "棕色 2×4 砖向前伸出一格；左右各一块浅灰 2×2 斜坡，低边朝外。",
+        "addedPieces": 3,
+        "totalPieces": 5
+      },
+      {
+        "title": "第一圈白色塔身与屋顶",
+        "page": 1,
+        "check": "白色 4×4 圆砖居中；棕色砖前端的两块黑色小斜坡相向形成屋脊。",
+        "addedPieces": 3,
+        "totalPieces": 8
+      },
+      {
+        "title": "第一圈红色条纹",
+        "page": 1,
+        "check": "4 块红色弧砖组成完整圆环，圆环顶面保持红色；此步从下往上只有白—红两层。",
+        "addedPieces": 4,
+        "totalPieces": 12
+      },
+      {
+        "title": "第二圈红白条纹",
+        "page": 1,
+        "check": "先加白色圆砖，再加 4 块红色弧砖，最后盖白色圆砖；共五层白—红—白—红—白。",
+        "addedPieces": 6,
+        "totalPieces": 18
+      },
+      {
+        "title": "平台第一半块",
+        "page": 1,
+        "check": "第一块浅灰 3×6 切角板覆盖半个塔顶，直边经过塔心，两个切角朝外。",
+        "addedPieces": 1,
+        "totalPieces": 19
+      },
+      {
+        "title": "完整八边平台",
+        "page": 1,
+        "check": "第二块切角板旋转 180° 与第一块拼合；两块等高、直边贴合，组成对称八边平台。",
+        "addedPieces": 1,
+        "totalPieces": 20
+      },
+      {
+        "title": "黑色灯座与透明灯室",
+        "page": 2,
+        "check": "黑色 4×4 圆砖居中，两块透明黄色 2×2 圆砖上下叠放，四周露出黑色凸点。",
+        "addedPieces": 3,
+        "totalPieces": 23
+      },
+      {
+        "title": "灯罩与隐藏连接板",
+        "page": 2,
+        "check": "白色 1×1 圆板装在黑色 3×3 碟形灯罩下面，再一起装上灯室；最终使用 25 件。",
+        "addedPieces": 2,
+        "totalPieces": 25
+      }
+    ]
   }
 ]

@@ -6,6 +6,8 @@ export type BrickColor =
   | 'white'
   | 'black'
   | 'gray'
+  | 'light-gray'
+  | 'dark-gray'
   | 'brown'
   | 'orange'
   | 'tan'
@@ -151,6 +153,8 @@ export type BuildStep = {
   title: string
   description: string
   brickIds: string[]
+  /** Keep this group aligned with an official instruction step in the standard manual. */
+  instructionStep?: number
 }
 
 export type BrickStructure = {

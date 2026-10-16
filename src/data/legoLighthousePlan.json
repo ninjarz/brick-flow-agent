@@ -1,0 +1,382 @@
+{
+  "id": "lego-30023-lighthouse",
+  "title": "LEGO 30023 灯塔",
+  "prompt": "LEGO Creator 30023 官方灯塔复刻",
+  "source": "template-local",
+  "bricks": [
+    {
+      "id": "lighthouse-1",
+      "brickId": "plate-4x4",
+      "color": "green",
+      "pose": {
+        "xStud": 1,
+        "yStud": 0,
+        "zStud": 1,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lighthouse-2",
+      "brickId": "technic-brick-1x2-hole",
+      "color": "dark-gray",
+      "pose": {
+        "xStud": 1,
+        "yStud": 0.4,
+        "zStud": 2,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lighthouse-3",
+      "brickId": "brick-2x4",
+      "color": "brown",
+      "pose": {
+        "xStud": 2,
+        "yStud": 0.4,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lighthouse-4",
+      "brickId": "slope-2x2",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 2,
+        "yStud": 0.4,
+        "zStud": 0,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lighthouse-5",
+      "brickId": "slope-2x2",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 2,
+        "yStud": 0.4,
+        "zStud": 4,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lighthouse-6",
+      "brickId": "brick-round-4x4-hole",
+      "color": "white",
+      "pose": {
+        "xStud": 1,
+        "yStud": 1.6,
+        "zStud": 1,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lighthouse-7",
+      "brickId": "slope-cheese-1x1",
+      "color": "black",
+      "pose": {
+        "xStud": 5,
+        "yStud": 1.6,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lighthouse-8",
+      "brickId": "slope-cheese-1x1",
+      "color": "black",
+      "pose": {
+        "xStud": 5,
+        "yStud": 1.6,
+        "zStud": 3,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lighthouse-9",
+      "brickId": "brick-round-corner-2x2",
+      "color": "red",
+      "pose": {
+        "xStud": 3,
+        "yStud": 2.8,
+        "zStud": 1,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lighthouse-10",
+      "brickId": "brick-round-corner-2x2",
+      "color": "red",
+      "pose": {
+        "xStud": 1,
+        "yStud": 2.8,
+        "zStud": 1,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lighthouse-11",
+      "brickId": "brick-round-corner-2x2",
+      "color": "red",
+      "pose": {
+        "xStud": 1,
+        "yStud": 2.8,
+        "zStud": 3,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lighthouse-12",
+      "brickId": "brick-round-corner-2x2",
+      "color": "red",
+      "pose": {
+        "xStud": 3,
+        "yStud": 2.8,
+        "zStud": 3,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lighthouse-13",
+      "brickId": "brick-round-4x4-hole",
+      "color": "white",
+      "pose": {
+        "xStud": 1,
+        "yStud": 4,
+        "zStud": 1,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lighthouse-14",
+      "brickId": "brick-round-corner-2x2",
+      "color": "red",
+      "pose": {
+        "xStud": 3,
+        "yStud": 5.2,
+        "zStud": 1,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lighthouse-15",
+      "brickId": "brick-round-corner-2x2",
+      "color": "red",
+      "pose": {
+        "xStud": 1,
+        "yStud": 5.2,
+        "zStud": 1,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lighthouse-16",
+      "brickId": "brick-round-corner-2x2",
+      "color": "red",
+      "pose": {
+        "xStud": 1,
+        "yStud": 5.2,
+        "zStud": 3,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lighthouse-17",
+      "brickId": "brick-round-corner-2x2",
+      "color": "red",
+      "pose": {
+        "xStud": 3,
+        "yStud": 5.2,
+        "zStud": 3,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lighthouse-18",
+      "brickId": "brick-round-4x4-hole",
+      "color": "white",
+      "pose": {
+        "xStud": 1,
+        "yStud": 6.4,
+        "zStud": 1,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lighthouse-19",
+      "brickId": "plate-cut-corners-3x6",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 0,
+        "yStud": 7.6,
+        "zStud": 0,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lighthouse-20",
+      "brickId": "plate-cut-corners-3x6",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 3,
+        "yStud": 7.6,
+        "zStud": 0,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lighthouse-21",
+      "brickId": "brick-round-4x4-hole",
+      "color": "black",
+      "pose": {
+        "xStud": 1,
+        "yStud": 8,
+        "zStud": 1,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lighthouse-22",
+      "brickId": "brick-round-2x2-axle",
+      "color": "trans-yellow",
+      "pose": {
+        "xStud": 2,
+        "yStud": 9.2,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lighthouse-23",
+      "brickId": "brick-round-2x2-axle",
+      "color": "trans-yellow",
+      "pose": {
+        "xStud": 2,
+        "yStud": 10.4,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lighthouse-24",
+      "brickId": "round-1x1-plate",
+      "color": "white",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 11.6,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lighthouse-25",
+      "brickId": "dish-3x3",
+      "color": "black",
+      "pose": {
+        "xStud": 1.5,
+        "yStud": 11.6,
+        "zStud": 1.5,
+        "rotationQuarterTurns": 0
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "lighthouse-step-1",
+      "title": "官方第 1 步：底板与带孔砖",
+      "description": "官方说明书第 1 页。绿色 4×4 底板；深灰带孔砖位于后侧，两个凸点与底板对齐，圆孔所在的长面可见。",
+      "instructionStep": 1,
+      "brickIds": [
+        "lighthouse-1",
+        "lighthouse-2"
+      ]
+    },
+    {
+      "id": "lighthouse-step-2",
+      "title": "官方第 2 步：底座与棕色小屋",
+      "description": "官方说明书第 1 页。棕色 2×4 砖向前伸出一格；左右各一块浅灰 2×2 斜坡，低边朝外。",
+      "instructionStep": 2,
+      "brickIds": [
+        "lighthouse-3",
+        "lighthouse-4",
+        "lighthouse-5"
+      ]
+    },
+    {
+      "id": "lighthouse-step-3",
+      "title": "官方第 3 步：第一圈白色塔身与屋顶",
+      "description": "官方说明书第 1 页。白色 4×4 圆砖居中；棕色砖前端的两块黑色小斜坡相向形成屋脊。",
+      "instructionStep": 3,
+      "brickIds": [
+        "lighthouse-6",
+        "lighthouse-7",
+        "lighthouse-8"
+      ]
+    },
+    {
+      "id": "lighthouse-step-4",
+      "title": "官方第 4 步：第一圈红色条纹",
+      "description": "官方说明书第 1 页。4 块红色弧砖组成完整圆环，圆环顶面保持红色；此步从下往上只有白—红两层。",
+      "instructionStep": 4,
+      "brickIds": [
+        "lighthouse-9",
+        "lighthouse-10",
+        "lighthouse-11",
+        "lighthouse-12"
+      ]
+    },
+    {
+      "id": "lighthouse-step-5",
+      "title": "官方第 5 步：第二圈红白条纹",
+      "description": "官方说明书第 1 页。先加白色圆砖，再加 4 块红色弧砖，最后盖白色圆砖；共五层白—红—白—红—白。",
+      "instructionStep": 5,
+      "brickIds": [
+        "lighthouse-13",
+        "lighthouse-14",
+        "lighthouse-15",
+        "lighthouse-16",
+        "lighthouse-17",
+        "lighthouse-18"
+      ]
+    },
+    {
+      "id": "lighthouse-step-6",
+      "title": "官方第 6 步：平台第一半块",
+      "description": "官方说明书第 1 页。第一块浅灰 3×6 切角板覆盖半个塔顶，直边经过塔心，两个切角朝外。",
+      "instructionStep": 6,
+      "brickIds": [
+        "lighthouse-19"
+      ]
+    },
+    {
+      "id": "lighthouse-step-7",
+      "title": "官方第 7 步：完整八边平台",
+      "description": "官方说明书第 1 页。第二块切角板旋转 180° 与第一块拼合；两块等高、直边贴合，组成对称八边平台。",
+      "instructionStep": 7,
+      "brickIds": [
+        "lighthouse-20"
+      ]
+    },
+    {
+      "id": "lighthouse-step-8",
+      "title": "官方第 8 步：黑色灯座与透明灯室",
+      "description": "官方说明书第 2 页。黑色 4×4 圆砖居中，两块透明黄色 2×2 圆砖上下叠放，四周露出黑色凸点。",
+      "instructionStep": 8,
+      "brickIds": [
+        "lighthouse-21",
+        "lighthouse-22",
+        "lighthouse-23"
+      ]
+    },
+    {
+      "id": "lighthouse-step-9",
+      "title": "官方第 9 步：灯罩与隐藏连接板",
+      "description": "官方说明书第 2 页。白色 1×1 圆板装在黑色 3×3 碟形灯罩下面，再一起装上灯室；最终使用 25 件。",
+      "instructionStep": 9,
+      "brickIds": [
+        "lighthouse-24",
+        "lighthouse-25"
+      ]
+    }
+  ]
+}
