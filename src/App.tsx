@@ -22,6 +22,7 @@ import { createEmptyBuildPlan, generateBuildPlan } from './lib/localGenerator'
 import { buildLlmUserPrompt, generateLlmBuildPlan, llmSystemPrompt, requestLlmJsonContent, requestLlmTextStream, testLlmConnection } from './lib/llmGenerator'
 import { clearLlmConnection, normalizeMaxRepairAttempts, saveLlmConnection } from './lib/llmConfig'
 import { defaultFinishedAssets, needsFinishedAssetsRecovery, isDefaultFinishedAsset, mergeRecoveredFinishedAssets, loadAllDefaultFinishedAssets, loadFinishedAssets, loadFinishedAssetsFromIndexedDb, mergeWithDefaultAssets, saveFinishedAssets } from './lib/finishedAssets'
+import { preparePlanGeometry } from './lib/planGeometry'
 import { formatBuildManualHtml, formatBuildManualMarkdown, serializeBuildManual } from './lib/manualSerializer'
 import { getManualPageTabItems, getManualStepPage, manualStepPageSize } from './lib/manualPagination'
 import { countBricks, createBrickCollisionIndex, createPlanSpatialState, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickPlacementDiagnostics, getBrickRawOverlapScore, getConnectedBrickComponents, hasBrickCollision, isBrickAboveGround, makeBrick, repairBuildPlan, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
@@ -2496,7 +2497,11 @@ function App() {
     }
   }
 
-  const loadFinishedAsset = (asset: LocalizedFinishedAsset) => {
+  const loadFinishedAsset = async (asset: LocalizedFinishedAsset) => {
+    try { await preparePlanGeometry(asset.displayPlan) } catch {
+      setGenerationFailure(t('error.geometryLoad'))
+      return
+    }
     const issues = isDefaultFinishedAsset(asset.source) ? [] : validateBuildPlan(asset.displayPlan)
     if (getBlockingBuildPlanIssues(issues).length > 0) {
       setGenerationFailure(t('error.assetInvalid', { summary: summarizeBuildPlanIssues(issues, locale) }))
@@ -2662,8 +2667,12 @@ function App() {
     if (issues.length > 0) setGenerationWarning(summarizeBuildPlanIssues(issues, locale))
   }
 
-  const openManual = (sourcePlan?: BuildPlan) => {
-    const nextManualPlan = sourcePlan ?? plan
+  const openManual = async (sourcePlan?: BuildPlan) => {
+    const nextManualPlan = sourcePlan ?? planRef.current
+    try { await preparePlanGeometry(nextManualPlan) } catch {
+      setGenerationFailure(t('error.geometryLoad'))
+      return
+    }
     const issues = validateBuildPlan(nextManualPlan)
     if (getBlockingBuildPlanIssues(issues).length > 0) {
       setGenerationFailure(t('error.manualInvalid', { summary: summarizeBuildPlanIssues(issues, locale) }))

@@ -6,6 +6,7 @@ import { PLATE_HEIGHT_WORLD } from '../lib/brickUnits'
 import { getBrickCatalogName, getBrickCatalogSearchTerms } from '../lib/brickCatalog'
 import { loadCatalogPreferences, saveCatalogPreferences, type CatalogPackPreference } from '../lib/catalogPreferences'
 import { getBlockingBuildPlanIssues, summarizeBuildPlanIssues, validateBuildPlan, validateBuildPlanBasics } from '../lib/planUtils'
+import { preparePlanGeometry } from '../lib/planGeometry'
 import { useI18n } from '../lib/i18n'
 import { LazyBrickGlyph } from './LazyBrickGlyph'
 import type { BuildPlan } from '../types/bricks'
@@ -91,6 +92,7 @@ export const ControlPanel = ({
     plan: BuildPlan
     issues: ReturnType<typeof validateBuildPlan>
   }>()
+  const [geometryLoadFailure, setGeometryLoadFailure] = useState<BuildPlan>()
   const deferredPlan = useDeferredValue(plan)
   const derivedPlan = deferredPlan
   const basicPlanIssues = useMemo(() => validateBuildPlanBasics(derivedPlan), [derivedPlan])
@@ -98,10 +100,14 @@ export const ControlPanel = ({
   useEffect(() => {
     let isCanceled = false
     const timeoutId = window.setTimeout(() => {
-      const issues = validateBuildPlan(derivedPlan)
-      if (!isCanceled) {
+      void preparePlanGeometry(derivedPlan).then(() => {
+        if (isCanceled) return
+        const issues = validateBuildPlan(derivedPlan)
+        setGeometryLoadFailure(undefined)
         setBackgroundValidation({ plan: derivedPlan, issues })
-      }
+      }).catch(() => {
+        if (!isCanceled) setGeometryLoadFailure(derivedPlan)
+      })
     }, validationDebounceMs)
 
     return () => {
@@ -110,7 +116,8 @@ export const ControlPanel = ({
     }
   }, [derivedPlan])
 
-  const isStructureChecking = backgroundValidation?.plan !== derivedPlan
+  const hasGeometryLoadFailure = geometryLoadFailure === derivedPlan
+  const isStructureChecking = !hasGeometryLoadFailure && backgroundValidation?.plan !== derivedPlan
   const planIssues = useMemo(
     () => {
       return backgroundValidation?.plan === derivedPlan ? backgroundValidation.issues : basicPlanIssues
@@ -119,12 +126,12 @@ export const ControlPanel = ({
   )
   const blockingPlanIssues = useMemo(() => getBlockingBuildPlanIssues(planIssues), [planIssues])
   const planIssueSummary = useMemo(() => summarizeBuildPlanIssues(planIssues, locale), [locale, planIssues])
-  const structureStatusTone = blockingPlanIssues.length > 0
+  const structureStatusTone = hasGeometryLoadFailure || blockingPlanIssues.length > 0
     ? 'warn'
     : planIssues.length > 0 || isStructureChecking
       ? 'notice'
       : 'ok'
-  const structureStatusText = isStructureChecking
+  const structureStatusText = hasGeometryLoadFailure ? t('error.geometryLoad') : isStructureChecking
     ? planIssues.length > 0
       ? `${planIssueSummary} · ${t('control.validationCheckingLarge')}`
       : t('control.validationCheckingLarge')

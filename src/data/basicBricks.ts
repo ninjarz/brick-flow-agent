@@ -2,6 +2,7 @@ import type { BrickColor, BrickConnector, BrickDefinition, VoxelBlockVisual } fr
 import { getLDrawConnectors } from '../lib/ldrawPartRegistry'
 import { legoPlateFootprint, plateHeightToWorldStud } from '../lib/brickUnits'
 import { architectureBricks } from './architectureBricks'
+import { architectureReplicaColors } from './architectureReplicaColors'
 import { getOfficialPartColors } from './officialPartColors'
 
 const makeStudGrid = (
@@ -188,6 +189,7 @@ export const colorHex: Record<BrickColor, string> = {
   'light-gray': '#969696',
   'dark-gray': '#646464',
   'dark-green': '#184632',
+  'pearl-gold': '#AA7F2E',
   brown: '#7c4a28',
   orange: '#f97316',
   tan: '#d6b98c',
@@ -218,6 +220,7 @@ export const colorOpacity: Record<BrickColor, number> = {
   'light-gray': 1,
   'dark-gray': 1,
   'dark-green': 1,
+  'pearl-gold': 1,
   brown: 1,
   orange: 1,
   tan: 1,
@@ -632,7 +635,7 @@ const classic10696ExtraDefinitions: BrickDefinitionDraft[] = [
 ]
 
 const usesFixedPrintedColors = (definition: BrickDefinitionDraft) =>
-  definition.id.startsWith('tile-eye') || definition.id === 'tile-round-clock-2x2' || definition.id === 'tile-big-ben-nameplate'
+  definition.id.startsWith('tile-eye') || definition.id === 'tile-round-clock-2x2' || definition.id.endsWith('-nameplate')
 
 const replicaColors: Record<string, BrickColor[]> = {
   '3039': ['light-gray'], '2419': ['light-gray'], '3700': ['dark-gray'],
@@ -646,7 +649,7 @@ const replicaColors: Record<string, BrickColor[]> = {
 const withOfficialColors = (definition: BrickDefinitionDraft): BrickDefinitionDraft => (
   usesFixedPrintedColors(definition)
     ? definition
-    : { ...definition, colors: [...new Set([...getOfficialPartColors(definition.partNumber, definition.colors), ...(replicaColors[definition.partNumber] ?? [])])] }
+    : { ...definition, colors: [...new Set([...getOfficialPartColors(definition.partNumber, definition.colors), ...(replicaColors[definition.partNumber] ?? []), ...(architectureReplicaColors[definition.partNumber] ?? [])])] }
 )
 
 const withDefaultPack = (definition: BrickDefinitionDraft): BrickDefinition => ({

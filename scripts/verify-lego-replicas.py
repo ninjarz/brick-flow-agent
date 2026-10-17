@@ -122,7 +122,54 @@ def main():
             assert total == item['officialPieceCount'], model
         print(f"#{item['number']}: {piece_count} pieces, {len(files)} submodels, {item['stepMarkers']} step markers")
 
-    print(f"All models and {len(checked)} library dependencies verified")
+    # Native Architecture sources use the main editor's public/ldraw library.
+    native_library = ROOT / "public" / "ldraw"
+    native_checked = set()
+
+    def check_native_ref(reference, parent=None):
+        reference = reference.replace("\\", "/").lower()
+        candidates = [native_library / "parts" / reference, native_library / "p" / reference]
+        if parent is not None:
+            candidates.insert(0, parent.parent / reference)
+        target = next((path.resolve() for path in candidates if path.is_file()), None)
+        assert target and target.is_relative_to(native_library.resolve()), reference
+        if target in native_checked:
+            return
+        native_checked.add(target)
+        for child in refs(target.read_text(errors="replace")):
+            check_native_ref(child, target)
+
+    configs = json.loads((ROOT / "scripts" / "architectureReplicaSources.json").read_text())
+    for config in configs:
+        model = DATA / "models" / f"{config['set']}-1.mpd"
+        raw = model.read_bytes()
+        assert hashlib.sha256(raw).hexdigest() == config["sha256"], model
+        text = raw.decode("utf-8-sig")
+        files = embedded(text) or {"root": text}
+
+        def expand_native(name, ancestry=()):
+            key = name.lower()
+            assert key not in ancestry, f"Cyclic native source: {key}"
+            count = 0
+            for reference in refs(files[key]):
+                if reference.lower() in files:
+                    count += expand_native(reference, (*ancestry, key))
+                else:
+                    check_native_ref(reference)
+                    count += 1
+            return count
+
+        assert expand_native(next(iter(files))) == config["pieces"], model
+        membership = [index for group in config["groups"] for index in group]
+        assert sorted(membership) == list(range(1, config["pieces"] + 1)), model
+        plan = json.loads((ROOT / "src" / "data" / f"{config['output']}.json").read_text())
+        assert len(plan["bricks"]) == config["pieces"], model
+        assert len(plan["steps"]) == len(config["pages"]), model
+        for step, group in zip(plan["steps"], config["groups"]):
+            assert step["brickIds"] == [f"{config['id']}-{index}" for index in group], step["title"]
+        print(f"#{config['set']}: {config['pieces']} native pieces, {len(plan['steps'])} official main steps")
+
+    print(f"All archived and native batch models verified; {len(checked)} archive and {len(native_checked)} editor dependencies")
 
 
 if __name__ == "__main__":

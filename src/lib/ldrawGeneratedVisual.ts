@@ -25,6 +25,12 @@ const loadVisualChunk17 = () => import('./ldrawGeneratedVisualChunks/chunk-17')
 const loadVisualChunk18 = () => import('./ldrawGeneratedVisualChunks/chunk-18')
 const loadVisualChunk19 = () => import('./ldrawGeneratedVisualChunks/chunk-19')
 const loadVisualChunk20 = () => import('./ldrawGeneratedVisualChunks/chunk-20')
+const loadVisualChunk21 = () => import('./ldrawGeneratedVisualChunks/chunk-21')
+const loadVisualChunk22 = () => import('./ldrawGeneratedVisualChunks/chunk-22')
+const loadVisualChunk23 = () => import('./ldrawGeneratedVisualChunks/chunk-23')
+const loadVisualChunk24 = () => import('./ldrawGeneratedVisualChunks/chunk-24')
+const loadVisualChunk25 = () => import('./ldrawGeneratedVisualChunks/chunk-25')
+const loadVisualChunk26 = () => import('./ldrawGeneratedVisualChunks/chunk-26')
 
 export const ldrawGeneratedVisualChunkLoaders: Record<
   string,
@@ -136,10 +142,31 @@ export const ldrawGeneratedVisualChunkLoaders: Record<
   "4733": loadVisualChunk19,
   "47905": loadVisualChunk19,
   "59900": loadVisualChunk19,
-  "3044b": loadVisualChunk20,
-  "3794b": loadVisualChunk20,
-  "4150p03": loadVisualChunk20,
-  "4162p0g": loadVisualChunk20,
+  "2357": loadVisualChunk20,
+  "2458": loadVisualChunk20,
+  "30165": loadVisualChunk20,
+  "3028": loadVisualChunk21,
+  "3030": loadVisualChunk22,
+  "30374": loadVisualChunk22,
+  "3068": loadVisualChunk22,
+  "3460": loadVisualChunk22,
+  "3832": loadVisualChunk23,
+  "4477": loadVisualChunk24,
+  "60479": loadVisualChunk24,
+  "63864": loadVisualChunk24,
+  "6541": loadVisualChunk24,
+  "6636": loadVisualChunk24,
+  "3044b": loadVisualChunk25,
+  "3794a": loadVisualChunk25,
+  "3794b": loadVisualChunk25,
+  "3957b": loadVisualChunk25,
+  "4150p03": loadVisualChunk25,
+  "4162p08": loadVisualChunk25,
+  "4162p0b": loadVisualChunk25,
+  "4162p0g": loadVisualChunk25,
+  "4865a": loadVisualChunk25,
+  "6636p01": loadVisualChunk26,
+  "6636p02": loadVisualChunk26,
 }
 
 export const ldrawGeneratedVisualPartNumbers = Object.keys(ldrawGeneratedVisualChunkLoaders)

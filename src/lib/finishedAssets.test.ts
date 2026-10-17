@@ -11,7 +11,9 @@ vi.mock('./browserStorage', () => ({
 vi.mock('./storageCoordinator', () => ({ areStorageWritesPaused: () => false, coordinateStorageWrite: (write: () => Promise<boolean>) => write() }))
 const key = 'brick-flow-agent:finished-assets:v18'
 const marker = '__brick_flow_agent_indexeddb__'
-const asset = { ...defaultFinishedAssets[0], id: 'custom-one', title: 'Saved work' }
+// The curved entry and antenna need precise geometry: recovery must prepare it
+// before validating, even when this asset has never been rendered in the session.
+const asset = { ...defaultFinishedAssets.find((entry) => entry.id === 'finished-lego-21000')!, id: 'custom-one', title: 'Saved work' }
 let values: Map<string, string>
 beforeEach(() => {
   vi.resetAllMocks()

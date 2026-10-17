@@ -9,6 +9,7 @@ export type BrickColor =
   | 'light-gray'
   | 'dark-gray'
   | 'dark-green'
+  | 'pearl-gold'
   | 'brown'
   | 'orange'
   | 'tan'

@@ -1,0 +1,974 @@
+{
+  "id": "lego-21000-sears-tower",
+  "title": "LEGO 21000 西尔斯大厦",
+  "prompt": "LEGO 21000 西尔斯大厦 官方套装复刻",
+  "source": "template-local",
+  "bricks": [
+    {
+      "id": "lego-21000-sears-tower-1",
+      "brickId": "plate-4x10",
+      "color": "black",
+      "pose": {
+        "xStud": 1,
+        "yStud": 0,
+        "zStud": 4,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-2",
+      "brickId": "plate-4x10",
+      "color": "black",
+      "pose": {
+        "xStud": 1,
+        "yStud": 0,
+        "zStud": 0,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-3",
+      "brickId": "tile-1x8",
+      "color": "black",
+      "pose": {
+        "xStud": 10,
+        "yStud": 0.4,
+        "zStud": 0,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-4",
+      "brickId": "tile-1x8",
+      "color": "black",
+      "pose": {
+        "xStud": 1,
+        "yStud": 0.4,
+        "zStud": 0,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-5",
+      "brickId": "tile-1x8",
+      "color": "black",
+      "pose": {
+        "xStud": 2,
+        "yStud": 0.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-6",
+      "brickId": "tile-sears-nameplate",
+      "color": "black",
+      "pose": {
+        "xStud": 2,
+        "yStud": 0.4,
+        "zStud": 0,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-7",
+      "brickId": "plate-4x6",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 6,
+        "yStud": 0.4,
+        "zStud": 1,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-8",
+      "brickId": "plate-4x6",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 2,
+        "yStud": 0.4,
+        "zStud": 1,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-9",
+      "brickId": "tile-1x6",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 9,
+        "yStud": 0.8,
+        "zStud": 1,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-10",
+      "brickId": "tile-1x6",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 2,
+        "yStud": 0.8,
+        "zStud": 1,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-11",
+      "brickId": "tile-1x6",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 3,
+        "yStud": 0.8,
+        "zStud": 1,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-12",
+      "brickId": "tile-1x6",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 3,
+        "yStud": 0.8,
+        "zStud": 6,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-13",
+      "brickId": "tile-1x4",
+      "color": "black",
+      "pose": {
+        "xStud": 8,
+        "yStud": 0.8,
+        "zStud": 2,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-14",
+      "brickId": "tile-1x2",
+      "color": "black",
+      "pose": {
+        "xStud": 3,
+        "yStud": 0.8,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-15",
+      "brickId": "tile-1x2",
+      "color": "black",
+      "pose": {
+        "xStud": 3,
+        "yStud": 0.8,
+        "zStud": 5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-16",
+      "brickId": "plate-2x2",
+      "color": "black",
+      "pose": {
+        "xStud": 3,
+        "yStud": 0.8,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-17",
+      "brickId": "plate-jumper-1x2-3794",
+      "color": "black",
+      "pose": {
+        "xStud": 5,
+        "yStud": 0.8,
+        "zStud": 2,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-18",
+      "brickId": "plate-jumper-1x2-3794",
+      "color": "black",
+      "pose": {
+        "xStud": 6,
+        "yStud": 0.8,
+        "zStud": 2,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-19",
+      "brickId": "plate-jumper-1x2-3794",
+      "color": "black",
+      "pose": {
+        "xStud": 7,
+        "yStud": 0.8,
+        "zStud": 2,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-20",
+      "brickId": "plate-jumper-1x2-3794",
+      "color": "black",
+      "pose": {
+        "xStud": 7,
+        "yStud": 0.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-21",
+      "brickId": "plate-jumper-1x2-3794",
+      "color": "black",
+      "pose": {
+        "xStud": 6,
+        "yStud": 0.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-22",
+      "brickId": "plate-jumper-1x2-3794",
+      "color": "black",
+      "pose": {
+        "xStud": 5,
+        "yStud": 0.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-23",
+      "brickId": "plate-2x2",
+      "color": "black",
+      "pose": {
+        "xStud": 3,
+        "yStud": 1.2,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-24",
+      "brickId": "brick-1x3",
+      "color": "black",
+      "pose": {
+        "xStud": 5,
+        "yStud": 1.2,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-25",
+      "brickId": "brick-2x3",
+      "color": "black",
+      "pose": {
+        "xStud": 6,
+        "yStud": 1.2,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-26",
+      "brickId": "brick-1x3",
+      "color": "black",
+      "pose": {
+        "xStud": 7,
+        "yStud": 2.4,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-27",
+      "brickId": "brick-2x3",
+      "color": "black",
+      "pose": {
+        "xStud": 5,
+        "yStud": 2.4,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-28",
+      "brickId": "brick-curved-top-2x2",
+      "color": "black",
+      "pose": {
+        "xStud": 3,
+        "yStud": 1.6,
+        "zStud": 3,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-29",
+      "brickId": "brick-1x3",
+      "color": "black",
+      "pose": {
+        "xStud": 5,
+        "yStud": 3.6,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-30",
+      "brickId": "brick-2x3",
+      "color": "black",
+      "pose": {
+        "xStud": 6,
+        "yStud": 3.6,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-31",
+      "brickId": "brick-1x3",
+      "color": "black",
+      "pose": {
+        "xStud": 7,
+        "yStud": 4.8,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-32",
+      "brickId": "brick-2x3",
+      "color": "black",
+      "pose": {
+        "xStud": 5,
+        "yStud": 4.8,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-33",
+      "brickId": "brick-1x3",
+      "color": "black",
+      "pose": {
+        "xStud": 5,
+        "yStud": 6,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-34",
+      "brickId": "brick-2x3",
+      "color": "black",
+      "pose": {
+        "xStud": 6,
+        "yStud": 6,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-35",
+      "brickId": "brick-1x3",
+      "color": "black",
+      "pose": {
+        "xStud": 7,
+        "yStud": 7.2,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-36",
+      "brickId": "brick-2x3",
+      "color": "black",
+      "pose": {
+        "xStud": 5,
+        "yStud": 7.2,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-37",
+      "brickId": "brick-1x3",
+      "color": "black",
+      "pose": {
+        "xStud": 5,
+        "yStud": 8.4,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-38",
+      "brickId": "brick-2x3",
+      "color": "black",
+      "pose": {
+        "xStud": 6,
+        "yStud": 8.4,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-39",
+      "brickId": "brick-1x3",
+      "color": "black",
+      "pose": {
+        "xStud": 7,
+        "yStud": 9.6,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-40",
+      "brickId": "brick-2x3",
+      "color": "black",
+      "pose": {
+        "xStud": 5,
+        "yStud": 9.6,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-41",
+      "brickId": "brick-1x3",
+      "color": "black",
+      "pose": {
+        "xStud": 5,
+        "yStud": 10.8,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-42",
+      "brickId": "brick-2x3",
+      "color": "black",
+      "pose": {
+        "xStud": 6,
+        "yStud": 10.8,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-43",
+      "brickId": "brick-2x2",
+      "color": "black",
+      "pose": {
+        "xStud": 5,
+        "yStud": 12,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-44",
+      "brickId": "brick-corner-2x2",
+      "color": "black",
+      "pose": {
+        "xStud": 6,
+        "yStud": 12,
+        "zStud": 3.5,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-45",
+      "brickId": "brick-corner-2x2",
+      "color": "black",
+      "pose": {
+        "xStud": 5,
+        "yStud": 13.2,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-46",
+      "brickId": "brick-2x2",
+      "color": "black",
+      "pose": {
+        "xStud": 6,
+        "yStud": 13.2,
+        "zStud": 3.5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-47",
+      "brickId": "tile-1x1",
+      "color": "black",
+      "pose": {
+        "xStud": 7,
+        "yStud": 12,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-48",
+      "brickId": "tile-1x1",
+      "color": "black",
+      "pose": {
+        "xStud": 5,
+        "yStud": 12,
+        "zStud": 4.5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-49",
+      "brickId": "brick-2x2",
+      "color": "black",
+      "pose": {
+        "xStud": 5,
+        "yStud": 14.4,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-50",
+      "brickId": "brick-corner-2x2",
+      "color": "black",
+      "pose": {
+        "xStud": 6,
+        "yStud": 14.4,
+        "zStud": 3.5,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-52",
+      "brickId": "tile-1x1",
+      "color": "black",
+      "pose": {
+        "xStud": 5,
+        "yStud": 15.6,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-51",
+      "brickId": "tile-1x1",
+      "color": "black",
+      "pose": {
+        "xStud": 7,
+        "yStud": 15.6,
+        "zStud": 4.5,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-53",
+      "brickId": "brick-1x1",
+      "color": "black",
+      "pose": {
+        "xStud": 7,
+        "yStud": 15.6,
+        "zStud": 3.5,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-54",
+      "brickId": "brick-1x1",
+      "color": "black",
+      "pose": {
+        "xStud": 5,
+        "yStud": 15.6,
+        "zStud": 3.5,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-55",
+      "brickId": "brick-1x3",
+      "color": "black",
+      "pose": {
+        "xStud": 6,
+        "yStud": 15.6,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-56",
+      "brickId": "brick-1x3",
+      "color": "black",
+      "pose": {
+        "xStud": 5,
+        "yStud": 16.8,
+        "zStud": 3.5,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-57",
+      "brickId": "brick-1x1",
+      "color": "black",
+      "pose": {
+        "xStud": 6,
+        "yStud": 16.8,
+        "zStud": 4.5,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-58",
+      "brickId": "brick-1x1",
+      "color": "black",
+      "pose": {
+        "xStud": 6,
+        "yStud": 16.8,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-59",
+      "brickId": "brick-1x1",
+      "color": "black",
+      "pose": {
+        "xStud": 7,
+        "yStud": 18,
+        "zStud": 3.5,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-60",
+      "brickId": "brick-1x1",
+      "color": "black",
+      "pose": {
+        "xStud": 5,
+        "yStud": 18,
+        "zStud": 3.5,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-61",
+      "brickId": "brick-1x3",
+      "color": "black",
+      "pose": {
+        "xStud": 6,
+        "yStud": 18,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-62",
+      "brickId": "tile-1x1",
+      "color": "black",
+      "pose": {
+        "xStud": 7,
+        "yStud": 19.2,
+        "zStud": 3.5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-63",
+      "brickId": "tile-1x1",
+      "color": "black",
+      "pose": {
+        "xStud": 6,
+        "yStud": 19.2,
+        "zStud": 4.5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-64",
+      "brickId": "tile-1x1",
+      "color": "black",
+      "pose": {
+        "xStud": 6,
+        "yStud": 19.2,
+        "zStud": 2.5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-65",
+      "brickId": "brick-1x2",
+      "color": "black",
+      "pose": {
+        "xStud": 5,
+        "yStud": 19.2,
+        "zStud": 3.5,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-66",
+      "brickId": "brick-1x2",
+      "color": "black",
+      "pose": {
+        "xStud": 5,
+        "yStud": 20.4,
+        "zStud": 3.5,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-67",
+      "brickId": "brick-1x2",
+      "color": "black",
+      "pose": {
+        "xStud": 5,
+        "yStud": 21.6,
+        "zStud": 3.5,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-68",
+      "brickId": "antenna-4h",
+      "color": "white",
+      "pose": {
+        "xStud": 6,
+        "yStud": 22.8,
+        "zStud": 3.5,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21000-sears-tower-69",
+      "brickId": "antenna-4h",
+      "color": "white",
+      "pose": {
+        "xStud": 5,
+        "yStud": 22.8,
+        "zStud": 3.5,
+        "rotationQuarterTurns": 2
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "lego-21000-sears-tower-step-1",
+      "title": "官方第 1 步：底板",
+      "description": "LEGO 21000 官方说明书 4580893，第 4 页。",
+      "instructionStep": 1,
+      "brickIds": [
+        "lego-21000-sears-tower-1",
+        "lego-21000-sears-tower-2"
+      ]
+    },
+    {
+      "id": "lego-21000-sears-tower-step-2",
+      "title": "官方第 2 步：黑色收边与铭牌",
+      "description": "LEGO 21000 官方说明书 4580893，第 4 页。",
+      "instructionStep": 2,
+      "brickIds": [
+        "lego-21000-sears-tower-3",
+        "lego-21000-sears-tower-4",
+        "lego-21000-sears-tower-5",
+        "lego-21000-sears-tower-6"
+      ]
+    },
+    {
+      "id": "lego-21000-sears-tower-step-3",
+      "title": "官方第 3 步：广场铺板",
+      "description": "LEGO 21000 官方说明书 4580893，第 5 页。",
+      "instructionStep": 3,
+      "brickIds": [
+        "lego-21000-sears-tower-7",
+        "lego-21000-sears-tower-8"
+      ]
+    },
+    {
+      "id": "lego-21000-sears-tower-step-4",
+      "title": "官方第 4 步：灰色边框",
+      "description": "LEGO 21000 官方说明书 4580893，第 5 页。",
+      "instructionStep": 4,
+      "brickIds": [
+        "lego-21000-sears-tower-9",
+        "lego-21000-sears-tower-10",
+        "lego-21000-sears-tower-11",
+        "lego-21000-sears-tower-12"
+      ]
+    },
+    {
+      "id": "lego-21000-sears-tower-step-5",
+      "title": "官方第 5 步：基座定位与收面",
+      "description": "LEGO 21000 官方说明书 4580893，第 6 页。",
+      "instructionStep": 5,
+      "brickIds": [
+        "lego-21000-sears-tower-13",
+        "lego-21000-sears-tower-14",
+        "lego-21000-sears-tower-15",
+        "lego-21000-sears-tower-16",
+        "lego-21000-sears-tower-17",
+        "lego-21000-sears-tower-18",
+        "lego-21000-sears-tower-19",
+        "lego-21000-sears-tower-20",
+        "lego-21000-sears-tower-21",
+        "lego-21000-sears-tower-22"
+      ]
+    },
+    {
+      "id": "lego-21000-sears-tower-step-6",
+      "title": "官方第 6 步：首层地基",
+      "description": "LEGO 21000 官方说明书 4580893，第 6 页。",
+      "instructionStep": 6,
+      "brickIds": [
+        "lego-21000-sears-tower-23",
+        "lego-21000-sears-tower-24",
+        "lego-21000-sears-tower-25"
+      ]
+    },
+    {
+      "id": "lego-21000-sears-tower-step-7",
+      "title": "官方第 7 步：弧形入口与首层",
+      "description": "LEGO 21000 官方说明书 4580893，第 7 页。",
+      "instructionStep": 7,
+      "brickIds": [
+        "lego-21000-sears-tower-26",
+        "lego-21000-sears-tower-27",
+        "lego-21000-sears-tower-28"
+      ]
+    },
+    {
+      "id": "lego-21000-sears-tower-step-8",
+      "title": "官方第 8 步：主体叠层",
+      "description": "LEGO 21000 官方说明书 4580893，第 7 页。",
+      "instructionStep": 8,
+      "brickIds": [
+        "lego-21000-sears-tower-29",
+        "lego-21000-sears-tower-30",
+        "lego-21000-sears-tower-31",
+        "lego-21000-sears-tower-32",
+        "lego-21000-sears-tower-33",
+        "lego-21000-sears-tower-34",
+        "lego-21000-sears-tower-35",
+        "lego-21000-sears-tower-36",
+        "lego-21000-sears-tower-37",
+        "lego-21000-sears-tower-38",
+        "lego-21000-sears-tower-39",
+        "lego-21000-sears-tower-40",
+        "lego-21000-sears-tower-41",
+        "lego-21000-sears-tower-42"
+      ]
+    },
+    {
+      "id": "lego-21000-sears-tower-step-9",
+      "title": "官方第 9 步：第一处退台",
+      "description": "LEGO 21000 官方说明书 4580893，第 8 页。",
+      "instructionStep": 9,
+      "brickIds": [
+        "lego-21000-sears-tower-43",
+        "lego-21000-sears-tower-44"
+      ]
+    },
+    {
+      "id": "lego-21000-sears-tower-step-10",
+      "title": "官方第 10 步：第二处退台",
+      "description": "LEGO 21000 官方说明书 4580893，第 8 页。",
+      "instructionStep": 10,
+      "brickIds": [
+        "lego-21000-sears-tower-45",
+        "lego-21000-sears-tower-46",
+        "lego-21000-sears-tower-47",
+        "lego-21000-sears-tower-48"
+      ]
+    },
+    {
+      "id": "lego-21000-sears-tower-step-11",
+      "title": "官方第 11 步：第三处退台",
+      "description": "LEGO 21000 官方说明书 4580893，第 9 页。",
+      "instructionStep": 11,
+      "brickIds": [
+        "lego-21000-sears-tower-49",
+        "lego-21000-sears-tower-50",
+        "lego-21000-sears-tower-52"
+      ]
+    },
+    {
+      "id": "lego-21000-sears-tower-step-12",
+      "title": "官方第 12 步：上段十字形楼层",
+      "description": "LEGO 21000 官方说明书 4580893，第 9 页。",
+      "instructionStep": 12,
+      "brickIds": [
+        "lego-21000-sears-tower-51",
+        "lego-21000-sears-tower-53",
+        "lego-21000-sears-tower-54",
+        "lego-21000-sears-tower-55"
+      ]
+    },
+    {
+      "id": "lego-21000-sears-tower-step-13",
+      "title": "官方第 13 步：上段第二层",
+      "description": "LEGO 21000 官方说明书 4580893，第 10 页。",
+      "instructionStep": 13,
+      "brickIds": [
+        "lego-21000-sears-tower-56",
+        "lego-21000-sears-tower-57",
+        "lego-21000-sears-tower-58"
+      ]
+    },
+    {
+      "id": "lego-21000-sears-tower-step-14",
+      "title": "官方第 14 步：上段第三层",
+      "description": "LEGO 21000 官方说明书 4580893，第 10 页。",
+      "instructionStep": 14,
+      "brickIds": [
+        "lego-21000-sears-tower-59",
+        "lego-21000-sears-tower-60",
+        "lego-21000-sears-tower-61"
+      ]
+    },
+    {
+      "id": "lego-21000-sears-tower-step-15",
+      "title": "官方第 15 步：屋顶收面",
+      "description": "LEGO 21000 官方说明书 4580893，第 11 页。",
+      "instructionStep": 15,
+      "brickIds": [
+        "lego-21000-sears-tower-62",
+        "lego-21000-sears-tower-63",
+        "lego-21000-sears-tower-64"
+      ]
+    },
+    {
+      "id": "lego-21000-sears-tower-step-16",
+      "title": "官方第 16 步：顶部三层",
+      "description": "LEGO 21000 官方说明书 4580893，第 11 页。",
+      "instructionStep": 16,
+      "brickIds": [
+        "lego-21000-sears-tower-65",
+        "lego-21000-sears-tower-66",
+        "lego-21000-sears-tower-67"
+      ]
+    },
+    {
+      "id": "lego-21000-sears-tower-step-17",
+      "title": "官方第 17 步：双天线",
+      "description": "LEGO 21000 官方说明书 4580893，第 12 页。",
+      "instructionStep": 17,
+      "brickIds": [
+        "lego-21000-sears-tower-68",
+        "lego-21000-sears-tower-69"
+      ]
+    }
+  ]
+}

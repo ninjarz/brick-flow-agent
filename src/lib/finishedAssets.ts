@@ -1,5 +1,9 @@
+import { preparePlanGeometry } from './planGeometry'
 import { safeStorage } from './safeStorage'
 import { coordinateStorageWrite } from './storageCoordinator'
+import searsTowerPlan from '../data/legoSearsTowerPlan.json'
+import empireStatePlan from '../data/legoEmpireStatePlan.json'
+import rockefellerPlan from '../data/legoRockefellerPlan.json'
 import bigBenPlan from '../data/legoBigBenPlan.json'
 import lighthousePlan from '../data/legoLighthousePlan.json'
 import type { BuildPlan, FinishedAsset } from '../types/bricks'
@@ -22,6 +26,9 @@ const retiredDefaultAssetIds = new Set([
   'finished-arch-gate',
 ])
 const defaultAssetIds = new Set([
+  'finished-lego-21000',
+  'finished-lego-21002',
+  'finished-lego-21007',
   'finished-lego-21013',
   'finished-ghost',
   'finished-lego-30023',
@@ -77,6 +84,24 @@ const createDefaultAsset = (
 }
 
 export const defaultFinishedAssets: FinishedAsset[] = [
+  {
+    id: 'finished-lego-21000', title: 'LEGO 21000 西尔斯大厦', category: 'Classic',
+    description: '69 个可编辑零件、17 个官方步骤，保留逐级退台、弧形入口、双天线和原始铭牌。',
+    instructionUrl: 'https://www.lego.com/cdn/product-assets/product.bi.core.pdf/4580893.pdf',
+    instructionStatus: 'mapped', plan: searsTowerPlan as BuildPlan,
+  },
+  {
+    id: 'finished-lego-21002', title: 'LEGO 21002 帝国大厦', category: 'Classic',
+    description: '77 个可编辑零件、25 个官方步骤，保留层层退台、侧销与孔砖连接、尖塔和原始铭牌。',
+    instructionUrl: 'https://www.lego.com/cdn/product-assets/product.bi.core.pdf/4580898.pdf',
+    instructionStatus: 'mapped', plan: empireStatePlan as BuildPlan,
+  },
+  {
+    id: 'finished-lego-21007', title: 'LEGO 21007 洛克菲勒中心', category: 'Classic',
+    description: '240 个可编辑零件、23 个官方主步骤，保留侧贴砖立面、建筑群、金色广场圆板和双铭牌；主塔与副塔子步骤按总成展示。',
+    instructionUrl: 'https://www.lego.com/cdn/product-assets/product.bi.core.pdf/4632899.pdf',
+    instructionStatus: 'mapped', plan: rockefellerPlan as BuildPlan,
+  },
   {
     id: 'finished-lego-21013', title: 'LEGO 21013 大本钟', category: 'Classic',
     description: 'LEGO Architecture 大本钟，346 个可编辑零件、52 个官方主步骤，保留四面钟盘、侧向格栅、屋顶尖塔与 Big Ben 铭牌。',
@@ -145,6 +170,18 @@ const normalizeStoredAssets = (value: unknown): FinishedAsset[] => {
   })
 }
 
+const prepareStoredAssets = async (value: unknown) => {
+  if (!Array.isArray(value)) throw new Error('INVALID_ASSET_STORAGE')
+  const normalized = value.map((item) => {
+    if (!isFinishedAsset(item)) throw new Error('INVALID_ASSET_STORAGE')
+    const asset = normalizeAsset(item)
+    if (!asset) throw new Error('INVALID_ASSET_STORAGE')
+    return asset
+  })
+  await Promise.all(normalized.map((asset) => preparePlanGeometry(asset.plan)))
+  return normalizeStoredAssets(normalized)
+}
+
 export const mergeRecoveredFinishedAssets = (stored: FinishedAsset[], current: FinishedAsset[]) => {
   const custom = new Map(stored.filter((asset) => !isDefaultFinishedAsset(asset)).map((asset) => [asset.id, asset]))
   for (const asset of current) if (!isDefaultFinishedAsset(asset)) custom.set(asset.id, asset)
@@ -192,7 +229,7 @@ export const loadFinishedAssetsFromIndexedDb = async (): Promise<FinishedAssetsL
   const inline = safeStorage.getItem(storageKey)
   if (inline && !isIndexedDbStorageMarker(inline)) {
     try {
-      const assets = mergeWithDefaultAssets(normalizeStoredAssets(JSON.parse(inline)))
+      const assets = mergeWithDefaultAssets(await prepareStoredAssets(JSON.parse(inline)))
       recoveryBlocked = false
       return { status: 'loaded', assets }
     } catch { return { status: 'invalid' } }
@@ -206,7 +243,7 @@ export const loadFinishedAssetsFromIndexedDb = async (): Promise<FinishedAssetsL
     return { status: 'missing' }
   }
   try {
-    const assets = mergeWithDefaultAssets(normalizeStoredAssets(stored))
+    const assets = mergeWithDefaultAssets(await prepareStoredAssets(stored))
     recoveryBlocked = false
     return { status: 'loaded', assets }
   } catch { return { status: 'invalid' } }

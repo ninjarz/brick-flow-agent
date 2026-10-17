@@ -42,6 +42,7 @@ const colorToLDrawCode: Record<BrickColor, number> = {
   'light-gray': 71,
   'dark-gray': 72,
   'dark-green': 288,
+  'pearl-gold': 297,
   pink: 13,
   yellow: 14,
   white: 15,

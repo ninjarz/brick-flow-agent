@@ -1,5 +1,39 @@
 # 乐高套装数字复刻
 
+## 批量复刻：21000、21002、21007
+
+三款均位于「素材库 → 模型 → Classic」，使用原有的加载、手册和主画布编辑流程，零件未预先固化。
+
+| 套装 | 装配件数（不含备用件） | 官方主步骤 | 官方 PDF | OMR 作者 |
+| --- | ---: | ---: | --- | --- |
+| 21000 西尔斯大厦 | 69 | 17 | [4580893](https://www.lego.com/cdn/product-assets/product.bi.core.pdf/4580893.pdf) | Damien Roux [Darats] |
+| 21002 帝国大厦 | 77 | 25 | [4580898](https://www.lego.com/cdn/product-assets/product.bi.core.pdf/4580898.pdf) | Orion Pobursky [OrionP] |
+| 21007 洛克菲勒中心 | 240 | 23 | [4632899](https://www.lego.com/cdn/product-assets/product.bi.core.pdf/4632899.pdf) | Damien Roux [Darats] |
+
+原始文件来自 LDraw OMR，位于 `public/lego-replicas/models/`，保留作者与 CC BY 2.0 许可头。`scripts/architectureReplicaSources.json` 固定源文件 SHA-256、逐步零件成员、官方 PDF 页码与总成说明；原始 MPD 中没有步骤的部分，依据官方图示重新标注。`scripts/build-architecture-assets.mjs` 转换为原生可编辑模型，保留具体零件变体与四块原始印刷铭牌。
+
+65 个官方主步骤均已在原有界面回放，并将每步实际场景截图与对应 PDF 图示并列核验。21007 的第 17–23 主步骤按塔楼总成展示，其中第 20 步含第 34–44 页的 21 个内部装配子步骤，第 23 步含第 49–53 页的 10 个子步骤；这些内部子步骤未单独拆成应用页面，不能将主步骤检查记录表述为所有子步骤均已独立回放。
+
+颜色件数：21000 为 black 61、light-gray 6、white 2；21002 为 tan 65、black 6、light-gray 6；21007 为 tan 189、light-gray 39、black 11、pearl-gold 1。西尔斯大厦的双天线是白色，洛克菲勒广场中央圆板为珍珠金色；说明书的深色底板光照不应被当作灰色零件。
+
+补齐了源零件几何中的销孔、空心凸点与板底销连接，以及 1×2 光面板中央空腔连接。首次打开模型手册、加载模型、异步恢复保存素材和画布状态栏检查时，先准备精确几何再执行结构校验，避免以尚未加载的近似形状误报重叠。未关闭碰撞或支撑检查。
+
+重建与验证：
+
+```bash
+node scripts/generate-ldraw-structural.mjs > /tmp/architecture-geometry.json
+node scripts/build-architecture-assets.mjs /tmp/architecture-geometry.json
+npm run generate:part-colors
+npm run verify:replicas
+npm run validate:builds
+npm run audit:ldraw
+npm test
+npm run lint
+npm run build
+```
+
+本地截图与逐步核验记录位于忽略的 `docs/replicas/21000/native/`、`21002/native/`、`21007/native/`，批量记录位于 `docs/replicas/batch/`。官方 PDF 仅用于本地比对，不随代码分发。本批未纳入仍存在件数与自由角度兼容性疑点的 21005 流水别墅。
+
 ## LEGO 21013 大本钟
 
 在「素材库 → 模型 → Classic」中选择「LEGO 21013 大本钟」，使用与小幽灵、灯塔相同的「加载」「手册」「说明书」。模型有 346 个可编辑零件、52 个官方主步骤；第 51 步包含说明书第 54–58 页的 10 个钟室与尖塔装配子步骤，应用在主步骤中整体展示该总成。零件未预先固化。

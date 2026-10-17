@@ -1,0 +1,1134 @@
+{
+  "id": "lego-21002-empire-state",
+  "title": "LEGO 21002 帝国大厦",
+  "prompt": "LEGO 21002 帝国大厦 官方套装复刻",
+  "source": "template-local",
+  "bricks": [
+    {
+      "id": "lego-21002-empire-state-1",
+      "brickId": "plate-4x10",
+      "color": "black",
+      "pose": {
+        "xStud": 1,
+        "yStud": 0,
+        "zStud": 5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-2",
+      "brickId": "plate-4x10",
+      "color": "black",
+      "pose": {
+        "xStud": 1,
+        "yStud": 0,
+        "zStud": 1,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-3",
+      "brickId": "tile-empire-state-nameplate",
+      "color": "black",
+      "pose": {
+        "xStud": 2,
+        "yStud": 0.4,
+        "zStud": 1,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-4",
+      "brickId": "tile-1x8",
+      "color": "black",
+      "pose": {
+        "xStud": 1,
+        "yStud": 0.4,
+        "zStud": 1,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-5",
+      "brickId": "tile-1x8",
+      "color": "black",
+      "pose": {
+        "xStud": 10,
+        "yStud": 0.4,
+        "zStud": 1,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-6",
+      "brickId": "tile-1x8",
+      "color": "black",
+      "pose": {
+        "xStud": 2,
+        "yStud": 0.4,
+        "zStud": 8,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-7",
+      "brickId": "plate-4x6",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 2,
+        "yStud": 0.4,
+        "zStud": 2,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-8",
+      "brickId": "plate-4x6",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 6,
+        "yStud": 0.4,
+        "zStud": 2,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-9",
+      "brickId": "tile-1x6",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 2,
+        "yStud": 0.8,
+        "zStud": 2,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-10",
+      "brickId": "tile-1x6",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 9,
+        "yStud": 0.8,
+        "zStud": 2,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-11",
+      "brickId": "tile-1x6",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 3,
+        "yStud": 0.8,
+        "zStud": 7,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-12",
+      "brickId": "tile-1x6",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 3,
+        "yStud": 0.8,
+        "zStud": 2,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-13",
+      "brickId": "brick-2x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 3,
+        "yStud": 0.8,
+        "zStud": 3,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-14",
+      "brickId": "brick-2x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 5,
+        "yStud": 0.8,
+        "zStud": 3,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-15",
+      "brickId": "brick-2x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 0.8,
+        "zStud": 3,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-16",
+      "brickId": "plate-4x6",
+      "color": "tan",
+      "pose": {
+        "xStud": 3,
+        "yStud": 2,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-17",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 8,
+        "yStud": 2.4,
+        "zStud": 4,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-18",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 3,
+        "yStud": 2.4,
+        "zStud": 4,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-19",
+      "brickId": "tile-1x6",
+      "color": "tan",
+      "pose": {
+        "xStud": 3,
+        "yStud": 2.4,
+        "zStud": 6,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-20",
+      "brickId": "tile-1x6",
+      "color": "tan",
+      "pose": {
+        "xStud": 3,
+        "yStud": 2.4,
+        "zStud": 3,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-21",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 5,
+        "yStud": 2.4,
+        "zStud": 5,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-22",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 5,
+        "yStud": 2.4,
+        "zStud": 4,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-23",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 4,
+        "yStud": 2.4,
+        "zStud": 4,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-24",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 2.4,
+        "zStud": 4,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-25",
+      "brickId": "brick-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 2.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-26",
+      "brickId": "brick-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 3.5,
+        "yStud": 2.8,
+        "zStud": 3.5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-27",
+      "brickId": "brick-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 2.8,
+        "zStud": 3.5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-28",
+      "brickId": "brick-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 3.5,
+        "yStud": 4,
+        "zStud": 3.5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-29",
+      "brickId": "brick-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 4,
+        "zStud": 3.5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-30",
+      "brickId": "brick-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 4,
+        "zStud": 4,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-31",
+      "brickId": "brick-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 3.5,
+        "yStud": 5.2,
+        "zStud": 3.5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-32",
+      "brickId": "brick-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 5.2,
+        "zStud": 3.5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-33",
+      "brickId": "brick-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 5.2,
+        "zStud": 4,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-34",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 6.4,
+        "zStud": 4,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-35",
+      "brickId": "plate-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 4.5,
+        "yStud": 6.4,
+        "zStud": 4.5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-36",
+      "brickId": "plate-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 6.4,
+        "zStud": 4.5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-37",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 3.5,
+        "yStud": 6.4,
+        "zStud": 4.5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-38",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7.5,
+        "yStud": 6.4,
+        "zStud": 4.5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-39",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 6.4,
+        "zStud": 5.5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-40",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 3.5,
+        "yStud": 6.4,
+        "zStud": 5.5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-41",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 3.5,
+        "yStud": 6.4,
+        "zStud": 3.5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-42",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 6.4,
+        "zStud": 3.5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-43",
+      "brickId": "brick-2x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 4,
+        "yStud": 6.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-44",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 4,
+        "yStud": 8,
+        "zStud": 5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-45",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 4,
+        "yStud": 8,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-46",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 6,
+        "yStud": 8,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-47",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 6,
+        "yStud": 8,
+        "zStud": 5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-48",
+      "brickId": "brick-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 4.5,
+        "yStud": 8.4,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-49",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 4.5,
+        "yStud": 9.6,
+        "zStud": 4,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-50",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 9.6,
+        "zStud": 4,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-51",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 9.6,
+        "zStud": 4,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-52",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 10,
+        "zStud": 4.5,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-53",
+      "brickId": "brick-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 10,
+        "zStud": 4,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-54",
+      "brickId": "brick-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 4.5,
+        "yStud": 10,
+        "zStud": 4,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-55",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 11.2,
+        "zStud": 4.5,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-56",
+      "brickId": "brick-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 11.2,
+        "zStud": 4,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-57",
+      "brickId": "brick-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 4.5,
+        "yStud": 11.2,
+        "zStud": 4,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-58",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 12.4,
+        "zStud": 4.5,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-59",
+      "brickId": "brick-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 12.4,
+        "zStud": 4,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-60",
+      "brickId": "brick-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 4.5,
+        "yStud": 12.4,
+        "zStud": 4,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-61",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 13.6,
+        "zStud": 4.5,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-62",
+      "brickId": "brick-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 13.6,
+        "zStud": 4,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-63",
+      "brickId": "brick-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 4.5,
+        "yStud": 13.6,
+        "zStud": 4,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-64",
+      "brickId": "technic-brick-1x1-hole",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 14.8,
+        "zStud": 4.5,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-65",
+      "brickId": "brick-pin-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 6,
+        "yStud": 14.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-66",
+      "brickId": "technic-brick-1x1-hole",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 16,
+        "zStud": 4.5,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-67",
+      "brickId": "brick-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 4.5,
+        "yStud": 14.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-68",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 4.5,
+        "yStud": 16,
+        "zStud": 4,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-69",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 4.5,
+        "yStud": 16.4,
+        "zStud": 4,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-70",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 16.4,
+        "zStud": 4,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-71",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 16,
+        "zStud": 4,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-72",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 16.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-73",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 4.5,
+        "yStud": 16.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-74",
+      "brickId": "brick-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 5,
+        "yStud": 17.2,
+        "zStud": 4.5,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-75",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 5,
+        "yStud": 18.4,
+        "zStud": 4.5,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-76",
+      "brickId": "cone-1x1-stop",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.5,
+        "yStud": 18.8,
+        "zStud": 4.5,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21002-empire-state-77",
+      "brickId": "bar-4l",
+      "color": "tan",
+      "pose": {
+        "xStud": 5.8,
+        "yStud": 18.8,
+        "zStud": 4.8,
+        "rotationQuarterTurns": 2
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "lego-21002-empire-state-step-1",
+      "title": "官方第 1 步：底板",
+      "description": "LEGO 21002 官方说明书 4580898，第 4 页。",
+      "instructionStep": 1,
+      "brickIds": [
+        "lego-21002-empire-state-1",
+        "lego-21002-empire-state-2"
+      ]
+    },
+    {
+      "id": "lego-21002-empire-state-step-2",
+      "title": "官方第 2 步：黑色收边与铭牌",
+      "description": "LEGO 21002 官方说明书 4580898，第 4 页。",
+      "instructionStep": 2,
+      "brickIds": [
+        "lego-21002-empire-state-3",
+        "lego-21002-empire-state-4",
+        "lego-21002-empire-state-5",
+        "lego-21002-empire-state-6"
+      ]
+    },
+    {
+      "id": "lego-21002-empire-state-step-3",
+      "title": "官方第 3 步：灰色铺板",
+      "description": "LEGO 21002 官方说明书 4580898，第 5 页。",
+      "instructionStep": 3,
+      "brickIds": [
+        "lego-21002-empire-state-7",
+        "lego-21002-empire-state-8"
+      ]
+    },
+    {
+      "id": "lego-21002-empire-state-step-4",
+      "title": "官方第 4 步：广场边框",
+      "description": "LEGO 21002 官方说明书 4580898，第 5 页。",
+      "instructionStep": 4,
+      "brickIds": [
+        "lego-21002-empire-state-9",
+        "lego-21002-empire-state-10",
+        "lego-21002-empire-state-11",
+        "lego-21002-empire-state-12"
+      ]
+    },
+    {
+      "id": "lego-21002-empire-state-step-5",
+      "title": "官方第 5 步：地基三块砖",
+      "description": "LEGO 21002 官方说明书 4580898，第 6 页。",
+      "instructionStep": 5,
+      "brickIds": [
+        "lego-21002-empire-state-13",
+        "lego-21002-empire-state-14",
+        "lego-21002-empire-state-15"
+      ]
+    },
+    {
+      "id": "lego-21002-empire-state-step-6",
+      "title": "官方第 6 步：地基压板",
+      "description": "LEGO 21002 官方说明书 4580898，第 6 页。",
+      "instructionStep": 6,
+      "brickIds": [
+        "lego-21002-empire-state-16"
+      ]
+    },
+    {
+      "id": "lego-21002-empire-state-step-7",
+      "title": "官方第 7 步：外围收面",
+      "description": "LEGO 21002 官方说明书 4580898，第 7 页。",
+      "instructionStep": 7,
+      "brickIds": [
+        "lego-21002-empire-state-17",
+        "lego-21002-empire-state-18",
+        "lego-21002-empire-state-19",
+        "lego-21002-empire-state-20"
+      ]
+    },
+    {
+      "id": "lego-21002-empire-state-step-8",
+      "title": "官方第 8 步：首层定位板",
+      "description": "LEGO 21002 官方说明书 4580898，第 7 页。",
+      "instructionStep": 8,
+      "brickIds": [
+        "lego-21002-empire-state-21",
+        "lego-21002-empire-state-22",
+        "lego-21002-empire-state-23",
+        "lego-21002-empire-state-24"
+      ]
+    },
+    {
+      "id": "lego-21002-empire-state-step-9",
+      "title": "官方第 9 步：中间墙砖",
+      "description": "LEGO 21002 官方说明书 4580898，第 8 页。",
+      "instructionStep": 9,
+      "brickIds": [
+        "lego-21002-empire-state-25"
+      ]
+    },
+    {
+      "id": "lego-21002-empire-state-step-10",
+      "title": "官方第 10 步：侧墙砖",
+      "description": "LEGO 21002 官方说明书 4580898，第 8 页。",
+      "instructionStep": 10,
+      "brickIds": [
+        "lego-21002-empire-state-26",
+        "lego-21002-empire-state-27"
+      ]
+    },
+    {
+      "id": "lego-21002-empire-state-step-11",
+      "title": "官方第 11 步：主体叠层",
+      "description": "LEGO 21002 官方说明书 4580898，第 9 页。",
+      "instructionStep": 11,
+      "brickIds": [
+        "lego-21002-empire-state-28",
+        "lego-21002-empire-state-29",
+        "lego-21002-empire-state-30",
+        "lego-21002-empire-state-31",
+        "lego-21002-empire-state-32",
+        "lego-21002-empire-state-33"
+      ]
+    },
+    {
+      "id": "lego-21002-empire-state-step-12",
+      "title": "官方第 12 步：中间定位板",
+      "description": "LEGO 21002 官方说明书 4580898，第 9 页。",
+      "instructionStep": 12,
+      "brickIds": [
+        "lego-21002-empire-state-34",
+        "lego-21002-empire-state-35",
+        "lego-21002-empire-state-36"
+      ]
+    },
+    {
+      "id": "lego-21002-empire-state-step-13",
+      "title": "官方第 13 步：第一处退台",
+      "description": "LEGO 21002 官方说明书 4580898，第 10 页。",
+      "instructionStep": 13,
+      "brickIds": [
+        "lego-21002-empire-state-37",
+        "lego-21002-empire-state-38",
+        "lego-21002-empire-state-39",
+        "lego-21002-empire-state-40",
+        "lego-21002-empire-state-41",
+        "lego-21002-empire-state-42"
+      ]
+    },
+    {
+      "id": "lego-21002-empire-state-step-14",
+      "title": "官方第 14 步：第二段墙体",
+      "description": "LEGO 21002 官方说明书 4580898，第 10 页。",
+      "instructionStep": 14,
+      "brickIds": [
+        "lego-21002-empire-state-43"
+      ]
+    },
+    {
+      "id": "lego-21002-empire-state-step-15",
+      "title": "官方第 15 步：四块定位板",
+      "description": "LEGO 21002 官方说明书 4580898，第 11 页。",
+      "instructionStep": 15,
+      "brickIds": [
+        "lego-21002-empire-state-44",
+        "lego-21002-empire-state-45",
+        "lego-21002-empire-state-46",
+        "lego-21002-empire-state-47"
+      ]
+    },
+    {
+      "id": "lego-21002-empire-state-step-16",
+      "title": "官方第 16 步：第二处退台",
+      "description": "LEGO 21002 官方说明书 4580898，第 11 页。",
+      "instructionStep": 16,
+      "brickIds": [
+        "lego-21002-empire-state-48"
+      ]
+    },
+    {
+      "id": "lego-21002-empire-state-step-17",
+      "title": "官方第 17 步：上段定位板",
+      "description": "LEGO 21002 官方说明书 4580898，第 12 页。",
+      "instructionStep": 17,
+      "brickIds": [
+        "lego-21002-empire-state-49",
+        "lego-21002-empire-state-50",
+        "lego-21002-empire-state-51"
+      ]
+    },
+    {
+      "id": "lego-21002-empire-state-step-18",
+      "title": "官方第 18 步：中央小砖",
+      "description": "LEGO 21002 官方说明书 4580898，第 12 页。",
+      "instructionStep": 18,
+      "brickIds": [
+        "lego-21002-empire-state-52"
+      ]
+    },
+    {
+      "id": "lego-21002-empire-state-step-19",
+      "title": "官方第 19 步：两侧墙砖",
+      "description": "LEGO 21002 官方说明书 4580898，第 13 页。",
+      "instructionStep": 19,
+      "brickIds": [
+        "lego-21002-empire-state-53",
+        "lego-21002-empire-state-54"
+      ]
+    },
+    {
+      "id": "lego-21002-empire-state-step-20",
+      "title": "官方第 20 步：上段叠层",
+      "description": "LEGO 21002 官方说明书 4580898，第 13 页。",
+      "instructionStep": 20,
+      "brickIds": [
+        "lego-21002-empire-state-55",
+        "lego-21002-empire-state-56",
+        "lego-21002-empire-state-57",
+        "lego-21002-empire-state-58",
+        "lego-21002-empire-state-59",
+        "lego-21002-empire-state-60",
+        "lego-21002-empire-state-61",
+        "lego-21002-empire-state-62",
+        "lego-21002-empire-state-63"
+      ]
+    },
+    {
+      "id": "lego-21002-empire-state-step-21",
+      "title": "官方第 21 步：天线基座侧销",
+      "description": "LEGO 21002 官方说明书 4580898，第 14 页。",
+      "instructionStep": 21,
+      "brickIds": [
+        "lego-21002-empire-state-64",
+        "lego-21002-empire-state-65"
+      ]
+    },
+    {
+      "id": "lego-21002-empire-state-step-22",
+      "title": "官方第 22 步：天线基座孔砖",
+      "description": "LEGO 21002 官方说明书 4580898，第 14 页。",
+      "instructionStep": 22,
+      "brickIds": [
+        "lego-21002-empire-state-66",
+        "lego-21002-empire-state-67"
+      ]
+    },
+    {
+      "id": "lego-21002-empire-state-step-23",
+      "title": "官方第 23 步：两侧收面",
+      "description": "LEGO 21002 官方说明书 4580898，第 15 页。",
+      "instructionStep": 23,
+      "brickIds": [
+        "lego-21002-empire-state-68",
+        "lego-21002-empire-state-69",
+        "lego-21002-empire-state-70",
+        "lego-21002-empire-state-71",
+        "lego-21002-empire-state-72",
+        "lego-21002-empire-state-73"
+      ]
+    },
+    {
+      "id": "lego-21002-empire-state-step-24",
+      "title": "官方第 24 步：尖塔定位板",
+      "description": "LEGO 21002 官方说明书 4580898，第 15 页。",
+      "instructionStep": 24,
+      "brickIds": [
+        "lego-21002-empire-state-74",
+        "lego-21002-empire-state-75"
+      ]
+    },
+    {
+      "id": "lego-21002-empire-state-step-25",
+      "title": "官方第 25 步：锥形尖顶与天线",
+      "description": "LEGO 21002 官方说明书 4580898，第 16 页。",
+      "instructionStep": 25,
+      "brickIds": [
+        "lego-21002-empire-state-76",
+        "lego-21002-empire-state-77"
+      ]
+    }
+  ]
+}

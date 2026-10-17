@@ -1,0 +1,3111 @@
+{
+  "id": "lego-21007-rockefeller",
+  "title": "LEGO 21007 洛克菲勒中心",
+  "prompt": "LEGO 21007 洛克菲勒中心 官方套装复刻",
+  "source": "template-local",
+  "bricks": [
+    {
+      "id": "lego-21007-rockefeller-1",
+      "brickId": "plate-6x12",
+      "color": "black",
+      "pose": {
+        "xStud": 1,
+        "yStud": 0,
+        "zStud": 0,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-2",
+      "brickId": "plate-1x10",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 2,
+        "yStud": 0.4,
+        "zStud": 1,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-3",
+      "brickId": "plate-2x10",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 3,
+        "yStud": 0.4,
+        "zStud": 1,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-4",
+      "brickId": "plate-1x2",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 5,
+        "yStud": 0.4,
+        "zStud": 4,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-5",
+      "brickId": "plate-1x12",
+      "color": "black",
+      "pose": {
+        "xStud": 7,
+        "yStud": 0,
+        "zStud": 0,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-6",
+      "brickId": "plate-6x12",
+      "color": "black",
+      "pose": {
+        "xStud": 8,
+        "yStud": 0,
+        "zStud": 0,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-7",
+      "brickId": "plate-1x8",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 5,
+        "yStud": 0.4,
+        "zStud": 10,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-8",
+      "brickId": "plate-4x4",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 5,
+        "yStud": 0.4,
+        "zStud": 6,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-9",
+      "brickId": "panel-1x2x1",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 6,
+        "yStud": 0.4,
+        "zStud": 4,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-10",
+      "brickId": "plate-1x1",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 7,
+        "yStud": 0.4,
+        "zStud": 5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-11",
+      "brickId": "tile-1x1",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 7,
+        "yStud": 0.4,
+        "zStud": 4,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-12",
+      "brickId": "panel-1x2x1",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 8,
+        "yStud": 0.4,
+        "zStud": 4,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-13",
+      "brickId": "plate-2x4",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 5,
+        "yStud": 0.4,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-14",
+      "brickId": "plate-1x8",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 5,
+        "yStud": 0.4,
+        "zStud": 1,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-15",
+      "brickId": "plate-4x8",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 9,
+        "yStud": 0.4,
+        "zStud": 2,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-16",
+      "brickId": "tile-1x6",
+      "color": "black",
+      "pose": {
+        "xStud": 1,
+        "yStud": 0.4,
+        "zStud": 6,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-17",
+      "brickId": "tile-1x6",
+      "color": "black",
+      "pose": {
+        "xStud": 1,
+        "yStud": 0.4,
+        "zStud": 0,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-18",
+      "brickId": "tile-1x6",
+      "color": "black",
+      "pose": {
+        "xStud": 2,
+        "yStud": 0.4,
+        "zStud": 11,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-19",
+      "brickId": "tile-1x6",
+      "color": "black",
+      "pose": {
+        "xStud": 8,
+        "yStud": 0.4,
+        "zStud": 11,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-20",
+      "brickId": "tile-1x4",
+      "color": "black",
+      "pose": {
+        "xStud": 13,
+        "yStud": 0.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-21",
+      "brickId": "tile-1x6",
+      "color": "black",
+      "pose": {
+        "xStud": 13,
+        "yStud": 0.4,
+        "zStud": 1,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-22",
+      "brickId": "tile-rockefeller-nameplate",
+      "color": "black",
+      "pose": {
+        "xStud": 2,
+        "yStud": 0.4,
+        "zStud": 0,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-23",
+      "brickId": "tile-center-nameplate",
+      "color": "black",
+      "pose": {
+        "xStud": 8,
+        "yStud": 0.4,
+        "zStud": 0,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-24",
+      "brickId": "plate-2x4",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 2,
+        "yStud": 0.8,
+        "zStud": 7,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-25",
+      "brickId": "plate-1x4",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 4,
+        "yStud": 0.8,
+        "zStud": 7,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-26",
+      "brickId": "tile-1x3",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 2,
+        "yStud": 0.8,
+        "zStud": 6,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-27",
+      "brickId": "tile-1x4",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 5,
+        "yStud": 0.8,
+        "zStud": 7,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-28",
+      "brickId": "tile-1x6",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 5,
+        "yStud": 0.8,
+        "zStud": 1,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-29",
+      "brickId": "plate-2x3",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 2,
+        "yStud": 0.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-30",
+      "brickId": "plate-2x3",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 2,
+        "yStud": 0.8,
+        "zStud": 1,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-31",
+      "brickId": "round-1x1-plate",
+      "color": "pearl-gold",
+      "pose": {
+        "xStud": 7,
+        "yStud": 0.8,
+        "zStud": 5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-32",
+      "brickId": "plate-2x4",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 6,
+        "yStud": 0.8,
+        "zStud": 7,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-33",
+      "brickId": "plate-1x4",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 8,
+        "yStud": 0.8,
+        "zStud": 7,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-34",
+      "brickId": "tile-1x3",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 6,
+        "yStud": 0.8,
+        "zStud": 6,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-35",
+      "brickId": "tile-1x4",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 9,
+        "yStud": 0.8,
+        "zStud": 7,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-36",
+      "brickId": "plate-2x4",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 10,
+        "yStud": 0.8,
+        "zStud": 7,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-37",
+      "brickId": "plate-1x4",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 12,
+        "yStud": 0.8,
+        "zStud": 7,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-38",
+      "brickId": "tile-1x6",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 9,
+        "yStud": 0.8,
+        "zStud": 1,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-39",
+      "brickId": "tile-1x3",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 10,
+        "yStud": 0.8,
+        "zStud": 6,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-40",
+      "brickId": "tile-1x2",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 10,
+        "yStud": 0.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-41",
+      "brickId": "tile-1x1",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 11,
+        "yStud": 0.8,
+        "zStud": 3,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-42",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 11,
+        "yStud": 0.8,
+        "zStud": 1,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-43",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 11,
+        "yStud": 0.8,
+        "zStud": 5,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-44",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 11,
+        "yStud": 0.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-45",
+      "brickId": "plate-1x3",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 12,
+        "yStud": 0.8,
+        "zStud": 1,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-46",
+      "brickId": "plate-1x3",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 10,
+        "yStud": 0.8,
+        "zStud": 1,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-47",
+      "brickId": "plate-1x3",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 8,
+        "yStud": 0.8,
+        "zStud": 1,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-48",
+      "brickId": "plate-1x3",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 6,
+        "yStud": 0.8,
+        "zStud": 1,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-49",
+      "brickId": "tile-1x3",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 7,
+        "yStud": 0.8,
+        "zStud": 1,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-50",
+      "brickId": "brick-1x3",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 4,
+        "yStud": 0.8,
+        "zStud": 1,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-51",
+      "brickId": "plate-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6,
+        "yStud": 1.2,
+        "zStud": 9,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-52",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 8,
+        "yStud": 1.2,
+        "zStud": 7,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-53",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 6,
+        "yStud": 1.2,
+        "zStud": 7,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-54",
+      "brickId": "plate-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 10,
+        "yStud": 1.2,
+        "zStud": 9,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-55",
+      "brickId": "plate-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 10,
+        "yStud": 1.2,
+        "zStud": 7,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-56",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 10.5,
+        "yStud": 1.2,
+        "zStud": 5,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-57",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 10.5,
+        "yStud": 1.2,
+        "zStud": 4,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-58",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 11,
+        "yStud": 1.2,
+        "zStud": 1.5,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-59",
+      "brickId": "plate-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 10,
+        "yStud": 1.6,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-60",
+      "brickId": "plate-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 10,
+        "yStud": 1.6,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-61",
+      "brickId": "plate-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6,
+        "yStud": 1.6,
+        "zStud": 10,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-62",
+      "brickId": "plate-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6,
+        "yStud": 1.6,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-63",
+      "brickId": "plate-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6,
+        "yStud": 1.6,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-64",
+      "brickId": "plate-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8,
+        "yStud": 1.6,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-65",
+      "brickId": "brick-side-studs-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 1.2,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-66",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 11,
+        "yStud": 1.6,
+        "zStud": 4,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-67",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 11,
+        "yStud": 1.6,
+        "zStud": 1.5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-68",
+      "brickId": "tile-1x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 8,
+        "yStud": 2,
+        "zStud": 7,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-69",
+      "brickId": "tile-1x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 6,
+        "yStud": 2,
+        "zStud": 7,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-70",
+      "brickId": "plate-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 2,
+        "zStud": 8,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-71",
+      "brickId": "plate-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 10,
+        "yStud": 2,
+        "zStud": 8,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-72",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 10,
+        "yStud": 2,
+        "zStud": 7,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-73",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 11,
+        "yStud": 2,
+        "zStud": 7,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-74",
+      "brickId": "tile-1x3",
+      "color": "light-gray",
+      "pose": {
+        "xStud": 4,
+        "yStud": 2,
+        "zStud": 1,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-75",
+      "brickId": "brick-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 2,
+        "yStud": 1.2,
+        "zStud": 9,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-76",
+      "brickId": "brick-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 2,
+        "yStud": 1.2,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-77",
+      "brickId": "brick-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 2,
+        "yStud": 1.2,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-78",
+      "brickId": "brick-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 2,
+        "yStud": 1.2,
+        "zStud": 1,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-79",
+      "brickId": "brick-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 6,
+        "yStud": 1.2,
+        "zStud": 1,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-80",
+      "brickId": "brick-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 8,
+        "yStud": 1.2,
+        "zStud": 1,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-81",
+      "brickId": "brick-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 10,
+        "yStud": 1.2,
+        "zStud": 1,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-82",
+      "brickId": "brick-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 12,
+        "yStud": 1.2,
+        "zStud": 1,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-83",
+      "brickId": "brick-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 10,
+        "yStud": 1.6,
+        "zStud": 10,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-84",
+      "brickId": "plate-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 2,
+        "yStud": 2.4,
+        "zStud": 10,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-85",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 2,
+        "yStud": 2.4,
+        "zStud": 9,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-86",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 2,
+        "yStud": 2.4,
+        "zStud": 8,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-87",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 2,
+        "yStud": 2.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-88",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 4,
+        "yStud": 2.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-89",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 4,
+        "yStud": 2.4,
+        "zStud": 9,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-90",
+      "brickId": "plate-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 2,
+        "yStud": 2.4,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-91",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 2,
+        "yStud": 2.4,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-92",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 2,
+        "yStud": 2.4,
+        "zStud": 2,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-93",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 2,
+        "yStud": 2.4,
+        "zStud": 1,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-94",
+      "brickId": "plate-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6,
+        "yStud": 2.4,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-95",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 6,
+        "yStud": 2.4,
+        "zStud": 1,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-96",
+      "brickId": "plate-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8,
+        "yStud": 2.4,
+        "zStud": 3,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-97",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 8,
+        "yStud": 2.4,
+        "zStud": 1,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-98",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 10,
+        "yStud": 2.4,
+        "zStud": 3,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-99",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 10,
+        "yStud": 2.4,
+        "zStud": 1,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-100",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 12,
+        "yStud": 2.4,
+        "zStud": 3,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-101",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 12,
+        "yStud": 2.4,
+        "zStud": 1,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-102",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 10.5,
+        "yStud": 2.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-103",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 10,
+        "yStud": 2.4,
+        "zStud": 8,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-104",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 11,
+        "yStud": 2.4,
+        "zStud": 9,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-105",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 11,
+        "yStud": 2.4,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-106",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.5,
+        "yStud": 1.4,
+        "zStud": 6.6,
+        "rotationQuarterTurns": 0,
+        "verticalQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-107",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 2,
+        "yStud": 2.8,
+        "zStud": 10,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-108",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 4,
+        "yStud": 2.8,
+        "zStud": 10,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-109",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 2.8,
+        "zStud": 9,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-110",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 2.8,
+        "zStud": 8,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-111",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 2.8,
+        "zStud": 7,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-112",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 10,
+        "yStud": 2.8,
+        "zStud": 10,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-113",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 11,
+        "yStud": 2.8,
+        "zStud": 10,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-114",
+      "brickId": "plate-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 10.5,
+        "yStud": 2.8,
+        "zStud": 7,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-115",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8,
+        "yStud": 2.8,
+        "zStud": 3,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-116",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6,
+        "yStud": 2.8,
+        "zStud": 3,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-117",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 4,
+        "yStud": 2.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-118",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 2,
+        "yStud": 2.8,
+        "zStud": 5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-119",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 2,
+        "yStud": 2.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-120",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 3,
+        "yStud": 3.2,
+        "zStud": 9,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-121",
+      "brickId": "brick-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 3,
+        "yStud": 3.2,
+        "zStud": 7,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-122",
+      "brickId": "plate-2x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 10.5,
+        "yStud": 3.2,
+        "zStud": 8,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-123",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 3,
+        "yStud": 4.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-124",
+      "brickId": "tile-2x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 10.5,
+        "yStud": 3.6,
+        "zStud": 8,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-125",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 3,
+        "yStud": 2.8,
+        "zStud": 10,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-126",
+      "brickId": "brick-side-studs-opposite-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 3,
+        "yStud": 4,
+        "zStud": 10,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-127",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 3,
+        "yStud": 5.2,
+        "zStud": 10,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-128",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 4,
+        "yStud": 3.2,
+        "zStud": 10,
+        "rotationQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-129",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.6,
+        "yStud": 3.2,
+        "zStud": 10,
+        "rotationQuarterTurns": 0,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-130",
+      "brickId": "plate-2x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 3.2,
+        "zStud": 4,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-131",
+      "brickId": "brick-2x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 3.6,
+        "zStud": 4,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-132",
+      "brickId": "brick-2x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 4.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-133",
+      "brickId": "brick-2x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 6,
+        "zStud": 4,
+        "rotationQuarterTurns": 2
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-134",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 7.2,
+        "zStud": 4,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-135",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 3.5,
+        "yStud": 7.2,
+        "zStud": 4,
+        "rotationQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-136",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 7.6,
+        "zStud": 4.5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-137",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 8,
+        "zStud": 4.5,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-138",
+      "brickId": "brick-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 2.8,
+        "zStud": 1,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-139",
+      "brickId": "brick-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 4,
+        "zStud": 1,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-140",
+      "brickId": "brick-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 5.2,
+        "zStud": 1,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-141",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 6.4,
+        "zStud": 1,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-142",
+      "brickId": "plate-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 6.4,
+        "zStud": 2,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-143",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 2.5,
+        "yStud": 6.8,
+        "zStud": 2,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-144",
+      "brickId": "plate-1x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 2.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-145",
+      "brickId": "plate-1x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 2.8,
+        "zStud": 7,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-146",
+      "brickId": "brick-side-studs-opposite-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 3.2,
+        "zStud": 10,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-147",
+      "brickId": "brick-side-studs-opposite-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 3.2,
+        "zStud": 9,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-148",
+      "brickId": "brick-side-studs-opposite-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 3.2,
+        "zStud": 8,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-149",
+      "brickId": "brick-side-studs-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 3.2,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-150",
+      "brickId": "plate-1x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 4.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-151",
+      "brickId": "plate-1x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 4.8,
+        "zStud": 7,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-152",
+      "brickId": "brick-side-studs-opposite-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 5.2,
+        "zStud": 10,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-153",
+      "brickId": "brick-side-studs-opposite-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 5.2,
+        "zStud": 9,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-154",
+      "brickId": "brick-side-studs-opposite-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 5.2,
+        "zStud": 8,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-155",
+      "brickId": "brick-side-studs-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 5.2,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-156",
+      "brickId": "plate-1x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 6.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-157",
+      "brickId": "plate-1x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 6.8,
+        "zStud": 7,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-158",
+      "brickId": "brick-side-studs-opposite-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 7.2,
+        "zStud": 10,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-159",
+      "brickId": "brick-side-studs-opposite-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 7.2,
+        "zStud": 9,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-160",
+      "brickId": "brick-side-studs-opposite-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 7.2,
+        "zStud": 8,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-161",
+      "brickId": "brick-side-studs-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 7.2,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-162",
+      "brickId": "plate-1x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 8.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-163",
+      "brickId": "plate-1x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 8.8,
+        "zStud": 7,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-164",
+      "brickId": "plate-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 9.2,
+        "zStud": 8,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-165",
+      "brickId": "plate-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 9.6,
+        "zStud": 8,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-166",
+      "brickId": "brick-side-studs-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 9.2,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-167",
+      "brickId": "brick-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 10,
+        "zStud": 8,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-168",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 10.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-169",
+      "brickId": "brick-side-studs-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 11.2,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-170",
+      "brickId": "brick-side-studs-opposite-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 11.2,
+        "zStud": 9,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-171",
+      "brickId": "brick-side-studs-opposite-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 11.2,
+        "zStud": 10,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-172",
+      "brickId": "plate-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 12.4,
+        "zStud": 8,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-173",
+      "brickId": "plate-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 12.8,
+        "zStud": 8,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-174",
+      "brickId": "brick-side-studs-opposite-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 13.2,
+        "zStud": 9,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-175",
+      "brickId": "brick-side-studs-opposite-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 13.2,
+        "zStud": 10,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-176",
+      "brickId": "brick-side-studs-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 13.2,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-177",
+      "brickId": "plate-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 14.4,
+        "zStud": 8,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-178",
+      "brickId": "brick-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 14.8,
+        "zStud": 9,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-179",
+      "brickId": "brick-side-studs-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 14.8,
+        "zStud": 8,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-180",
+      "brickId": "plate-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 16,
+        "zStud": 8,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-181",
+      "brickId": "plate-1x3",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 16.4,
+        "zStud": 8,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-182",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 16.8,
+        "zStud": 10,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-183",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 16.8,
+        "zStud": 8,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-184",
+      "brickId": "plate-1x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 10.9,
+        "zStud": 7.6,
+        "rotationQuarterTurns": 1,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-185",
+      "brickId": "tile-1x8",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 2.4,
+        "zStud": 6.6,
+        "rotationQuarterTurns": 1,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-186",
+      "brickId": "tile-1x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 10.9,
+        "zStud": 7.2,
+        "rotationQuarterTurns": 1,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-187",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 7,
+        "yStud": 14.9,
+        "zStud": 7.6,
+        "rotationQuarterTurns": 1,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-188",
+      "brickId": "tile-1x8",
+      "color": "tan",
+      "pose": {
+        "xStud": 8,
+        "yStud": 8.9,
+        "zStud": 10,
+        "rotationQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-189",
+      "brickId": "tile-1x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 8,
+        "yStud": 4.9,
+        "zStud": 10,
+        "rotationQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-190",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 8,
+        "yStud": 2.9,
+        "zStud": 10,
+        "rotationQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-191",
+      "brickId": "tile-1x8",
+      "color": "tan",
+      "pose": {
+        "xStud": 8,
+        "yStud": 6.9,
+        "zStud": 9,
+        "rotationQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-192",
+      "brickId": "tile-1x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 8,
+        "yStud": 2.9,
+        "zStud": 9,
+        "rotationQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-193",
+      "brickId": "tile-1x6",
+      "color": "tan",
+      "pose": {
+        "xStud": 8,
+        "yStud": 2.9,
+        "zStud": 8,
+        "rotationQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-194",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.4,
+        "yStud": 2.9,
+        "zStud": 9,
+        "rotationQuarterTurns": 3,
+        "verticalQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-195",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 8.4,
+        "yStud": 3.9,
+        "zStud": 10,
+        "rotationQuarterTurns": 3,
+        "verticalQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-196",
+      "brickId": "tile-1x8",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.6,
+        "yStud": 8.9,
+        "zStud": 10,
+        "rotationQuarterTurns": 0,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-197",
+      "brickId": "tile-1x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.6,
+        "yStud": 4.9,
+        "zStud": 10,
+        "rotationQuarterTurns": 0,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-198",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.6,
+        "yStud": 2.9,
+        "zStud": 10,
+        "rotationQuarterTurns": 0,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-199",
+      "brickId": "tile-1x8",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.6,
+        "yStud": 6.9,
+        "zStud": 9,
+        "rotationQuarterTurns": 0,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-200",
+      "brickId": "tile-1x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.6,
+        "yStud": 2.9,
+        "zStud": 9,
+        "rotationQuarterTurns": 0,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-201",
+      "brickId": "tile-1x6",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.6,
+        "yStud": 2.9,
+        "zStud": 8,
+        "rotationQuarterTurns": 0,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-202",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.2,
+        "yStud": 2.9,
+        "zStud": 9,
+        "rotationQuarterTurns": 1,
+        "verticalQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-203",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 6.2,
+        "yStud": 3.9,
+        "zStud": 10,
+        "rotationQuarterTurns": 1,
+        "verticalQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-204",
+      "brickId": "plate-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 10.5,
+        "yStud": 3.6,
+        "zStud": 10,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-205",
+      "brickId": "brick-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 10.5,
+        "yStud": 4,
+        "zStud": 10,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-206",
+      "brickId": "brick-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 10.5,
+        "yStud": 5.2,
+        "zStud": 10,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-207",
+      "brickId": "brick-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 10.5,
+        "yStud": 6.4,
+        "zStud": 10,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-208",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 10.5,
+        "yStud": 7.6,
+        "zStud": 10,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-209",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 11,
+        "yStud": 8,
+        "zStud": 10,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-210",
+      "brickId": "brick-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 10.5,
+        "yStud": 3.2,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-211",
+      "brickId": "plate-jumper-1x2-3794a",
+      "color": "tan",
+      "pose": {
+        "xStud": 10.5,
+        "yStud": 4.4,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-212",
+      "brickId": "tile-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 11,
+        "yStud": 4.8,
+        "zStud": 7,
+        "rotationQuarterTurns": 0
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-213",
+      "brickId": "brick-1x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 11,
+        "yStud": 2,
+        "zStud": 2,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-214",
+      "brickId": "plate-1x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 11,
+        "yStud": 3.2,
+        "zStud": 2,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-215",
+      "brickId": "brick-side-studs-opposite-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 11,
+        "yStud": 3.6,
+        "zStud": 5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-216",
+      "brickId": "brick-side-studs-opposite-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 11,
+        "yStud": 3.6,
+        "zStud": 4,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-217",
+      "brickId": "brick-side-studs-opposite-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 11,
+        "yStud": 3.6,
+        "zStud": 3,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-218",
+      "brickId": "brick-side-studs-opposite-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 11,
+        "yStud": 3.6,
+        "zStud": 2,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-219",
+      "brickId": "plate-1x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 11,
+        "yStud": 4.8,
+        "zStud": 2,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-220",
+      "brickId": "plate-1x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 11,
+        "yStud": 5.2,
+        "zStud": 2,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-221",
+      "brickId": "brick-side-studs-opposite-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 11,
+        "yStud": 5.6,
+        "zStud": 5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-222",
+      "brickId": "brick-side-studs-opposite-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 11,
+        "yStud": 5.6,
+        "zStud": 4,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-223",
+      "brickId": "brick-side-studs-opposite-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 11,
+        "yStud": 5.6,
+        "zStud": 3,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-224",
+      "brickId": "brick-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 11,
+        "yStud": 5.6,
+        "zStud": 2,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-225",
+      "brickId": "plate-1x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 11,
+        "yStud": 6.8,
+        "zStud": 2,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-226",
+      "brickId": "plate-1x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 11,
+        "yStud": 7.2,
+        "zStud": 2,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-227",
+      "brickId": "brick-side-studs-opposite-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 11,
+        "yStud": 7.6,
+        "zStud": 5,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-228",
+      "brickId": "brick-side-studs-opposite-1x1",
+      "color": "tan",
+      "pose": {
+        "xStud": 11,
+        "yStud": 7.6,
+        "zStud": 4,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-229",
+      "brickId": "brick-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 11,
+        "yStud": 7.6,
+        "zStud": 2,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-230",
+      "brickId": "tile-1x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 11,
+        "yStud": 8.8,
+        "zStud": 2,
+        "rotationQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-231",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 12,
+        "yStud": 7.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 1,
+        "verticalQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-232",
+      "brickId": "tile-1x6",
+      "color": "tan",
+      "pose": {
+        "xStud": 12,
+        "yStud": 1.8,
+        "zStud": 5,
+        "rotationQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-233",
+      "brickId": "tile-1x6",
+      "color": "tan",
+      "pose": {
+        "xStud": 12,
+        "yStud": 1.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-234",
+      "brickId": "tile-1x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 12,
+        "yStud": 2.8,
+        "zStud": 3,
+        "rotationQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-235",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 12,
+        "yStud": 2.8,
+        "zStud": 2,
+        "rotationQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-236",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 10.6,
+        "yStud": 7.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 1,
+        "verticalQuarterTurns": 3
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-237",
+      "brickId": "tile-1x6",
+      "color": "tan",
+      "pose": {
+        "xStud": 10.6,
+        "yStud": 1.8,
+        "zStud": 5,
+        "rotationQuarterTurns": 0,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-238",
+      "brickId": "tile-1x6",
+      "color": "tan",
+      "pose": {
+        "xStud": 10.6,
+        "yStud": 1.8,
+        "zStud": 4,
+        "rotationQuarterTurns": 0,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-239",
+      "brickId": "tile-1x4",
+      "color": "tan",
+      "pose": {
+        "xStud": 10.6,
+        "yStud": 2.8,
+        "zStud": 3,
+        "rotationQuarterTurns": 0,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    },
+    {
+      "id": "lego-21007-rockefeller-240",
+      "brickId": "tile-1x2",
+      "color": "tan",
+      "pose": {
+        "xStud": 10.6,
+        "yStud": 2.8,
+        "zStud": 2,
+        "rotationQuarterTurns": 0,
+        "verticalQuarterTurns": 2,
+        "rollQuarterTurns": 1
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "lego-21007-rockefeller-step-1",
+      "title": "官方第 1 步：左侧底板与连接条",
+      "description": "LEGO 21007 官方说明书 4632899，第 12 页。",
+      "instructionStep": 1,
+      "brickIds": [
+        "lego-21007-rockefeller-1",
+        "lego-21007-rockefeller-2"
+      ]
+    },
+    {
+      "id": "lego-21007-rockefeller-step-2",
+      "title": "官方第 2 步：底板连接",
+      "description": "LEGO 21007 官方说明书 4632899，第 13 页。",
+      "instructionStep": 2,
+      "brickIds": [
+        "lego-21007-rockefeller-3",
+        "lego-21007-rockefeller-4"
+      ]
+    },
+    {
+      "id": "lego-21007-rockefeller-step-3",
+      "title": "官方第 3 步：右侧底板",
+      "description": "LEGO 21007 官方说明书 4632899，第 14 页。",
+      "instructionStep": 3,
+      "brickIds": [
+        "lego-21007-rockefeller-5",
+        "lego-21007-rockefeller-6"
+      ]
+    },
+    {
+      "id": "lego-21007-rockefeller-step-4",
+      "title": "官方第 4 步：右侧连接条",
+      "description": "LEGO 21007 官方说明书 4632899，第 15 页。",
+      "instructionStep": 4,
+      "brickIds": [
+        "lego-21007-rockefeller-7"
+      ]
+    },
+    {
+      "id": "lego-21007-rockefeller-step-5",
+      "title": "官方第 5 步：中央广场左半",
+      "description": "LEGO 21007 官方说明书 4632899，第 16 页。",
+      "instructionStep": 5,
+      "brickIds": [
+        "lego-21007-rockefeller-8",
+        "lego-21007-rockefeller-9",
+        "lego-21007-rockefeller-10",
+        "lego-21007-rockefeller-11"
+      ]
+    },
+    {
+      "id": "lego-21007-rockefeller-step-6",
+      "title": "官方第 6 步：中央广场右半",
+      "description": "LEGO 21007 官方说明书 4632899，第 17 页。",
+      "instructionStep": 6,
+      "brickIds": [
+        "lego-21007-rockefeller-12",
+        "lego-21007-rockefeller-13",
+        "lego-21007-rockefeller-14",
+        "lego-21007-rockefeller-15"
+      ]
+    },
+    {
+      "id": "lego-21007-rockefeller-step-7",
+      "title": "官方第 7 步：外围收边与双铭牌",
+      "description": "LEGO 21007 官方说明书 4632899，第 18 页。",
+      "instructionStep": 7,
+      "brickIds": [
+        "lego-21007-rockefeller-16",
+        "lego-21007-rockefeller-17",
+        "lego-21007-rockefeller-18",
+        "lego-21007-rockefeller-19",
+        "lego-21007-rockefeller-20",
+        "lego-21007-rockefeller-21",
+        "lego-21007-rockefeller-22",
+        "lego-21007-rockefeller-23"
+      ]
+    },
+    {
+      "id": "lego-21007-rockefeller-step-8",
+      "title": "官方第 8 步：左侧铺面与金色圆板",
+      "description": "LEGO 21007 官方说明书 4632899，第 19 页。",
+      "instructionStep": 8,
+      "brickIds": [
+        "lego-21007-rockefeller-24",
+        "lego-21007-rockefeller-25",
+        "lego-21007-rockefeller-26",
+        "lego-21007-rockefeller-27",
+        "lego-21007-rockefeller-28",
+        "lego-21007-rockefeller-29",
+        "lego-21007-rockefeller-30",
+        "lego-21007-rockefeller-31"
+      ]
+    },
+    {
+      "id": "lego-21007-rockefeller-step-9",
+      "title": "官方第 9 步：右侧铺面与定位板",
+      "description": "LEGO 21007 官方说明书 4632899，第 20 页。",
+      "instructionStep": 9,
+      "brickIds": [
+        "lego-21007-rockefeller-32",
+        "lego-21007-rockefeller-33",
+        "lego-21007-rockefeller-34",
+        "lego-21007-rockefeller-35",
+        "lego-21007-rockefeller-36",
+        "lego-21007-rockefeller-37",
+        "lego-21007-rockefeller-38",
+        "lego-21007-rockefeller-39",
+        "lego-21007-rockefeller-40",
+        "lego-21007-rockefeller-41",
+        "lego-21007-rockefeller-42",
+        "lego-21007-rockefeller-43",
+        "lego-21007-rockefeller-44",
+        "lego-21007-rockefeller-45",
+        "lego-21007-rockefeller-46",
+        "lego-21007-rockefeller-47",
+        "lego-21007-rockefeller-48",
+        "lego-21007-rockefeller-49",
+        "lego-21007-rockefeller-50"
+      ]
+    },
+    {
+      "id": "lego-21007-rockefeller-step-10",
+      "title": "官方第 10 步：建筑底层",
+      "description": "LEGO 21007 官方说明书 4632899，第 21 页。",
+      "instructionStep": 10,
+      "brickIds": [
+        "lego-21007-rockefeller-51",
+        "lego-21007-rockefeller-52",
+        "lego-21007-rockefeller-53",
+        "lego-21007-rockefeller-54",
+        "lego-21007-rockefeller-55",
+        "lego-21007-rockefeller-56",
+        "lego-21007-rockefeller-57",
+        "lego-21007-rockefeller-58"
+      ]
+    },
+    {
+      "id": "lego-21007-rockefeller-step-11",
+      "title": "官方第 11 步：建筑第二层",
+      "description": "LEGO 21007 官方说明书 4632899，第 22 页。",
+      "instructionStep": 11,
+      "brickIds": [
+        "lego-21007-rockefeller-59",
+        "lego-21007-rockefeller-60",
+        "lego-21007-rockefeller-61",
+        "lego-21007-rockefeller-62",
+        "lego-21007-rockefeller-63",
+        "lego-21007-rockefeller-64",
+        "lego-21007-rockefeller-65",
+        "lego-21007-rockefeller-66",
+        "lego-21007-rockefeller-67"
+      ]
+    },
+    {
+      "id": "lego-21007-rockefeller-step-12",
+      "title": "官方第 12 步：收面与侧向连接",
+      "description": "LEGO 21007 官方说明书 4632899，第 23 页。",
+      "instructionStep": 12,
+      "brickIds": [
+        "lego-21007-rockefeller-68",
+        "lego-21007-rockefeller-69",
+        "lego-21007-rockefeller-70",
+        "lego-21007-rockefeller-71",
+        "lego-21007-rockefeller-72",
+        "lego-21007-rockefeller-73",
+        "lego-21007-rockefeller-74"
+      ]
+    },
+    {
+      "id": "lego-21007-rockefeller-step-13",
+      "title": "官方第 13 步：首层建筑群",
+      "description": "LEGO 21007 官方说明书 4632899，第 24 页。",
+      "instructionStep": 13,
+      "brickIds": [
+        "lego-21007-rockefeller-75",
+        "lego-21007-rockefeller-76",
+        "lego-21007-rockefeller-77",
+        "lego-21007-rockefeller-78",
+        "lego-21007-rockefeller-79",
+        "lego-21007-rockefeller-80",
+        "lego-21007-rockefeller-81",
+        "lego-21007-rockefeller-82",
+        "lego-21007-rockefeller-83"
+      ]
+    },
+    {
+      "id": "lego-21007-rockefeller-step-14",
+      "title": "官方第 14 步：屋顶定位板",
+      "description": "LEGO 21007 官方说明书 4632899，第 25 页。",
+      "instructionStep": 14,
+      "brickIds": [
+        "lego-21007-rockefeller-84",
+        "lego-21007-rockefeller-85",
+        "lego-21007-rockefeller-86",
+        "lego-21007-rockefeller-87",
+        "lego-21007-rockefeller-88",
+        "lego-21007-rockefeller-89",
+        "lego-21007-rockefeller-90",
+        "lego-21007-rockefeller-91",
+        "lego-21007-rockefeller-92",
+        "lego-21007-rockefeller-93",
+        "lego-21007-rockefeller-94",
+        "lego-21007-rockefeller-95",
+        "lego-21007-rockefeller-96",
+        "lego-21007-rockefeller-97",
+        "lego-21007-rockefeller-98",
+        "lego-21007-rockefeller-99",
+        "lego-21007-rockefeller-100",
+        "lego-21007-rockefeller-101",
+        "lego-21007-rockefeller-102",
+        "lego-21007-rockefeller-103",
+        "lego-21007-rockefeller-104",
+        "lego-21007-rockefeller-105"
+      ]
+    },
+    {
+      "id": "lego-21007-rockefeller-step-15",
+      "title": "官方第 15 步：第二层屋面",
+      "description": "LEGO 21007 官方说明书 4632899，第 26 页。",
+      "instructionStep": 15,
+      "brickIds": [
+        "lego-21007-rockefeller-106",
+        "lego-21007-rockefeller-107",
+        "lego-21007-rockefeller-108",
+        "lego-21007-rockefeller-109",
+        "lego-21007-rockefeller-110",
+        "lego-21007-rockefeller-111",
+        "lego-21007-rockefeller-112",
+        "lego-21007-rockefeller-113",
+        "lego-21007-rockefeller-114",
+        "lego-21007-rockefeller-115",
+        "lego-21007-rockefeller-116",
+        "lego-21007-rockefeller-117",
+        "lego-21007-rockefeller-118",
+        "lego-21007-rockefeller-119"
+      ]
+    },
+    {
+      "id": "lego-21007-rockefeller-step-16",
+      "title": "官方第 16 步：小楼墙体与定位",
+      "description": "LEGO 21007 官方说明书 4632899，第 27 页。",
+      "instructionStep": 16,
+      "brickIds": [
+        "lego-21007-rockefeller-120",
+        "lego-21007-rockefeller-121",
+        "lego-21007-rockefeller-122"
+      ]
+    },
+    {
+      "id": "lego-21007-rockefeller-step-17",
+      "title": "官方第 17 步：左后小楼总成",
+      "description": "LEGO 21007 官方说明书 4632899，第 28 页。含 2 个侧贴砖装配子步骤。",
+      "instructionStep": 17,
+      "brickIds": [
+        "lego-21007-rockefeller-123",
+        "lego-21007-rockefeller-124",
+        "lego-21007-rockefeller-125",
+        "lego-21007-rockefeller-126",
+        "lego-21007-rockefeller-127",
+        "lego-21007-rockefeller-128",
+        "lego-21007-rockefeller-129"
+      ]
+    },
+    {
+      "id": "lego-21007-rockefeller-step-18",
+      "title": "官方第 18 步：左侧方塔总成",
+      "description": "LEGO 21007 官方说明书 4632899，第 31 页。含第 29–30 页的 4 个装配子步骤。",
+      "instructionStep": 18,
+      "brickIds": [
+        "lego-21007-rockefeller-130",
+        "lego-21007-rockefeller-131",
+        "lego-21007-rockefeller-132",
+        "lego-21007-rockefeller-133",
+        "lego-21007-rockefeller-134",
+        "lego-21007-rockefeller-135",
+        "lego-21007-rockefeller-136",
+        "lego-21007-rockefeller-137"
+      ]
+    },
+    {
+      "id": "lego-21007-rockefeller-step-19",
+      "title": "官方第 19 步：左前窄塔总成",
+      "description": "LEGO 21007 官方说明书 4632899，第 33 页。含第 32–33 页的 4 个装配子步骤。",
+      "instructionStep": 19,
+      "brickIds": [
+        "lego-21007-rockefeller-138",
+        "lego-21007-rockefeller-139",
+        "lego-21007-rockefeller-140",
+        "lego-21007-rockefeller-141",
+        "lego-21007-rockefeller-142",
+        "lego-21007-rockefeller-143"
+      ]
+    },
+    {
+      "id": "lego-21007-rockefeller-step-20",
+      "title": "官方第 20 步：中央主塔总成",
+      "description": "LEGO 21007 官方说明书 4632899，第 45 页。含第 34–44 页的 21 个主塔装配子步骤。",
+      "instructionStep": 20,
+      "brickIds": [
+        "lego-21007-rockefeller-144",
+        "lego-21007-rockefeller-145",
+        "lego-21007-rockefeller-146",
+        "lego-21007-rockefeller-147",
+        "lego-21007-rockefeller-148",
+        "lego-21007-rockefeller-149",
+        "lego-21007-rockefeller-150",
+        "lego-21007-rockefeller-151",
+        "lego-21007-rockefeller-152",
+        "lego-21007-rockefeller-153",
+        "lego-21007-rockefeller-154",
+        "lego-21007-rockefeller-155",
+        "lego-21007-rockefeller-156",
+        "lego-21007-rockefeller-157",
+        "lego-21007-rockefeller-158",
+        "lego-21007-rockefeller-159",
+        "lego-21007-rockefeller-160",
+        "lego-21007-rockefeller-161",
+        "lego-21007-rockefeller-162",
+        "lego-21007-rockefeller-163",
+        "lego-21007-rockefeller-164",
+        "lego-21007-rockefeller-165",
+        "lego-21007-rockefeller-166",
+        "lego-21007-rockefeller-167",
+        "lego-21007-rockefeller-168",
+        "lego-21007-rockefeller-169",
+        "lego-21007-rockefeller-170",
+        "lego-21007-rockefeller-171",
+        "lego-21007-rockefeller-172",
+        "lego-21007-rockefeller-173",
+        "lego-21007-rockefeller-174",
+        "lego-21007-rockefeller-175",
+        "lego-21007-rockefeller-176",
+        "lego-21007-rockefeller-177",
+        "lego-21007-rockefeller-178",
+        "lego-21007-rockefeller-179",
+        "lego-21007-rockefeller-180",
+        "lego-21007-rockefeller-181",
+        "lego-21007-rockefeller-182",
+        "lego-21007-rockefeller-183",
+        "lego-21007-rockefeller-184",
+        "lego-21007-rockefeller-185",
+        "lego-21007-rockefeller-186",
+        "lego-21007-rockefeller-187",
+        "lego-21007-rockefeller-188",
+        "lego-21007-rockefeller-189",
+        "lego-21007-rockefeller-190",
+        "lego-21007-rockefeller-191",
+        "lego-21007-rockefeller-192",
+        "lego-21007-rockefeller-193",
+        "lego-21007-rockefeller-194",
+        "lego-21007-rockefeller-195",
+        "lego-21007-rockefeller-196",
+        "lego-21007-rockefeller-197",
+        "lego-21007-rockefeller-198",
+        "lego-21007-rockefeller-199",
+        "lego-21007-rockefeller-200",
+        "lego-21007-rockefeller-201",
+        "lego-21007-rockefeller-202",
+        "lego-21007-rockefeller-203"
+      ]
+    },
+    {
+      "id": "lego-21007-rockefeller-step-21",
+      "title": "官方第 21 步：右后方塔总成",
+      "description": "LEGO 21007 官方说明书 4632899，第 47 页。含第 46–47 页的 3 个装配子步骤。",
+      "instructionStep": 21,
+      "brickIds": [
+        "lego-21007-rockefeller-204",
+        "lego-21007-rockefeller-205",
+        "lego-21007-rockefeller-206",
+        "lego-21007-rockefeller-207",
+        "lego-21007-rockefeller-208",
+        "lego-21007-rockefeller-209"
+      ]
+    },
+    {
+      "id": "lego-21007-rockefeller-step-22",
+      "title": "官方第 22 步：右侧小楼总成",
+      "description": "LEGO 21007 官方说明书 4632899，第 48 页。含 2 个装配子步骤。",
+      "instructionStep": 22,
+      "brickIds": [
+        "lego-21007-rockefeller-210",
+        "lego-21007-rockefeller-211",
+        "lego-21007-rockefeller-212"
+      ]
+    },
+    {
+      "id": "lego-21007-rockefeller-step-23",
+      "title": "官方第 23 步：右前副塔总成",
+      "description": "LEGO 21007 官方说明书 4632899，第 54 页。含第 49–53 页的 10 个副塔装配子步骤。",
+      "instructionStep": 23,
+      "brickIds": [
+        "lego-21007-rockefeller-213",
+        "lego-21007-rockefeller-214",
+        "lego-21007-rockefeller-215",
+        "lego-21007-rockefeller-216",
+        "lego-21007-rockefeller-217",
+        "lego-21007-rockefeller-218",
+        "lego-21007-rockefeller-219",
+        "lego-21007-rockefeller-220",
+        "lego-21007-rockefeller-221",
+        "lego-21007-rockefeller-222",
+        "lego-21007-rockefeller-223",
+        "lego-21007-rockefeller-224",
+        "lego-21007-rockefeller-225",
+        "lego-21007-rockefeller-226",
+        "lego-21007-rockefeller-227",
+        "lego-21007-rockefeller-228",
+        "lego-21007-rockefeller-229",
+        "lego-21007-rockefeller-230",
+        "lego-21007-rockefeller-231",
+        "lego-21007-rockefeller-232",
+        "lego-21007-rockefeller-233",
+        "lego-21007-rockefeller-234",
+        "lego-21007-rockefeller-235",
+        "lego-21007-rockefeller-236",
+        "lego-21007-rockefeller-237",
+        "lego-21007-rockefeller-238",
+        "lego-21007-rockefeller-239",
+        "lego-21007-rockefeller-240"
+      ]
+    }
+  ]
+}

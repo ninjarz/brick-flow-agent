@@ -491,8 +491,8 @@ const makeGeneratedConnectors = (profile, frame, horizontalAxisMapping, connecto
     if (profile.partNumber === '3022' && /^stud4\.dat$/.test(connectorReference.source)) centers.push(center)
     // A 1x2 plate's underside pin fits the hollow stud of a Travis brick.
     // Keep the mechanical pin and bore separate from the surrounding stud sockets.
-    const pin = profile.partNumber === '3023' && /^stud3\.dat$/.test(connectorReference.source)
-    const bore = profile.partNumber === '4733' && /^stud2a\.dat$/.test(connectorReference.source)
+    const pin = ['3004', '3023', '3710', '2431', '6636', '4162', '63864'].includes(profile.partNumber) && /^stud3\.dat$/.test(connectorReference.source)
+    const bore = ['4733', '47905', '87087', '6541'].includes(profile.partNumber) && /^stud2a?\.dat$/.test(connectorReference.source)
     if (pin || bore) {
       connectors.push({ idSuffix: `bar-${connectors.length}`, kind: 'bar', gender: pin ? 'male' : 'female', axis, direction,
         pose: { xStud: center.x, yStud: center.y, zStud: center.z } })
@@ -514,6 +514,24 @@ const makeGeneratedConnectors = (profile, frame, horizontalAxisMapping, connecto
       connectors.push(connector)
     }
   }
+
+  // The open 1x2 tile cavity also accepts a centered stud (21007, step 15).
+  if (profile.partNumber === '3069') {
+    for (const x of [0.5, 1, 1.5]) connectors.push({ kind: 'tube', gender: 'female', axis: 'y', direction: { x: 0, y: -1, z: 0 }, pose: { xStud: x - 0.5, yStud: 0, zStud: 0 } })
+  }
+  // Audited mechanical insertion points from the actual 2458/6541 pin and
+  // 59900/30374 cone/rod geometry, rather than overlapping bounding boxes.
+  const addMechanical = (kind, gender, point, axis, direction) => {
+    const center = ldrawPointToLocal(point, frame, horizontalAxisMapping)
+    connectors.push({ kind, gender, axis, direction, pose: { xStud: center.x, yStud: center.y, zStud: center.z } })
+  }
+  if (profile.partNumber === '2458') addMechanical('pin', 'male', [0, 10, -20], 'z', { x: 0, y: 0, z: -1 })
+  if (profile.partNumber === '6541') {
+    addMechanical('pin', 'female', [0, 10, 0], 'z', { x: 0, y: 0, z: 1 })
+    addMechanical('pin', 'female', [0, 10, 0], 'z', { x: 0, y: 0, z: -1 })
+  }
+  if (profile.partNumber === '59900') addMechanical('bar', 'female', [0, 24, 0], 'y', { x: 0, y: 1, z: 0 })
+  if (profile.partNumber === '30374') addMechanical('bar', 'male', [0, 80, 0], 'y', { x: 0, y: -1, z: 0 })
 
   return connectors.map((connector, index) => ({
     idSuffix: `${connector.kind}-${index}`,
