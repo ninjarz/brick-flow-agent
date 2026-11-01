@@ -23,6 +23,27 @@ type WorldPoint = {
 
 type WorldVector = WorldPoint
 
+export const isValidOrientationMatrix = (value: unknown): value is NonNullable<BrickPose['orientationMatrix']> => {
+  if (!Array.isArray(value) || value.length !== 9 || !value.every(Number.isFinite)) return false
+  // Both handednesses are needed: some catalogue meshes swap the source X/Z axes.
+  for (let row = 0; row < 3; row++) for (let other = 0; other < 3; other++) {
+    const dot = [0, 1, 2].reduce((sum, k) => sum + value[row * 3 + k] * value[other * 3 + k], 0)
+    if (Math.abs(dot - Number(row === other)) > 0.0001) return false
+  }
+  return true
+}
+
+const matrixVector = (matrix: NonNullable<BrickPose['orientationMatrix']>, point: WorldPoint): WorldPoint => ({
+  x: matrix[0] * point.x + matrix[1] * point.y + matrix[2] * point.z,
+  y: matrix[3] * point.x + matrix[4] * point.y + matrix[5] * point.z,
+  z: matrix[6] * point.x + matrix[7] * point.y + matrix[8] * point.z,
+})
+
+const matrixFootprint = (footprint: BrickFootprint, matrix: NonNullable<BrickPose['orientationMatrix']>): BrickFootprint => {
+  const size = matrixVector(matrix.map(Math.abs) as typeof matrix, { x: footprint.widthStuds, y: footprint.heightStuds, z: footprint.depthStuds })
+  return { widthStuds: size.x, heightStuds: size.y, depthStuds: size.z }
+}
+
 export const normalizeQuarterTurns = (
   turns: number,
 ): BrickRotationQuarterTurns => (((turns % 4) + 4) % 4) as BrickRotationQuarterTurns
@@ -70,6 +91,16 @@ export const poseToWorld = (pose: BrickPose) => ({
   z: pose.zStud * STUD_PITCH_WORLD,
 })
 
+/** Rigid imported assemblies retain their insertion depths when moved together. */
+export const translateBrickPose = (pose: BrickPose, delta: { xStud?: number; yStud?: number; zStud?: number }): BrickPose => {
+  const step = pose.orientationMatrix ? 0.000001 : WORLD_SNAP_STEP_STUDS
+  return { ...pose,
+    xStud: roundToGrid(pose.xStud + (delta.xStud ?? 0), step),
+    yStud: Math.max(0, roundToGrid(pose.yStud + (delta.yStud ?? 0), step)),
+    zStud: roundToGrid(pose.zStud + (delta.zStud ?? 0), step),
+  }
+}
+
 const getRolledFootprint = (footprint: BrickFootprint, roll: number): BrickFootprint => roll % 2 === 1
   ? { widthStuds: footprint.heightStuds, heightStuds: footprint.widthStuds, depthStuds: footprint.depthStuds }
   : footprint
@@ -79,7 +110,9 @@ export const footprintToWorld = (
   rotationQuarterTurns: BrickRotationQuarterTurns,
   verticalQuarterTurns: BrickVerticalQuarterTurns = 0,
   rollQuarterTurns: BrickRotationQuarterTurns = 0,
-) => {
+  orientationMatrix?: BrickPose['orientationMatrix'],
+): { width: number; depth: number; height: number; widthStuds: number; depthStuds: number; heightStuds: number } => {
+  if (orientationMatrix) return footprintToWorld({ ...definition, footprint: matrixFootprint(definition.footprint, orientationMatrix) }, rotationQuarterTurns, verticalQuarterTurns, rollQuarterTurns)
   const base = getRolledFootprint(definition.footprint, rollQuarterTurns)
   const tilted = verticalQuarterTurns % 2 === 1
   const depth = tilted ? base.heightStuds : base.depthStuds
@@ -94,7 +127,7 @@ export const footprintToWorld = (
 }
 
 export const getBrickWorldFrame = (definition: BrickDefinition, pose: BrickPose) => {
-  const footprint = footprintToWorld(definition, pose.rotationQuarterTurns, pose.verticalQuarterTurns ?? 0, pose.rollQuarterTurns ?? 0)
+  const footprint = footprintToWorld(definition, pose.rotationQuarterTurns, pose.verticalQuarterTurns ?? 0, pose.rollQuarterTurns ?? 0, pose.orientationMatrix)
   const origin = poseToWorld(pose)
 
   return {
@@ -222,7 +255,12 @@ export const transformBrickLocalPoint = (
   definition: BrickDefinition,
   pose: BrickPose,
   point: WorldPoint,
-) => {
+): WorldPoint => {
+  if (pose.orientationMatrix) {
+    const footprint = matrixFootprint(definition.footprint, pose.orientationMatrix)
+    const centered = matrixVector(pose.orientationMatrix, { x: point.x - definition.footprint.widthStuds / 2, y: point.y - definition.footprint.heightStuds / 2, z: point.z - definition.footprint.depthStuds / 2 })
+    return transformBrickLocalPoint({ ...definition, footprint }, { ...pose, orientationMatrix: undefined }, { x: centered.x + footprint.widthStuds / 2, y: centered.y + footprint.heightStuds / 2, z: centered.z + footprint.depthStuds / 2 })
+  }
   const verticalQuarterTurns = normalizeVerticalQuarterTurns(pose.verticalQuarterTurns ?? 0)
   const roll = normalizeQuarterTurns(pose.rollQuarterTurns ?? 0)
   const rolled = rotateRollPoint(point, roll, definition.footprint)
@@ -277,7 +315,8 @@ export const getBrickConnectors = (definition: BrickDefinition, pose: BrickPose)
     const verticalQuarterTurns = normalizeVerticalQuarterTurns(pose.verticalQuarterTurns ?? 0)
     const localPoint = getConnectorLocalPoint(definition, connector)
     const transformedPoint = transformBrickLocalPoint(definition, pose, localPoint)
-    const baseDirection = connector.direction ?? axisVector[connector.axis]
+    const originalDirection = connector.direction ?? axisVector[connector.axis]
+    const baseDirection = pose.orientationMatrix ? matrixVector(pose.orientationMatrix, originalDirection) : originalDirection
     const direction = normaliseVector(
       rotateYawVector(
         rotateVerticalVector(rotateRollVector(baseDirection, pose.rollQuarterTurns ?? 0), verticalQuarterTurns),

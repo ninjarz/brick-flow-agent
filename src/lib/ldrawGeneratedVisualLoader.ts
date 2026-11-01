@@ -72,3 +72,9 @@ export const loadLDrawGeneratedVisualTriangles = async (partNumber: string) => {
     ? (await loadVisualChunk(loader)).getLDrawGeneratedVisualTriangles(normalizedPartNumber)
     : undefined
 }
+
+// Ink shares the geometry chunk and is available after the same load completes.
+export const getLoadedLDrawPrintLayers = (partNumber: string) => {
+  const part = normalizeLDrawPartNumber(partNumber), loader = getVisualChunkLoader(part)
+  return loader ? loadedChunks.get(loader)?.getLDrawGeneratedPrintLayers(part) : undefined
+}

@@ -1,0 +1,101 @@
+{
+  "set": "71043",
+  "officialPieces": 6020,
+  "officialInstructions": "https://www.lego.com/en-us/service/building-instructions/71043",
+  "books": [
+    {
+      "number": 1,
+      "pdf": "6590091",
+      "pages": 152,
+      "sha256": "c1e920e896fa917b3c3b40a7f52325d8e88ff35c8d9f2a6c1305750bea10c032"
+    },
+    {
+      "number": 2,
+      "pdf": "6607902",
+      "pages": 196,
+      "sha256": "461dab36caae487f0b815c9845c519f272a0f5a9c6f3e077679578758d6829f9"
+    },
+    {
+      "number": 3,
+      "pdf": "6607904",
+      "pages": 108,
+      "sha256": "47f31ee584da57bbfd3750ddd164f04294db5b80e2786e14d465c93efdd831c6"
+    },
+    {
+      "number": 4,
+      "pdf": "6607903",
+      "pages": 184,
+      "sha256": "b184a5e476bbfac6cf3f61c40067d4307c196d2d1f334e67bc16b8f5d5a22c01"
+    }
+  ],
+  "reference": {
+    "author": "Bod9nou",
+    "url": "https://bricksafe.com/files/Bod9nou/official-sets-in-ldd/71043_hogwarts_castle.lxf",
+    "post": "https://www.eurobricks.com/forum/forums/topic/41226-key-topic-official-lego-sets-made-in-ldd/page/200/#comment-3101718",
+    "status": "reference-only",
+    "knownDeviations": [
+      "Missing castle stickers and prints, trophy figure prints, minifigure capes and new wands",
+      "38801 snake replaced by 30115",
+      "38585 and 38583 arches replaced by 4490",
+      "38317 half cone replaced by 3943; lime plates inside half cones omitted",
+      "36841 and 24885 missing",
+      "Trees replaced by custom assemblies; 24866 replaced by bracelet part",
+      "Viaduct does not follow official placement",
+      "One 15207 wall displaced; 49668 teeth lowered"
+    ],
+    "sha256": "479bdba847f9faa318291514894c74fb9f7bb4fbf51c4468689e85ef323b93be",
+    "assemblyObjects": 5939,
+    "partObjects": 5967,
+    "instructionNodes": 0
+  },
+  "replica": {
+    "plan": "src/data/legoHogwartsPlan.json",
+    "sha256": "1f17d7b3fddabf7608240dd3273662b57b82c180f52744cd8b49afa017d876d6",
+    "editablePieces": 6025,
+    "assemblySteps": 819,
+    "castleNumberedSteps": 771,
+    "castleInsetChecks": 1035,
+    "components": [
+      {
+        "name": "四位创始人与展示台",
+        "pieces": 66
+      },
+      {
+        "name": "五艘渡船",
+        "pieces": 40
+      },
+      {
+        "name": "礼堂与主塔",
+        "pieces": 3130
+      },
+      {
+        "name": "东侧城堡",
+        "pieces": 2643
+      },
+      {
+        "name": "海格小屋",
+        "pieces": 72
+      },
+      {
+        "name": "打人柳与汽车",
+        "pieces": 49
+      },
+      {
+        "name": "微缩人物",
+        "pieces": 24
+      }
+    ],
+    "includedSeparator": true,
+    "manualUiCompared": true,
+    "wholeCastleViewsCompared": 5,
+    "inventory": {
+      "factoryInventoryUnits": 6016,
+      "expandedHingeHalves": 9,
+      "missing": [],
+      "extra": [],
+      "countNote": "6016 factory inventory units include four two-wand sprues. The assembled model uses four single wands; nine factory hinges each expand into two editable leaves. The advertised 6020 count includes four unused spare wands."
+    },
+    "artwork": "Set-specific stickers and printed figures are retained as fixed-colour mesh layers.",
+    "assemblyPoses": "The editable asset stores final display poses. Temporary flipped or folded construction stages were checked separately against official insets."
+  }
+}

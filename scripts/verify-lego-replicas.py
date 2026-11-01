@@ -169,6 +169,19 @@ def main():
             assert step["brickIds"] == [f"{config['id']}-{index}" for index in group], step["title"]
         print(f"#{config['set']}: {config['pieces']} native pieces, {len(plan['steps'])} official main steps")
 
+    hogwarts = json.loads((ROOT / "scripts" / "hogwartsReplicaSource.json").read_text())["replica"]
+    plan_path = ROOT / hogwarts["plan"]
+    raw = plan_path.read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == hogwarts["sha256"], plan_path
+    plan = json.loads(raw)
+    assert len(plan["bricks"]) == hogwarts["editablePieces"]
+    assert len(plan["steps"]) == hogwarts["assemblySteps"]
+    membership = [brick_id for step in plan["steps"] for brick_id in step["brickIds"]]
+    assert len(set(membership)) == len(membership) == len(plan["bricks"])
+    assert set(membership) == {brick["id"] for brick in plan["bricks"]}
+    assert [len(s["brickIds"]) for s in plan["structures"]] == [c["pieces"] for c in hogwarts["components"]]
+    print(f"#71043: {len(plan['bricks'])} editable pieces, {len(plan['steps'])} assembly steps; source hash verified")
+
     print(f"All archived and native batch models verified; {len(checked)} archive and {len(native_checked)} editor dependencies")
 
 

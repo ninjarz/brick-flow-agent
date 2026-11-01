@@ -8,6 +8,8 @@ const packageVersion = (JSON.parse(readFileSync(new URL('./package.json', import
 // https://vite.dev/config/
 export default defineConfig({
   base: '/brick-flow-agent/',
+  // Large scene data stays a JSON string until runtime, keeping Rollup memory bounded.
+  json: { namedExports: false, stringify: true },
   define: {
     __APP_VERSION__: JSON.stringify(packageVersion),
   },
@@ -17,6 +19,9 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
+      // Bound simultaneous geometry transforms to keep large replica builds
+      // within Node's default heap rather than raising its memory limit.
+      maxParallelFileOps: 8,
       output: {
         manualChunks(id) {
           if (!id.includes('/node_modules/')) return undefined

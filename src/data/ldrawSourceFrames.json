@@ -1,0 +1,4194 @@
+{
+  "970": {
+    "origin": [
+      -18,
+      21.000193180000004,
+      -10
+    ],
+    "swapped": false
+  },
+  "973": {
+    "origin": [
+      -19,
+      32,
+      -10
+    ],
+    "swapped": false
+  },
+  "2339": {
+    "origin": [
+      -10,
+      96,
+      -10
+    ],
+    "swapped": false
+  },
+  "2343": {
+    "origin": [
+      -10,
+      40,
+      -10
+    ],
+    "swapped": false
+  },
+  "2357": {
+    "origin": [
+      -10,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "2412": {
+    "origin": [
+      -20,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "2419": {
+    "origin": [
+      -60,
+      8,
+      -30
+    ],
+    "swapped": false
+  },
+  "2420": {
+    "origin": [
+      -10,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "2429": {
+    "origin": [
+      -40,
+      8,
+      0
+    ],
+    "swapped": false
+  },
+  "2430": {
+    "origin": [
+      -10,
+      8,
+      0
+    ],
+    "swapped": false
+  },
+  "2431": {
+    "origin": [
+      -40,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "2445": {
+    "origin": [
+      -120,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "2453": {
+    "origin": [
+      -10,
+      120,
+      -10
+    ],
+    "swapped": false
+  },
+  "2454": {
+    "origin": [
+      -20,
+      120,
+      -10
+    ],
+    "swapped": false
+  },
+  "2456": {
+    "origin": [
+      -60,
+      24,
+      -20
+    ],
+    "swapped": false
+  },
+  "2458": {
+    "origin": [
+      -20,
+      24,
+      -20
+    ],
+    "swapped": false
+  },
+  "2462": {
+    "origin": [
+      -30,
+      24,
+      -30
+    ],
+    "swapped": false
+  },
+  "2465": {
+    "origin": [
+      -160,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "2479": {
+    "origin": [
+      -50,
+      24,
+      -50
+    ],
+    "swapped": false
+  },
+  "2555": {
+    "origin": [
+      -10,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "2723": {
+    "origin": [
+      -30,
+      10,
+      -30
+    ],
+    "swapped": false
+  },
+  "2730": {
+    "origin": [
+      -100,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "2780": {
+    "origin": [
+      -20,
+      7.801,
+      -8.000531
+    ],
+    "swapped": false
+  },
+  "2877": {
+    "origin": [
+      -20,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "2921": {
+    "origin": [
+      -10,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "2926": {
+    "origin": [
+      -50,
+      9.992125999999999,
+      -10
+    ],
+    "swapped": false
+  },
+  "3001": {
+    "origin": [
+      -40,
+      24,
+      -20
+    ],
+    "swapped": false
+  },
+  "3002": {
+    "origin": [
+      -30,
+      24,
+      -20
+    ],
+    "swapped": false
+  },
+  "3003": {
+    "origin": [
+      -20,
+      24,
+      -20
+    ],
+    "swapped": false
+  },
+  "3004": {
+    "origin": [
+      -20,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "3005": {
+    "origin": [
+      -10,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "3006": {
+    "origin": [
+      -100,
+      24,
+      -20
+    ],
+    "swapped": false
+  },
+  "3007": {
+    "origin": [
+      -80,
+      24,
+      -20
+    ],
+    "swapped": false
+  },
+  "3008": {
+    "origin": [
+      -80,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "3009": {
+    "origin": [
+      -60,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "3010": {
+    "origin": [
+      -40,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "3020": {
+    "origin": [
+      -40,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "3021": {
+    "origin": [
+      -30,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "3022": {
+    "origin": [
+      -20,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "3023": {
+    "origin": [
+      -20,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "3024": {
+    "origin": [
+      -10,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "3028": {
+    "origin": [
+      -120,
+      8,
+      -60
+    ],
+    "swapped": false
+  },
+  "3030": {
+    "origin": [
+      -100,
+      8,
+      -40
+    ],
+    "swapped": false
+  },
+  "3031": {
+    "origin": [
+      -40,
+      8,
+      -40
+    ],
+    "swapped": false
+  },
+  "3032": {
+    "origin": [
+      -60,
+      8,
+      -40
+    ],
+    "swapped": false
+  },
+  "3033": {
+    "origin": [
+      -100,
+      8,
+      -60
+    ],
+    "swapped": false
+  },
+  "3034": {
+    "origin": [
+      -80,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "3035": {
+    "origin": [
+      -80,
+      8,
+      -40
+    ],
+    "swapped": false
+  },
+  "3036": {
+    "origin": [
+      -80,
+      8,
+      -60
+    ],
+    "swapped": false
+  },
+  "3037": {
+    "origin": [
+      -40,
+      24,
+      -30
+    ],
+    "swapped": false
+  },
+  "3038": {
+    "origin": [
+      -30,
+      24,
+      -30
+    ],
+    "swapped": false
+  },
+  "3039": {
+    "origin": [
+      -20,
+      24,
+      -30
+    ],
+    "swapped": false
+  },
+  "3040": {
+    "origin": [
+      -10,
+      24,
+      -30
+    ],
+    "swapped": true
+  },
+  "3043": {
+    "origin": [
+      -20,
+      24,
+      -20
+    ],
+    "swapped": false
+  },
+  "3045": {
+    "origin": [
+      -10,
+      24,
+      -30
+    ],
+    "swapped": false
+  },
+  "3046": {
+    "origin": [
+      -10,
+      24,
+      -30
+    ],
+    "swapped": false
+  },
+  "3049": {
+    "origin": [
+      -20,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "3062": {
+    "origin": [
+      -10,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "3065": {
+    "origin": [
+      -20,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "3068": {
+    "origin": [
+      -20,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "3069": {
+    "origin": [
+      -20,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "3070": {
+    "origin": [
+      -10,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "3176": {
+    "origin": [
+      -20,
+      8,
+      -40
+    ],
+    "swapped": false
+  },
+  "3184": {
+    "origin": [
+      -40,
+      12,
+      -20
+    ],
+    "swapped": false
+  },
+  "3298": {
+    "origin": [
+      -20,
+      24,
+      -50
+    ],
+    "swapped": false
+  },
+  "3456": {
+    "origin": [
+      -140,
+      8,
+      -60
+    ],
+    "swapped": false
+  },
+  "3460": {
+    "origin": [
+      -80,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "3622": {
+    "origin": [
+      -30,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "3623": {
+    "origin": [
+      -30,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "3626": {
+    "origin": [
+      -10,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "3659": {
+    "origin": [
+      -40,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "3660": {
+    "origin": [
+      -20,
+      24,
+      -30
+    ],
+    "swapped": false
+  },
+  "3665": {
+    "origin": [
+      -10,
+      24,
+      -30
+    ],
+    "swapped": true
+  },
+  "3666": {
+    "origin": [
+      -60,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "3676": {
+    "origin": [
+      -10,
+      24,
+      -30
+    ],
+    "swapped": false
+  },
+  "3678": {
+    "origin": [
+      -20,
+      48,
+      -30
+    ],
+    "swapped": false
+  },
+  "3679": {
+    "origin": [
+      -20,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "3680": {
+    "origin": [
+      -20,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "3684": {
+    "origin": [
+      -20,
+      72,
+      -30
+    ],
+    "swapped": false
+  },
+  "3688": {
+    "origin": [
+      -20,
+      48,
+      -20
+    ],
+    "swapped": false
+  },
+  "3700": {
+    "origin": [
+      -20,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "3701": {
+    "origin": [
+      -40,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "3702": {
+    "origin": [
+      -80,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "3703": {
+    "origin": [
+      -160,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "3705": {
+    "origin": [
+      -39.5,
+      6,
+      -6
+    ],
+    "swapped": false
+  },
+  "3710": {
+    "origin": [
+      -40,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "3743": {
+    "origin": [
+      -40,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "3747": {
+    "origin": [
+      -20,
+      24,
+      -50
+    ],
+    "swapped": true
+  },
+  "3749": {
+    "origin": [
+      -20,
+      8,
+      -8
+    ],
+    "swapped": false
+  },
+  "3795": {
+    "origin": [
+      -60,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "3818": {
+    "origin": [
+      -10.0652,
+      22.436,
+      -13.436
+    ],
+    "swapped": false
+  },
+  "3819": {
+    "origin": [
+      -7,
+      22.436,
+      -13.436
+    ],
+    "swapped": false
+  },
+  "3820": {
+    "origin": [
+      -6,
+      4.6128,
+      -15.517837
+    ],
+    "swapped": false
+  },
+  "3832": {
+    "origin": [
+      -100,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "3839": {
+    "origin": [
+      -30,
+      10,
+      -30
+    ],
+    "swapped": false
+  },
+  "3894": {
+    "origin": [
+      -60,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "3895": {
+    "origin": [
+      -120,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "3937": {
+    "origin": [
+      -20,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "3941": {
+    "origin": [
+      -20,
+      24,
+      -20
+    ],
+    "swapped": false
+  },
+  "3942": {
+    "origin": [
+      -20,
+      48,
+      -20
+    ],
+    "swapped": false
+  },
+  "3957": {
+    "origin": [
+      -10,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "3960": {
+    "origin": [
+      -40,
+      16,
+      -40
+    ],
+    "swapped": false
+  },
+  "4032": {
+    "origin": [
+      -20,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "4070": {
+    "origin": [
+      -10,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "4073": {
+    "origin": [
+      -10,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "4081": {
+    "origin": [
+      -10,
+      10,
+      -20
+    ],
+    "swapped": false
+  },
+  "4095": {
+    "origin": [
+      -6,
+      12,
+      -6
+    ],
+    "swapped": false
+  },
+  "4150": {
+    "origin": [
+      -20.000505,
+      8,
+      -20.000505
+    ],
+    "swapped": false
+  },
+  "4162": {
+    "origin": [
+      -80,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "4274": {
+    "origin": [
+      -20,
+      8,
+      -8
+    ],
+    "swapped": false
+  },
+  "4282": {
+    "origin": [
+      -160,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "4286": {
+    "origin": [
+      -10,
+      24,
+      -50
+    ],
+    "swapped": true
+  },
+  "4287": {
+    "origin": [
+      -10,
+      24,
+      -50
+    ],
+    "swapped": false
+  },
+  "4460": {
+    "origin": [
+      -10,
+      72,
+      -30
+    ],
+    "swapped": true
+  },
+  "4477": {
+    "origin": [
+      -100,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "4490": {
+    "origin": [
+      -30,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "4510": {
+    "origin": [
+      -80,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "4589": {
+    "origin": [
+      -10,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "4599": {
+    "origin": [
+      -10,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "4600": {
+    "origin": [
+      -30,
+      9.992125999999999,
+      -20
+    ],
+    "swapped": false
+  },
+  "4624": {
+    "origin": [
+      -10,
+      10,
+      -8
+    ],
+    "swapped": false
+  },
+  "4733": {
+    "origin": [
+      -10,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "4740": {
+    "origin": [
+      -20,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "4742": {
+    "origin": [
+      -40,
+      48,
+      -40
+    ],
+    "swapped": false
+  },
+  "4865": {
+    "origin": [
+      -20,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "6003": {
+    "origin": [
+      -60,
+      8,
+      -60
+    ],
+    "swapped": false
+  },
+  "6014": {
+    "origin": [
+      -13.000327,
+      13.00032668,
+      -20
+    ],
+    "swapped": false
+  },
+  "6082": {
+    "origin": [
+      -100,
+      144,
+      -40
+    ],
+    "swapped": false
+  },
+  "6091": {
+    "origin": [
+      -10,
+      32,
+      -30
+    ],
+    "swapped": true
+  },
+  "6106": {
+    "origin": [
+      -60,
+      8,
+      -60
+    ],
+    "swapped": false
+  },
+  "6108": {
+    "origin": [
+      -120,
+      72,
+      -10
+    ],
+    "swapped": false
+  },
+  "6111": {
+    "origin": [
+      -100,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "6112": {
+    "origin": [
+      -120,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "6134": {
+    "origin": [
+      -20,
+      16,
+      -10
+    ],
+    "swapped": false
+  },
+  "6141": {
+    "origin": [
+      -10,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "6143": {
+    "origin": [
+      -20,
+      24,
+      -20
+    ],
+    "swapped": false
+  },
+  "6179": {
+    "origin": [
+      -40,
+      8,
+      -40
+    ],
+    "swapped": false
+  },
+  "6182": {
+    "origin": [
+      -40,
+      48,
+      -10
+    ],
+    "swapped": false
+  },
+  "6215": {
+    "origin": [
+      -20,
+      24,
+      -20
+    ],
+    "swapped": false
+  },
+  "6232": {
+    "origin": [
+      -20,
+      24,
+      -20
+    ],
+    "swapped": false
+  },
+  "6233": {
+    "origin": [
+      -30,
+      48,
+      -30
+    ],
+    "swapped": false
+  },
+  "6259": {
+    "origin": [
+      -40,
+      96,
+      -40
+    ],
+    "swapped": false
+  },
+  "6269": {
+    "origin": [
+      -10.0002,
+      40,
+      -10.0002
+    ],
+    "swapped": false
+  },
+  "6541": {
+    "origin": [
+      -10,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "6558": {
+    "origin": [
+      -30,
+      7.801,
+      -8.000531
+    ],
+    "swapped": false
+  },
+  "6562": {
+    "origin": [
+      -20,
+      8,
+      -8
+    ],
+    "swapped": false
+  },
+  "6636": {
+    "origin": [
+      -60,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "10830": {
+    "origin": [
+      -19.000481,
+      10,
+      -4
+    ],
+    "swapped": false
+  },
+  "11211": {
+    "origin": [
+      -20,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "11212": {
+    "origin": [
+      -30,
+      8,
+      -30
+    ],
+    "swapped": false
+  },
+  "11213": {
+    "origin": [
+      -60,
+      8.0003,
+      -60
+    ],
+    "swapped": false
+  },
+  "11214": {
+    "origin": [
+      -30,
+      8,
+      -8
+    ],
+    "swapped": false
+  },
+  "11253": {
+    "origin": [
+      -10,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "11476": {
+    "origin": [
+      -20,
+      9.447946754,
+      -10
+    ],
+    "swapped": false
+  },
+  "11477": {
+    "origin": [
+      -10,
+      0,
+      -20
+    ],
+    "swapped": true
+  },
+  "11833": {
+    "origin": [
+      -40,
+      8,
+      -40
+    ],
+    "swapped": false
+  },
+  "13731": {
+    "origin": [
+      -10,
+      16.0133,
+      -140
+    ],
+    "swapped": false
+  },
+  "13965": {
+    "origin": [
+      -10,
+      72,
+      -10
+    ],
+    "swapped": false
+  },
+  "13971": {
+    "origin": [
+      -21,
+      21,
+      -10
+    ],
+    "swapped": false
+  },
+  "14395": {
+    "origin": [
+      -10,
+      96,
+      -10
+    ],
+    "swapped": false
+  },
+  "14716": {
+    "origin": [
+      -10,
+      72,
+      -10
+    ],
+    "swapped": false
+  },
+  "14718": {
+    "origin": [
+      -40,
+      48,
+      -10
+    ],
+    "swapped": false
+  },
+  "14719": {
+    "origin": [
+      -10,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "14769": {
+    "origin": [
+      -20,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "15068": {
+    "origin": [
+      -20,
+      0,
+      -20
+    ],
+    "swapped": false
+  },
+  "15070": {
+    "origin": [
+      -10,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "15082": {
+    "origin": [
+      -4,
+      10,
+      -5.104
+    ],
+    "swapped": false
+  },
+  "15207": {
+    "origin": [
+      -40,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "15254": {
+    "origin": [
+      -60,
+      48,
+      -10
+    ],
+    "swapped": false
+  },
+  "15397": {
+    "origin": [
+      -30,
+      8,
+      -30
+    ],
+    "swapped": false
+  },
+  "15533": {
+    "origin": [
+      -40,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "15571": {
+    "origin": [
+      -20,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "15573": {
+    "origin": [
+      -20,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "15672": {
+    "origin": [
+      -10,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "15706": {
+    "origin": [
+      -40,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "15712": {
+    "origin": [
+      -10,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "16000": {
+    "origin": [
+      -10.0652,
+      22.436,
+      -13.436
+    ],
+    "swapped": false
+  },
+  "16001": {
+    "origin": [
+      -7,
+      22.436,
+      -13.436
+    ],
+    "swapped": false
+  },
+  "16478": {
+    "origin": [
+      -13.3704,
+      -0.000003,
+      -8.25
+    ],
+    "swapped": false
+  },
+  "16577": {
+    "origin": [
+      -80,
+      48,
+      -10
+    ],
+    "swapped": false
+  },
+  "17485": {
+    "origin": [
+      -20,
+      24,
+      -20
+    ],
+    "swapped": false
+  },
+  "18031": {
+    "origin": [
+      -6,
+      22,
+      -15
+    ],
+    "swapped": false
+  },
+  "18646": {
+    "origin": [
+      -60,
+      8,
+      -60
+    ],
+    "swapped": false
+  },
+  "18674": {
+    "origin": [
+      -20,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "18677": {
+    "origin": [
+      -20,
+      19,
+      -10
+    ],
+    "swapped": false
+  },
+  "18838": {
+    "origin": [
+      -120,
+      72.00049999999999,
+      -10
+    ],
+    "swapped": false
+  },
+  "18980": {
+    "origin": [
+      -60,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "19119": {
+    "origin": [
+      -20.482949,
+      10,
+      -27.201929
+    ],
+    "swapped": false
+  },
+  "20430": {
+    "origin": [
+      -40,
+      96,
+      -40
+    ],
+    "swapped": false
+  },
+  "20482": {
+    "origin": [
+      -10,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "21269": {
+    "origin": [
+      -20,
+      23.749,
+      -10
+    ],
+    "swapped": false
+  },
+  "22885": {
+    "origin": [
+      -20,
+      40,
+      -10
+    ],
+    "swapped": false
+  },
+  "22886": {
+    "origin": [
+      -20,
+      72,
+      -10
+    ],
+    "swapped": false
+  },
+  "22888": {
+    "origin": [
+      -80,
+      8,
+      -40
+    ],
+    "swapped": false
+  },
+  "23949": {
+    "origin": [
+      -60,
+      24,
+      -30
+    ],
+    "swapped": false
+  },
+  "23996": {
+    "origin": [
+      -50,
+      144,
+      -110
+    ],
+    "swapped": false
+  },
+  "24246": {
+    "origin": [
+      -10,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "24309": {
+    "origin": [
+      -20,
+      24,
+      -30
+    ],
+    "swapped": false
+  },
+  "24482": {
+    "origin": [
+      -9.684,
+      8,
+      -9.684
+    ],
+    "swapped": false
+  },
+  "24855": {
+    "origin": [
+      -25.100608,
+      20,
+      -15.321143
+    ],
+    "swapped": false
+  },
+  "24866": {
+    "origin": [
+      -10,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "25269": {
+    "origin": [
+      -10,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "25893": {
+    "origin": [
+      -10,
+      14,
+      -10
+    ],
+    "swapped": false
+  },
+  "26047": {
+    "origin": [
+      -10,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "26601": {
+    "origin": [
+      -20,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "26603": {
+    "origin": [
+      -30,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "26604": {
+    "origin": [
+      -10,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "27507": {
+    "origin": [
+      0,
+      8,
+      -80
+    ],
+    "swapped": false
+  },
+  "27925": {
+    "origin": [
+      -10,
+      8,
+      -30
+    ],
+    "swapped": false
+  },
+  "28588": {
+    "origin": [
+      -5.555,
+      5.313,
+      -28.015
+    ],
+    "swapped": false
+  },
+  "29111": {
+    "origin": [
+      -20,
+      0,
+      -20
+    ],
+    "swapped": false
+  },
+  "29119": {
+    "origin": [
+      -10,
+      0,
+      -17
+    ],
+    "swapped": false
+  },
+  "29120": {
+    "origin": [
+      -10,
+      0,
+      -17
+    ],
+    "swapped": false
+  },
+  "30000": {
+    "origin": [
+      -30,
+      24,
+      -20
+    ],
+    "swapped": false
+  },
+  "30044": {
+    "origin": [
+      -20,
+      64,
+      -10
+    ],
+    "swapped": false
+  },
+  "30115": {
+    "origin": [
+      -12.49,
+      0.01,
+      -33.19
+    ],
+    "swapped": false
+  },
+  "30136": {
+    "origin": [
+      -20,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "30165": {
+    "origin": [
+      -20,
+      24,
+      -20
+    ],
+    "swapped": false
+  },
+  "30236": {
+    "origin": [
+      -20,
+      24,
+      -20
+    ],
+    "swapped": false
+  },
+  "30350": {
+    "origin": [
+      -20,
+      10,
+      -30
+    ],
+    "swapped": false
+  },
+  "30357": {
+    "origin": [
+      -10,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "30361": {
+    "origin": [
+      -20,
+      38,
+      -20
+    ],
+    "swapped": false
+  },
+  "30374": {
+    "origin": [
+      -4,
+      80,
+      -4
+    ],
+    "swapped": false
+  },
+  "30375": {
+    "origin": [
+      -20,
+      5,
+      -9
+    ],
+    "swapped": false
+  },
+  "30413": {
+    "origin": [
+      -40,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "30414": {
+    "origin": [
+      -40,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "30503": {
+    "origin": [
+      -40,
+      8,
+      -40
+    ],
+    "swapped": false
+  },
+  "30504": {
+    "origin": [
+      -80,
+      8,
+      -80
+    ],
+    "swapped": false
+  },
+  "30526": {
+    "origin": [
+      -10,
+      24,
+      -30
+    ],
+    "swapped": false
+  },
+  "30562": {
+    "origin": [
+      0,
+      144,
+      -80
+    ],
+    "swapped": false
+  },
+  "30565": {
+    "origin": [
+      -40,
+      8,
+      -40
+    ],
+    "swapped": false
+  },
+  "32000": {
+    "origin": [
+      -20,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "32018": {
+    "origin": [
+      -140,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "32028": {
+    "origin": [
+      -20,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "32054": {
+    "origin": [
+      -30,
+      9,
+      -9
+    ],
+    "swapped": false
+  },
+  "32124": {
+    "origin": [
+      -50,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "32316": {
+    "origin": [
+      -10,
+      10,
+      -50
+    ],
+    "swapped": false
+  },
+  "32524": {
+    "origin": [
+      -10,
+      10,
+      -70
+    ],
+    "swapped": false
+  },
+  "32531": {
+    "origin": [
+      -40,
+      24,
+      -60
+    ],
+    "swapped": false
+  },
+  "32532": {
+    "origin": [
+      -60,
+      24,
+      -80
+    ],
+    "swapped": false
+  },
+  "32555": {
+    "origin": [
+      -50,
+      24,
+      -50
+    ],
+    "swapped": false
+  },
+  "32952": {
+    "origin": [
+      -10,
+      40,
+      -10
+    ],
+    "swapped": false
+  },
+  "33286": {
+    "origin": [
+      -10,
+      16,
+      -10
+    ],
+    "swapped": false
+  },
+  "33291": {
+    "origin": [
+      -10,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "33909": {
+    "origin": [
+      -20,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "34103": {
+    "origin": [
+      -30,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "34337": {
+    "origin": [
+      -10.000255,
+      10.000255161,
+      -8
+    ],
+    "swapped": false
+  },
+  "35464": {
+    "origin": [
+      -10,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "36036": {
+    "origin": [
+      -20,
+      40,
+      -10
+    ],
+    "swapped": false
+  },
+  "36841": {
+    "origin": [
+      -10,
+      20,
+      -10
+    ],
+    "swapped": false
+  },
+  "37775": {
+    "origin": [
+      -4,
+      5,
+      -7.6
+    ],
+    "swapped": false
+  },
+  "38317": {
+    "origin": [
+      -40,
+      72,
+      -40
+    ],
+    "swapped": false
+  },
+  "38583": {
+    "origin": [
+      -10,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "38585": {
+    "origin": [
+      -10,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "38801": {
+    "origin": [
+      -10.276,
+      0,
+      -81.439
+    ],
+    "swapped": false
+  },
+  "41539": {
+    "origin": [
+      -80,
+      8,
+      -80
+    ],
+    "swapped": false
+  },
+  "42446": {
+    "origin": [
+      -10,
+      24,
+      -17
+    ],
+    "swapped": false
+  },
+  "43093": {
+    "origin": [
+      -20,
+      8,
+      -8
+    ],
+    "swapped": false
+  },
+  "43719": {
+    "origin": [
+      -40,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "43722": {
+    "origin": [
+      -20,
+      8,
+      -30
+    ],
+    "swapped": false
+  },
+  "43723": {
+    "origin": [
+      -20,
+      8,
+      -30
+    ],
+    "swapped": false
+  },
+  "43898": {
+    "origin": [
+      -30,
+      16,
+      -30
+    ],
+    "swapped": false
+  },
+  "44237": {
+    "origin": [
+      -60,
+      24,
+      -20
+    ],
+    "swapped": false
+  },
+  "44302": {
+    "origin": [
+      -20,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "44728": {
+    "origin": [
+      -20,
+      40,
+      -20
+    ],
+    "swapped": false
+  },
+  "45301": {
+    "origin": [
+      -40,
+      24,
+      -280
+    ],
+    "swapped": false
+  },
+  "47397": {
+    "origin": [
+      -30,
+      8,
+      -120
+    ],
+    "swapped": false
+  },
+  "47398": {
+    "origin": [
+      -30,
+      8,
+      -120
+    ],
+    "swapped": false
+  },
+  "47457": {
+    "origin": [
+      -20,
+      16,
+      -30
+    ],
+    "swapped": false
+  },
+  "47543": {
+    "origin": [
+      -80,
+      144,
+      -80
+    ],
+    "swapped": false
+  },
+  "47905": {
+    "origin": [
+      -10,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "48092": {
+    "origin": [
+      0,
+      24,
+      -80
+    ],
+    "swapped": false
+  },
+  "48336": {
+    "origin": [
+      -20,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "48723": {
+    "origin": [
+      -30,
+      14,
+      -30
+    ],
+    "swapped": false
+  },
+  "49668": {
+    "origin": [
+      -10,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "50231": {
+    "origin": [
+      -48.7,
+      0,
+      -80.6
+    ],
+    "swapped": false
+  },
+  "50304": {
+    "origin": [
+      -30,
+      8,
+      -80
+    ],
+    "swapped": false
+  },
+  "50305": {
+    "origin": [
+      -30,
+      8,
+      -80
+    ],
+    "swapped": false
+  },
+  "50950": {
+    "origin": [
+      -10,
+      24,
+      -30
+    ],
+    "swapped": true
+  },
+  "51739": {
+    "origin": [
+      -40,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "53451": {
+    "origin": [
+      -5,
+      5,
+      -8.000007
+    ],
+    "swapped": false
+  },
+  "53989": {
+    "origin": [
+      -8,
+      26,
+      -7
+    ],
+    "swapped": false
+  },
+  "54200": {
+    "origin": [
+      -10,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "55236": {
+    "origin": [
+      -8.313,
+      0,
+      -5
+    ],
+    "swapped": false
+  },
+  "59349": {
+    "origin": [
+      -60,
+      120,
+      -10
+    ],
+    "swapped": false
+  },
+  "59900": {
+    "origin": [
+      -10,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "60032": {
+    "origin": [
+      -20,
+      48,
+      -10
+    ],
+    "swapped": false
+  },
+  "60474": {
+    "origin": [
+      -40,
+      8.0003,
+      -40
+    ],
+    "swapped": false
+  },
+  "60475": {
+    "origin": [
+      -10,
+      24,
+      -20
+    ],
+    "swapped": false
+  },
+  "60477": {
+    "origin": [
+      -10,
+      24,
+      -70
+    ],
+    "swapped": false
+  },
+  "60478": {
+    "origin": [
+      -20,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "60479": {
+    "origin": [
+      -120,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "60481": {
+    "origin": [
+      -10,
+      48,
+      -30
+    ],
+    "swapped": true
+  },
+  "60581": {
+    "origin": [
+      -40,
+      72,
+      -10
+    ],
+    "swapped": false
+  },
+  "60601": {
+    "origin": [
+      -16.5,
+      41,
+      -7
+    ],
+    "swapped": false
+  },
+  "60808": {
+    "origin": [
+      -40,
+      120,
+      -10
+    ],
+    "swapped": false
+  },
+  "60897": {
+    "origin": [
+      -10,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "61252": {
+    "origin": [
+      -10,
+      9.447946754,
+      -20
+    ],
+    "swapped": false
+  },
+  "61254": {
+    "origin": [
+      -29.631383,
+      29.631,
+      -9
+    ],
+    "swapped": false
+  },
+  "61485": {
+    "origin": [
+      -40,
+      8,
+      -40
+    ],
+    "swapped": false
+  },
+  "61678": {
+    "origin": [
+      -10,
+      24,
+      -40
+    ],
+    "swapped": true
+  },
+  "63864": {
+    "origin": [
+      -30,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "63868": {
+    "origin": [
+      -20,
+      9.447946754,
+      -10
+    ],
+    "swapped": false
+  },
+  "63965": {
+    "origin": [
+      -6,
+      18,
+      -6
+    ],
+    "swapped": false
+  },
+  "64644": {
+    "origin": [
+      -10,
+      40,
+      -10
+    ],
+    "swapped": false
+  },
+  "64647": {
+    "origin": [
+      -4,
+      6,
+      -6.3
+    ],
+    "swapped": false
+  },
+  "64799": {
+    "origin": [
+      -40,
+      8,
+      -40
+    ],
+    "swapped": false
+  },
+  "64807": {
+    "origin": [
+      -20,
+      19.3,
+      -10
+    ],
+    "swapped": false
+  },
+  "67737": {
+    "origin": [
+      -50,
+      24,
+      -50
+    ],
+    "swapped": false
+  },
+  "73983": {
+    "origin": [
+      -40,
+      8,
+      0
+    ],
+    "swapped": false
+  },
+  "75937": {
+    "origin": [
+      -30,
+      8,
+      -30
+    ],
+    "swapped": false
+  },
+  "76768": {
+    "origin": [
+      -10,
+      96,
+      -10
+    ],
+    "swapped": false
+  },
+  "85080": {
+    "origin": [
+      -10,
+      24,
+      -30
+    ],
+    "swapped": false
+  },
+  "85861": {
+    "origin": [
+      -10,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "85970": {
+    "origin": [
+      -10,
+      16.0133,
+      -140
+    ],
+    "swapped": false
+  },
+  "85975": {
+    "origin": [
+      -10,
+      16,
+      -10
+    ],
+    "swapped": false
+  },
+  "85984": {
+    "origin": [
+      -20,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "87079": {
+    "origin": [
+      -40,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "87081": {
+    "origin": [
+      -40,
+      24.0003,
+      -40
+    ],
+    "swapped": false
+  },
+  "87087": {
+    "origin": [
+      -10,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "87414": {
+    "origin": [
+      -17.915,
+      17.915,
+      -8
+    ],
+    "swapped": false
+  },
+  "87580": {
+    "origin": [
+      -20,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "87620": {
+    "origin": [
+      -20,
+      24,
+      -20
+    ],
+    "swapped": false
+  },
+  "87697": {
+    "origin": [
+      -25.000003,
+      25.000008359368,
+      -14
+    ],
+    "swapped": false
+  },
+  "87994": {
+    "origin": [
+      -4,
+      60,
+      -4
+    ],
+    "swapped": false
+  },
+  "88072": {
+    "origin": [
+      -20,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "88292": {
+    "origin": [
+      -10,
+      48,
+      -10
+    ],
+    "swapped": true
+  },
+  "88930": {
+    "origin": [
+      -40,
+      0,
+      -20
+    ],
+    "swapped": false
+  },
+  "90195": {
+    "origin": [
+      -20,
+      48,
+      -10
+    ],
+    "swapped": false
+  },
+  "90398": {
+    "origin": [
+      -10,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "90540": {
+    "origin": [
+      -6.000154,
+      60,
+      -6
+    ],
+    "swapped": false
+  },
+  "92438": {
+    "origin": [
+      -160,
+      8,
+      -80
+    ],
+    "swapped": false
+  },
+  "92582": {
+    "origin": [
+      -20,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "92593": {
+    "origin": [
+      -40,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "92946": {
+    "origin": [
+      -10,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "92947": {
+    "origin": [
+      -20,
+      24,
+      -20
+    ],
+    "swapped": false
+  },
+  "92950": {
+    "origin": [
+      -60,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "93069": {
+    "origin": [
+      -14.381,
+      31.286,
+      -16.86
+    ],
+    "swapped": false
+  },
+  "93223": {
+    "origin": [
+      -16.822,
+      12.651,
+      -18.385
+    ],
+    "swapped": false
+  },
+  "93273": {
+    "origin": [
+      -10,
+      0,
+      -40
+    ],
+    "swapped": true
+  },
+  "93274": {
+    "origin": [
+      -40,
+      40,
+      -10
+    ],
+    "swapped": false
+  },
+  "93549": {
+    "origin": [
+      -10,
+      40,
+      -10
+    ],
+    "swapped": false
+  },
+  "93552": {
+    "origin": [
+      -4.835,
+      0,
+      -4.514
+    ],
+    "swapped": false
+  },
+  "93888": {
+    "origin": [
+      -80,
+      24,
+      -20
+    ],
+    "swapped": false
+  },
+  "94161": {
+    "origin": [
+      -16.75,
+      32.75,
+      -2.25
+    ],
+    "swapped": false
+  },
+  "95225": {
+    "origin": [
+      -20,
+      52.079,
+      -20
+    ],
+    "swapped": false
+  },
+  "96874": {
+    "origin": [
+      -10,
+      24,
+      -10
+    ],
+    "swapped": true
+  },
+  "98100": {
+    "origin": [
+      -20,
+      24,
+      -20
+    ],
+    "swapped": false
+  },
+  "98138": {
+    "origin": [
+      -10,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "98263": {
+    "origin": [
+      -40,
+      14,
+      -20
+    ],
+    "swapped": false
+  },
+  "98283": {
+    "origin": [
+      -20,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "98313": {
+    "origin": [
+      -8,
+      26,
+      -7
+    ],
+    "swapped": false
+  },
+  "98370": {
+    "origin": [
+      -6,
+      22,
+      -15
+    ],
+    "swapped": false
+  },
+  "98374": {
+    "origin": [
+      -20,
+      4,
+      -20
+    ],
+    "swapped": false
+  },
+  "99206": {
+    "origin": [
+      -20,
+      16,
+      -10
+    ],
+    "swapped": false
+  },
+  "99207": {
+    "origin": [
+      -20,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "99780": {
+    "origin": [
+      -20,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "99781": {
+    "origin": [
+      -20,
+      20,
+      -10
+    ],
+    "swapped": false
+  },
+  "10830pat0001": {
+    "origin": [
+      -19.000481,
+      10,
+      -4
+    ],
+    "swapped": false
+  },
+  "11477pbf71043s19": {
+    "origin": [
+      -10,
+      0,
+      -20
+    ],
+    "swapped": true
+  },
+  "11477pbf71043s20": {
+    "origin": [
+      -10,
+      0,
+      -20
+    ],
+    "swapped": true
+  },
+  "14718pbf71043s32": {
+    "origin": [
+      -40,
+      48,
+      -10
+    ],
+    "swapped": false
+  },
+  "14769pbf71043s30": {
+    "origin": [
+      -20,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "15068pbf71043s17": {
+    "origin": [
+      -20,
+      0,
+      -20
+    ],
+    "swapped": false
+  },
+  "15068pbf71043s18": {
+    "origin": [
+      -20,
+      0,
+      -20
+    ],
+    "swapped": false
+  },
+  "15068pbf71043s21": {
+    "origin": [
+      -20,
+      0,
+      -20
+    ],
+    "swapped": false
+  },
+  "15068pbf71043s22": {
+    "origin": [
+      -20,
+      0,
+      -20
+    ],
+    "swapped": false
+  },
+  "20460b": {
+    "origin": [
+      1.25,
+      28,
+      -11.25
+    ],
+    "swapped": false
+  },
+  "20461b": {
+    "origin": [
+      -19.25,
+      28,
+      -11.25
+    ],
+    "swapped": false
+  },
+  "20551c01": {
+    "origin": [
+      -28.4937,
+      0,
+      -11.8106
+    ],
+    "swapped": false
+  },
+  "22885pbf71043s10": {
+    "origin": [
+      -20,
+      40,
+      -10
+    ],
+    "swapped": false
+  },
+  "22885pbf71043s13": {
+    "origin": [
+      -20,
+      40,
+      -10
+    ],
+    "swapped": false
+  },
+  "22885pbf71043s14": {
+    "origin": [
+      -20,
+      40,
+      -10
+    ],
+    "swapped": false
+  },
+  "2412b": {
+    "origin": [
+      -20,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "24309pbf71043s11": {
+    "origin": [
+      -20,
+      24,
+      -30
+    ],
+    "swapped": false
+  },
+  "24309pbf71043s11r": {
+    "origin": [
+      -20,
+      24,
+      -30
+    ],
+    "swapped": false
+  },
+  "2453b": {
+    "origin": [
+      -10,
+      120,
+      -10
+    ],
+    "swapped": false
+  },
+  "2454b": {
+    "origin": [
+      -20,
+      120,
+      -10
+    ],
+    "swapped": false
+  },
+  "2454bpbf71043s33": {
+    "origin": [
+      -20,
+      120,
+      -10
+    ],
+    "swapped": false
+  },
+  "2454bpbf71043s34": {
+    "origin": [
+      -20,
+      120,
+      -10
+    ],
+    "swapped": false
+  },
+  "2454bpbf71043s36": {
+    "origin": [
+      -20,
+      120,
+      -10
+    ],
+    "swapped": false
+  },
+  "2454bpbf71043s39": {
+    "origin": [
+      -20,
+      120,
+      -10
+    ],
+    "swapped": false
+  },
+  "2454bpbf71043s43": {
+    "origin": [
+      -20,
+      120,
+      -10
+    ],
+    "swapped": false
+  },
+  "2454bpbf71043s46": {
+    "origin": [
+      -20,
+      120,
+      -10
+    ],
+    "swapped": false
+  },
+  "25893a": {
+    "origin": [
+      -10,
+      12,
+      -10
+    ],
+    "swapped": false
+  },
+  "2723pbf71043s27": {
+    "origin": [
+      -30,
+      10,
+      -30
+    ],
+    "swapped": false
+  },
+  "3004pbf71043s33": {
+    "origin": [
+      -20,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "3007pbf71043s42": {
+    "origin": [
+      -80,
+      24,
+      -20
+    ],
+    "swapped": false
+  },
+  "3010pbf71043s07": {
+    "origin": [
+      -40,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "3010pbf71043s07r": {
+    "origin": [
+      -40,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "3010pbf71043s08": {
+    "origin": [
+      -40,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "30152ap01": {
+    "origin": [
+      -17,
+      10,
+      -4
+    ],
+    "swapped": false
+  },
+  "3023b": {
+    "origin": [
+      -20,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "30350b": {
+    "origin": [
+      -20,
+      9.46151861,
+      -30
+    ],
+    "swapped": false
+  },
+  "30350bpbf71043s56": {
+    "origin": [
+      -20,
+      9.46151861,
+      -30
+    ],
+    "swapped": false
+  },
+  "30350bpbf71043s57": {
+    "origin": [
+      -20,
+      9.46151861,
+      -30
+    ],
+    "swapped": false
+  },
+  "30350bpbf71043s58": {
+    "origin": [
+      -20,
+      9.46151861,
+      -30
+    ],
+    "swapped": false
+  },
+  "30350bpbf71043s59": {
+    "origin": [
+      -20,
+      9.46151861,
+      -30
+    ],
+    "swapped": false
+  },
+  "30361d": {
+    "origin": [
+      -20,
+      38,
+      -20
+    ],
+    "swapped": false
+  },
+  "3040b": {
+    "origin": [
+      -10,
+      24,
+      -30
+    ],
+    "swapped": false
+  },
+  "3044b": {
+    "origin": [
+      -10,
+      24,
+      -20
+    ],
+    "swapped": false
+  },
+  "3044c": {
+    "origin": [
+      -10,
+      24,
+      -20
+    ],
+    "swapped": false
+  },
+  "3049d": {
+    "origin": [
+      -20,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "30562pbf71043s01": {
+    "origin": [
+      0,
+      144,
+      -80
+    ],
+    "swapped": false
+  },
+  "30562pbf71043s02": {
+    "origin": [
+      0,
+      144,
+      -80
+    ],
+    "swapped": false
+  },
+  "30562pbf71043s03": {
+    "origin": [
+      0,
+      144,
+      -80
+    ],
+    "swapped": false
+  },
+  "30562pbf71043s04": {
+    "origin": [
+      0,
+      144,
+      -80
+    ],
+    "swapped": false
+  },
+  "30562pbf71043s05": {
+    "origin": [
+      0,
+      144,
+      -80
+    ],
+    "swapped": false
+  },
+  "30562pbf71043s06": {
+    "origin": [
+      0,
+      144,
+      -80
+    ],
+    "swapped": false
+  },
+  "3062b": {
+    "origin": [
+      -10,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "3068b": {
+    "origin": [
+      -20,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "3068bpbf71043s48": {
+    "origin": [
+      -20,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "3068bpbf71043s49": {
+    "origin": [
+      -20,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "3068bpbf71043s60": {
+    "origin": [
+      -20,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "3068bpbf71043s61": {
+    "origin": [
+      -20,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "3068bpbf71043s62": {
+    "origin": [
+      -20,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "3068bpbf71043s63": {
+    "origin": [
+      -20,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "3069b": {
+    "origin": [
+      -20,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "3069bpbf71043s23": {
+    "origin": [
+      -20,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "3069bpbf71043s35": {
+    "origin": [
+      -20,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "3069bpbf71043s54": {
+    "origin": [
+      -20,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "3069bpbf71043s55": {
+    "origin": [
+      -20,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "3070b": {
+    "origin": [
+      -10,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "3245b": {
+    "origin": [
+      -20,
+      48,
+      -10
+    ],
+    "swapped": false
+  },
+  "3245bpbf71043s15": {
+    "origin": [
+      -20,
+      48,
+      -10
+    ],
+    "swapped": false
+  },
+  "3245bpbf71043s16": {
+    "origin": [
+      -20,
+      48,
+      -10
+    ],
+    "swapped": false
+  },
+  "3245c": {
+    "origin": [
+      -20,
+      48,
+      -10
+    ],
+    "swapped": false
+  },
+  "3245cpbf71043s25": {
+    "origin": [
+      -20,
+      48,
+      -10
+    ],
+    "swapped": false
+  },
+  "3245cpbf71043s26": {
+    "origin": [
+      -20,
+      48,
+      -10
+    ],
+    "swapped": false
+  },
+  "3245cpbf71043s28": {
+    "origin": [
+      -20,
+      48,
+      -10
+    ],
+    "swapped": false
+  },
+  "32531b": {
+    "origin": [
+      -60,
+      24,
+      -40
+    ],
+    "swapped": false
+  },
+  "32532b": {
+    "origin": [
+      -80,
+      24,
+      -60
+    ],
+    "swapped": false
+  },
+  "32952pbf71043s24": {
+    "origin": [
+      -10,
+      40,
+      -10
+    ],
+    "swapped": false
+  },
+  "3308a": {
+    "origin": [
+      -80,
+      48,
+      -10
+    ],
+    "swapped": false
+  },
+  "36036p01": {
+    "origin": [
+      -20,
+      40,
+      -10
+    ],
+    "swapped": false
+  },
+  "36036pbf71043e6244583": {
+    "origin": [
+      -20,
+      40,
+      -10
+    ],
+    "swapped": false
+  },
+  "36036pbf71043e6244584": {
+    "origin": [
+      -20,
+      40,
+      -10
+    ],
+    "swapped": false
+  },
+  "3626c": {
+    "origin": [
+      -10,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "3626cpbf71043e6240414": {
+    "origin": [
+      -10,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "3626cpbf71043e6240417": {
+    "origin": [
+      -10,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "3626cpbf71043e6240418": {
+    "origin": [
+      -10,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "3626cpbf71043e6240419": {
+    "origin": [
+      -10,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "3660b": {
+    "origin": [
+      -20,
+      24,
+      -30
+    ],
+    "swapped": false
+  },
+  "3665b": {
+    "origin": [
+      -10,
+      24,
+      -30
+    ],
+    "swapped": false
+  },
+  "36752a": {
+    "origin": [
+      -4,
+      4,
+      -4
+    ],
+    "swapped": false
+  },
+  "3678b": {
+    "origin": [
+      -20,
+      48,
+      -30
+    ],
+    "swapped": false
+  },
+  "3678bpbf71043s44": {
+    "origin": [
+      -20,
+      48,
+      -30
+    ],
+    "swapped": false
+  },
+  "3741a": {
+    "origin": [
+      -20,
+      12,
+      -10
+    ],
+    "swapped": false
+  },
+  "3747b": {
+    "origin": [
+      -20,
+      24,
+      -50
+    ],
+    "swapped": false
+  },
+  "3794a": {
+    "origin": [
+      -20,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "3794b": {
+    "origin": [
+      -20,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "3815b": {
+    "origin": [
+      -18,
+      20.750224701,
+      -10
+    ],
+    "swapped": false
+  },
+  "3816c": {
+    "origin": [
+      -19.25,
+      28,
+      -11.25
+    ],
+    "swapped": false
+  },
+  "3817c": {
+    "origin": [
+      1.25,
+      28,
+      -11.25
+    ],
+    "swapped": false
+  },
+  "3839b": {
+    "origin": [
+      -10,
+      10,
+      -30
+    ],
+    "swapped": false
+  },
+  "3942c": {
+    "origin": [
+      -20,
+      48,
+      -20
+    ],
+    "swapped": false
+  },
+  "3943b": {
+    "origin": [
+      -40,
+      48,
+      -40
+    ],
+    "swapped": false
+  },
+  "3957a": {
+    "origin": [
+      -10,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "3957b": {
+    "origin": [
+      -10,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "4032a": {
+    "origin": [
+      -20,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "4081b": {
+    "origin": [
+      -10,
+      10,
+      -10
+    ],
+    "swapped": false
+  },
+  "4085c": {
+    "origin": [
+      -10,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "4150p03": {
+    "origin": [
+      -20.000505,
+      8,
+      -20.000505
+    ],
+    "swapped": false
+  },
+  "4150pbf71043s30": {
+    "origin": [
+      -20.000505,
+      8,
+      -20.000505
+    ],
+    "swapped": false
+  },
+  "4162p08": {
+    "origin": [
+      -80,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "4162p0b": {
+    "origin": [
+      -80,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "4162p0g": {
+    "origin": [
+      -80,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "4287c": {
+    "origin": [
+      -10,
+      24,
+      -50
+    ],
+    "swapped": false
+  },
+  "44302b": {
+    "origin": [
+      -20,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "4599a": {
+    "origin": [
+      -10,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "4865a": {
+    "origin": [
+      -20,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "4865b": {
+    "origin": [
+      -20,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "50231c01": {
+    "origin": [
+      -42.04,
+      66.25,
+      -14.04
+    ],
+    "swapped": false
+  },
+  "50950pbf71043s11": {
+    "origin": [
+      -10,
+      24,
+      -30
+    ],
+    "swapped": false
+  },
+  "59349pbf71043s31": {
+    "origin": [
+      -60,
+      120,
+      -10
+    ],
+    "swapped": false
+  },
+  "59349pbf71043s37": {
+    "origin": [
+      -60,
+      120,
+      -10
+    ],
+    "swapped": false
+  },
+  "59349pbf71043s41": {
+    "origin": [
+      -60,
+      120,
+      -10
+    ],
+    "swapped": false
+  },
+  "59349pbf71043s45": {
+    "origin": [
+      -60,
+      120,
+      -10
+    ],
+    "swapped": false
+  },
+  "59349pbf71043s47": {
+    "origin": [
+      -60,
+      120,
+      -10
+    ],
+    "swapped": false
+  },
+  "60475b": {
+    "origin": [
+      -10,
+      24,
+      -10
+    ],
+    "swapped": false
+  },
+  "60481b": {
+    "origin": [
+      -10,
+      48,
+      -30
+    ],
+    "swapped": false
+  },
+  "60581pbf71043s29": {
+    "origin": [
+      -40,
+      72,
+      -10
+    ],
+    "swapped": false
+  },
+  "60581pbf71043s38": {
+    "origin": [
+      -40,
+      72,
+      -10
+    ],
+    "swapped": false
+  },
+  "60581pbf71043s40": {
+    "origin": [
+      -40,
+      72,
+      -10
+    ],
+    "swapped": false
+  },
+  "60601p01": {
+    "origin": [
+      -16.5,
+      41,
+      -7
+    ],
+    "swapped": false
+  },
+  "60808pbf71043s09": {
+    "origin": [
+      -40,
+      120,
+      -10
+    ],
+    "swapped": false
+  },
+  "6636p01": {
+    "origin": [
+      -60,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "6636p02": {
+    "origin": [
+      -60,
+      8,
+      -10
+    ],
+    "swapped": false
+  },
+  "87079pbf71043s12": {
+    "origin": [
+      -40,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "87079pbf71043s50": {
+    "origin": [
+      -40,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "87079pbf71043s51": {
+    "origin": [
+      -40,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "87079pbf71043s52": {
+    "origin": [
+      -40,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "87079pbf71043s53": {
+    "origin": [
+      -40,
+      8,
+      -20
+    ],
+    "swapped": false
+  },
+  "90398pbf71043e6240385": {
+    "origin": [
+      -10,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "90398pbf71043e6240389": {
+    "origin": [
+      -10,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "90398pbf71043e6240394": {
+    "origin": [
+      -10,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "90398pbf71043e6240398": {
+    "origin": [
+      -10,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "90398pbf71043e6240406": {
+    "origin": [
+      -10,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "90398pbf71043e6240409": {
+    "origin": [
+      -10,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "90398pbf71043e6240411": {
+    "origin": [
+      -10,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "90398pbf71043e6240412": {
+    "origin": [
+      -10,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "90398pbf71043e6240413": {
+    "origin": [
+      -10,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "90398pbf71043e6240425": {
+    "origin": [
+      -10,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "90398pbf71043e6240426": {
+    "origin": [
+      -10,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "90398pbf71043e6240428": {
+    "origin": [
+      -10,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "90398pbf71043e6240472": {
+    "origin": [
+      -10,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "90398pbf71043e6240473": {
+    "origin": [
+      -10,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "90398pbf71043e6240474": {
+    "origin": [
+      -10,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "90398pbf71043e6240475": {
+    "origin": [
+      -10,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "90398pbf71043e6240521": {
+    "origin": [
+      -10,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "90398pbf71043e6240522": {
+    "origin": [
+      -10,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "90398pbf71043e6240523": {
+    "origin": [
+      -10,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "90398pbf71043e6240524": {
+    "origin": [
+      -10,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "90398pbf71043e6240530": {
+    "origin": [
+      -10,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "90398pbf71043e6240537": {
+    "origin": [
+      -10,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "90398pbf71043e6240539": {
+    "origin": [
+      -10,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "90398pbf71043e6240540": {
+    "origin": [
+      -10,
+      0,
+      -10
+    ],
+    "swapped": false
+  },
+  "93549pat0002": {
+    "origin": [
+      -10,
+      40,
+      -10
+    ],
+    "swapped": false
+  },
+  "970pbf71043e6240420": {
+    "origin": [
+      -19.25,
+      40,
+      -11.53502
+    ],
+    "swapped": false
+  },
+  "970pbf71043e6240423": {
+    "origin": [
+      -19.25,
+      40,
+      -11.53512
+    ],
+    "swapped": false
+  },
+  "973pbf71043e6240433": {
+    "origin": [
+      -27.830597,
+      32,
+      -32.866397
+    ],
+    "swapped": false
+  },
+  "973pbf71043e6240437": {
+    "origin": [
+      -28.727566,
+      32,
+      -32.864876
+    ],
+    "swapped": false
+  },
+  "973pbf71043e6240440": {
+    "origin": [
+      -27.830673,
+      32,
+      -32.866402
+    ],
+    "swapped": false
+  },
+  "973pbf71043e6244851": {
+    "origin": [
+      -27.830559,
+      32,
+      -32.866373
+    ],
+    "swapped": false
+  }
+}

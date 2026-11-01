@@ -281,7 +281,47 @@ export const findWorldPath = (
   if (startKey === goalKey) {
     return [{ x: fromGrid(goalNode.x), y: 0, z: fromGrid(goalNode.z) }]
   }
-  const open = new Map<string, { node: GridNode; score: number }>([[startKey, { node: startNode, score: 0 }]])
+  type OpenNode = { key: string; node: GridNode; score: number; order: number }
+  const open = new Map<string, OpenNode>()
+  const heap: OpenNode[] = []
+  let nextOrder = 0
+  const precedes = (left: OpenNode, right: OpenNode) =>
+    left.score < right.score || (left.score === right.score && left.order < right.order)
+  const offer = (key: string, node: GridNode, score: number) => {
+    // Keep Map insertion order as the tie breaker, including decrease-key updates.
+    const entry = { key, node, score, order: open.get(key)?.order ?? nextOrder++ }
+    open.set(key, entry)
+    let index = heap.length
+    heap.push(entry)
+    while (index > 0) {
+      const parent = (index - 1) >>> 1
+      if (!precedes(entry, heap[parent])) break
+      heap[index] = heap[parent]
+      index = parent
+    }
+    heap[index] = entry
+  }
+  const takeNext = () => {
+    while (heap.length > 0) {
+      const entry = heap[0]
+      const tail = heap.pop()!
+      if (heap.length > 0) {
+        let index = 0
+        while (index * 2 + 1 < heap.length) {
+          let child = index * 2 + 1
+          if (child + 1 < heap.length && precedes(heap[child + 1], heap[child])) child += 1
+          if (!precedes(heap[child], tail)) break
+          heap[index] = heap[child]
+          index = child
+        }
+        heap[index] = tail
+      }
+      // Improved scores leave stale entries in the heap, without consuming a visit.
+      if (open.get(entry.key) === entry) return entry
+    }
+    return undefined
+  }
+  offer(startKey, startNode, 0)
   const nodes = new Map<string, GridNode>([[startKey, startNode]])
   const cameFrom = new Map<string, string>()
   const cost = new Map<string, number>([[startKey, 0]])
@@ -291,15 +331,10 @@ export const findWorldPath = (
   ]
 
   for (let visited = 0; open.size > 0 && visited < maxNavigationNodes; visited += 1) {
-    let currentKey = ''
-    let currentScore = Infinity
-    for (const [key, value] of open) {
-      if (value.score < currentScore) {
-        currentKey = key
-        currentScore = value.score
-      }
-    }
-    const current = open.get(currentKey)!.node
+    const entry = takeNext()
+    if (!entry) break
+    const currentKey = entry.key
+    const current = entry.node
     open.delete(currentKey)
     if (currentKey === goalKey) return reconstructPath(cameFrom, nodes, currentKey)
 
@@ -321,7 +356,7 @@ export const findWorldPath = (
       cameFrom.set(nextKey, currentKey)
       nodes.set(nextKey, next)
       const heuristic = Math.hypot(goalNode.x - next.x, goalNode.z - next.z)
-      open.set(nextKey, { node: next, score: nextCost + heuristic })
+      offer(nextKey, next, nextCost + heuristic)
     }
   }
 

@@ -1,6 +1,7 @@
 import { isWorldCoordinate } from './worldCoordinates'
 import type { BrickColor, BuildPlan, PlacedBrick, VoxelBlockState } from '../types/bricks'
 import {
+  isValidOrientationMatrix,
   normalizeHorizontalStud,
   normalizeQuarterTurns,
   normalizeVerticalQuarterTurns,
@@ -23,20 +24,25 @@ export const isValidImportedPose = (value: unknown): value is Record<string, unk
     isWorldCoordinate(value.zStud) &&
     [0, 1, 2, 3].includes(Number(value.rotationQuarterTurns)) &&
     (value.verticalQuarterTurns === undefined || [0, 1, 2, 3].includes(Number(value.verticalQuarterTurns))) &&
-    (value.rollQuarterTurns === undefined || [0, 1, 2, 3].includes(Number(value.rollQuarterTurns)))
+    (value.rollQuarterTurns === undefined || [0, 1, 2, 3].includes(Number(value.rollQuarterTurns))) &&
+    (value.orientationMatrix === undefined || isValidOrientationMatrix(value.orientationMatrix))
   )
 }
 
-export const normalizeImportedPose = (pose: Record<string, unknown>): PlacedBrick['pose'] => ({
-  xStud: normalizeHorizontalStud(Number(pose.xStud)),
-  yStud: Number.isFinite(pose.yStud)
-    ? normalizeYStud(Number(pose.yStud))
-    : plateHeightToWorldStud(Number(pose.yPlate ?? 0)),
-  zStud: normalizeHorizontalStud(Number(pose.zStud)),
-  rotationQuarterTurns: normalizeQuarterTurns(Number(pose.rotationQuarterTurns)),
-  verticalQuarterTurns: normalizeVerticalQuarterTurns(Number(pose.verticalQuarterTurns ?? 0)),
-  ...(pose.rollQuarterTurns ? { rollQuarterTurns: normalizeQuarterTurns(Number(pose.rollQuarterTurns)) } : {}),
-})
+export const normalizeImportedPose = (pose: Record<string, unknown>): PlacedBrick['pose'] => {
+  const matrix = isValidOrientationMatrix(pose.orientationMatrix) ? pose.orientationMatrix : undefined
+  return {
+    xStud: matrix ? Number(pose.xStud) : normalizeHorizontalStud(Number(pose.xStud)),
+    yStud: Number.isFinite(pose.yStud)
+      ? matrix ? Math.max(0, Number(pose.yStud)) : normalizeYStud(Number(pose.yStud))
+      : plateHeightToWorldStud(Number(pose.yPlate ?? 0)),
+    zStud: matrix ? Number(pose.zStud) : normalizeHorizontalStud(Number(pose.zStud)),
+    rotationQuarterTurns: normalizeQuarterTurns(Number(pose.rotationQuarterTurns)),
+    verticalQuarterTurns: normalizeVerticalQuarterTurns(Number(pose.verticalQuarterTurns ?? 0)),
+    ...(matrix ? { orientationMatrix: [...matrix] as PlacedBrick['pose']['orientationMatrix'] } : {}),
+    ...(pose.rollQuarterTurns ? { rollQuarterTurns: normalizeQuarterTurns(Number(pose.rollQuarterTurns)) } : {}),
+  }
+}
 
 export const normalizeImportedVoxelState = (value: unknown): VoxelBlockState | undefined => {
   if (!isRecord(value)) return undefined

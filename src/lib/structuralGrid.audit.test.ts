@@ -25,8 +25,9 @@ const expandedVoxelKeys = (cells: StructuralCell[]) => {
 
 describe('structural voxel audit', () => {
   beforeAll(async () => {
+    // This audit loads the complete catalogue, including large replica artwork.
     await loadLDrawGeneratedVisual()
-  })
+  }, 60_000)
 
   it('preserves every reviewed non-rectangular part shape', () => {
     const reviewedShapes = brickDefinitions.flatMap((definition) => {

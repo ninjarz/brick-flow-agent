@@ -36,7 +36,7 @@ The app uses React + Three.js for the editor, LDraw data for part rendering, and
 - JSON, Markdown, themed SVG, and PNG analysis reports with an embedded scene thumbnail
 - Editable per-part inventory limits shared by manual editing and LLM generation
 - Built-in asset library with IndexedDB-backed persistence for large user models
-- Six sourced LEGO set replicas in the asset library, including a 3,104-piece official set, with local LDraw geometry and step playback
+- Seven sourced LEGO set replicas in the asset library, including the complete 71043 Hogwarts Castle with 6,025 editable components, with local LDraw geometry and step playback
 - Browser-side OBJ/MTL import with multi-material color mapping, size, brick-budget, edge-style, silhouette, and quality previews
 - JSON and LDraw/MPD import plus lossless LDraw export for application round trips
 - Workspace-wide drag-and-drop import for JSON, LDraw/MPD, and OBJ files
@@ -178,6 +178,8 @@ New or corrected parts should be backed by real references:
 2. Compare against official LEGO imagery or build-manual images when visual shape matters
 3. Preserve real part numbers, dimensions, connector semantics, and regression coverage
 4. Run `npm run generate:ldraw` and `npm run validate:builds` after changing LDraw-derived data
+
+For another official set replica, use the project skill [lego-official-replica](.agents/skills/lego-official-replica/SKILL.md). It covers manual mapping, inventory reconciliation, actual per-stage visual comparisons, and native data verification.
 
 For non-LEGO packs, prefer explicit structural semantics instead of forcing every system into LEGO stud and tube rules. The Minecraft basic block uses a bidirectional `studsocket` face connector so the block stays solid while still supporting face-to-face attachment
 

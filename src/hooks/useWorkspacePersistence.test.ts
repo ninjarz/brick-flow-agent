@@ -87,6 +87,9 @@ describe('workspace persistence across asynchronous storage', () => {
     await persistence.retry()
     expect(mocks.store.create.mock.calls[0][0].plan.title).toBe('Edit')
     expect(session.getSnapshot().plan.title).toBe('Edit')
+    expect(session.getHistory().past).toHaveLength(1)
+    session.undo()
+    expect(session.getSnapshot().plan.title).toBe('Stale backup')
     expect(mocks.store.save.mock.calls.every(([id]) => id !== 'formal')).toBe(true)
   })
 

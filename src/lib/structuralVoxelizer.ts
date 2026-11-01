@@ -168,14 +168,61 @@ const triangleIntersectsVoxel = (
   )
 }
 
+type MeshBounds = { min: Point3; max: Point3 }
+type MeshIndex = MeshBounds & { triangles?: MeshTriangle[]; left?: MeshIndex; right?: MeshIndex }
+
+// A spatial index changes the candidate search, while the existing triangle
+// intersection tests continue to determine the exact same filled voxels.
+const makeMeshIndex = (triangles: MeshTriangle[]): MeshIndex => {
+  const records = triangles.map(triangle => ({ triangle, min: {
+    x: Math.min(...triangle.map(p => p.x)), y: Math.min(...triangle.map(p => p.y)), z: Math.min(...triangle.map(p => p.z)),
+  }, max: {
+    x: Math.max(...triangle.map(p => p.x)), y: Math.max(...triangle.map(p => p.y)), z: Math.max(...triangle.map(p => p.z)),
+  } }))
+  const build = (items: typeof records): MeshIndex => {
+    const min = { x: Infinity, y: Infinity, z: Infinity }, max = { x: -Infinity, y: -Infinity, z: -Infinity }
+    for (const item of items) for (const axis of ['x', 'y', 'z'] as const) {
+      min[axis] = Math.min(min[axis], item.min[axis]); max[axis] = Math.max(max[axis], item.max[axis])
+    }
+    if (items.length <= 8) return { min, max, triangles: items.map(item => item.triangle) }
+    const axis = (['x', 'y', 'z'] as const).reduce((a, b) => max[a] - min[a] >= max[b] - min[b] ? a : b)
+    items.sort((a, b) => a.min[axis] + a.max[axis] - b.min[axis] - b.max[axis])
+    const middle = Math.floor(items.length / 2)
+    return { min, max, left: build(items.slice(0, middle)), right: build(items.slice(middle)) }
+  }
+  return build(records)
+}
+
 const voxelIntersectsMesh = (
-  triangles: MeshTriangle[],
+  root: MeshIndex,
   minX: number,
   minY: number,
   minZ: number,
   voxelSize: number,
-) =>
-  triangles.some((triangle) => triangleIntersectsVoxel(triangle, minX, minY, minZ, voxelSize))
+) => {
+  const stack = [root]
+  while (stack.length) {
+    const node = stack.pop()!
+    if (node.min.x > minX + voxelSize + epsilon || node.max.x < minX - epsilon ||
+        node.min.y > minY + voxelSize + epsilon || node.max.y < minY - epsilon ||
+        node.min.z > minZ + voxelSize + epsilon || node.max.z < minZ - epsilon) continue
+    if (node.triangles?.some(triangle => triangleIntersectsVoxel(triangle, minX, minY, minZ, voxelSize))) return true
+    if (node.left) stack.push(node.left)
+    if (node.right) stack.push(node.right)
+  }
+  return false
+}
+
+const rayIntersectsBounds = (origin: Point3, direction: Point3, bounds: MeshBounds) => {
+  let near = 0, far = Infinity
+  for (const axis of ['x', 'y', 'z'] as const) {
+    const a = (bounds.min[axis] - epsilon - origin[axis]) / direction[axis]
+    const b = (bounds.max[axis] + epsilon - origin[axis]) / direction[axis]
+    near = Math.max(near, Math.min(a, b)); far = Math.min(far, Math.max(a, b))
+    if (far < near) return false
+  }
+  return true
+}
 
 const insideRayDirections = [
   normalise({ x: 1, y: 0.017, z: 0.031 }),
@@ -204,23 +251,30 @@ const rayIntersectsTriangle = (origin: Point3, direction: Point3, triangle: Mesh
   return t > epsilon ? t : undefined
 }
 
-const pointIsInsideMeshForDirection = (point: Point3, direction: Point3, triangles: MeshTriangle[]) => {
+const pointIsInsideMeshForDirection = (point: Point3, direction: Point3, root: MeshIndex) => {
   const hits = new Set<number>()
 
-  for (const triangle of triangles) {
-    const hitDistance = rayIntersectsTriangle(point, direction, triangle)
-    if (hitDistance === undefined) continue
-    hits.add(Math.round(hitDistance / epsilon))
+  const stack = [root]
+  while (stack.length) {
+    const node = stack.pop()!
+    if (!rayIntersectsBounds(point, direction, node)) continue
+    for (const triangle of node.triangles ?? []) {
+      const hitDistance = rayIntersectsTriangle(point, direction, triangle)
+      if (hitDistance === undefined) continue
+      hits.add(Math.round(hitDistance / epsilon))
+    }
+    if (node.left) stack.push(node.left)
+    if (node.right) stack.push(node.right)
   }
 
   return hits.size % 2 === 1
 }
 
-const pointIsInsideMesh = (point: Point3, triangles: MeshTriangle[]) => {
+const pointIsInsideMesh = (point: Point3, root: MeshIndex) => {
   let insideVotes = 0
 
   for (let index = 0; index < insideRayDirections.length; index += 1) {
-    if (pointIsInsideMeshForDirection(point, insideRayDirections[index], triangles)) insideVotes += 1
+    if (pointIsInsideMeshForDirection(point, insideRayDirections[index], root)) insideVotes += 1
     if (insideVotes >= 2) return true
     if (index + 1 - insideVotes >= 2) return false
   }
@@ -250,6 +304,7 @@ export const voxelizeMeshStructuralCells = ({
   const yCount = Math.max(1, Math.round((gridMaxY - gridMinY) / voxelSize))
   const zCount = Math.max(1, Math.round((gridMaxZ - gridMinZ) / voxelSize))
   const samples: VoxelSample[] = []
+  const meshIndex = makeMeshIndex(triangles)
 
   for (let x = 0; x < xCount; x += 1) {
     for (let y = 0; y < yCount; y += 1) {
@@ -262,7 +317,7 @@ export const voxelizeMeshStructuralCells = ({
           y: minY + voxelSize / 2,
           z: minZ + voxelSize / 2,
         }
-        const centerIsInside = pointIsInsideMesh(center, triangles)
+        const centerIsInside = pointIsInsideMesh(center, meshIndex)
 
         samples.push({
           minX,
@@ -271,7 +326,7 @@ export const voxelizeMeshStructuralCells = ({
           centerIsInside,
           surfaceIntersects: centerIsInside
             ? false
-            : voxelIntersectsMesh(triangles, minX, minY, minZ, voxelSize),
+            : voxelIntersectsMesh(meshIndex, minX, minY, minZ, voxelSize),
         })
       }
     }

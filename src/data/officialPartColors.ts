@@ -1,6 +1,6 @@
 import type { BrickColor } from '../types/bricks'
 
-// Generated from Rebrickable elements.csv/colors.csv on 2026-10-16.
+// Generated from Rebrickable elements.csv/colors.csv on 2026-10-17.
 // Re-run `npm run generate:part-colors` to refresh this coarse mapping.
 // Rebrickable color names are folded into the current BrickColor palette.
 export const officialPartColorsByPartNumber: Record<string, BrickColor[]> = {
@@ -40,6 +40,7 @@ export const officialPartColorsByPartNumber: Record<string, BrickColor[]> = {
   '3068': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink', 'trans-pink', 'trans-cyan', 'trans-clear'],
   '3069': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink', 'trans-pink', 'trans-red', 'trans-blue', 'trans-yellow', 'trans-green', 'trans-orange', 'trans-cyan', 'trans-lime', 'trans-brown', 'trans-clear'],
   '3070': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink', 'trans-red', 'trans-blue', 'trans-yellow', 'trans-green', 'trans-orange', 'trans-cyan', 'trans-lime', 'trans-brown', 'trans-clear'],
+  '3176': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink'],
   '3184': ['red', 'yellow', 'white', 'black', 'brown'],
   '3460': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink', 'trans-red', 'trans-lime', 'trans-clear'],
   '3622': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink', 'trans-pink', 'trans-red', 'trans-blue', 'trans-yellow', 'trans-green', 'trans-orange', 'trans-cyan', 'trans-clear'],
@@ -87,6 +88,7 @@ export const officialPartColorsByPartNumber: Record<string, BrickColor[]> = {
   '30374': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'trans-pink', 'trans-red', 'trans-blue', 'trans-yellow', 'trans-green', 'trans-orange', 'trans-cyan', 'trans-lime', 'trans-clear'],
   '30414': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink'],
   '34337': ['yellow', 'white', 'black', 'gray', 'brown', 'pink'],
+  '43719': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink', 'trans-green', 'trans-orange', 'trans-lime', 'trans-clear'],
   '43898': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink', 'trans-pink', 'trans-red', 'trans-blue', 'trans-orange', 'trans-cyan', 'trans-lime', 'trans-clear'],
   '44728': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink', 'trans-orange'],
   '47905': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink'],
@@ -107,6 +109,7 @@ export const officialPartColorsByPartNumber: Record<string, BrickColor[]> = {
   '67737': ['black'],
   '75937': ['red', 'yellow', 'green', 'white', 'black', 'gray', 'orange', 'tan', 'pink'],
   '85080': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink', 'trans-red', 'trans-green'],
+  '85861': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink', 'trans-orange', 'trans-cyan', 'trans-clear'],
   '85984': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink'],
   '87079': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink'],
   '87081': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'pink'],
@@ -114,6 +117,7 @@ export const officialPartColorsByPartNumber: Record<string, BrickColor[]> = {
   '87414': ['black'],
   '87580': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink', 'trans-pink', 'trans-blue', 'trans-orange', 'trans-cyan', 'trans-clear'],
   '87697': ['black'],
+  '87994': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink', 'trans-pink', 'trans-red', 'trans-cyan', 'trans-lime'],
   '88292': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'pink'],
   '88930': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink'],
   '92438': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink'],
@@ -130,8 +134,8 @@ export const officialPartColorsByPartNumber: Record<string, BrickColor[]> = {
   '3957b': ['red', 'blue', 'yellow', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'pink', 'trans-orange', 'trans-cyan', 'trans-lime', 'trans-brown', 'trans-clear'],
   '4150p03': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink', 'trans-yellow', 'trans-clear'],
   '4162p08': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink', 'trans-cyan'],
-  '4162p0b': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink', 'trans-cyan'],
   '4162p0g': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink', 'trans-cyan'],
+  '4162p0b': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink', 'trans-cyan'],
   '4865a': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'pink', 'trans-pink', 'trans-red', 'trans-blue', 'trans-green', 'trans-cyan', 'trans-lime', 'trans-brown', 'trans-clear'],
   '6636p01': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink', 'trans-cyan'],
   '6636p02': ['red', 'blue', 'yellow', 'green', 'white', 'black', 'gray', 'brown', 'orange', 'tan', 'cyan', 'lime', 'pink', 'trans-cyan'],

@@ -73,6 +73,8 @@ export const useWorkspacePersistence = (session: ReturnType<typeof createWorkspa
         const recovered = await createCurrentProject(session.getPersistentSnapshot().plan.title || project.name, () => canceled)
         if (!recovered) return
         project = recovered
+        // The recovered copy contains the same edits; retain their undo chain.
+        histories.current.set(project.id, session.getPersistentHistory())
       }
       install(project)
       const backup = session.getPersistentSnapshot()

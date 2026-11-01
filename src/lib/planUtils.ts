@@ -6,6 +6,8 @@ import {
   footprintToWorld,
   isHorizontalStudOnGrid,
   isYStudOnGrid,
+  isValidOrientationMatrix,
+  translateBrickPose,
   normalizeHorizontalStud,
   normalizeQuarterTurns,
   normalizeVerticalQuarterTurns,
@@ -49,15 +51,21 @@ const isMechanicalConnectorKind = (kind: WorldBrickConnector['kind']) =>
   kind === 'axle' || kind === 'bar' || kind === 'pin'
 
 const getConnectorCacheKey = (brick: PlacedBrick) =>
-  `${brick.id}:${brick.brickId}:${brick.pose.xStud},${brick.pose.yStud},${brick.pose.zStud},${brick.pose.rotationQuarterTurns},${brick.pose.verticalQuarterTurns ?? 0},${brick.pose.rollQuarterTurns ?? 0}`
+  `${brick.id}:${brick.brickId}:${brick.pose.xStud},${brick.pose.yStud},${brick.pose.zStud},${brick.pose.rotationQuarterTurns},${brick.pose.verticalQuarterTurns ?? 0},${brick.pose.rollQuarterTurns ?? 0}:${brick.pose.orientationMatrix?.join(',') ?? ''}`
 
 const getBrickPoseGeometryCacheKey = (brick: PlacedBrick) =>
-  `${brick.brickId}:${brick.pose.xStud},${brick.pose.yStud},${brick.pose.zStud},${brick.pose.rotationQuarterTurns},${brick.pose.verticalQuarterTurns ?? 0},${brick.pose.rollQuarterTurns ?? 0}`
+  `${brick.brickId}:${brick.pose.xStud},${brick.pose.yStud},${brick.pose.zStud},${brick.pose.rotationQuarterTurns},${brick.pose.verticalQuarterTurns ?? 0},${brick.pose.rollQuarterTurns ?? 0}:${brick.pose.orientationMatrix?.join(',') ?? ''}`
 
 const setLimitedBooleanCache = (cache: Map<string, boolean>, key: string, value: boolean) => {
   if (!cache.has(key) && cache.size >= verticalLoadContactCacheLimit) {
-    const oldestKey = cache.keys().next().value
-    if (oldestKey) cache.delete(oldestKey)
+    // Evict a batch with one iterator. Recreating a Map iterator for every
+    // insertion repeatedly walks deleted slots after a large model fills it.
+    const keys = cache.keys()
+    for (let count = 0; count < verticalLoadContactCacheLimit / 10; count += 1) {
+      const oldest = keys.next()
+      if (oldest.done) break
+      cache.delete(oldest.value)
+    }
   }
 
   cache.set(key, value)
@@ -96,6 +104,9 @@ const placedBrickNeedsGraphConnectorCheck = (
   brick: PlacedBrick,
   context?: PlanValidationContext,
 ) =>
+  // Imported hinge transforms retain sub-grid coordinates. Their real stud
+  // contacts must not depend on two voxel face planes rounding identically.
+  Boolean(brick.pose.orientationMatrix) ||
   getPlacedBrickConnectors(brick, context).some(connectorCanFormNonSupportGraphEdge)
 
 const graphPairNeedsConnectorCheck = (
@@ -293,11 +304,7 @@ export const findNearestOpenPoseAround = (
   for (const offset of getNearestHorizontalSearchOffsets(options.radiusStuds, options.stepStuds)) {
     const candidate = liftBrickAboveGround({
       ...brick,
-      pose: {
-        ...brick.pose,
-        xStud: normalizeHorizontalStud(brick.pose.xStud + offset.xStud),
-        zStud: normalizeHorizontalStud(brick.pose.zStud + offset.zStud),
-      },
+      pose: translateBrickPose(brick.pose, offset),
     })
 
     if (isBrickAboveGround(candidate) && !hasBrickCollision(candidate, bricks, collisionIndex)) {
@@ -673,8 +680,10 @@ const computeGroundedIds = (
   const brickByPlacedId = new Map(bricks.map((brick) => [brick.id, brick]))
 
   for (const brick of bricks) {
-    const bounds = boundsById.get(brick.id)
-    if (!bounds || bounds.minY < -boundsTolerance || bounds.minY > boundsTolerance) continue
+    // Retain body support and also recognize exterior tips resting on the table,
+    // matching the direct contact accepted by isBrickSupported.
+    const candidates = [boundsById.get(brick.id), getBrickBounds(brick)]
+    if (!candidates.some(bounds => bounds && bounds.minY >= -boundsTolerance && bounds.minY <= boundsTolerance)) continue
     groundedIds.add(brick.id)
     queue.push(brick)
   }
@@ -859,7 +868,7 @@ export const findOpenPose = (
 
   const bounds = getBounds(bricks)
   const definition = brickById.get(brick.brickId)
-  const footprint = definition ? footprintToWorld(definition, brick.pose.rotationQuarterTurns, brick.pose.verticalQuarterTurns ?? 0, brick.pose.rollQuarterTurns ?? 0) : undefined
+  const footprint = definition ? footprintToWorld(definition, brick.pose.rotationQuarterTurns, brick.pose.verticalQuarterTurns ?? 0, brick.pose.rollQuarterTurns ?? 0, brick.pose.orientationMatrix) : undefined
   const maxX = Math.max(bounds.width + (footprint?.widthStuds ?? 1), 8)
   const maxZ = Math.max(bounds.depth + (footprint?.depthStuds ?? 1), 8)
 
@@ -935,6 +944,7 @@ export const findSupportedOpenPose = (
     brick.pose.rotationQuarterTurns,
     brick.pose.verticalQuarterTurns ?? 0,
     brick.pose.rollQuarterTurns ?? 0,
+    brick.pose.orientationMatrix?.join(',') ?? '',
     options.allowGroundFallback ? 1 : 0,
     options.preferGroundFallback ? 1 : 0,
   ].join(':')
@@ -951,7 +961,7 @@ export const findSupportedOpenPose = (
   }
   const definition = brickById.get(brick.brickId)
   const bounds = spatialState.bounds
-  const footprint = definition ? footprintToWorld(definition, brick.pose.rotationQuarterTurns, brick.pose.verticalQuarterTurns ?? 0, brick.pose.rollQuarterTurns ?? 0) : undefined
+  const footprint = definition ? footprintToWorld(definition, brick.pose.rotationQuarterTurns, brick.pose.verticalQuarterTurns ?? 0, brick.pose.rollQuarterTurns ?? 0, brick.pose.orientationMatrix) : undefined
   const context = createPlanValidationContextFromSpatialState(spatialState)
   const tryCandidate = (candidate: PlacedBrick, knownSupport?: PlacedBrick) =>
     isBrickAboveGround(candidate) &&
@@ -1096,24 +1106,24 @@ const areConnectorsCompatible = (
   source: ReturnType<typeof getBrickConnectors>[number],
   target: ReturnType<typeof getBrickConnectors>[number],
 ) => {
-  if (source.axis !== target.axis) return false
+  if (source.interfaceType !== target.interfaceType) return false
 
-  const sourceDirection = source.direction ?? { x: 0, y: 1, z: 0 }
-  const targetDirection = target.direction ?? { x: 0, y: 1, z: 0 }
+  const sourceDirection = source.direction ?? { x: source.axis === 'x' ? 1 : 0, y: source.axis === 'y' ? 1 : 0, z: source.axis === 'z' ? 1 : 0 }
+  const targetDirection = target.direction ?? { x: target.axis === 'x' ? 1 : 0, y: target.axis === 'y' ? 1 : 0, z: target.axis === 'z' ? 1 : 0 }
   const directionDot =
     sourceDirection.x * targetDirection.x +
     sourceDirection.y * targetDirection.y +
     sourceDirection.z * targetDirection.z
 
-  if (source.kind === 'studsocket' && target.kind === 'studsocket') return directionDot < -0.5
+  if (source.kind === 'studsocket' && target.kind === 'studsocket') return directionDot < -0.995
   if (source.gender === target.gender) return false
 
-  if (source.kind === 'axle' && target.kind === 'axle') return Math.abs(directionDot) > 0.5
-  if (source.kind === 'bar' && target.kind === 'bar') return Math.abs(directionDot) > 0.5
-  if (source.kind === 'pin' && target.kind === 'pin') return Math.abs(directionDot) > 0.5
+  if (source.kind === 'axle' && target.kind === 'axle') return Math.abs(directionDot) > 0.995
+  if (source.kind === 'bar' && target.kind === 'bar') return Math.abs(directionDot) > 0.995
+  if (source.kind === 'pin' && target.kind === 'pin') return Math.abs(directionDot) > 0.995
 
   return (
-    directionDot < -0.5 &&
+    directionDot < -0.995 &&
     ((source.kind === 'stud' && target.kind === 'tube') ||
       (source.kind === 'tube' && target.kind === 'stud'))
   )
@@ -1161,8 +1171,8 @@ const connectorDirectionDot = (
   source: ReturnType<typeof getBrickConnectors>[number],
   target: ReturnType<typeof getBrickConnectors>[number],
 ) => {
-  const sourceDirection = source.direction ?? { x: 0, y: 1, z: 0 }
-  const targetDirection = target.direction ?? { x: 0, y: 1, z: 0 }
+  const sourceDirection = source.direction ?? { x: source.axis === 'x' ? 1 : 0, y: source.axis === 'y' ? 1 : 0, z: source.axis === 'z' ? 1 : 0 }
+  const targetDirection = target.direction ?? { x: target.axis === 'x' ? 1 : 0, y: target.axis === 'y' ? 1 : 0, z: target.axis === 'z' ? 1 : 0 }
   return (
     sourceDirection.x * targetDirection.x +
     sourceDirection.y * targetDirection.y +
@@ -1274,6 +1284,7 @@ export const snapBrickToPlan = (
     brick.pose.rotationQuarterTurns,
     brick.pose.verticalQuarterTurns ?? 0,
     brick.pose.rollQuarterTurns ?? 0,
+    brick.pose.orientationMatrix?.join(',') ?? '',
     options.previousBrick?.brickId ?? '',
     options.previousBrick?.pose.xStud ?? '',
     options.previousBrick?.pose.yStud ?? '',
@@ -1281,6 +1292,7 @@ export const snapBrickToPlan = (
     options.previousBrick?.pose.rotationQuarterTurns ?? '',
     options.previousBrick?.pose.verticalQuarterTurns ?? '',
     options.previousBrick?.pose.rollQuarterTurns ?? '',
+    options.previousBrick?.pose.orientationMatrix?.join(',') ?? '',
   ].join(':')
   const cachedSnapPose = spatialState.snapResults.get(snapCacheKey)
   if (cachedSnapPose) {
@@ -1323,12 +1335,8 @@ export const snapBrickToPlan = (
       }
 
       const snappedPose: BrickPose = {
-        xStud: normalizeHorizontalStud(brick.pose.xStud + (target.pose.xStud - source.pose.xStud)),
-        yStud: normalizeYStud(brick.pose.yStud + (target.pose.yStud - source.pose.yStud)),
-        zStud: normalizeHorizontalStud(brick.pose.zStud + (target.pose.zStud - source.pose.zStud)),
-        rotationQuarterTurns: brick.pose.rotationQuarterTurns,
+        ...translateBrickPose(brick.pose, { xStud: target.pose.xStud-source.pose.xStud, yStud: target.pose.yStud-source.pose.yStud, zStud: target.pose.zStud-source.pose.zStud }),
         verticalQuarterTurns: brick.pose.verticalQuarterTurns ?? 0,
-        ...(brick.pose.rollQuarterTurns ? { rollQuarterTurns: brick.pose.rollQuarterTurns } : {}),
       }
 
       if (!best || distance < best.score) {
@@ -1382,6 +1390,7 @@ export const duplicateBrick = (brick: PlacedBrick): PlacedBrick => ({
             brick.pose.rotationQuarterTurns,
             brick.pose.verticalQuarterTurns ?? 0,
             brick.pose.rollQuarterTurns ?? 0,
+            brick.pose.orientationMatrix,
           ).height
         : 1.2
     ),
@@ -1396,11 +1405,12 @@ const cloneBrickWithUniqueId = (brick: PlacedBrick, usedIds: Set<string>): Place
     ...brick,
     id: nextId,
     pose: {
-      xStud: normalizeHorizontalStud(brick.pose.xStud),
-      yStud: normalizeYStud(brick.pose.yStud),
-      zStud: normalizeHorizontalStud(brick.pose.zStud),
+      xStud: brick.pose.orientationMatrix ? brick.pose.xStud : normalizeHorizontalStud(brick.pose.xStud),
+      yStud: brick.pose.orientationMatrix ? brick.pose.yStud : normalizeYStud(brick.pose.yStud),
+      zStud: brick.pose.orientationMatrix ? brick.pose.zStud : normalizeHorizontalStud(brick.pose.zStud),
       rotationQuarterTurns: normalizeQuarterTurns(brick.pose.rotationQuarterTurns),
       verticalQuarterTurns: normalizeVerticalQuarterTurns(brick.pose.verticalQuarterTurns ?? 0),
+      ...(brick.pose.orientationMatrix ? { orientationMatrix: brick.pose.orientationMatrix } : {}),
       ...(brick.pose.rollQuarterTurns ? { rollQuarterTurns: normalizeQuarterTurns(brick.pose.rollQuarterTurns) } : {}),
     },
   }
@@ -1462,9 +1472,9 @@ export const moveBrick = (brick: PlacedBrick, delta: Partial<BrickPose>): Placed
   pose: {
     ...brick.pose,
     ...delta,
-    xStud: normalizeHorizontalStud(delta.xStud ?? brick.pose.xStud),
-    yStud: normalizeYStud(delta.yStud ?? brick.pose.yStud),
-    zStud: normalizeHorizontalStud(delta.zStud ?? brick.pose.zStud),
+    xStud: brick.pose.orientationMatrix ? delta.xStud ?? brick.pose.xStud : normalizeHorizontalStud(delta.xStud ?? brick.pose.xStud),
+    yStud: brick.pose.orientationMatrix ? Math.max(0, delta.yStud ?? brick.pose.yStud) : normalizeYStud(delta.yStud ?? brick.pose.yStud),
+    zStud: brick.pose.orientationMatrix ? delta.zStud ?? brick.pose.zStud : normalizeHorizontalStud(delta.zStud ?? brick.pose.zStud),
     rotationQuarterTurns: normalizeQuarterTurns(
       delta.rotationQuarterTurns ?? brick.pose.rotationQuarterTurns,
     ),
@@ -1584,14 +1594,15 @@ export const validateBuildPlanBasics = (plan: BuildPlan): BuildPlanIssue[] => {
       !Number.isFinite(brick.pose.xStud) ||
       !Number.isFinite(brick.pose.yStud) ||
       !Number.isFinite(brick.pose.zStud) ||
-      !isHorizontalStudOnGrid(brick.pose.xStud) ||
-      !isHorizontalStudOnGrid(brick.pose.zStud) ||
-      !isYStudOnGrid(brick.pose.yStud) ||
+      (!brick.pose.orientationMatrix && !isHorizontalStudOnGrid(brick.pose.xStud)) ||
+      (!brick.pose.orientationMatrix && !isHorizontalStudOnGrid(brick.pose.zStud)) ||
+      (!brick.pose.orientationMatrix && !isYStudOnGrid(brick.pose.yStud)) ||
       brick.pose.yStud < 0 ||
       (definition ? !isBrickAboveGround(brick) : false) ||
       ![0, 1, 2, 3].includes(brick.pose.rotationQuarterTurns) ||
       ![0, 1, 2, 3].includes(brick.pose.verticalQuarterTurns ?? 0) ||
-      ![0, 1, 2, 3].includes(brick.pose.rollQuarterTurns ?? 0)
+      ![0, 1, 2, 3].includes(brick.pose.rollQuarterTurns ?? 0) ||
+      (brick.pose.orientationMatrix !== undefined && !isValidOrientationMatrix(brick.pose.orientationMatrix))
     if (hasInvalidPose) {
       issues.push({ type: 'invalid-pose', brickId: brick.id })
     }

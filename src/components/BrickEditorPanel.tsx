@@ -136,6 +136,7 @@ export const BrickEditorPanel = ({
         />
       )}
 
+      {selectedBrick.pose.orientationMatrix && <p className="subtle-text">{t('control.exactOrientation')}</p>}
       <div className="field-grid">
         <label>
           {t('control.x')}

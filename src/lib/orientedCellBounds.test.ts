@@ -1,0 +1,31 @@
+import {describe,it,expect} from 'vitest'
+import {orientedCellsOverlap,type CellAxes,type CellBounds} from './orientedCellBounds'
+const c=Math.SQRT1_2
+const yaw:CellAxes=[[c,0,c],[0,1,0],[-c,0,c]]
+const box=(offset:number,axes=yaw):CellBounds=>{
+ const x=-c*offset,z=c*offset,r=c*1.6
+ return {minX:x-r,maxX:x+r,minY:0,maxY:.2,minZ:z-r,maxZ:z+r,oriented:{axes,halfSize:[1.5,.1,.1]}}
+}
+describe('oriented structural cells',()=>{
+ it('does not turn the empty space in diagonal cell envelopes into collisions',()=>{
+  const a=box(0),b=box(.4)
+  expect(a.minX).toBeLessThan(b.maxX)
+  expect(a.maxX).toBeGreaterThan(b.minX)
+  expect(orientedCellsOverlap(a,b,1e-6)).toBe(false)
+  expect(orientedCellsOverlap(b,a,1e-6)).toBe(false)
+ })
+ it('retains collisions with penetration and rejects face contact',()=>{
+  expect(orientedCellsOverlap(box(0),box(.15),1e-6)).toBe(true)
+  expect(orientedCellsOverlap(box(0),box(.2),1e-6)).toBe(false)
+ })
+ it('treats reflected source axes as the same occupied box',()=>{
+  const reflected:CellAxes=[[-c,0,-c],[0,1,0],[-c,0,c]]
+  expect(orientedCellsOverlap(box(0),box(.4,reflected),1e-6)).toBe(false)
+  expect(orientedCellsOverlap(box(0),box(.1,reflected),1e-6)).toBe(true)
+ })
+ it('checks a rotated cell against an axis aligned cell',()=>{
+  const ordinary:CellBounds={minX:-.05,maxX:.05,minY:.05,maxY:.15,minZ:-.05,maxZ:.05}
+  expect(orientedCellsOverlap(box(0),ordinary,1e-6)).toBe(true)
+  expect(orientedCellsOverlap(box(2),ordinary,1e-6)).toBe(false)
+ })
+})

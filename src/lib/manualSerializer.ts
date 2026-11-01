@@ -130,6 +130,7 @@ export type ManualPiece = {
   rotationDegrees: number
   verticalRotationDegrees: number
   rollRotationDegrees: number
+  orientationLabel?: string
   assembly: ManualAssemblyGuide
 }
 
@@ -235,7 +236,7 @@ const getAssemblyGuide = (
 const toManualPiece = (brick: BuildPlan['bricks'][number], locale: ManualLocale): ManualPiece => {
   const definition = brickById.get(brick.brickId)
   const footprint = definition
-    ? footprintToWorld(definition, brick.pose.rotationQuarterTurns, brick.pose.verticalQuarterTurns ?? 0, brick.pose.rollQuarterTurns ?? 0)
+    ? footprintToWorld(definition, brick.pose.rotationQuarterTurns, brick.pose.verticalQuarterTurns ?? 0, brick.pose.rollQuarterTurns ?? 0, brick.pose.orientationMatrix)
     : undefined
 
   return {
@@ -253,6 +254,7 @@ const toManualPiece = (brick: BuildPlan['bricks'][number], locale: ManualLocale)
     rotationDegrees: brick.pose.rotationQuarterTurns * 90,
     verticalRotationDegrees: (brick.pose.verticalQuarterTurns ?? 0) * 90,
     rollRotationDegrees: (brick.pose.rollQuarterTurns ?? 0) * 90,
+    ...(brick.pose.orientationMatrix ? { orientationLabel: locale === 'zh-CN' ? '按图示装配朝向' : 'Use the illustrated assembly orientation' } : {}),
     assembly: getAssemblyGuide(brick, locale),
   }
 }
@@ -454,7 +456,7 @@ export const formatBuildManualMarkdown = (manual: BuildManual, locale: ManualLoc
     lines.push(`### ${labels.addedParts}`)
     for (const piece of step.addPieces) {
       lines.push(
-        `- ${piece.name} (${piece.brickId}) · ${piece.color} · x${piece.pose.xStud} y${piece.pose.yStud} z${piece.pose.zStud} · ${labels.horizontal} ${piece.rotationDegrees}° · ${labels.vertical} ${piece.verticalRotationDegrees}°${piece.rollRotationDegrees ? ` · ${labels.roll} ${piece.rollRotationDegrees}°` : ''} · ${piece.assembly.label}`,
+        `- ${piece.name} (${piece.brickId}) · ${piece.color} · x${piece.pose.xStud} y${piece.pose.yStud} z${piece.pose.zStud} · ${piece.orientationLabel ?? `${labels.horizontal} ${piece.rotationDegrees}° · ${labels.vertical} ${piece.verticalRotationDegrees}°${piece.rollRotationDegrees ? ` · ${labels.roll} ${piece.rollRotationDegrees}°` : ''}`} · ${piece.assembly.label}`,
       )
     }
     lines.push('')
@@ -628,7 +630,7 @@ export const formatBuildManualHtml = (manual: BuildManual, locale: ManualLocale 
       <p class="count">${escapeHtml(labels.stepCount(step.addPieces.length, step.completedPieceCount))}</p>
       ${renderStepDiagram(step, cumulativePieces, locale)}
       <ul>
-        ${step.addPieces.map((piece) => `<li><strong>${escapeHtml(piece.name)}</strong><br /><small>${escapeHtml(piece.brickId)} · ${escapeHtml(piece.color)} · x${piece.pose.xStud} y${piece.pose.yStud} z${piece.pose.zStud} · ${escapeHtml(labels.horizontal)} ${piece.rotationDegrees}° · ${escapeHtml(labels.vertical)} ${piece.verticalRotationDegrees}°${piece.rollRotationDegrees ? ` · ${escapeHtml(labels.roll)} ${piece.rollRotationDegrees}°` : ''} · ${escapeHtml(piece.assembly.label)}</small></li>`).join('\n        ')}
+        ${step.addPieces.map((piece) => `<li><strong>${escapeHtml(piece.name)}</strong><br /><small>${escapeHtml(piece.brickId)} · ${escapeHtml(piece.color)} · x${piece.pose.xStud} y${piece.pose.yStud} z${piece.pose.zStud} · ${piece.orientationLabel ? escapeHtml(piece.orientationLabel) : `${escapeHtml(labels.horizontal)} ${piece.rotationDegrees}° · ${escapeHtml(labels.vertical)} ${piece.verticalRotationDegrees}°${piece.rollRotationDegrees ? ` · ${escapeHtml(labels.roll)} ${piece.rollRotationDegrees}°` : ''}`} · ${escapeHtml(piece.assembly.label)}</small></li>`).join('\n        ')}
       </ul>
     </section>`
   }).join('\n    ')

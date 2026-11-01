@@ -8,7 +8,7 @@ import {
   isBrickAboveGround,
 } from './planUtils'
 import { brickById } from '../data/basicBricks'
-import { STUD_PITCH_WORLD, WORLD_SNAP_STEP_STUDS, getBrickWorldFrame, normalizeHorizontalStud, normalizeYStud, roundToGrid } from './brickUnits'
+import { STUD_PITCH_WORLD, WORLD_SNAP_STEP_STUDS, getBrickWorldFrame, roundToGrid, translateBrickPose } from './brickUnits'
 import type { PlacedBrick } from '../types/bricks'
 
 export type StationaryPlanSpatialData = {
@@ -31,7 +31,7 @@ const liftBrickGroupAboveGround = (bricks: PlacedBrick[]) => {
   const liftStuds = liftSteps * WORLD_SNAP_STEP_STUDS
   return bricks.map((brick) => ({
     ...brick,
-    pose: { ...brick.pose, yStud: normalizeYStud(brick.pose.yStud + liftStuds) },
+    pose: translateBrickPose(brick.pose, { yStud: liftStuds }),
   }))
 }
 
@@ -47,11 +47,7 @@ export const findNearestOpenBrickGroupAround = (
   for (const offset of getNearestHorizontalSearchOffsets(rotationRepositionSearchRadiusStuds)) {
     const candidateBricks = liftBrickGroupAboveGround(rotatedBricks.map((brick) => ({
       ...brick,
-      pose: {
-        ...brick.pose,
-        xStud: normalizeHorizontalStud(brick.pose.xStud + offset.xStud),
-        zStud: normalizeHorizontalStud(brick.pose.zStud + offset.zStud),
-      },
+      pose: translateBrickPose(brick.pose, offset),
     })))
 
     if (candidateBricks.some((brick) => !isBrickAboveGround(brick))) continue
@@ -95,12 +91,7 @@ const translateBrickGroup = (
   delta: { xStud?: number; yStud?: number; zStud?: number },
 ) => bricks.map((brick) => ({
   ...brick,
-  pose: {
-    ...brick.pose,
-    xStud: normalizeHorizontalStud(brick.pose.xStud + (delta.xStud ?? 0)),
-    yStud: normalizeYStud(brick.pose.yStud + (delta.yStud ?? 0)),
-    zStud: normalizeHorizontalStud(brick.pose.zStud + (delta.zStud ?? 0)),
-  },
+  pose: translateBrickPose(brick.pose, delta),
 }))
 
 const canPlaceDroppedGroup = (

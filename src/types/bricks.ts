@@ -9,6 +9,8 @@ export type BrickColor =
   | 'light-gray'
   | 'dark-gray'
   | 'dark-green'
+  | 'dark-blue'
+  | 'reddish-brown'
   | 'pearl-gold'
   | 'brown'
   | 'orange'
@@ -27,6 +29,57 @@ export type BrickColor =
   | 'trans-brown'
   | 'trans-black'
   | 'trans-clear'
+  | 'lego-0'
+  | 'lego-1'
+  | 'lego-2'
+  | 'lego-3'
+  | 'lego-4'
+  | 'lego-5'
+  | 'lego-10'
+  | 'lego-14'
+  | 'lego-15'
+  | 'lego-19'
+  | 'lego-25'
+  | 'lego-26'
+  | 'lego-27'
+  | 'lego-28'
+  | 'lego-29'
+  | 'lego-31'
+  | 'lego-70'
+  | 'lego-71'
+  | 'lego-72'
+  | 'lego-73'
+  | 'lego-78'
+  | 'lego-84'
+  | 'lego-85'
+  | 'lego-272'
+  | 'lego-288'
+  | 'lego-308'
+  | 'lego-320'
+  | 'lego-321'
+  | 'lego-322'
+  | 'lego-330'
+  | 'lego-378'
+  | 'lego-379'
+  | 'lego-484'
+  | 'lego-33'
+  | 'lego-34'
+  | 'lego-36'
+  | 'lego-37'
+  | 'lego-38'
+  | 'lego-40'
+  | 'lego-41'
+  | 'lego-43'
+  | 'lego-46'
+  | 'lego-47'
+  | 'lego-52'
+  | 'lego-57'
+  | 'lego-179'
+  | 'lego-316'
+  | 'lego-135'
+  | 'lego-297'
+  | 'lego-80'
+  | 'lego-81'
 
 export type BrickKind =
   | 'brick'
@@ -70,6 +123,7 @@ export type BrickConnector = {
   axis: ConnectorAxis
   pose: ConnectorPose
   direction?: ConnectorDirection
+  interfaceType?: string
 }
 
 export type BrickFootprint = {
@@ -117,6 +171,8 @@ export type BrickPose = {
   rotationQuarterTurns: BrickRotationQuarterTurns
   verticalQuarterTurns?: BrickVerticalQuarterTurns
   rollQuarterTurns?: BrickRotationQuarterTurns
+  /** Exact local-frame orientation for hinged assemblies imported from LDraw. */
+  orientationMatrix?: [number, number, number, number, number, number, number, number, number]
 }
 
 export type VoxelFenceConnections = {

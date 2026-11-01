@@ -1,0 +1,198 @@
+{
+  "resolutionStud": 0.2,
+  "notes": "Reviewed 0.2-stud visual sampling of thin mould features and raised ink. Exact LDD collision volumes and connector interfaces remain authoritative for placement. Any changed cells or new disconnected part require review.",
+  "parts": {
+    "4287": {
+      "name": "~Moved to 4287a",
+      "solidComponents": [
+        231,
+        2
+      ],
+      "cellSha256": "f93f7ef446c9c4f042415476b2611141e1e488c00ab53659535d734589d28266"
+    },
+    "4742": {
+      "name": "Cone 4 x  4 x  2 Hollow Without Studs",
+      "solidComponents": [
+        1216,
+        5
+      ],
+      "cellSha256": "7b60daa665187a81675f8395636c4b3ea9ca157bf624e2230ef720ff7e3c82d0"
+    },
+    "6082": {
+      "name": "Panel  4 x 10 x  6 Rock Rectangular",
+      "solidComponents": [
+        5199,
+        2,
+        2,
+        2
+      ],
+      "cellSha256": "4812e1babf47c44bee286567f2b26b08ac0887ab965ce791ad8cca3ef51b8dc6"
+    },
+    "6108": {
+      "name": "Arch  1 x 12 x  3",
+      "solidComponents": [
+        1230,
+        4,
+        4
+      ],
+      "cellSha256": "07aca031eae61a0856045ddf8e328d95688159e47ec5525f07e83b4eccbae7cc"
+    },
+    "6269": {
+      "name": "Minifig Goblet with Hollow Stem",
+      "solidComponents": [
+        59,
+        30
+      ],
+      "cellSha256": "6d929b30e4205c31de51668327659b212ceb06ca5444c9eb5fa397287589cdad"
+    },
+    "18838": {
+      "name": "Arch  1 x 12 x  3 Raised with  5 Internal Ribs",
+      "solidComponents": [
+        1239,
+        4,
+        4
+      ],
+      "cellSha256": "e8d0f671cda7e2b3c2369216c19b2fe20bcf771cd2c5c55387cfda123a6bf2ce"
+    },
+    "23996": {
+      "name": "Panel  8 x  8 x  6 Rock Corner",
+      "solidComponents": [
+        5143,
+        24,
+        12,
+        12,
+        8,
+        8,
+        8,
+        6
+      ],
+      "cellSha256": "3670606b36233f9025843899d77a66835fe0dee6fc2a5eb58ef381ed86bd6a24"
+    },
+    "32531": {
+      "name": "~Moved to 32531a",
+      "solidComponents": [
+        1296,
+        2,
+        2
+      ],
+      "cellSha256": "46632881891bc41d01a51d198f8331bdbc690e0acebb99a6c03b9d2e8f460fed"
+    },
+    "32532": {
+      "name": "~Moved to 32532a",
+      "solidComponents": [
+        1894,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "cellSha256": "637a54eee75d0967d36834caf96c32dd205bcfd1f6fa881ad5a44eaeb639fb79"
+    },
+    "45301": {
+      "name": "Wedge  4 x 16 Triple Curved",
+      "solidComponents": [
+        2341,
+        4,
+        3,
+        3,
+        3,
+        3,
+        2,
+        2,
+        2
+      ],
+      "cellSha256": "717b1c80be4ac7aa749011611018a4b3caa1a8047e1cfcd0728e695eab7c1c5e"
+    },
+    "3741a": {
+      "name": "Plant Flower Stem",
+      "solidComponents": [
+        104,
+        14
+      ],
+      "cellSha256": "53eca77ac3652af31f63a34b8e40bcd83cc4f585e6dc6e4fd20d76394bc59e22"
+    },
+    "60808pbf71043s09": {
+      "name": "Panel 1 x 4 x 5 with Window and 71043 Sticker 9",
+      "solidComponents": [
+        546,
+        15,
+        14,
+        2
+      ],
+      "cellSha256": "6b817ac60d435bd40d0ca47340a66490f2b76dfccfd34fb1353663764a8c5e95"
+    },
+    "60581pbf71043s29": {
+      "name": "60581 with 71043 Sticker 29",
+      "solidComponents": [
+        986,
+        2
+      ],
+      "cellSha256": "6d3c81210c45d8773ff741f517a8fb0943be8b1a11482d9c4560c3685b7fb5a9"
+    },
+    "30562pbf71043s02": {
+      "name": "Panel 4 x 4 x 6 Corner Round with71043Sticker2",
+      "solidComponents": [
+        2161,
+        6,
+        3
+      ],
+      "cellSha256": "b50f916cbeb0f490854f6ac086bc6024cf9ba76d7c260741f75d5beb37ae332b"
+    },
+    "30562pbf71043s03": {
+      "name": "Panel 4 x 4 x 6 Corner Round with71043Sticker3",
+      "solidComponents": [
+        2153,
+        2
+      ],
+      "cellSha256": "191a760af60af5dd760bd59ac26d196ea2ce1e1f370129a8e9d0a8e1c4866ee7"
+    },
+    "30562pbf71043s04": {
+      "name": "Panel 4 x 4 x 6 Corner Round with71043Sticker4",
+      "solidComponents": [
+        2159,
+        6
+      ],
+      "cellSha256": "c0aca41afb8c8a4460856d696428f1b377b80dd500eebb715662aa4d7d2949fa"
+    },
+    "30562pbf71043s05": {
+      "name": "Panel 4 x 4 x 6 Corner Round with71043Sticker5",
+      "solidComponents": [
+        2126,
+        6,
+        6,
+        2
+      ],
+      "cellSha256": "f21c721ab2ea035827282900a1f4abc5b356ac89343596b45c09cdaad2ac403f"
+    },
+    "30562pbf71043s06": {
+      "name": "Panel 4 x 4 x 6 Corner Round with71043Sticker6",
+      "solidComponents": [
+        2106,
+        3
+      ],
+      "cellSha256": "19136e8ce814321634b142b154e6058fc07be83e918281fbb60e3412a9819775"
+    },
+    "2454bpbf71043s39": {
+      "name": "2454b with71043Sticker39",
+      "solidComponents": [
+        1026,
+        3
+      ],
+      "cellSha256": "5ac250400e49f3d651124cd4d9832384814bf2b51314c2adba935d449060b2f7"
+    },
+    "2454bpbf71043s46": {
+      "name": "2454b with71043Sticker46",
+      "solidComponents": [
+        1026,
+        3
+      ],
+      "cellSha256": "5ac250400e49f3d651124cd4d9832384814bf2b51314c2adba935d449060b2f7"
+    }
+  }
+}

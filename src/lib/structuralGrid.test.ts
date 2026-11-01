@@ -20,7 +20,11 @@ import {
 
 describe('structural collision index', () => {
   beforeAll(async () => {
-    await loadLDrawGeneratedVisual()
+    await loadLDrawGeneratedVisual([
+      'brick-2x4', 'brick-1x1', 'brick-2x2', 'inverted-slope-3x2',
+      'slope-curved-3x2', 'slope-curved-2x1-low', 'propeller-4-blade-open',
+      'propeller-4-blade-closed',
+    ].map(id => brickById.get(id)!.partNumber))
   })
 
   it('keeps ordinary rectangular parts on a stable nominal collision body', () => {

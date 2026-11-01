@@ -1,7 +1,12 @@
+import { getLDDInterfaceConnectors } from '../lib/lddInterfacePoints'
+import { hogwartsReferenceBricks } from './hogwartsReferenceBricks'
+import { hogwartsExactColors } from './hogwartsExactColors'
+import { hogwartsPartColors } from './hogwartsPartColors'
 import type { BrickColor, BrickConnector, BrickDefinition, VoxelBlockVisual } from '../types/bricks'
 import { getLDrawConnectors } from '../lib/ldrawPartRegistry'
 import { legoPlateFootprint, plateHeightToWorldStud } from '../lib/brickUnits'
 import { architectureBricks } from './architectureBricks'
+import { hogwartsBricks } from './hogwartsBricks'
 import { architectureReplicaColors } from './architectureReplicaColors'
 import { getOfficialPartColors } from './officialPartColors'
 
@@ -179,6 +184,7 @@ const makeStudSocketFaceConnectors = (
 }
 
 export const colorHex: Record<BrickColor, string> = {
+  ...Object.fromEntries(Object.entries(hogwartsExactColors).map(([key, value]) => [key, value.hex])) as Record<keyof typeof hogwartsExactColors, string>,
   red: '#d62828',
   blue: '#1d4ed8',
   yellow: '#f7c948',
@@ -189,6 +195,8 @@ export const colorHex: Record<BrickColor, string> = {
   'light-gray': '#969696',
   'dark-gray': '#646464',
   'dark-green': '#184632',
+  'dark-blue': '#19325A',
+  'reddish-brown': '#5F3109',
   'pearl-gold': '#AA7F2E',
   brown: '#7c4a28',
   orange: '#f97316',
@@ -210,6 +218,7 @@ export const colorHex: Record<BrickColor, string> = {
 }
 
 export const colorOpacity: Record<BrickColor, number> = {
+  ...Object.fromEntries(Object.entries(hogwartsExactColors).map(([key, value]) => [key, value.opacity])) as Record<keyof typeof hogwartsExactColors, number>,
   red: 1,
   blue: 1,
   yellow: 1,
@@ -220,6 +229,8 @@ export const colorOpacity: Record<BrickColor, number> = {
   'light-gray': 1,
   'dark-gray': 1,
   'dark-green': 1,
+  'dark-blue': 1,
+  'reddish-brown': 1,
   'pearl-gold': 1,
   brown: 1,
   orange: 1,
@@ -287,7 +298,11 @@ const getConnectorGroup = (connectors: BrickConnector[], key: string) =>
   connectors.filter((connector) => connectorGroupKey(connector) === key)
 
 const withLDrawConnectors = (definition: BrickDefinitionDraft): BrickDefinitionDraft => {
-  const ldrawConnectors = getLDrawConnectors(definition.partNumber, definition.id)
+  const generatedConnectors = getLDrawConnectors(definition.partNumber, definition.id)
+  const sourceConnectors = getLDDInterfaceConnectors(definition)
+  const ldrawConnectors = sourceConnectors.some(p => p.kind === 'stud' || p.kind === 'tube')
+    ? [...generatedConnectors.filter(p => p.kind !== 'stud' && p.kind !== 'tube'), ...sourceConnectors]
+    : [...generatedConnectors, ...sourceConnectors]
   const topYStud = definition.footprint.heightStuds
   const fallbackGroupKeys = new Set(definition.connectors.map(connectorGroupKey))
   const discardedLDrawGroupKeys = new Set<string>()
@@ -638,18 +653,21 @@ const usesFixedPrintedColors = (definition: BrickDefinitionDraft) =>
   definition.id.startsWith('tile-eye') || definition.id === 'tile-round-clock-2x2' || definition.id.endsWith('-nameplate')
 
 const replicaColors: Record<string, BrickColor[]> = {
+  '43719': ['dark-blue'], '30044': ['reddish-brown'], '4073': ['dark-gray', 'trans-yellow'],
+  '3176': ['reddish-brown'], '54200': ['reddish-brown'],
+  '85861': ['black', 'trans-blue'],
   '3039': ['light-gray'], '2419': ['light-gray'], '3700': ['dark-gray'],
   '4162': ['light-gray'], '3794b': ['light-gray'], '47905': ['light-gray'],
   '3023': ['dark-gray'], '3024': ['dark-gray'], '59900': ['dark-gray'],
   '3688': ['dark-gray'], '3021': ['dark-green'],
   '2431': ['light-gray'], '3069': ['dark-gray'], '3070': ['dark-gray'],
-  '3044b': ['dark-gray'], '4073': ['dark-gray'], '3623': ['dark-gray'],
+  '3044b': ['dark-gray'], '3623': ['dark-gray'],
 }
 
 const withOfficialColors = (definition: BrickDefinitionDraft): BrickDefinitionDraft => (
   usesFixedPrintedColors(definition)
     ? definition
-    : { ...definition, colors: [...new Set([...getOfficialPartColors(definition.partNumber, definition.colors), ...(replicaColors[definition.partNumber] ?? []), ...(architectureReplicaColors[definition.partNumber] ?? [])])] }
+    : { ...definition, colors: [...new Set([...getOfficialPartColors(definition.partNumber, definition.colors), ...(hogwartsPartColors[definition.partNumber] ?? []), ...(replicaColors[definition.partNumber] ?? []), ...(architectureReplicaColors[definition.partNumber] ?? [])])] }
 )
 
 const withDefaultPack = (definition: BrickDefinitionDraft): BrickDefinition => ({
@@ -1186,6 +1204,8 @@ const fallbackBrickDefinitions: BrickDefinitionDraft[] = [
   { id: 'plate-cut-corners-3x6', partNumber: '2419', name: '3x6 Cut Corner Plate', kind: 'plate', footprint: legoPlateFootprint(6, 3, 1), connectors: [], colors: ['gray'], inventory: 16 },
   { id: 'dish-3x3', partNumber: '43898', name: '3x3 Inverted Dish', kind: 'round', footprint: legoPlateFootprint(3, 3, 2), connectors: [], colors: ['black'], inventory: 16 },
   ...architectureBricks,
+  ...hogwartsBricks,
+  ...hogwartsReferenceBricks,
   ...classic10696ExtraDefinitions,
 ]
 

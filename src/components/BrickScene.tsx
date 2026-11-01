@@ -2,7 +2,7 @@ import { Billboard, Edges, Html, Line, OrbitControls, Text } from '@react-three/
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
 import { memo, type CSSProperties, type ReactNode, type RefCallback, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { BufferGeometry, DoubleSide, Float32BufferAttribute, Object3D, Vector3, type DirectionalLight, type Group, type InstancedMesh } from 'three'
+import { BufferGeometry, DoubleSide, Float32BufferAttribute, Matrix4, Object3D, Vector3, type DirectionalLight, type Group, type InstancedMesh } from 'three'
 import { brickById, colorHex, colorOpacity } from '../data/basicBricks'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { getWorldCombatPresentationPhase } from '../lib/worldCombatPresentation'
@@ -10,7 +10,7 @@ import { createRound2x2AxleBodyGeometry, createRound2x2AxleGrilleBodyGeometry } 
 import { getBrickWorldBoundsFrame } from '../lib/ldrawBounds'
 import { loadLDrawGeneratedVisual } from '../lib/ldrawGeneratedVisualLoader'
 import { normalizeLDrawPartNumber } from '../lib/ldrawPartNumbers'
-import { createLoadedLDrawPartGeometry, createLDrawPrintGeometries } from '../lib/ldrawVisualGeometry'
+import { createLoadedLDrawBodyGeometry, createLDrawPrintGeometries } from '../lib/ldrawVisualGeometry'
 import { getVisibleBricksDuringPlacement } from '../lib/brickPlacementPreview'
 import { createBuildGraph, getBrickBounds } from '../lib/planUtils'
 import { getScenePerformanceSettings, getWorldAnimationFps, shouldInstanceVoxelGroup } from '../lib/scenePerformance'
@@ -31,7 +31,7 @@ import {
   createInvertedSlope45Geometry,
   createSlope45Geometry,
 } from '../lib/slopeGeometries'
-import type { BrickDefinition, PlacedBrick } from '../types/bricks'
+import type { BrickDefinition, BrickPose, PlacedBrick } from '../types/bricks'
 import type { WorldEntity, WorldEvent } from '../types/world'
 
 export type BrickSceneViewMode = 'border' | 'borderless' | 'xray' | 'voxel'
@@ -642,20 +642,28 @@ const getVerticalRotationRadians = (verticalQuarterTurns: number) => {
 const getHorizontalRotationRadians = (rotationQuarterTurns: number) =>
   -((((rotationQuarterTurns % 4) + 4) % 4) * Math.PI) / 2
 
+const exactOrientationMatrix4 = (values: NonNullable<BrickPose['orientationMatrix']>) => new Matrix4().set(
+  values[0], values[1], values[2], 0, values[3], values[4], values[5], 0, values[6], values[7], values[8], 0, 0, 0, 0, 1,
+)
+
 const BrickPoseRotation = ({
   rotationQuarterTurns,
   verticalQuarterTurns,
   rollQuarterTurns = 0,
+  orientationMatrix,
   children,
 }: {
   rotationQuarterTurns: number
   verticalQuarterTurns: number
   rollQuarterTurns?: number
+  orientationMatrix?: BrickPose['orientationMatrix']
   children: ReactNode
 }) => (
   <group rotation={[0, getHorizontalRotationRadians(rotationQuarterTurns), 0]}>
     <group rotation={[getVerticalRotationRadians(verticalQuarterTurns), 0, 0]}>
-      <group rotation={[0, 0, rollQuarterTurns * Math.PI / 2]}>{children}</group>
+      <group rotation={[0, 0, rollQuarterTurns * Math.PI / 2]}>
+        {orientationMatrix ? <group matrix={exactOrientationMatrix4(orientationMatrix)} matrixAutoUpdate={false}>{children}</group> : children}
+      </group>
     </group>
   </group>
 )
@@ -1134,6 +1142,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
       rotationQuarterTurns={brick.pose.rotationQuarterTurns}
       verticalQuarterTurns={verticalQuarterTurns}
       rollQuarterTurns={brick.pose.rollQuarterTurns ?? 0}
+      orientationMatrix={brick.pose.orientationMatrix}
     >
       {children}
     </BrickPoseRotation>
@@ -1152,7 +1161,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
   const baseDepth = definition.footprint.depthStuds
   const baseHeight = definition.footprint.heightStuds
   const ldrawGeometry = preferDetailedGeometry
-    ? createLoadedLDrawPartGeometry(definition.partNumber, definition.footprint)
+    ? createLoadedLDrawBodyGeometry(definition.partNumber, definition.footprint)
     : undefined
 
   const interactionHandlers = useBrickInteractionHandlers({
@@ -1211,7 +1220,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
             {isEyeTile && <RoundEyeTilePrints variant={brick.brickId} height={baseHeight} />}
             {createLDrawPrintGeometries(definition.partNumber, definition.footprint).map((layer) => (
               <mesh key={layer.color} geometry={layer.geometry} renderOrder={1}>
-                <meshStandardMaterial color={layer.color} roughness={0.4} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-1} transparent={bodyOpacity < 1} opacity={bodyOpacity} />
+                <meshStandardMaterial color={layer.color} roughness={0.4} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-1} transparent={ghost || Boolean(displayColor) || layer.opacity < 1} opacity={ghost ? 0.32 : displayColor ? 0.92 : layer.opacity} depthWrite={!ghost && !displayColor && layer.opacity >= 1} />
               </mesh>
             ))}
           </>,
@@ -2062,6 +2071,12 @@ const VoxelBoxInstances = memo(function VoxelBoxInstances({
           definition.footprint.depthStuds,
         )
         matrixObject.updateMatrix()
+        if (brick.pose.orientationMatrix) {
+          const scale = new Matrix4().makeScale(definition.footprint.widthStuds, definition.footprint.heightStuds, definition.footprint.depthStuds)
+          matrixObject.scale.set(1, 1, 1)
+          matrixObject.updateMatrix()
+          matrixObject.matrix.multiply(exactOrientationMatrix4(brick.pose.orientationMatrix)).multiply(scale)
+        }
         mesh.setMatrixAt(index, matrixObject.matrix)
       })
       mesh.count = group.instances.length
@@ -2893,7 +2908,7 @@ export const BrickScene = ({
   const worldAnimationFps = getWorldAnimationFps(bricks.length, worldEntities.length)
   const enableRealtimeShadows = performanceSettings.enableRealtimeShadows
   const preferDetailedGeometry = ldrawBoundsVersion > 0
-  const useSimplifiedInteractionView = performanceSettings.useSimplifiedView && !showHiddenObjects
+  const useSimplifiedInteractionView = performanceSettings.useSimplifiedView && !showHiddenObjects && !visibleBricks.every(brick => brickById.get(brick.brickId)?.pack === 'lego')
   const resolvedCameraFrameKey = useMemo(
     () => getSceneCameraFrameRequestKey(deferredCameraFrameKey, frameBricks.map((brick) => brick.id)),
     [deferredCameraFrameKey, frameBricks],

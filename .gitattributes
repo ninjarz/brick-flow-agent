@@ -1,0 +1,2 @@
+# Preserve whitespace in vendored LDraw source and license files.
+public/ldraw/** -whitespace

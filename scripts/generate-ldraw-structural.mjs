@@ -22,6 +22,7 @@ await writeFile(entry, `
       normalizeLDrawPartNumber(definition.partNumber),
       {
         partNumber: normalizeLDrawPartNumber(definition.partNumber),
+        alignStudMargins: definition.id.startsWith('hogwarts-ldraw-'),
         widthStuds: definition.footprint.widthStuds,
         heightStuds: definition.footprint.heightStuds,
         depthStuds: definition.footprint.depthStuds,
@@ -92,8 +93,11 @@ const normalizeReference = (reference) => reference.replace(/\\/g, '/').toLowerC
 const referenceBasename = (reference) => normalizeReference(reference).split('/').at(-1) ?? ''
 
 const connectorPrimitiveSpecs = [
+  { pattern: /^peghole(?:|3)\.dat$/, connectors: [{kind:'pin',gender:'female',point:'female-pin-center'}] },
+  { pattern: /^(?:connect|confric[156])\.dat$/, connectors: [{kind:'pin',gender:'male',point:'male-pin-center'}] },
+  { pattern: /^confric9\.dat$/, connectors: [{kind:'pin',gender:'male',point:'male-pin-center'}, {kind:'pin',gender:'male',point:'male-pin-far-center'}] },
   { pattern: /^stud(?:|10|15)\.dat$/, connectors: [{ kind: 'stud', gender: 'male', point: 'origin' }] },
-  { pattern: /^stud(?:2|2a|2s)\.dat$/, connectors: [{ kind: 'stud', gender: 'male', point: 'origin' }] },
+  { pattern: /^stud(?:2|2a|2s|6)\.dat$/, connectors: [{ kind: 'stud', gender: 'male', point: 'origin' }] },
   {
     pattern: /^stud(?:3|3a|4|4a|4o|4od|4f2w)\.dat$/,
     connectors: [{ kind: 'tube', gender: 'female', point: 'tip', socketExpansion: 'adjacent-grid' }],
@@ -229,15 +233,13 @@ const parseFile = async (relativePath, transform = identityTransform, stack = []
 }
 
 const getBounds = (triangles) => {
-  const points = triangles.flat()
-  return {
-    minX: Math.min(...points.map((point) => point[0])),
-    maxX: Math.max(...points.map((point) => point[0])),
-    minY: Math.min(...points.map((point) => point[1])),
-    maxY: Math.max(...points.map((point) => point[1])),
-    minZ: Math.min(...points.map((point) => point[2])),
-    maxZ: Math.max(...points.map((point) => point[2])),
+  const bounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, minZ: Infinity, maxZ: -Infinity }
+  for (const triangle of triangles) for (const [x,y,z] of triangle) {
+    bounds.minX = Math.min(bounds.minX,x); bounds.maxX = Math.max(bounds.maxX,x)
+    bounds.minY = Math.min(bounds.minY,y); bounds.maxY = Math.max(bounds.maxY,y)
+    bounds.minZ = Math.min(bounds.minZ,z); bounds.maxZ = Math.max(bounds.maxZ,z)
   }
+  return bounds
 }
 
 const getHorizontalAxisMapping = (frame, profile) => {
@@ -311,8 +313,9 @@ const getAlignedAxisOrigin = (frame, profile, horizontalAxisMapping, connectorRe
     for (const value of verticalConnectorValues) {
       const localValue = (value - origin) / 20
       score += gridSnapDistance(localValue) * 100
-      if (localValue < -0.000001 || localValue > sizeStuds + 0.000001) {
-        score += 100 + Math.min(Math.abs(localValue), Math.abs(localValue - sizeStuds))
+      const margin = profile.alignStudMargins && sizeStuds >= 1 ? 0.5 : 0
+      if (localValue < margin - 0.000001 || localValue > sizeStuds - margin + 0.000001) {
+        score += 100 + Math.min(Math.abs(localValue - margin), Math.abs(localValue - (sizeStuds - margin)))
       }
     }
 
@@ -414,6 +417,9 @@ const connectorPoseFromCenter = (center, axis, direction, profile) => {
 }
 
 const getConnectorPoint = (connectorReference) =>
+  connectorReference.point === 'female-pin-center' ? transformPoint([0, 10, 0], connectorReference.transform) :
+  connectorReference.point === 'male-pin-center' ? transformPoint([0, -10, 0], connectorReference.transform) :
+  connectorReference.point === 'male-pin-far-center' ? transformPoint([0, -30, 0], connectorReference.transform) :
   connectorReference.point === 'tip'
     ? transformPoint([0, -4, 0], connectorReference.transform)
     : connectorReference.transform.origin
@@ -506,7 +512,7 @@ const makeGeneratedConnectors = (profile, frame, horizontalAxisMapping, connecto
         gender: connectorReference.gender,
         axis,
         direction,
-        pose: connectorPoseFromCenter(socketCenter, axis, direction, profile),
+        pose: ['pin', 'bar', 'axle'].includes(connectorReference.kind) ? { xStud: socketCenter.x, yStud: socketCenter.y, zStud: socketCenter.z } : connectorPoseFromCenter(socketCenter, axis, direction, profile),
       }
       const key = connectorKey(connector)
       if (seen.has(key)) continue
@@ -532,6 +538,25 @@ const makeGeneratedConnectors = (profile, frame, horizontalAxisMapping, connecto
   }
   if (profile.partNumber === '59900') addMechanical('bar', 'female', [0, 24, 0], 'y', { x: 0, y: 1, z: 0 })
   if (profile.partNumber === '30374') addMechanical('bar', 'male', [0, 80, 0], 'y', { x: 0, y: -1, z: 0 })
+  // 71043 boat lantern: a 3.18 mm bar passes through the deck's small hole
+  // and the round plate's open stud. Sample the real shaft for insertion depth.
+  if (profile.partNumber === '87994') for (let y = 0; y <= 60; y += 4) {
+    addMechanical('bar', 'male', [0, y, 0], 'y', { x: 0, y: 1, z: 0 })
+    addMechanical('bar', 'male', [0, y, 0], 'y', { x: 0, y: -1, z: 0 })
+  }
+  if (profile.partNumber === '85861') {
+    addMechanical('bar', 'female', [0, 4, 0], 'y', { x: 0, y: 1, z: 0 })
+    addMechanical('bar', 'female', [0, 4, 0], 'y', { x: 0, y: -1, z: 0 })
+  }
+  if (profile.partNumber === '16478') {
+    const center = ldrawPointToLocal([0, 0, 0], frame, horizontalAxisMapping)
+    connectors.push({ kind: 'tube', gender: 'female', axis: 'y', direction: { x: 0, y: -1, z: 0 }, pose: { xStud: center.x - 0.5, yStud: center.y, zStud: center.z - 0.5 } })
+  }
+  if (profile.partNumber === '3176') {
+    const center = ldrawPointToLocal([0, 8, -30], frame, horizontalAxisMapping)
+    connectors.push({ kind: 'tube', gender: 'female', axis: 'y', direction: { x: 0, y: -1, z: 0 },
+      pose: { xStud: center.x - 0.5, yStud: center.y, zStud: center.z - 0.5 } })
+  }
 
   return connectors.map((connector, index) => ({
     idSuffix: `${connector.kind}-${index}`,
@@ -552,9 +577,16 @@ const generatedVisualProfiles = []
 const generatedConnectorProfiles = []
 const auditRows = []
 const printedParts = {}
-const printColorHex = new Map((await readFile(join(publicLDrawDir, 'LDConfig.ldr'), 'utf8')).split(/\r?\n/).flatMap((line) => {
+const printColorLines = (await readFile(join(publicLDrawDir, 'LDConfig.ldr'), 'utf8')).split(/\r?\n/)
+const printColorHex = new Map(printColorLines.flatMap((line) => {
   const match = line.match(/!COLOUR.*?\sCODE\s+(\d+)\s+VALUE\s+(#[0-9A-Fa-f]{6})/)
   return match ? [[Number(match[1]), match[2]]] : []
+}))
+
+const printColorOpacity = new Map(printColorLines.flatMap(line => {
+  const code = line.match(/!COLOUR.*?\sCODE\s+(\d+)\s/)
+  const alpha = line.match(/\sALPHA\s+(\d+)/)
+  return code && alpha ? [[Number(code[1]), Number(alpha[1]) / 255]] : []
 }))
 
 for (const profile of partProfiles) {
@@ -567,16 +599,20 @@ for (const profile of partProfiles) {
   const visualTriangles = triangles.map((triangle) => mapTriangleToLocal(triangle, alignedFrame, horizontalAxisMapping))
   if (/p[0-9a-z]+$/.test(profile.partNumber)) {
     const layers = new Map()
+    const layerTriangleIndices = new Map()
     visualTriangles.forEach((triangle, index) => {
       const color = triangleColors[index]
       if (color === 16) return
-      if (!layers.has(color)) layers.set(color, [])
+      if (!layers.has(color)) { layers.set(color, []); layerTriangleIndices.set(color, []) }
+      layerTriangleIndices.get(color).push(index)
       layers.get(color).push(...triangle.flatMap((point) => [point.x, point.y, point.z]))
     })
-    printedParts[profile.partNumber] = [...layers].map(([color, positions]) => {
-      const hex = printColorHex.get(color)
+    printedParts[profile.partNumber] = [...layers].map(([color]) => {
+      const hex = printColorHex.get(color) ?? (color >= 0x2000000 && color <= 0x2ffffff
+        ? '#' + (color & 0xffffff).toString(16).padStart(6, '0')
+        : undefined)
       if (!hex) throw new Error(`Missing printed colour ${color} in ${profile.partNumber}`)
-      return { color, hex, positions }
+      return { color, hex, opacity: printColorOpacity.get(color) ?? 1, triangleIndices: layerTriangleIndices.get(color) }
     })
   }
   const connectors = makeGeneratedConnectors(profile, alignedFrame, horizontalAxisMapping, connectorReferences)
@@ -617,9 +653,7 @@ const makeGeneratedTriangleModule = (
   structuralVoxelizerImport = './structuralVoxelizer',
 ) => `import type { MeshTriangle } from '${structuralVoxelizerImport}'
 
-const ${valuesName}: Record<string, number[]> = {
-${serializeTriangleValueProfiles(profiles)}
-}
+const ${valuesName}: Record<string, number[]> = JSON.parse(${JSON.stringify('{' + serializeTriangleValueProfiles(profiles).trim().replace(/,$/, '') + '}')})
 
 const ${cacheName} = new Map<string, MeshTriangle[]>()
 
@@ -646,7 +680,7 @@ export const ${exportName} = (partNumber: string) => {
 
 // Keep existing geometry chunks stable when adding catalogue parts.
 const previousManifest = existsSync(visualOutputPath) ? await readFile(visualOutputPath, 'utf8') : ''
-const previousChunkByPart = new Map([...previousManifest.matchAll(/"(\d+)": loadVisualChunk(\d+),/g)].map((match) => [match[1], Number(match[2])]))
+const previousChunkByPart = new Map([...previousManifest.matchAll(/"([^"]+)": loadVisualChunk(\d+),/g)].map((match) => [match[1], Number(match[2])]))
 const previousChunkCount = previousChunkByPart.size ? Math.max(...previousChunkByPart.values()) + 1 : 0
 const generatedVisualChunks = Array.from({ length: previousChunkCount }, () => [])
 const newProfiles = []
@@ -671,8 +705,10 @@ if (currentVisualChunk.length) generatedVisualChunks.push(currentVisualChunk)
 
 const visualChunkNames = generatedVisualChunks.map((_, index) => `chunk-${String(index).padStart(2, '0')}`)
 const makeGeneratedVisualManifest = () => {
-  const loaderDeclarations = visualChunkNames.map((chunkName, index) =>
-    `const loadVisualChunk${index} = () => import('./ldrawGeneratedVisualChunks/${chunkName}')`,
+  const loaderDeclarations = visualChunkNames.flatMap((chunkName, index) =>
+    generatedVisualChunks[index].length
+      ? [`const loadVisualChunk${index} = () => import('./ldrawGeneratedVisualChunks/${chunkName}')`]
+      : [],
   ).join('\n')
   const loaderEntries = generatedVisualChunks.flatMap((profiles, index) => profiles.map((profile) =>
     `  ${JSON.stringify(profile.partNumber)}: loadVisualChunk${index},`,
@@ -680,7 +716,10 @@ const makeGeneratedVisualManifest = () => {
 
   return `import type { MeshTriangle } from './structuralVoxelizer'
 
+export type LDrawFixedColorLayer = { color: number; hex: string; opacity: number; triangleIndices: number[] }
+
 export type LDrawGeneratedVisualChunk = {
+  getLDrawGeneratedPrintLayers: (partNumber: string) => LDrawFixedColorLayer[] | undefined
   getLDrawGeneratedVisualTriangles: (partNumber: string) => MeshTriangle[] | undefined
 }
 
@@ -739,10 +778,14 @@ await Promise.all(generatedVisualChunks.map((profiles, index) => writeFile(
     'visualTriangleCache',
     profiles,
     '../structuralVoxelizer',
-  ),
+  ) + `\nimport type { LDrawFixedColorLayer } from '../ldrawGeneratedVisual'\nconst printLayers: Record<string, LDrawFixedColorLayer[]> = JSON.parse(${JSON.stringify(JSON.stringify(Object.fromEntries(profiles.filter(p => printedParts[p.partNumber]?.length).map(p => [p.partNumber, printedParts[p.partNumber]]))))})\nexport const getLDrawGeneratedPrintLayers = (partNumber: string) => printLayers[partNumber]\n`,
 )))
 await writeFile(visualOutputPath, makeGeneratedVisualManifest())
 await writeFile(connectorOutputPath, makeGeneratedConnectorModule(generatedConnectorProfiles))
+await writeFile(join(workspace, 'src/data/ldrawSourceFrames.json'), JSON.stringify(Object.fromEntries(auditRows.map(row => [row.partNumber, {
+  origin: [row.alignedFrame.minX, row.alignedFrame.maxY, row.alignedFrame.minZ],
+  swapped: row.horizontalAxisMapping === 'swapped',
+}])) , null, 2) + '\n')
 
 console.log(JSON.stringify({
   generated: generatedVisualProfiles.length,

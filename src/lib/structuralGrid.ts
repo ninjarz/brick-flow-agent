@@ -1,3 +1,5 @@
+import { getLDDWorldCollisionBounds } from './lddCollisionBounds'
+import { orientedCellsOverlap, type CellAxes, type OrientedCell, type CellBounds } from './orientedCellBounds'
 import { brickById } from '../data/basicBricks'
 import type { BrickConnector, BrickDefinition, PlacedBrick, VoxelFenceConnections } from '../types/bricks'
 import {
@@ -13,7 +15,7 @@ export const STRUCTURAL_VOXEL_SIZE = 1 / 5
 const STRUCTURAL_HASH_STEP = STRUCTURAL_VOXEL_SIZE
 const COLLISION_INDEX_HASH_STEP = 1
 const STRUCTURAL_OVERLAP_TOLERANCE = 0.000001
-const WORLD_STRUCTURAL_CACHE_LIMIT = 5000
+const WORLD_STRUCTURAL_CACHE_LIMIT = 10000
 const structuralCellCache = new Map<string, StructuralCell[]>()
 const renderStructuralCellCache = new Map<string, StructuralCell[]>()
 const interactionStructuralCellCache = new Map<string, StructuralCell[]>()
@@ -50,7 +52,7 @@ export type WorldStructuralCell = StructuralCell & {
   key: string
 }
 
-export type WorldStructuralCellBox = StructuralCell
+export type WorldStructuralCellBox = StructuralCell & { oriented?: OrientedCell }
 
 export type WorldStructuralSupportFace = {
   y: number
@@ -682,7 +684,7 @@ const getCellHashKeys = (
 }
 
 const getPlacedBrickCacheKey = (brick: PlacedBrick) =>
-  `${brick.brickId}:${brick.pose.xStud},${brick.pose.yStud},${brick.pose.zStud},${brick.pose.rotationQuarterTurns},${brick.pose.verticalQuarterTurns ?? 0},${brick.pose.rollQuarterTurns ?? 0}:${brick.voxelState?.slabHalf ?? ''}:${brick.voxelState?.open ? 1 : 0}:${brick.voxelState?.fenceConnections ? Object.values(brick.voxelState.fenceConnections).map(Number).join('') : ''}`
+  `${brick.brickId}:${brick.pose.xStud},${brick.pose.yStud},${brick.pose.zStud},${brick.pose.rotationQuarterTurns},${brick.pose.verticalQuarterTurns ?? 0},${brick.pose.rollQuarterTurns ?? 0}:${brick.pose.orientationMatrix?.join(',') ?? ''}:${brick.voxelState?.slabHalf ?? ''}:${brick.voxelState?.open ? 1 : 0}:${brick.voxelState?.fenceConnections ? Object.values(brick.voxelState.fenceConnections).map(Number).join('') : ''}`
 
 const getOpenDoorStructuralCells = (definition: BrickDefinition): StructuralCell[] => {
   const { widthStuds: width, heightStuds: height, depthStuds: depth } = definition.footprint
@@ -767,8 +769,17 @@ const cellCenterIsInsideNominalBody = (definition: BrickDefinition, cell: Struct
   )
 }
 
-const supportCellCarriesLoad = (definition: BrickDefinition, cell: StructuralCell) =>
-  structuralCellBlocksCollision(cell) && cellCenterIsInsideNominalBody(definition, cell)
+const supportCellCarriesLoad = (definition: BrickDefinition, cell: StructuralCell) => {
+  if (!structuralCellBlocksCollision(cell)) return false
+  // Down brackets have a molded wall behind the nominal stud footprint. Its
+  // lower edge can rest on a surface while the top plate remains above it.
+  if (['99781', '36841'].includes(definition.partNumber)) {
+    const centerY = (cell.minY + cell.maxY) / 2
+    return centerY >= -supportCellCenterTolerance &&
+      centerY <= definition.footprint.heightStuds + supportCellCenterTolerance
+  }
+  return cellCenterIsInsideNominalBody(definition, cell)
+}
 
 const getBrickLocalSupportCellBoxes = (definition: BrickDefinition) =>
   getBrickStructuralCells(definition).filter((cell) => supportCellCarriesLoad(definition, cell))
@@ -975,7 +986,9 @@ export const getBrickWorldSupportFaces = (brick: PlacedBrick): WorldStructuralSu
   const definition = brickById.get(brick.brickId)
   if (!definition) return makeSupportFaces([], [])
 
-  if ((brick.pose.verticalQuarterTurns ?? 0) === 0 && (brick.pose.rollQuarterTurns ?? 0) === 0 &&
+  const matrix = brick.pose.orientationMatrix
+  const keepsVerticalAxis = !matrix || (Math.abs(matrix[3]) < 1e-6 && Math.abs(matrix[4] - 1) < 1e-6 && Math.abs(matrix[5]) < 1e-6)
+  if (keepsVerticalAxis && (brick.pose.verticalQuarterTurns ?? 0) === 0 && (brick.pose.rollQuarterTurns ?? 0) === 0 &&
     !(brick.brickId === 'minecraft-oak-door' && brick.voxelState?.open) &&
     !(definition.voxelVisual?.shape === 'fence' && brick.voxelState?.fenceConnections)) {
     const faces = getBrickWorldHorizontalSupportFaces(definition, brick)
@@ -1052,6 +1065,24 @@ export const getBrickWorldSupportBounds = (brick: PlacedBrick) => {
   return bounds
 }
 
+const rotatedCellAxesCache = new WeakMap<PlacedBrick, { key: string; axes: CellAxes }>()
+const getRotatedCellAxes = (definition: BrickDefinition, brick: PlacedBrick): CellAxes | undefined => {
+  const matrix = brick.pose.orientationMatrix
+  if (!matrix || !matrix.some(value => Math.abs(value) > 1e-6 && Math.abs(value) < 1 - 1e-6)) return undefined
+  const key = getPlacedBrickCacheKey(brick)
+  const cached = rotatedCellAxesCache.get(brick)
+  if (cached?.key === key) return cached.axes
+  const origin = transformBrickLocalPoint(definition, brick.pose, { x: 0, y: 0, z: 0 })
+  const axes = [{ x: 1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }, { x: 0, y: 0, z: 1 }].map(point => {
+    const transformed = transformBrickLocalPoint(definition, brick.pose, point)
+    const x = transformed.x - origin.x, y = transformed.y - origin.y, z = transformed.z - origin.z
+    const length = Math.hypot(x, y, z)
+    return [x / length, y / length, z / length] as const
+  }) as unknown as CellAxes
+  rotatedCellAxesCache.set(brick, { key, axes })
+  return axes
+}
+
 const getBrickWorldCollisionCellBoxes = (brick: PlacedBrick): WorldStructuralCellBox[] => {
   const cacheKey = getPlacedBrickCacheKey(brick)
   const cached = worldCollisionCellBoxCache.get(cacheKey)
@@ -1065,23 +1096,54 @@ const getBrickWorldCollisionCellBoxes = (brick: PlacedBrick): WorldStructuralCel
     : definition.voxelVisual?.shape === 'fence' && brick.voxelState?.fenceConnections
     ? compactStructuralCells(getPlacedBrickStructuralCells(brick, definition).filter(structuralCellBlocksCollision))
     : getBrickInteractionStructuralCells(definition)
+  const axes = getRotatedCellAxes(definition, brick)
   const boxes = localCells
     .filter(structuralCellBlocksCollision)
-    .map((cell) => transformStructuralCellBox(definition, brick, cell))
+    .map((cell) => ({
+      ...transformStructuralCellBox(definition, brick, cell),
+      ...(axes ? { oriented: { axes, halfSize: [(cell.maxX - cell.minX) / 2, (cell.maxY - cell.minY) / 2, (cell.maxZ - cell.minZ) / 2] as const } } : {}),
+    }))
   setLimitedWorldCache(worldCollisionCellBoxCache, cacheKey, boxes)
   return boxes
 }
 
 const doCellBoxesOverlap = (
-  source: Pick<StructuralCell, 'minX' | 'maxX' | 'minY' | 'maxY' | 'minZ' | 'maxZ'>,
-  target: Pick<StructuralCell, 'minX' | 'maxX' | 'minY' | 'maxY' | 'minZ' | 'maxZ'>,
+  source: CellBounds,
+  target: CellBounds,
 ) =>
   source.minX < target.maxX - STRUCTURAL_OVERLAP_TOLERANCE &&
   source.maxX > target.minX + STRUCTURAL_OVERLAP_TOLERANCE &&
   source.minY < target.maxY - STRUCTURAL_OVERLAP_TOLERANCE &&
   source.maxY > target.minY + STRUCTURAL_OVERLAP_TOLERANCE &&
   source.minZ < target.maxZ - STRUCTURAL_OVERLAP_TOLERANCE &&
-  source.maxZ > target.minZ + STRUCTURAL_OVERLAP_TOLERANCE
+  source.maxZ > target.minZ + STRUCTURAL_OVERLAP_TOLERANCE &&
+  orientedCellsOverlap(source, target, STRUCTURAL_OVERLAP_TOLERANCE)
+
+// Use the source library's molded-body envelopes as an additional narrow phase.
+// The mesh occupancy must also overlap: a source envelope alone can cover a
+// real hollow socket (for example the underside of a round 1 x 1 plate).
+const sourceCollisionEnvelopeCache = new Map<string, WorldStructuralCellBox[] | undefined>()
+const getSourceCollisionEnvelope = (brick: PlacedBrick) => {
+  const key = getPlacedBrickCacheKey(brick)
+  if (sourceCollisionEnvelopeCache.has(key)) return sourceCollisionEnvelopeCache.get(key)
+  const definition = brickById.get(brick.brickId)
+  const boxes = definition ? getLDDWorldCollisionBounds(definition, brick) : undefined
+  setLimitedWorldCache(sourceCollisionEnvelopeCache, key, boxes)
+  return boxes
+}
+const sourceEnvelopesOverlap = (source: PlacedBrick, target: PlacedBrick) => {
+  const a = getSourceCollisionEnvelope(source), b = getSourceCollisionEnvelope(target)
+  return !a || !b || a.some(x => b.some(y => doCellBoxesOverlap(x, y)))
+}
+
+const cellPairFitsSourceEnvelopes = (
+  source: WorldStructuralCellBox,
+  target: WorldStructuralCellBox,
+  sourceEnvelope?: WorldStructuralCellBox[],
+  targetEnvelope?: WorldStructuralCellBox[],
+) =>
+  (!sourceEnvelope || sourceEnvelope.some(box => doCellBoxesOverlap(box, source) && doCellBoxesOverlap(box, target))) &&
+  (!targetEnvelope || targetEnvelope.some(box => doCellBoxesOverlap(box, source) && doCellBoxesOverlap(box, target)))
 
 export const getBrickWorldCollisionKeys = (brick: PlacedBrick) => {
   const cacheKey = getPlacedBrickCacheKey(brick)
@@ -1152,9 +1214,9 @@ export const getStructuralOverlapScore = (
 
   for (const brickId of getStructuralCollisionCandidateIds(brick, index)) {
     const other = index.bricksById.get(brickId)
-    if (!other) continue
+    if (!other || !sourceEnvelopesOverlap(brick, other)) continue
 
-    overlapVolume += getCollisionBoxOverlapVolume(sourceBoxes, getBrickWorldCollisionCellBoxes(other))
+    overlapVolume += getCollisionBoxOverlapVolume(sourceBoxes, getBrickWorldCollisionCellBoxes(other), getSourceCollisionEnvelope(brick), getSourceCollisionEnvelope(other))
   }
 
   return overlapVolume
@@ -1163,10 +1225,13 @@ export const getStructuralOverlapScore = (
 const getCollisionBoxOverlapVolume = (
   sourceBoxes: WorldStructuralCellBox[],
   targetBoxes: WorldStructuralCellBox[],
+  sourceEnvelope?: WorldStructuralCellBox[],
+  targetEnvelope?: WorldStructuralCellBox[],
 ) => {
   let volume = 0
   for (const source of sourceBoxes) {
     for (const target of targetBoxes) {
+      if (!doCellBoxesOverlap(source, target) || !cellPairFitsSourceEnvelopes(source, target, sourceEnvelope, targetEnvelope)) continue
       const width = Math.max(0, Math.min(source.maxX, target.maxX) - Math.max(source.minX, target.minX))
       const height = Math.max(0, Math.min(source.maxY, target.maxY) - Math.max(source.minY, target.minY))
       const depth = Math.max(0, Math.min(source.maxZ, target.maxZ) - Math.max(source.minZ, target.minZ))
@@ -1177,17 +1242,18 @@ const getCollisionBoxOverlapVolume = (
 }
 
 export const getBrickStructuralOverlapVolume = (source: PlacedBrick, target: PlacedBrick) =>
-  getCollisionBoxOverlapVolume(getBrickWorldCollisionCellBoxes(source), getBrickWorldCollisionCellBoxes(target))
+  !sourceEnvelopesOverlap(source, target) ? 0 : getCollisionBoxOverlapVolume(getBrickWorldCollisionCellBoxes(source), getBrickWorldCollisionCellBoxes(target), getSourceCollisionEnvelope(source), getSourceCollisionEnvelope(target))
 
 export const doBrickStructuralCellsCollide = (
   source: PlacedBrick,
   target: PlacedBrick,
 ) => {
+  if (!sourceEnvelopesOverlap(source, target)) return false
   const sourceCells = getBrickWorldCollisionCellBoxes(source)
   const targetCells = getBrickWorldCollisionCellBoxes(target)
 
   return sourceCells.some((sourceCell) =>
-    targetCells.some((targetCell) => doCellBoxesOverlap(sourceCell, targetCell)),
+    targetCells.some((targetCell) => doCellBoxesOverlap(sourceCell, targetCell) && cellPairFitsSourceEnvelopes(sourceCell, targetCell, getSourceCollisionEnvelope(source), getSourceCollisionEnvelope(target))),
   )
 }
 

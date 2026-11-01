@@ -5,7 +5,7 @@ import { useAiTaskContext } from './hooks/useAiTaskContext'
 import { useLlmConnection } from './hooks/useLlmConnection'
 import { useWorkspacePersistence } from './hooks/useWorkspacePersistence'
 import { WorkspaceStorageStatus } from './components/WorkspaceStorageStatus'
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { BookOpen, Box, Boxes, ClipboardList, Download, Eye, EyeOff, FileUp, Gauge, Github, Globe2, Link, MessageCircle, MessageSquareText, Pause, Play, Plus, Redo2, RotateCcw, ScanLine, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
 import { BrickEditorPanel } from './components/BrickEditorPanel'
 import { BrickCountsPanel } from './components/BrickCountsPanel'
@@ -27,7 +27,7 @@ import { formatBuildManualHtml, formatBuildManualMarkdown, serializeBuildManual 
 import { getManualPageTabItems, getManualStepPage, manualStepPageSize } from './lib/manualPagination'
 import { countBricks, createBrickCollisionIndex, createPlanSpatialState, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickPlacementDiagnostics, getBrickRawOverlapScore, getConnectedBrickComponents, hasBrickCollision, isBrickAboveGround, makeBrick, repairBuildPlan, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
 import { loadCatalogPreferences, type CatalogPackPreference } from './lib/catalogPreferences'
-import { footprintToWorld, getBrickWorldFrame, normalizeHorizontalStud, normalizeQuarterTurns, normalizeVerticalQuarterTurns, normalizeYStud } from './lib/brickUnits'
+import { footprintToWorld, getBrickWorldFrame, normalizeHorizontalStud, normalizeQuarterTurns, normalizeVerticalQuarterTurns, normalizeYStud, translateBrickPose } from './lib/brickUnits'
 import { useI18n } from './lib/i18n'
 import type { ObjImportResult } from './lib/objImport'
 import { parseImportedProject, type ImportText } from './lib/planFileIO'
@@ -843,8 +843,12 @@ function App() {
     }
   }
 
+  const pendingImportRef = useRef<File>()
   const handleImportPlan = useCallback((file?: File) => {
     if (!file) return
+    // Hydration replaces the initial session epoch. Start the user's import
+    // afterwards so storage restoration cannot silently cancel it.
+    if (!workspaceStorage.hydrated) { pendingImportRef.current = file; return }
 
     if (/\.(?:ldr|mpd)$/i.test(file.name) && file.size > ldrawImportLimits.sourceCharacters * 2) {
       setGenerationFailure(locale === 'zh-CN' ? 'LDraw 文件超过导入大小上限。' : 'LDraw file exceeds the import size limit.')
@@ -954,9 +958,16 @@ function App() {
       }
     }
     reader.readAsText(file)
-  }, [clearGenerationFeedback, importText, locale, selectBrick, setGenerationFailure, setGenerationWarning, t, workspaceSession])
+  }, [clearGenerationFeedback, importText, locale, selectBrick, setGenerationFailure, setGenerationWarning, t, workspaceSession, workspaceStorage.hydrated])
 
   useEffect(() => {
+    if (!workspaceStorage.hydrated || !pendingImportRef.current) return
+    const file = pendingImportRef.current
+    pendingImportRef.current = undefined
+    handleImportPlan(file)
+  }, [handleImportPlan, workspaceStorage.hydrated])
+
+  useLayoutEffect(() => {
     const hasFiles = (event: DragEvent) => event.dataTransfer?.types.includes('Files') === true
     const handleDragEnter = (event: DragEvent) => {
       if (!hasFiles(event)) return
@@ -1006,6 +1017,7 @@ function App() {
 
   const resetWorkspace = () => {
     if (!window.confirm(t('error.resetConfirm'))) return
+    pendingImportRef.current = undefined
 
     generationAbortRef.current?.abort()
     generationAbortRef.current = undefined
@@ -1291,6 +1303,7 @@ function App() {
         nextRotation,
         brick.pose.verticalQuarterTurns ?? 0,
         brick.pose.rollQuarterTurns ?? 0,
+        brick.pose.orientationMatrix,
       )
       const offsetX = frame.x - pivot.x
       const offsetZ = frame.z - pivot.z
@@ -1305,9 +1318,7 @@ function App() {
       return {
         ...brick,
         pose: {
-          ...brick.pose,
-          xStud: normalizeHorizontalStud(pivot.x + rotatedOffset.x - nextFootprint.width / 2),
-          zStud: normalizeHorizontalStud(pivot.z + rotatedOffset.z - nextFootprint.depth / 2),
+          ...translateBrickPose(brick.pose, { xStud: pivot.x + rotatedOffset.x - nextFootprint.width / 2 - brick.pose.xStud, zStud: pivot.z + rotatedOffset.z - nextFootprint.depth / 2 - brick.pose.zStud }),
           rotationQuarterTurns: nextRotation,
         },
       }
@@ -1338,6 +1349,7 @@ function App() {
         brick.pose.rotationQuarterTurns,
         nextVerticalRotation,
         brick.pose.rollQuarterTurns ?? 0,
+        brick.pose.orientationMatrix,
       )
       const offsetY = frame.y - pivot.y
       const offsetZ = frame.z - pivot.z
@@ -1352,9 +1364,7 @@ function App() {
       return {
         ...brick,
         pose: {
-          ...brick.pose,
-          yStud: normalizeYStud(pivot.y + rotatedOffset.y - nextFootprint.height / 2),
-          zStud: normalizeHorizontalStud(pivot.z + rotatedOffset.z - nextFootprint.depth / 2),
+          ...translateBrickPose(brick.pose, { yStud: pivot.y + rotatedOffset.y - nextFootprint.height / 2 - brick.pose.yStud, zStud: pivot.z + rotatedOffset.z - nextFootprint.depth / 2 - brick.pose.zStud }),
           verticalQuarterTurns: nextVerticalRotation,
         },
       }
@@ -1390,12 +1400,7 @@ function App() {
             color: colorChanged && brickById.get(brick.brickId)?.colors.includes(updated.color)
               ? updated.color
               : brick.color,
-            pose: {
-              ...brick.pose,
-              xStud: normalizeHorizontalStud(brick.pose.xStud + delta.xStud),
-              yStud: normalizeYStud(brick.pose.yStud + delta.yStud),
-              zStud: normalizeHorizontalStud(brick.pose.zStud + delta.zStud),
-            },
+            pose: translateBrickPose(brick.pose, delta),
           }))
         const stationaryData = getStationarySpatialState(current.bricks, selectionIdSet)
         if (!canAcceptBrickGroupPose(nextBricks, current.bricks, { action: 'updateBrickGroup' }, stationaryData)) return current
@@ -3777,7 +3782,7 @@ function App() {
                       <div key={piece.instanceId}>
                         <strong>{piece.name}</strong>
                         <small>
-                          {piece.color} · x{piece.pose.xStud} y{piece.pose.yStud} z{piece.pose.zStud} · {piece.rotationDegrees}° · {piece.assembly.label}
+                          {piece.color} · x{piece.pose.xStud} y{piece.pose.yStud} z{piece.pose.zStud} · {piece.orientationLabel ?? `${piece.rotationDegrees}°`} · {piece.assembly.label}
                         </small>
                       </div>
                     ))}

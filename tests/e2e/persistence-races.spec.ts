@@ -97,7 +97,7 @@ test('save-as retains edits during creation and activation and restores them aft
   await expect.poll(() => other.evaluate(() => JSON.parse(localStorage.getItem('brick-flow-agent:workspace-draft:v1')!).plan.title)).toBe('Other tab edit')
   await page.getByLabel('Plan name').fill('Before save-as')
   await page.getByLabel('Plan name').blur()
-  await expect(page.getByText(/Save conflict:/)).toBeVisible()
+  await expect(page.getByText(/Another tab changed this work/)).toBeVisible()
   await other.close()
   await page.evaluate(async path => {
     const { projectStore } = await import(/* @vite-ignore */ path)
@@ -113,8 +113,7 @@ test('save-as retains edits during creation and activation and restores them aft
       return activate(...args)
     }
   }, storePath)
-  await page.locator('.project-manager').first().locator('summary').click()
-  await page.getByRole('button', { name: 'Save as new project', exact: true }).click()
+  await page.getByRole('button', { name: 'Keep current copy', exact: true }).click()
   await page.waitForFunction(() => Boolean((window as unknown as { releaseProjectCreate?: () => void }).releaseProjectCreate))
   await page.getByLabel('Plan name').fill('Edit during creation')
   await page.getByLabel('Plan name').blur()
@@ -127,4 +126,24 @@ test('save-as retains edits during creation and activation and restores them aft
   await expect(page.getByLabel('Plan name')).toHaveValue('Edit during activation')
   await page.reload()
   await expect(page.getByLabel('Plan name')).toHaveValue('Edit during activation')
+})
+
+test('a file dropped during restoration imports afterwards and retains undo', async ({ page }) => {
+  await prepare(page)
+  await delayRestore(page)
+  await page.reload()
+  await page.waitForFunction(() => Boolean((window as unknown as { releaseProjectRestore?: () => void }).releaseProjectRestore))
+  await page.evaluate(() => {
+    const plan = { id: 'queued-import', title: 'Queued import', prompt: '', source: 'template-local',
+      bricks: [{ id: 'queued-brick', brickId: 'brick-1x1', color: 'red', pose: { xStud: 0, yStud: 0, zStud: 0, rotationQuarterTurns: 0 } }],
+      steps: [{ id: 'queued-step', title: 'Queued', description: '', brickIds: ['queued-brick'] }] }
+    const transfer = new DataTransfer()
+    transfer.items.add(new File([JSON.stringify(plan)], 'queued.json', { type: 'application/json' }))
+    window.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }))
+  })
+  await expect(page.getByLabel('Plan name')).toHaveValue('Authoritative project')
+  await releaseRestore(page)
+  await expect(page.getByLabel('Plan name')).toHaveValue('Queued import')
+  await page.getByLabel('Undo').click()
+  await expect(page.getByLabel('Plan name')).toHaveValue('Authoritative project')
 })

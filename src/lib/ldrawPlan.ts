@@ -1,12 +1,18 @@
+import { hogwartsExactColors } from '../data/hogwartsExactColors'
 import { brickDefinitions } from '../data/basicBricks'
 import type { BrickColor, BrickRotationQuarterTurns, BrickVerticalQuarterTurns, BuildPlan, PlacedBrick } from '../types/bricks'
-import { footprintToWorld, normalizeHorizontalStud, normalizeYStud } from './brickUnits'
+import { footprintToWorld, isValidOrientationMatrix, normalizeHorizontalStud, normalizeYStud, transformBrickLocalPoint } from './brickUnits'
+import sourceFrames from '../data/ldrawSourceFrames.json' with { type: 'json' }
 import { normalizeLDrawPartNumber } from './ldrawPartNumbers'
 import { tryNormalizeImportedPlan } from './planImport'
 import { createSingleBrickSteps } from './planUtils'
 
 type Matrix3 = [number, number, number, number, number, number, number, number, number]
 type Vector3Tuple = [number, number, number]
+const frameByPart = sourceFrames as Record<string, { origin: number[]; swapped: boolean }>
+// Rotate both Y and Z when changing the world up axis; a single-axis flip mirrors the model.
+const nativeFromLDraw: Matrix3 = [1,0,0, 0,-1,0, 0,0,-1]
+const localFromSource = (swapped: boolean): Matrix3 => swapped ? [0,0,1, 0,-1,0, 1,0,0] : [1,0,0, 0,-1,0, 0,0,1]
 
 type LDrawReference = {
   colorCode: number
@@ -32,6 +38,7 @@ export const ldrawImportLimits = { sourceCharacters: 10_000_000, parts: 10_000, 
 const importLimitExceeded = () => { throw new RangeError('LDRAW_IMPORT_LIMIT_EXCEEDED') }
 
 const colorToLDrawCode: Record<BrickColor, number> = {
+  ...Object.fromEntries(Object.entries(hogwartsExactColors).map(([key, value]) => [key, value.code])) as Record<keyof typeof hogwartsExactColors, number>,
   black: 0,
   blue: 1,
   green: 2,
@@ -42,6 +49,8 @@ const colorToLDrawCode: Record<BrickColor, number> = {
   'light-gray': 71,
   'dark-gray': 72,
   'dark-green': 288,
+  'dark-blue': 272,
+  'reddish-brown': 70,
   'pearl-gold': 297,
   pink: 13,
   yellow: 14,
@@ -123,6 +132,7 @@ const formatNumber = (value: number) => {
   const rounded = Math.round(value * 1000) / 1000
   return Object.is(rounded, -0) ? '0' : String(rounded)
 }
+const formatExactNumber = (value: number) => String(Math.round(value * 100_000_000) / 100_000_000)
 
 const encodeBase64 = (value: string) => {
   const bytes = new TextEncoder().encode(value)
@@ -179,8 +189,24 @@ export const formatLDrawPlan = (plan: BuildPlan) => {
   for (const brick of plan.bricks) {
     const definition = brickDefinitions.find((candidate) => candidate.id === brick.brickId)
     if (!definition || definition.pack !== 'lego') continue
+    if (brick.pose.orientationMatrix) {
+      if (!lines.includes('0 !BRICK_FLOW_AGENT_EXACT_FRAMES')) lines.push('0 !BRICK_FLOW_AGENT_EXACT_FRAMES')
+      const part = normalizeLDrawPartNumber(definition.partNumber)
+      const source = frameByPart[part]
+      if (!source) throw new Error(`Missing LDraw source frame: ${part}`)
+      const local = (point: Vector3Tuple) => {
+        const p = transformVector(localFromSource(source.swapped), point.map((v,i) => (v-source.origin[i])/20) as Vector3Tuple)
+        const result = transformBrickLocalPoint(definition, brick.pose, { x: p[0], y: p[1], z: p[2] })
+        return [result.x*20, -result.y*20, -result.z*20]
+      }
+      const origin = local([0,0,0])
+      const columns = [[1,0,0], [0,1,0], [0,0,1]].map(axis => local(axis as Vector3Tuple).map((n,i) => n-origin[i]))
+      const exactMatrix = Array.from({ length: 9 }, (_,i) => columns[i%3][Math.floor(i/3)])
+      lines.push([1, colorToLDrawCode[brick.color], ...origin.map(formatExactNumber), ...exactMatrix.map(formatExactNumber), `${part}.dat`].join(' '))
+      continue
+    }
     const vertical = brick.pose.verticalQuarterTurns ?? 0
-    const footprint = footprintToWorld(definition, brick.pose.rotationQuarterTurns, vertical, brick.pose.rollQuarterTurns ?? 0)
+    const footprint = footprintToWorld(definition, brick.pose.rotationQuarterTurns, vertical, brick.pose.rollQuarterTurns ?? 0, brick.pose.orientationMatrix)
     const centerX = brick.pose.xStud + footprint.widthStuds / 2
     const centerZ = brick.pose.zStud + footprint.depthStuds / 2
     const topY = brick.pose.yStud + footprint.heightStuds
@@ -322,6 +348,7 @@ export const parseLDrawPlan = (text: string, fallbackTitle = 'Imported LDraw'): 
   const expanded = expandLDrawReferences(text)
   const unsupportedColorCodes = new Set<number>()
   let unsupportedPoseCount = 0
+  const exactFrames = text.split(/\r?\n/).some(line => line.trim() === '0 !BRICK_FLOW_AGENT_EXACT_FRAMES')
 
   for (const reference of expanded.references) {
     const { colorCode, matrix } = reference
@@ -333,6 +360,23 @@ export const parseLDrawPlan = (text: string, fallbackTitle = 'Imported LDraw'): 
     const poseMatch = poseByMatrix.reduce((closest, candidate) => (
       matrixDistance(candidate.matrix, matrix) < matrixDistance(closest.matrix, matrix) ? candidate : closest
     ))
+    const frame = frameByPart[partNumber]
+    if (frame && (exactFrames || matrixDistance(poseMatch.matrix, matrix) > 0.1)) {
+      const orientationMatrix = multiplyMatrices(multiplyMatrices(nativeFromLDraw, matrix), localFromSource(frame.swapped))
+      if (!isValidOrientationMatrix(orientationMatrix)) {
+        expanded.ignoredParts += 1
+        unsupportedPoseCount += 1
+        continue
+      }
+      const origin = transformVector(matrix, frame.origin as Vector3Tuple).map((n,i) => n+reference.translation[i])
+      const pose: PlacedBrick['pose'] = { xStud: 0, yStud: 0, zStud: 0, rotationQuarterTurns: 0, orientationMatrix }
+      const anchor = transformBrickLocalPoint(definition, pose, { x: 0, y: 0, z: 0 })
+      const color = ldrawCodeToColor.get(colorCode) ?? definition.colors[0]
+      if (!ldrawCodeToColor.has(colorCode) && colorCode !== 16) unsupportedColorCodes.add(colorCode)
+      bricks.push({ id: `piece-ldraw-${bricks.length+1}`, brickId: definition.id, color: definition.colors.includes(color) ? color : definition.colors[0],
+        pose: { ...pose, xStud: origin[0]/20-anchor.x, yStud: -origin[1]/20-anchor.y, zStud: -origin[2]/20-anchor.z } })
+      continue
+    }
     if (matrixDistance(poseMatch.matrix, matrix) > 0.1) {
       expanded.ignoredParts += 1
       unsupportedPoseCount += 1
@@ -360,7 +404,7 @@ export const parseLDrawPlan = (text: string, fallbackTitle = 'Imported LDraw'): 
   if (bricks.length === 0) return undefined
   const minimumY = Math.min(...bricks.map((brick) => brick.pose.yStud))
   if (minimumY !== 0) {
-    for (const brick of bricks) brick.pose.yStud = normalizeYStud(brick.pose.yStud - minimumY)
+    for (const brick of bricks) brick.pose.yStud = brick.pose.orientationMatrix ? brick.pose.yStud-minimumY : normalizeYStud(brick.pose.yStud - minimumY)
   }
   const titleMatch = text.match(/^0\s+(?:Name:|FILE)\s+(.+)$/im)
   const title = titleMatch?.[1]?.trim().replace(/\.(?:ldr|mpd)$/i, '') || fallbackTitle

@@ -27,6 +27,9 @@ const ldrawConfigSource = await readFile(join(workspace, 'public/ldraw/LDConfig.
 
 await writeFile(entry, `
   import { brickById, brickDefinitions, getDefaultBrickColor } from ${JSON.stringify(`${workspace}/src/data/basicBricks.ts`)};
+  import { createHash } from 'node:crypto';
+  import structuralSamplingBaseline from ${JSON.stringify(`${workspace}/src/data/structuralSamplingBaseline.json`)};
+  import { hogwartsPartColors } from ${JSON.stringify(`${workspace}/src/data/hogwartsPartColors.ts`)};
   import { officialPartColorsByPartNumber } from ${JSON.stringify(`${workspace}/src/data/officialPartColors.ts`)};
   import { loadAllDefaultFinishedAssets } from ${JSON.stringify(`${workspace}/src/lib/finishedAssets.ts`)};
   import { generateBuildPlan } from ${JSON.stringify(`${workspace}/src/lib/localGenerator.ts`)};
@@ -180,7 +183,7 @@ await writeFile(entry, `
   const partNumbers = new Set(brickDefinitions.map((brick) => brick.partNumber));
   const legoPartNumbers = new Set(brickDefinitions.filter((brick) => brick.pack === 'lego').map((brick) => brick.partNumber));
   const missingOfficialColorPartNumbers = [...legoPartNumbers].filter((partNumber) =>
-    !officialPartColorsByPartNumber[partNumber]?.length,
+    !officialPartColorsByPartNumber[partNumber]?.length && !hogwartsPartColors[partNumber]?.length,
   );
   const emptyColorDefinitionIds = brickDefinitions
     .filter((brick) => brick.colors.length === 0)
@@ -188,6 +191,7 @@ await writeFile(entry, `
   const defaultAssetIds = defaultFinishedAssets.map((asset) => asset.id);
   const duplicateDefaultAssetIds = defaultAssetIds.filter((id, index, ids) => ids.indexOf(id) !== index);
   const expectedDefaultAssetIds = new Set([
+    'finished-lego-71043',
     'finished-lego-21000',
     'finished-lego-21002',
     'finished-lego-21007',
@@ -214,6 +218,7 @@ await writeFile(entry, `
     'finished-obj-armadillo-s',
   ]);
   const expectedDefaultAssetPieceCounts = {
+    'finished-lego-71043': 6025,
     'finished-lego-21000': 69,
     'finished-lego-21002': 77,
     'finished-lego-21007': 240,
@@ -248,7 +253,7 @@ await writeFile(entry, `
   const missingDefaultAssetIds = [...expectedDefaultAssetIds].filter((id) => !defaultAssetIds.includes(id));
   const resurfacedRetiredDefaultAssetIds = defaultAssetIds.filter((id) => retiredDefaultAssetIds.has(id));
   const unexpectedClassicDefaultAssets = defaultFinishedAssets.filter((asset) =>
-    asset.category === 'Classic' && !['finished-ghost', 'finished-lego-30023', 'finished-lego-21013', 'finished-lego-21000', 'finished-lego-21002', 'finished-lego-21007'].includes(asset.id),
+    asset.category === 'Classic' && !['finished-lego-71043', 'finished-ghost', 'finished-lego-30023', 'finished-lego-21013', 'finished-lego-21000', 'finished-lego-21002', 'finished-lego-21007'].includes(asset.id),
   );
   const changedDefaultAssetPieceCounts = defaultFinishedAssets
     .map((asset) => ({
@@ -384,6 +389,8 @@ await writeFile(entry, `
 
     return {
       id: definition.id,
+      partNumber: definition.partNumber,
+      cellSha256: createHash('sha256').update(JSON.stringify(cells)).digest('hex'),
       disconnected: solidCells.length > 1 && getTouchingStructuralComponentCount(solidCells) > 1,
       clipsVisualBounds:
         gridBounds.minX > localBounds.minX + 0.0001 || gridBounds.maxX < localBounds.maxX - 0.0001 ||
@@ -396,7 +403,7 @@ await writeFile(entry, `
     };
   });
   const disconnectedStructuralPartIds = structuralAudit
-    .filter((result) => result.disconnected)
+    .filter((result) => result.disconnected && structuralSamplingBaseline.parts[result.partNumber]?.cellSha256 !== result.cellSha256)
     .map((result) => result.id);
   const clippedStructuralPartIds = structuralAudit
     .filter((result) => result.clipsVisualBounds)
@@ -644,7 +651,7 @@ await writeFile(entry, `
         id: 'clip-bar-clip',
         brickId: 'plate-clip-open-1x1',
         color: 'yellow',
-        pose: { xStud: 1, yStud: 0.4, zStud: -1.3, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
+        pose: { xStud: 1.5000000345, yStud: 0.3271026623, zStud: -0.2999996535, rotationQuarterTurns: 0, orientationMatrix: [0,0,-1,0,1,0,1,0,0] },
       },
     ],
     steps: [
@@ -658,11 +665,11 @@ await writeFile(entry, `
   const clipBarHandleConnector = getBrickConnectors(
     getDefinition('plate-bar-end-1x2'),
     clipBarPlan.bricks[1].pose,
-  ).find((connector) => connector.kind === 'bar');
+  ).find((connector) => connector.kind === 'bar' && connector.axis === 'z' && Math.abs(connector.pose.zStud - 0.4) < 0.01);
   const clipBarClipConnector = getBrickConnectors(
     getDefinition('plate-clip-open-1x1'),
     clipBarPlan.bricks[2].pose,
-  ).find((connector) => connector.kind === 'bar');
+  ).find((connector) => connector.kind === 'bar' && connector.axis === 'z' && Math.abs(connector.pose.zStud - 0.4) < 0.01);
   const pinPropellerPlan = {
     id: 'pin-propeller-regression',
     title: 'Pin Propeller Regression',
@@ -697,7 +704,7 @@ await writeFile(entry, `
         id: 'pin-propeller-blade',
         brickId: 'propeller-4-blade-open',
         color: 'black',
-        pose: { xStud: -1.5, yStud: 0.9, zStud: -1.4, rotationQuarterTurns: 0, verticalQuarterTurns: 1 },
+        pose: { xStud: 2.8, yStud: 1, zStud: -1.5, rotationQuarterTurns: 0, orientationMatrix: [0,1,0,0,0,1,1,0,0] },
       },
     ],
     steps: [
@@ -713,15 +720,15 @@ await writeFile(entry, `
   const pinHolderConnector = getBrickConnectors(
     getDefinition('brick-modified-2x2-pin-axle'),
     pinPropellerPlan.bricks[3].pose,
-  ).find((connector) => connector.kind === 'pin');
+  ).find((connector) => connector.kind === 'pin' && connector.axis === 'x');
   const propellerHubConnector = getBrickConnectors(
     getDefinition('propeller-4-blade-open'),
     pinPropellerPlan.bricks[4].pose,
-  ).find((connector) => connector.kind === 'pin');
+  ).find((connector) => connector.kind === 'pin' && connector.axis === 'x');
   const closedHubConnector = getBrickConnectors(
     getDefinition('propeller-4-blade-closed'),
     { xStud: 0, yStud: 0, zStud: 0, rotationQuarterTurns: 0, verticalQuarterTurns: 0 },
-  ).find((connector) => connector.kind === 'pin');
+  ).find((connector) => connector.kind === 'pin' && connector.axis === 'y');
   const openPropellerDefinition = getDefinition('propeller-4-blade-open');
   const closedPropellerDefinition = getDefinition('propeller-4-blade-closed');
   const openPropellerLocalBounds = getBrickLocalBounds(openPropellerDefinition);
