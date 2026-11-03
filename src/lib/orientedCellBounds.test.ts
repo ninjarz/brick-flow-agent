@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest'
-import {orientedCellsOverlap,type CellAxes,type CellBounds} from './orientedCellBounds'
+import {orientedCellsOverlap,getVerticalCellContactDistance,type CellAxes,type CellBounds} from './orientedCellBounds'
 const c=Math.SQRT1_2
 const yaw:CellAxes=[[c,0,c],[0,1,0],[-c,0,c]]
 const box=(offset:number,axes=yaw):CellBounds=>{
@@ -28,4 +28,22 @@ describe('oriented structural cells',()=>{
   expect(orientedCellsOverlap(box(0),ordinary,1e-6)).toBe(true)
   expect(orientedCellsOverlap(box(2),ordinary,1e-6)).toBe(false)
  })
+ it('solves vertical SAT entry without skipping contact between sampled poses',()=>{
+  const orientations:CellAxes[]=[yaw,[[1,0,0],[0,c,c],[0,-c,c]],[[-c,0,-c],[0,1,0],[-c,0,c]]]
+  for(const axes of orientations)for(const offset of [-.4,0,.15,.4]){
+   const original=box(offset,axes)
+   const a={...original,minY:original.minY+3,maxY:original.maxY+3}
+   const b=box(0)
+   const distance=getVerticalCellContactDistance(a,b,1e-6)
+   let first:number|undefined
+   for(let i=0;i<=600;i++){
+    const d=i*.01,shifted={...a,minY:a.minY-d,maxY:a.maxY-d}
+    const overlapping=shifted.minX<b.maxX-1e-6&&shifted.maxX>b.minX+1e-6&&shifted.minY<b.maxY-1e-6&&shifted.maxY>b.minY+1e-6&&shifted.minZ<b.maxZ-1e-6&&shifted.maxZ>b.minZ+1e-6&&orientedCellsOverlap(shifted,b,1e-6)
+    if(overlapping){first??=d;expect(distance).toBeLessThanOrEqual(d+1e-10)}
+   }
+   if(first!==undefined)expect(distance).toBeGreaterThanOrEqual(first-.010001)
+   else expect(distance).toBe(Infinity)
+  }
+ })
+
 })

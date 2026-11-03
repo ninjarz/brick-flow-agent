@@ -1,5 +1,5 @@
 import type { BrickDefinition, BrickPose } from '../types/bricks'
-import { getLoadedLDrawGeneratedVisualTriangles } from './ldrawGeneratedVisualLoader'
+import { getLoadedLDrawGeneratedVisualTriangles } from './ldrawVisualRegistry'
 import { normalizeLDrawPartNumber } from './ldrawPartNumbers'
 import { transformBrickLocalPoint } from './brickUnits'
 import type { MeshTriangle } from './structuralVoxelizer'
@@ -59,6 +59,11 @@ export const getFootprintLocalBounds = (definition: BrickDefinition): BrickBound
   maxZ: definition.footprint.depthStuds,
 })
 
+/** Analysis workers reuse reviewed bounds without downloading render meshes. */
+export const seedLDrawLocalBounds = (partNumber: string, bounds: BrickBounds) => {
+  localBoundsCache.set(normalizeLDrawPartNumber(partNumber), bounds)
+}
+
 export const getLoadedLDrawLocalBounds = (partNumber: string) => {
   const normalizedPartNumber = normalizeLDrawPartNumber(partNumber)
   const cached = localBoundsCache.get(normalizedPartNumber)
@@ -86,20 +91,36 @@ const getBoundsCorners = (bounds: BrickBounds) => [
   { x: bounds.maxX, y: bounds.maxY, z: bounds.maxZ },
 ]
 
+const orientedBounds = new WeakMap<BrickDefinition, WeakMap<BrickBounds, Map<string, BrickBounds>>>()
+
 export const transformBrickLocalBounds = (
   definition: BrickDefinition,
   pose: BrickPose,
   bounds: BrickBounds,
 ): BrickBounds => {
-  const corners = getBoundsCorners(bounds).map((corner) => transformBrickLocalPoint(definition, pose, corner))
-
+  let byBounds = orientedBounds.get(definition)
+  if (!byBounds) { byBounds = new WeakMap(); orientedBounds.set(definition, byBounds) }
+  let byOrientation = byBounds.get(bounds)
+  if (!byOrientation) { byOrientation = new Map(); byBounds.set(bounds, byOrientation) }
+  const key = `${definition.footprint.widthStuds},${definition.footprint.heightStuds},${definition.footprint.depthStuds}:${pose.rotationQuarterTurns},${pose.verticalQuarterTurns ?? 0},${pose.rollQuarterTurns ?? 0}:${pose.orientationMatrix?.join(',') ?? ''}:${bounds.minX},${bounds.maxX},${bounds.minY},${bounds.maxY},${bounds.minZ},${bounds.maxZ}`
+  let rotated = byOrientation.get(key)
+  if (!rotated) {
+    const localPose = { ...pose, xStud: 0, yStud: 0, zStud: 0 }
+    const corners = getBoundsCorners(bounds).map(corner => transformBrickLocalPoint(definition, localPose, corner))
+    rotated = {
+      minX: Math.min(...corners.map(corner => corner.x)), maxX: Math.max(...corners.map(corner => corner.x)),
+      minY: Math.min(...corners.map(corner => corner.y)), maxY: Math.max(...corners.map(corner => corner.y)),
+      minZ: Math.min(...corners.map(corner => corner.z)), maxZ: Math.max(...corners.map(corner => corner.z)),
+    }
+    if (byOrientation.size >= 512) byOrientation.clear()
+    byOrientation.set(key, rotated)
+  }
+  // Translation is the final operation in transformBrickLocalPoint, so this
+  // reuses the identical rotated extrema without re-transforming eight corners.
   return {
-    minX: Math.min(...corners.map((corner) => corner.x)),
-    maxX: Math.max(...corners.map((corner) => corner.x)),
-    minY: Math.min(...corners.map((corner) => corner.y)),
-    maxY: Math.max(...corners.map((corner) => corner.y)),
-    minZ: Math.min(...corners.map((corner) => corner.z)),
-    maxZ: Math.max(...corners.map((corner) => corner.z)),
+    minX: pose.xStud + rotated.minX, maxX: pose.xStud + rotated.maxX,
+    minY: pose.yStud + rotated.minY, maxY: pose.yStud + rotated.maxY,
+    minZ: pose.zStud + rotated.minZ, maxZ: pose.zStud + rotated.maxZ,
   }
 }
 

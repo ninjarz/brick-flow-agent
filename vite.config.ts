@@ -16,6 +16,8 @@ export default defineConfig({
   plugins: [react(), llmProxyPlugin()],
   worker: {
     format: 'es',
+    // Workers have their own Rollup graph and need the same geometry bound.
+    rollupOptions: { maxParallelFileOps: 8 },
   },
   build: {
     rollupOptions: {

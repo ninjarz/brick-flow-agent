@@ -1635,10 +1635,10 @@ export const validateBuildPlanBasics = (plan: BuildPlan): BuildPlanIssue[] => {
   return issues
 }
 
-export const validateBuildPlanStructural = (plan: BuildPlan): BuildPlanIssue[] => {
+export const validateBuildPlanStructural = (plan: BuildPlan, preparedGraph?: BuildGraph): BuildPlanIssue[] => {
   const issues: BuildPlanIssue[] = []
   const context = createPlanValidationContext(plan.bricks)
-  const buildGraph = createBuildGraph(plan.bricks, context)
+  const buildGraph = preparedGraph ?? createBuildGraph(plan.bricks, context)
   const collisionBoundsById = new Map(
     plan.bricks.flatMap((brick) => {
       const bounds = getBrickCollisionBroadBounds(brick, context)
@@ -1689,9 +1689,9 @@ export const validateBuildPlanStructural = (plan: BuildPlan): BuildPlanIssue[] =
   return issues
 }
 
-export const validateBuildPlan = (plan: BuildPlan): BuildPlanIssue[] => [
+export const validateBuildPlan = (plan: BuildPlan, preparedGraph?: BuildGraph): BuildPlanIssue[] => [
   ...validateBuildPlanBasics(plan),
-  ...validateBuildPlanStructural(plan),
+  ...validateBuildPlanStructural(plan, preparedGraph),
 ]
 
 type SummaryLocale = 'zh-CN' | 'en-US'

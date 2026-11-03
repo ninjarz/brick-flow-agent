@@ -1,4 +1,5 @@
 import * as esbuild from 'esbuild'
+import { generateStructuralCache } from './generate-ldraw-structural-cache.mjs'
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -787,7 +788,10 @@ await writeFile(join(workspace, 'src/data/ldrawSourceFrames.json'), JSON.stringi
   swapped: row.horizontalAxisMapping === 'swapped',
 }])) , null, 2) + '\n')
 
+const structuralCache = await generateStructuralCache()
+
 console.log(JSON.stringify({
+  structuralCache,
   generated: generatedVisualProfiles.length,
   generatedVisualChunks: generatedVisualChunks.length,
   generatedConnectorProfiles: generatedConnectorProfiles.length,

@@ -1,3 +1,5 @@
+import { registerLDrawVisualChunk } from './ldrawVisualRegistry'
+export { onLDrawGeneratedVisualLoaded, getLoadedLDrawGeneratedVisualTriangles, getLoadedLDrawPrintLayers } from './ldrawVisualRegistry'
 import {
   ldrawGeneratedVisualChunkLoaders,
   ldrawGeneratedVisualPartNumbers,
@@ -15,18 +17,6 @@ for (const [partNumber, loader] of Object.entries(ldrawGeneratedVisualChunkLoade
   if (partNumbers) partNumbers.push(partNumber)
   else partNumbersByLoader.set(loader, [partNumber])
 }
-const loadListeners = new Set<(partNumbers: readonly string[]) => void>()
-
-const notifyLoaded = (loader: VisualChunkLoader) => {
-  const partNumbers = partNumbersByLoader.get(loader) ?? []
-  for (const listener of loadListeners) listener(partNumbers)
-}
-
-export const onLDrawGeneratedVisualLoaded = (listener: (partNumbers: readonly string[]) => void) => {
-  loadListeners.add(listener)
-  return () => loadListeners.delete(listener)
-}
-
 const getVisualChunkLoader = (partNumber: string) =>
   ldrawGeneratedVisualChunkLoaders[normalizeLDrawPartNumber(partNumber)]
 
@@ -40,7 +30,7 @@ const loadVisualChunk = (loader: VisualChunkLoader) => {
   const loading = loader()
     .then((module) => {
       loadedChunks.set(loader, module)
-      notifyLoaded(loader)
+      registerLDrawVisualChunk(partNumbersByLoader.get(loader) ?? [], module)
       return module
     })
     .finally(() => loadingChunks.delete(loader))
@@ -57,24 +47,10 @@ export const loadLDrawGeneratedVisual = async (partNumbers = ldrawGeneratedVisua
   await Promise.all(Array.from(loaders, loadVisualChunk))
 }
 
-export const getLoadedLDrawGeneratedVisualTriangles = (partNumber: string) => {
-  const normalizedPartNumber = normalizeLDrawPartNumber(partNumber)
-  const loader = getVisualChunkLoader(normalizedPartNumber)
-  return loader
-    ? loadedChunks.get(loader)?.getLDrawGeneratedVisualTriangles(normalizedPartNumber)
-    : undefined
-}
-
 export const loadLDrawGeneratedVisualTriangles = async (partNumber: string) => {
   const normalizedPartNumber = normalizeLDrawPartNumber(partNumber)
   const loader = getVisualChunkLoader(normalizedPartNumber)
   return loader
     ? (await loadVisualChunk(loader)).getLDrawGeneratedVisualTriangles(normalizedPartNumber)
     : undefined
-}
-
-// Ink shares the geometry chunk and is available after the same load completes.
-export const getLoadedLDrawPrintLayers = (partNumber: string) => {
-  const part = normalizeLDrawPartNumber(partNumber), loader = getVisualChunkLoader(part)
-  return loader ? loadedChunks.get(loader)?.getLDrawGeneratedPrintLayers(part) : undefined
 }

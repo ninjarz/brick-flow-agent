@@ -1,3 +1,13 @@
+import { getSceneGridFade } from '../lib/sceneGridFade'
+import { useLDrawBatchResources } from './scene/useLDrawBatchResources'
+import { useSceneCallbacks } from './scene/useSceneCallbacks'
+import { getEditorSupport, getEditorStability, backgroundAnalysisThreshold } from '../lib/editorAnalysisClient'
+import { SceneGround } from './scene/SceneGround'
+import { useSceneCanvasGesture } from './scene/useSceneCanvasGesture'
+import { useBrickInteractionHandlers } from './scene/useBrickInteractionHandlers'
+import { LDrawBatch, LDrawPrints, LDrawBatchLines } from './scene/LDrawBatches'
+import { LargePlacementGhosts } from './scene/LargePlacementGhosts'
+import { buildLDrawSceneBatches, type LDrawSceneBatches } from '../lib/ldrawSceneBatches'
 import { Billboard, Edges, Html, Line, OrbitControls, Text } from '@react-three/drei'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
@@ -8,8 +18,8 @@ import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { getWorldCombatPresentationPhase } from '../lib/worldCombatPresentation'
 import { createRound2x2AxleBodyGeometry, createRound2x2AxleGrilleBodyGeometry } from '../lib/csgBrickGeometry'
 import { getBrickWorldBoundsFrame } from '../lib/ldrawBounds'
-import { loadLDrawGeneratedVisual } from '../lib/ldrawGeneratedVisualLoader'
-import { normalizeLDrawPartNumber } from '../lib/ldrawPartNumbers'
+import { prepareBrickDefinitionsGeometry } from '../lib/planGeometry'
+import { getLDrawEdgePoints } from '../lib/ldrawEdgePoints'
 import { createLoadedLDrawBodyGeometry, createLDrawPrintGeometries } from '../lib/ldrawVisualGeometry'
 import { getVisibleBricksDuringPlacement } from '../lib/brickPlacementPreview'
 import { createBuildGraph, getBrickBounds } from '../lib/planUtils'
@@ -49,7 +59,7 @@ export type BrickSelectionOptions = {
   toggle?: boolean
 }
 
-type BrickSceneProps = {
+export type BrickSceneProps = {
   bricks: PlacedBrick[]
   selectedId?: string
   highlightedIds?: string[]
@@ -102,99 +112,9 @@ const structuralVoxelStyle: Record<StructuralCellKind, { color: string; opacity:
 const structuralVoxelRenderOrder: StructuralCellKind[] = ['enterable', 'solid', 'studsocket', 'stud', 'socket']
 const defaultGridExtent = 15
 const gridPadding = 4
-const minimumRadialGridRadius = 30
 const nudgeRepeatDelayMs = 280
 const nudgeRepeatIntervalMs = 90
-const dragLongPressDelayMs = 420
 
-const radialGridVertexShader = `
-  varying vec2 vLocalGridPosition;
-
-  void main() {
-    vLocalGridPosition = position.xy;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-`
-
-const radialGridFragmentShader = `
-  varying vec2 vLocalGridPosition;
-
-  uniform float uRadius;
-  uniform float uCenterX;
-  uniform float uCenterZ;
-
-  float gridLine(vec2 coordinate, float spacing) {
-    vec2 scaled = coordinate / spacing;
-    vec2 width = max(fwidth(scaled), vec2(0.0001));
-    vec2 distanceToLine = abs(fract(scaled - 0.5) - 0.5) / width;
-    return 1.0 - min(min(distanceToLine.x, distanceToLine.y), 1.0);
-  }
-
-  void main() {
-    float distanceFromCenter = length(vLocalGridPosition);
-    float radialFade = 1.0 - smoothstep(uRadius * 0.7, uRadius, distanceFromCenter);
-    if (radialFade <= 0.001) discard;
-
-    // The circle geometry is rotated onto XZ, so its local Y points toward -Z.
-    // Including the world-space center keeps grid lines aligned to integer studs.
-    vec2 worldGridPosition = vec2(
-      vLocalGridPosition.x + uCenterX,
-      uCenterZ - vLocalGridPosition.y
-    );
-    float minorLine = gridLine(worldGridPosition, 1.0);
-    float majorLine = gridLine(worldGridPosition, 5.0);
-
-    vec3 surfaceColor = vec3(0.843, 0.871, 0.902);
-    vec3 minorColor = vec3(0.710, 0.757, 0.804);
-    vec3 majorColor = vec3(0.514, 0.588, 0.663);
-    vec3 color = mix(surfaceColor, minorColor, minorLine * 0.58);
-    color = mix(color, majorColor, majorLine * 0.82);
-    float alpha = (0.72 + minorLine * 0.12 + majorLine * 0.13) * radialFade;
-
-    gl_FragColor = vec4(color, alpha);
-  }
-`
-
-const RadialGrid = memo(({
-  centerX,
-  centerZ,
-  radius,
-  receiveShadow,
-}: {
-  centerX: number
-  centerZ: number
-  radius: number
-  receiveShadow: boolean
-}) => {
-  const uniforms = useMemo(() => ({
-    uRadius: { value: radius },
-    uCenterX: { value: centerX },
-    uCenterZ: { value: centerZ },
-  }), [centerX, centerZ, radius])
-
-  return (
-    <group position={[centerX, 0, centerZ]}>
-      {receiveShadow && (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} receiveShadow>
-          <circleGeometry args={[radius, 128]} />
-          <shadowMaterial transparent opacity={0.14} depthWrite={false} />
-        </mesh>
-      )}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]}>
-        <circleGeometry args={[radius, 128]} />
-        <shaderMaterial
-          uniforms={uniforms}
-          vertexShader={radialGridVertexShader}
-          fragmentShader={radialGridFragmentShader}
-          transparent
-          depthWrite={false}
-          side={DoubleSide}
-          toneMapped={false}
-        />
-      </mesh>
-    </group>
-  )
-})
 
 const isPlacementGhostObject = (object: Object3D) => {
   let current: Object3D | null = object
@@ -223,125 +143,13 @@ const getFirstPlacementSurfacePoint = (event: ThreeEvent<PointerEvent>) => {
   }
 }
 
-const useBrickInteractionHandlers = ({
-  resolveBrickId,
-  canBeginDrag,
-  placementActive,
-  onSelect,
-  onSelectConnected,
-  onBeginDragSelected,
-  onConfirmPlacement,
-  onCancelPlacement,
-}: {
-  resolveBrickId: (event: ThreeEvent<MouseEvent>) => string | undefined
-  canBeginDrag: (id: string) => boolean
-  placementActive: boolean
-  onSelect: (id: string, options?: BrickSelectionOptions) => void
-  onSelectConnected?: (id: string) => void
-  onBeginDragSelected?: (id: string, point: { x: number; z: number }) => void
-  onConfirmPlacement?: () => void
-  onCancelPlacement?: () => void
-}) => {
-  const longPressTimerRef = useRef<number>()
-  const pointerDownRef = useRef<{ x: number; y: number }>()
-  const isPointerDownRef = useRef(false)
-  const releaseListenerCleanupRef = useRef<() => void>()
-  const suppressNextClickRef = useRef(false)
-
-  const clearLongPress = () => {
-    if (longPressTimerRef.current !== undefined) window.clearTimeout(longPressTimerRef.current)
-    longPressTimerRef.current = undefined
-    pointerDownRef.current = undefined
-    isPointerDownRef.current = false
-    releaseListenerCleanupRef.current?.()
-    releaseListenerCleanupRef.current = undefined
-  }
-
-  useEffect(() => () => clearLongPress(), [])
-
-  useEffect(() => {
-    if (!placementActive) suppressNextClickRef.current = false
-  }, [placementActive])
-
-  const onPointerDown = (event: ThreeEvent<PointerEvent>) => {
-    if (placementActive || event.button !== 0) return
-    const brickId = resolveBrickId(event as unknown as ThreeEvent<MouseEvent>)
-    if (!brickId || !canBeginDrag(brickId) || !onBeginDragSelected) return
-    // A press on an already-selected brick belongs to the placement gesture.
-    // Keep OrbitControls from consuming the same pointer-down before the
-    // long-press timer switches placement mode on.
-    event.stopPropagation()
-    event.nativeEvent.stopImmediatePropagation()
-    clearLongPress()
-    const point = { x: event.point.x, z: event.point.z }
-    pointerDownRef.current = { x: event.clientX, y: event.clientY }
-    isPointerDownRef.current = true
-    const handleGlobalRelease = () => clearLongPress()
-    window.addEventListener('pointerup', handleGlobalRelease, true)
-    window.addEventListener('pointercancel', handleGlobalRelease, true)
-    window.addEventListener('blur', handleGlobalRelease)
-    releaseListenerCleanupRef.current = () => {
-      window.removeEventListener('pointerup', handleGlobalRelease, true)
-      window.removeEventListener('pointercancel', handleGlobalRelease, true)
-      window.removeEventListener('blur', handleGlobalRelease)
-    }
-    longPressTimerRef.current = window.setTimeout(() => {
-      if (!isPointerDownRef.current) {
-        clearLongPress()
-        return
-      }
-      suppressNextClickRef.current = true
-      longPressTimerRef.current = undefined
-      onBeginDragSelected(brickId, point)
-    }, dragLongPressDelayMs)
-  }
-
-  const onPointerMove = (event: ThreeEvent<PointerEvent>) => {
-    const start = pointerDownRef.current
-    if (!start || longPressTimerRef.current === undefined) return
-    if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 6) clearLongPress()
-  }
-
-  const onPointerUp = () => clearLongPress()
-  const onPointerOut = () => clearLongPress()
-  const onClick = (event: ThreeEvent<MouseEvent>) => {
-    event.stopPropagation()
-    clearLongPress()
-    if (suppressNextClickRef.current) {
-      suppressNextClickRef.current = false
-      return
-    }
-    if (placementActive) {
-      onConfirmPlacement?.()
-      return
-    }
-    const brickId = resolveBrickId(event)
-    const toggleSelection = event.metaKey || event.ctrlKey || event.nativeEvent.metaKey || event.nativeEvent.ctrlKey
-    if (brickId) onSelect(brickId, { toggle: toggleSelection })
-  }
-  const onDoubleClick = (event: ThreeEvent<MouseEvent>) => {
-    if (placementActive) return
-    const brickId = resolveBrickId(event)
-    if (!brickId) return
-    event.stopPropagation()
-    onSelectConnected?.(brickId)
-  }
-  const onContextMenu = (event: ThreeEvent<MouseEvent>) => {
-    if (!placementActive) return
-    event.stopPropagation()
-    event.nativeEvent.preventDefault()
-    onCancelPlacement?.()
-  }
-
-  return { onPointerDown, onPointerMove, onPointerUp, onPointerOut, onClick, onDoubleClick, onContextMenu }
-}
 
 const BoundsOutline = ({ position, size, color }: {
   position: [number, number, number]
   size: [number, number, number]
   color: string
 }) => (
-  <mesh position={position}>
+  <mesh position={position} raycast={() => null}>
     <boxGeometry args={size} />
     <meshBasicMaterial transparent opacity={0} depthWrite={false} />
     <Edges color={color} threshold={15} />
@@ -404,12 +212,14 @@ const BrickBodyMaterial = ({
   isSlope = false,
   flatShading = isSlope,
   showEdges = true,
+  edgeGeometry,
 }: {
   color: string
   opacity?: number
   isSlope?: boolean
   flatShading?: boolean
   showEdges?: boolean
+  edgeGeometry?: BufferGeometry
 }) => (
   <>
     <meshStandardMaterial
@@ -423,7 +233,9 @@ const BrickBodyMaterial = ({
       opacity={opacity}
       depthWrite={opacity >= 1}
     />
-    {showEdges && <Edges color={edgeColor} threshold={15} />}
+    {showEdges && (edgeGeometry
+      ? <Line segments points={getLDrawEdgePoints(edgeGeometry)} color={edgeColor} raycast={() => null} />
+      : <Edges color={edgeColor} threshold={15} />)}
   </>
 )
 
@@ -1214,6 +1026,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
                 opacity={bodyOpacity}
                 isSlope={definition.kind === 'slope'}
                 flatShading={false}
+                edgeGeometry={ldrawGeometry}
                 showEdges={showEdges || selected || highlighted || floating}
               />
             </mesh>
@@ -2134,7 +1947,8 @@ const VoxelBoxInstances = memo(function VoxelBoxInstances({
   )
 })
 
-const VoxelOptimizedScene = ({
+
+const VoxelOptimizedScene = memo(function VoxelOptimizedScene({
   bricks,
   selectedId,
   highlightedIdSet,
@@ -2166,13 +1980,26 @@ const VoxelOptimizedScene = ({
   onBeginDragSelected?: (id: string, point: { x: number; z: number }) => void
   onConfirmPlacement?: () => void
   onCancelPlacement?: () => void
-}) => {
+}) {
   const groupCacheRef = useRef(new Map<string, VoxelBoxInstanceGroup>())
+  const ldrawBatchCache = useRef<LDrawSceneBatches>()
+  const placementBatchCache = useRef<LDrawSceneBatches>()
+  const ldrawBatches = useMemo(() => {
+    const result = buildLDrawSceneBatches(preferDetailedGeometry ? bricks : [], {
+      selectedId, highlightedIds: highlightedIdSet, supportedByBrickId, displayColorByBrickId, showEdges,
+      excludedIds: new Set([...hiddenBrickIdSet, ...(transformsByBrickId?.keys() ?? [])]),
+    }, placementActive ? placementBatchCache.current ?? ldrawBatchCache.current : ldrawBatchCache.current)
+    if (placementActive) placementBatchCache.current = result
+    else { ldrawBatchCache.current = result; placementBatchCache.current = undefined }
+    return result
+  }, [bricks, preferDetailedGeometry, selectedId, highlightedIdSet, supportedByBrickId, displayColorByBrickId, showEdges, hiddenBrickIdSet, transformsByBrickId, placementActive])
+  const lineGeometries = useLDrawBatchResources(ldrawBatches, ldrawBatchCache.current, placementBatchCache.current)
+  const remainingBricks = preferDetailedGeometry ? ldrawBatches.individualBricks : bricks
   const { groups, individualBricks } = useMemo(() => {
     const candidates = new Map<string, VoxelBoxInstanceGroup>()
     const individual: PlacedBrick[] = []
 
-    for (const brick of bricks) {
+    for (const brick of remainingBricks) {
       const definition = brickById.get(brick.brickId)
       const visual = definition?.voxelVisual
       const canInstance = Boolean(
@@ -2217,7 +2044,7 @@ const VoxelOptimizedScene = ({
     }
     groupCacheRef.current = new Map(nextGroups.map((group) => [group.key, group]))
     return { groups: nextGroups, individualBricks: individual }
-  }, [bricks, displayColorByBrickId, hiddenBrickIdSet, highlightedIdSet, selectedId, supportedByBrickId, transformsByBrickId])
+  }, [remainingBricks, displayColorByBrickId, hiddenBrickIdSet, highlightedIdSet, selectedId, supportedByBrickId, transformsByBrickId])
   const draggableIds = useMemo(
     () => new Set(selectedId ? [selectedId, ...highlightedIdSet] : highlightedIdSet),
     [highlightedIdSet, selectedId],
@@ -2225,6 +2052,9 @@ const VoxelOptimizedScene = ({
 
   return (
     <>
+      {ldrawBatches.meshBatches.map(batch => <LDrawBatch key={batch.key} batch={batch} selectedId={selectedId} highlightedIdSet={highlightedIdSet} placementActive={placementActive} onSelect={onSelect} onSelectConnected={onSelectConnected} onBeginDragSelected={onBeginDragSelected} onConfirmPlacement={onConfirmPlacement} onCancelPlacement={onCancelPlacement} />)}
+      {ldrawBatches.printBatches.map(batch => <LDrawPrints key={batch.key} batch={batch} selectedId={selectedId} highlightedIdSet={highlightedIdSet} placementActive={placementActive} onSelect={onSelect} onSelectConnected={onSelectConnected} onBeginDragSelected={onBeginDragSelected} onConfirmPlacement={onConfirmPlacement} onCancelPlacement={onCancelPlacement} />)}
+      {ldrawBatches.lineBatches.map(batch => <LDrawBatchLines key={batch.key} batch={batch} geometry={lineGeometries.get(batch)!} />)}
       {groups.map((group) => (
         <VoxelBoxInstances
           key={group.key}
@@ -2261,7 +2091,7 @@ const VoxelOptimizedScene = ({
       ))}
     </>
   )
-}
+})
 
 const WorldEntityMaterial = ({ color, ghost }: { color: string; ghost: boolean }) => (
   <meshStandardMaterial
@@ -2744,38 +2574,13 @@ const WorldEntityScene = ({ entities, events, elapsedSeconds, paused, preview, s
   )
 }
 
+
 const PlacementGhosts = ({ bricks, onConfirmPlacement, onCancelPlacement }: {
   bricks: PlacedBrick[]
   onConfirmPlacement?: () => void
   onCancelPlacement?: () => void
 }) => {
-  if (bricks.length > 48) {
-    return (
-      <group renderOrder={30} userData={{ placementGhost: true }}>
-        {bricks.map((brick) => {
-          const bounds = getBrickBounds(brick)
-          if (!bounds) return null
-          const width = bounds.maxX - bounds.minX
-          const height = bounds.maxY - bounds.minY
-          const depth = bounds.maxZ - bounds.minZ
-          return (
-            <mesh
-              key={brick.id}
-              position={[
-                bounds.minX + width / 2,
-                bounds.minY + height / 2,
-                bounds.minZ + depth / 2,
-              ]}
-            >
-              <boxGeometry args={[width, height, depth]} />
-              <meshStandardMaterial color="#22d3ee" transparent opacity={0.24} depthWrite={false} />
-              <Edges color="#0891b2" threshold={12} />
-            </mesh>
-          )
-        })}
-      </group>
-    )
-  }
+  if (bricks.length > 48) return <LargePlacementGhosts bricks={bricks} />
 
   return (
     <group renderOrder={30} userData={{ placementGhost: true }}>
@@ -2874,17 +2679,31 @@ export const BrickScene = ({
   onRotateSelected,
   onDeleteSelected,
 }: BrickSceneProps) => {
+  const sceneCallbacks = useSceneCallbacks({ onSelect, onSelectConnected, onSelectWorldEntity, onPlacementPointChange, onConfirmPlacement, onCancelPlacement, onBeginDragSelected, onNudgeSelected, onRotateSelected, onDeleteSelected, onCameraAzimuthChange })
   const { t } = useI18n()
+  const { handlers: canvasGestureHandlers, canClearSelection, canConfirmPlacement } = useSceneCanvasGesture(placementActive)
+  const { onSelect: selectSceneBrick, onConfirmPlacement: confirmPlacement } = sceneCallbacks
+  const clearBackgroundSelection = useCallback(() => {
+    if (placementActive || !canClearSelection()) return false
+    selectSceneBrick('')
+    return true
+  }, [canClearSelection, placementActive, selectSceneBrick])
+  const confirmScenePlacement = useCallback(() => {
+    if (canConfirmPlacement()) confirmPlacement?.()
+  }, [canConfirmPlacement, confirmPlacement])
   const structuralDebug = viewMode === 'voxel'
   const xrayDebug = viewMode === 'xray'
   const showBrickEdges = viewMode === 'border' || xrayDebug
   const highlightedIdSet = useMemo(() => new Set(highlightedIds), [highlightedIds])
   const hiddenBrickIdSet = useMemo(() => new Set(hiddenBrickIds), [hiddenBrickIds])
   const hiddenWorldEntityIdSet = useMemo(() => new Set(hiddenWorldEntityIds), [hiddenWorldEntityIds])
+  const settledVisibleBricks = useMemo(
+    () => bricks.filter(brick => showHiddenObjects || !hiddenBrickIdSet.has(brick.id)),
+    [bricks, hiddenBrickIdSet, showHiddenObjects],
+  )
   const visibleBricks = useMemo(
-    () => getVisibleBricksDuringPlacement(bricks, placementSourceBrickIds)
-      .filter((brick) => showHiddenObjects || !hiddenBrickIdSet.has(brick.id)),
-    [bricks, hiddenBrickIdSet, placementSourceBrickIds, showHiddenObjects],
+    () => getVisibleBricksDuringPlacement(settledVisibleBricks, placementSourceBrickIds),
+    [settledVisibleBricks, placementSourceBrickIds],
   )
   const cameraFrameBricks = useMemo(
     () => {
@@ -2900,9 +2719,9 @@ export const BrickScene = ({
   const deferredFrameBricks = useDeferredValue(cameraFrameBricks)
   const deferredCameraFrameKey = useDeferredValue(cameraFrameKey)
   const frameBricks = deferredFrameBricks
-  const frameLDrawPartNumbersKey = useMemo(() => Array.from(new Set(frameBricks.flatMap((brick) => {
+  const frameLDrawDefinitionIdsKey = useMemo(() => Array.from(new Set(frameBricks.flatMap((brick) => {
     const definition = brickById.get(brick.brickId)
-    return definition?.pack === 'lego' ? [normalizeLDrawPartNumber(definition.partNumber)] : []
+    return definition?.pack === 'lego' ? [definition.id] : []
   }))).sort().join('|'), [frameBricks])
   const performanceSettings = getScenePerformanceSettings(visibleBricks.length, viewMode)
   const worldAnimationFps = getWorldAnimationFps(bricks.length, worldEntities.length)
@@ -2925,14 +2744,14 @@ export const BrickScene = ({
 
   useEffect(() => {
     let cancelled = false
-    loadLDrawGeneratedVisual(frameLDrawPartNumbersKey ? frameLDrawPartNumbersKey.split('|') : []).then(() => {
+    prepareBrickDefinitionsGeometry(frameLDrawDefinitionIdsKey ? frameLDrawDefinitionIdsKey.split('|').map(id => brickById.get(id)!) : []).then(() => {
       if (!cancelled) setLDrawBoundsVersion((version) => version + 1)
     })
 
     return () => {
       cancelled = true
     }
-  }, [frameLDrawPartNumbersKey])
+  }, [frameLDrawDefinitionIdsKey])
 
   const gridFrame = useMemo(() => {
     void ldrawBoundsVersion
@@ -2949,7 +2768,6 @@ export const BrickScene = ({
     const minZ = Math.min(defaultGridExtent * -1, modelMinZ - gridPadding)
     const maxZ = Math.max(defaultGridExtent, modelMaxZ + gridPadding)
     const size = Math.ceil(Math.max(maxX - minX, maxZ - minZ))
-    const gridRadius = Math.max(minimumRadialGridRadius, Math.ceil(size * 0.72))
     const modelHeight = modelMaxY - modelMinY
     const cameraSize = Math.max(
       8,
@@ -2959,8 +2777,8 @@ export const BrickScene = ({
 
     return {
       size,
-      gridRadius,
       cameraSize,
+      gridFade: getSceneGridFade({ minX, maxX, minZ, maxZ }),
       centerX: (minX + maxX) / 2,
       modelCenterX: (modelMinX + modelMaxX) / 2,
       centerY: Math.max(1, (modelMinY + modelMaxY) / 2),
@@ -2969,10 +2787,22 @@ export const BrickScene = ({
     }
   }, [frameBricks, ldrawBoundsVersion])
   const deferredSupportBricks = useDeferredValue(bricks)
-  const resolvedStabilityAnalysis = useMemo(
-    () => stabilityAnalysis ?? (xrayDebug ? analyzeBuildStability(deferredSupportBricks) : undefined),
-    [deferredSupportBricks, stabilityAnalysis, xrayDebug],
-  )
+  const [backgroundStability, setBackgroundStability] = useState<{ bricks: PlacedBrick[]; analysis: StabilityAnalysis }>()
+  useEffect(() => {
+    if (!xrayDebug || stabilityAnalysis || deferredSupportBricks.length < backgroundAnalysisThreshold) return
+    let canceled = false
+    getEditorStability(deferredSupportBricks).then(analysis => {
+      if (!canceled) setBackgroundStability({ bricks: deferredSupportBricks, analysis })
+    }).catch(() => { /* Keep the last committed view if background analysis fails. */ })
+    return () => { canceled = true }
+  }, [deferredSupportBricks, stabilityAnalysis, xrayDebug])
+  const resolvedStabilityAnalysis = useMemo(() => {
+    if (stabilityAnalysis) return stabilityAnalysis
+    if (!xrayDebug) return undefined
+    return deferredSupportBricks.length >= backgroundAnalysisThreshold
+      ? backgroundStability?.bricks === deferredSupportBricks ? backgroundStability.analysis : undefined
+      : analyzeBuildStability(deferredSupportBricks)
+  }, [backgroundStability, deferredSupportBricks, stabilityAnalysis, xrayDebug])
   const xrayColorByBrickId = useMemo(() => {
     if (!xrayDebug || !resolvedStabilityAnalysis) return undefined
     return new Map([...resolvedStabilityAnalysis.riskByBrickId].map(([brickId, item]) => [
@@ -2981,6 +2811,15 @@ export const BrickScene = ({
     ]))
   }, [resolvedStabilityAnalysis, xrayDebug])
   const resolvedDisplayColorByBrickId = xrayColorByBrickId ?? displayColorByBrickId
+  const [backgroundSupport, setBackgroundSupport] = useState<{ bricks: PlacedBrick[]; supported: Map<string, boolean> }>()
+  useEffect(() => {
+    if (deferredSupportBricks.length < backgroundAnalysisThreshold || resolvedStabilityAnalysis) return
+    let canceled = false
+    getEditorSupport(deferredSupportBricks).then(supported => {
+      if (!canceled) setBackgroundSupport({ bricks: deferredSupportBricks, supported })
+    }).catch(() => { /* Validation UI reports analysis failures; keep pending colours neutral. */ })
+    return () => { canceled = true }
+  }, [deferredSupportBricks, resolvedStabilityAnalysis])
   const supportedByBrickId = useMemo(() => {
     void ldrawBoundsVersion
 
@@ -2988,12 +2827,15 @@ export const BrickScene = ({
       return new Map([...resolvedStabilityAnalysis.riskByBrickId].map(([brickId, item]) => [brickId, item.grounded]))
     }
 
+    if (deferredSupportBricks.length >= backgroundAnalysisThreshold) {
+      return backgroundSupport?.bricks === deferredSupportBricks ? backgroundSupport.supported : new Map<string, boolean>()
+    }
     const buildGraph = createBuildGraph(deferredSupportBricks)
     return new Map(deferredSupportBricks.map((brick) => [
       brick.id,
       buildGraph.groundedIds.has(brick.id) && isVoxelPlantSupported(brick, deferredSupportBricks),
     ]))
-  }, [deferredSupportBricks, ldrawBoundsVersion, resolvedStabilityAnalysis])
+  }, [backgroundSupport, deferredSupportBricks, ldrawBoundsVersion, resolvedStabilityAnalysis])
 
   if (orbitTargetKeyRef.current !== cameraFrameRequestKey) {
     orbitTargetKeyRef.current = cameraFrameRequestKey
@@ -3002,14 +2844,14 @@ export const BrickScene = ({
 
   return (
     <Canvas
+      data-geometry-ready={preferDetailedGeometry ? 'true' : 'false'}
       shadows={enableRealtimeShadows}
       frameloop="demand"
       dpr={[1, performanceSettings.maxDevicePixelRatio]}
       gl={{ preserveDrawingBuffer }}
       camera={{ position: [8, 7, 9], fov: 42 }}
-      onPointerMissed={() => {
-        if (!placementActive) onSelect('')
-      }}
+      {...canvasGestureHandlers}
+      onPointerMissed={clearBackgroundSelection}
     >
       <color attach="background" args={['#eef2f5']} />
       <SceneLighting
@@ -3020,29 +2862,24 @@ export const BrickScene = ({
         enableShadows={enableRealtimeShadows}
       />
       <group
-        onPointerMove={(event) => {
+        onPointerMove={placementActive ? (event) => {
           if (!placementActive) return
           const surfacePoint = getFirstPlacementSurfacePoint(event)
-          onPlacementPointChange?.(surfacePoint)
-        }}
-        onClick={(event) => {
+          sceneCallbacks.onPlacementPointChange?.(surfacePoint)
+        } : undefined}
+        onClick={placementActive ? (event) => {
           if (!placementActive) return
           event.stopPropagation()
-          onConfirmPlacement?.()
-        }}
-        onContextMenu={(event) => {
+          confirmScenePlacement()
+        } : undefined}
+        onContextMenu={placementActive ? (event) => {
           if (!placementActive) return
           event.stopPropagation()
           event.nativeEvent.preventDefault()
-          onCancelPlacement?.()
-        }}
+          sceneCallbacks.onCancelPlacement?.()
+        } : undefined}
       >
-        <RadialGrid
-          centerX={gridFrame.centerX}
-          centerZ={gridFrame.centerZ}
-          radius={gridFrame.gridRadius}
-          receiveShadow={enableRealtimeShadows}
-        />
+        <SceneGround fade={gridFrame.gridFade} receiveShadow={enableRealtimeShadows} onBackgroundClick={clearBackgroundSelection} />
         {structuralDebug ? (
           <StructuralVoxelScene
             bricks={visibleBricks}
@@ -3050,11 +2887,11 @@ export const BrickScene = ({
             highlightedIdSet={highlightedIdSet}
             boundsVersion={ldrawBoundsVersion}
             placementActive={placementActive}
-            onSelect={onSelect}
-            onSelectConnected={onSelectConnected}
-            onBeginDragSelected={onBeginDragSelected}
-            onConfirmPlacement={onConfirmPlacement}
-            onCancelPlacement={onCancelPlacement}
+            onSelect={sceneCallbacks.onSelect}
+            onSelectConnected={sceneCallbacks.onSelectConnected}
+            onBeginDragSelected={sceneCallbacks.onBeginDragSelected}
+            onConfirmPlacement={confirmScenePlacement}
+            onCancelPlacement={sceneCallbacks.onCancelPlacement}
           />
         ) : useSimplifiedInteractionView ? (
           <SimplifiedBrickScene
@@ -3065,11 +2902,11 @@ export const BrickScene = ({
             displayColorByBrickId={resolvedDisplayColorByBrickId}
             transformsByBrickId={transformsByBrickId}
             placementActive={placementActive}
-            onSelect={onSelect}
-            onSelectConnected={onSelectConnected}
-            onBeginDragSelected={onBeginDragSelected}
-            onConfirmPlacement={onConfirmPlacement}
-            onCancelPlacement={onCancelPlacement}
+            onSelect={sceneCallbacks.onSelect}
+            onSelectConnected={sceneCallbacks.onSelectConnected}
+            onBeginDragSelected={sceneCallbacks.onBeginDragSelected}
+            onConfirmPlacement={confirmScenePlacement}
+            onCancelPlacement={sceneCallbacks.onCancelPlacement}
           />
         ) : (
           <VoxelOptimizedScene
@@ -3083,18 +2920,18 @@ export const BrickScene = ({
             transformsByBrickId={transformsByBrickId}
             hiddenBrickIdSet={hiddenBrickIdSet}
             placementActive={placementActive}
-            onSelect={onSelect}
-            onSelectConnected={onSelectConnected}
-            onBeginDragSelected={onBeginDragSelected}
-            onConfirmPlacement={onConfirmPlacement}
-            onCancelPlacement={onCancelPlacement}
+            onSelect={sceneCallbacks.onSelect}
+            onSelectConnected={sceneCallbacks.onSelectConnected}
+            onBeginDragSelected={sceneCallbacks.onBeginDragSelected}
+            onConfirmPlacement={confirmScenePlacement}
+            onCancelPlacement={sceneCallbacks.onCancelPlacement}
           />
         )}
         {placementActive && (
           <PlacementGhosts
             bricks={placementPreviewBricks}
-            onConfirmPlacement={onConfirmPlacement}
-            onCancelPlacement={onCancelPlacement}
+            onConfirmPlacement={confirmScenePlacement}
+            onCancelPlacement={sceneCallbacks.onCancelPlacement}
           />
         )}
         <WorldEntityScene
@@ -3107,7 +2944,7 @@ export const BrickScene = ({
           placementActive={placementActive}
           hiddenEntityIdSet={hiddenWorldEntityIdSet}
           showHiddenObjects={showHiddenObjects}
-          onSelect={onSelectWorldEntity}
+          onSelect={sceneCallbacks.onSelectWorldEntity}
         />
         {xrayDebug && resolvedStabilityAnalysis && <StabilityOverlay analysis={resolvedStabilityAnalysis} />}
         {bricks.length === 0 && (
@@ -3119,9 +2956,9 @@ export const BrickScene = ({
       {!placementActive && keyboardEnabled && (
         <KeyboardShortcuts
           selectedId={selectedId}
-          onNudgeSelected={onNudgeSelected}
-          onRotateSelected={onRotateSelected}
-          onDeleteSelected={onDeleteSelected}
+          onNudgeSelected={sceneCallbacks.onNudgeSelected}
+          onRotateSelected={sceneCallbacks.onRotateSelected}
+          onDeleteSelected={sceneCallbacks.onDeleteSelected}
         />
       )}
       <CameraFrame
@@ -3132,7 +2969,7 @@ export const BrickScene = ({
         frameKey={cameraFrameRequestKey}
         azimuthDegrees={initialCameraAzimuthDegrees}
       />
-      <CameraAzimuthObserver onChange={onCameraAzimuthChange} />
+      <CameraAzimuthObserver onChange={sceneCallbacks.onCameraAzimuthChange} />
       <SceneAnimationDriver
         active={worldEntities.length > 0 && !worldPaused}
         targetFps={worldAnimationFps}

@@ -24,5 +24,5 @@ export const getScenePerformanceSettings = (
 ) => ({
   enableRealtimeShadows: brickCount < shadowBrickThreshold,
   useSimplifiedView: viewMode !== 'voxel' && brickCount >= simplifiedBrickThreshold,
-  maxDevicePixelRatio: brickCount < shadowBrickThreshold ? 1.5 : 1,
+  maxDevicePixelRatio: 2,
 })

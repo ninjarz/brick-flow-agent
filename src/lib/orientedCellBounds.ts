@@ -39,3 +39,43 @@ export const orientedCellsOverlap = (a: CellBounds,b: CellBounds,tolerance:numbe
   }
   return true
 }
+
+/** Earliest possible contact while A translates straight down; Infinity when
+ * it falls away. These are the same AABB + 15 SAT inequalities as the discrete
+ * overlap test, solved as intervals of vertical translation distance. */
+export const getVerticalCellContactDistance = (a: CellBounds, b: CellBounds, tolerance: number) => {
+  if (a.minX >= b.maxX - tolerance || a.maxX <= b.minX + tolerance ||
+      a.minZ >= b.maxZ - tolerance || a.maxZ <= b.minZ + tolerance) return Infinity
+  let lower = Math.max(0, a.minY - b.maxY + tolerance)
+  let upper = a.maxY - b.minY - tolerance
+  if (upper <= lower) return Infinity
+  if (!a.oriented && !b.oriented) return lower
+  const axesA = a.oriented?.axes ?? worldAxes, axesB = b.oriented?.axes ?? worldAxes
+  const halfA = a.oriented?.halfSize ?? [(a.maxX-a.minX)/2,(a.maxY-a.minY)/2,(a.maxZ-a.minZ)/2]
+  const halfB = b.oriented?.halfSize ?? [(b.maxX-b.minX)/2,(b.maxY-b.minY)/2,(b.maxZ-b.minZ)/2]
+  const delta: Vector = [(b.minX+b.maxX-a.minX-a.maxX)/2,(b.minY+b.maxY-a.minY-a.maxY)/2,(b.minZ+b.maxZ-a.minZ-a.maxZ)/2]
+  const t = axesA.map(axis => dot(delta, axis)), velocity = axesA.map(axis => axis[1])
+  const { r, abs } = relation(axesA, axesB)
+  const constrain = (position: number, speed: number, radius: number) => {
+    if (Math.abs(speed) < 1e-12) return Math.abs(position) < radius
+    const x = (-radius-position)/speed, y = (radius-position)/speed
+    lower = Math.max(lower, Math.min(x,y)); upper = Math.min(upper, Math.max(x,y))
+    return lower < upper
+  }
+  for (let i=0;i<3;i++) {
+    const radius = halfA[i]+halfB.reduce((sum,h,j)=>sum+h*abs[i][j],0)-tolerance
+    if (!constrain(t[i],velocity[i],radius)) return Infinity
+  }
+  for (let j=0;j<3;j++) {
+    const radius = halfB[j]+halfA.reduce((sum,h,i)=>sum+h*abs[i][j],0)-tolerance
+    if (!constrain(t.reduce((sum,n,i)=>sum+n*r[i][j],0),velocity.reduce((sum,n,i)=>sum+n*r[i][j],0),radius)) return Infinity
+  }
+  for (let i=0;i<3;i++) for (let j=0;j<3;j++) {
+    const length = Math.sqrt(Math.max(0,1-r[i][j]*r[i][j]))
+    if (length < 1e-6) continue
+    const i1=(i+1)%3,i2=(i+2)%3,j1=(j+1)%3,j2=(j+2)%3
+    const radius=halfA[i1]*abs[i2][j]+halfA[i2]*abs[i1][j]+halfB[j1]*abs[i][j2]+halfB[j2]*abs[i][j1]-tolerance*length
+    if (!constrain(t[i2]*r[i1][j]-t[i1]*r[i2][j],velocity[i2]*r[i1][j]-velocity[i1]*r[i2][j],radius)) return Infinity
+  }
+  return Math.max(0, lower)
+}

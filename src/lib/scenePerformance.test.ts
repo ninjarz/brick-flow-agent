@@ -13,7 +13,7 @@ describe('scene performance policy', () => {
   it('keeps detail for small models', () => {
     expect(getScenePerformanceSettings(shadowBrickThreshold - 1, 'border')).toEqual({
       enableRealtimeShadows: true,
-      maxDevicePixelRatio: 1.5,
+      maxDevicePixelRatio: 2,
       useSimplifiedView: false,
     })
   })
@@ -22,6 +22,10 @@ describe('scene performance policy', () => {
     expect(getScenePerformanceSettings(simplifiedBrickThreshold, 'border').useSimplifiedView).toBe(true)
     expect(getScenePerformanceSettings(simplifiedBrickThreshold, 'xray').useSimplifiedView).toBe(true)
     expect(getScenePerformanceSettings(simplifiedBrickThreshold, 'voxel').useSimplifiedView).toBe(false)
+  })
+
+  it('retains high-DPI detail for large scenes instead of blurring the canvas', () => {
+    expect(getScenePerformanceSettings(6025, 'border').maxDevicePixelRatio).toBe(2)
   })
 
   it('caps React-driven simulation playback based on model size', () => {

@@ -1,3 +1,4 @@
+import { useIntentState } from './hooks/useIntentState'
 import { useModalFocus } from './hooks/useModalFocus'
 import { importLDrawInWorker } from './lib/ldrawImportWorkerClient'
 import { aiTasks } from './lib/aiTasks'
@@ -27,7 +28,7 @@ import { formatBuildManualHtml, formatBuildManualMarkdown, serializeBuildManual 
 import { getManualPageTabItems, getManualStepPage, manualStepPageSize } from './lib/manualPagination'
 import { countBricks, createBrickCollisionIndex, createPlanSpatialState, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickPlacementDiagnostics, getBrickRawOverlapScore, getConnectedBrickComponents, hasBrickCollision, isBrickAboveGround, makeBrick, repairBuildPlan, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
 import { loadCatalogPreferences, type CatalogPackPreference } from './lib/catalogPreferences'
-import { footprintToWorld, getBrickWorldFrame, normalizeHorizontalStud, normalizeQuarterTurns, normalizeVerticalQuarterTurns, normalizeYStud, translateBrickPose } from './lib/brickUnits'
+import { footprintToWorld, getBrickWorldFrame, normalizeHorizontalStud, normalizeQuarterTurns, normalizeVerticalQuarterTurns, normalizeYStud, roundToGrid, STUD_PITCH_WORLD, translateBrickPose } from './lib/brickUnits'
 import { useI18n } from './lib/i18n'
 import type { ObjImportResult } from './lib/objImport'
 import { parseImportedProject, type ImportText } from './lib/planFileIO'
@@ -47,7 +48,8 @@ import { playTavernActivity, type TavernActivityKind } from './lib/worldTavernAc
 import { applyTavernAiResponse, requestTavernAiActivity } from './lib/worldTavernAi'
 import { buildTavernDirectorPrompt, createTavernDirectorStreamParser, tavernDirectorSystemPrompt, type TavernDirectorEntry, type TavernDirectorEvent, type TavernDirectorStreamPreview } from './lib/worldTavernDirector'
 import { createWorldAiSnapshot } from './lib/worldAi'
-import { analyzeBuildStability } from './lib/stabilityAnalysis'
+import type { StabilityAnalysis } from './lib/stabilityAnalysis'
+import { canBackgroundDrop, getEditorDrop, getEditorStability } from './lib/editorAnalysisClient'
 import { formatLDrawPlan, ldrawImportLimits, parseLDrawPlan } from './lib/ldrawPlan'
 import { getEffectiveInventory, loadInventoryOverrides, saveInventoryOverrides } from './lib/userInventory'
 import { importAssetPlanIncrementally } from './lib/incrementalAssetImport'
@@ -96,6 +98,7 @@ type PlacementSession = {
   sourceBricks: PlacedBrick[]
   previewBricks: PlacedBrick[]
   dragPointerOffset?: HorizontalDropPoint
+  backgroundDropPoint?: HorizontalDropPoint
 }
 type WorldEntityPlacementSession = {
   entity: WorldEntity
@@ -202,7 +205,7 @@ function App() {
   const [selectedId, setSelectedId] = useState('')
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([])
   const [selectedWorldEntityId, setSelectedWorldEntityId] = useState('')
-  const [placementSession, setPlacementSession] = useState<PlacementSession>()
+  const [placementSession, setPlacementSession, placementSessionRef] = useIntentState<PlacementSession | undefined>(undefined)
   const [worldEntityPlacement, setWorldEntityPlacement] = useState<WorldEntityPlacementSession>()
   const { llmConfig, llmConfigComplete, isLlmConnectionVerified, setIsLlmConnectionVerified,
     isTestingLlmConfig, setIsTestingLlmConfig, llmConfigFeedback, setLlmConfigFeedback,
@@ -274,10 +277,18 @@ function App() {
   useEffect(() => {
     if (world.hiddenTargets.length === 0) setShowHiddenScenarioObjects(false)
   }, [world.hiddenTargets.length])
-  const sceneStabilityAnalysis = useMemo(
-    () => sceneViewMode === 'xray' ? analyzeBuildStability(plan.bricks) : undefined,
-    [plan.bricks, sceneViewMode],
-  )
+  const [sceneAnalysis, setSceneAnalysis] = useState<{ bricks: PlacedBrick[]; analysis: StabilityAnalysis }>()
+  useEffect(() => {
+    if (sceneViewMode !== 'xray') return
+    let canceled = false
+    getEditorStability(plan.bricks).then(analysis => {
+      if (!canceled) setSceneAnalysis({ bricks: plan.bricks, analysis })
+    }).catch(() => { /* Keep the scene usable; validation reports analysis failures. */ })
+    return () => { canceled = true }
+  }, [plan.bricks, sceneViewMode])
+  const sceneStabilityAnalysis = sceneViewMode === 'xray' && sceneAnalysis?.bricks === plan.bricks
+    ? sceneAnalysis.analysis
+    : undefined
   const latestAnalysisSnapshot = useMemo(
     () => {
       void analysisHistoryVersion
@@ -285,7 +296,10 @@ function App() {
     },
     [activeProjectId, analysisHistoryVersion, plan.id],
   )
-  const analysisIsStale = Boolean(latestAnalysisSnapshot && latestAnalysisSnapshot.planFingerprint !== createPlanFingerprint(plan))
+  const analysisIsStale = useMemo(
+    () => Boolean(latestAnalysisSnapshot && latestAnalysisSnapshot.planFingerprint !== createPlanFingerprint(plan)),
+    [latestAnalysisSnapshot, plan],
+  )
   const handleAnalysisSnapshotSaved = useCallback(() => {
     setAnalysisHistoryVersion((version) => version + 1)
   }, [])
@@ -385,7 +399,7 @@ function App() {
     setSelectedId('')
     setSelectedGroupIds([])
     setSelectedWorldEntityId('')
-  }, [])
+  }, [setPlacementSession])
   useEffect(() => { setScenarioPlaytest(undefined); clearWorkspaceSelection(); closeManual() }, [workspaceStorage.current?.id, clearWorkspaceSelection, closeManual])
   const undoPlan = useCallback(() => { workspaceSession.undo(); clearWorkspaceSelection() }, [workspaceSession, clearWorkspaceSelection])
   const redoPlan = useCallback(() => { workspaceSession.redo(); clearWorkspaceSelection() }, [workspaceSession, clearWorkspaceSelection])
@@ -466,12 +480,12 @@ function App() {
     const ids = groupIds.length > 1 ? groupIds : [selectedId]
     return ids.filter((id) => liveBrickIds.has(id))
   }, [plan.bricks, selectedGroupIds, selectedId])
+  const movingSourceBricks = placementSession?.kind === 'move' ? placementSession.sourceBricks : undefined
   const placementSourceBrickIds = useMemo(
-    () => placementSession?.kind === 'move'
-      ? placementSession.sourceBricks.map((brick) => brick.id)
-      : [],
-    [placementSession],
+    () => movingSourceBricks?.map(brick => brick.id) ?? [],
+    [movingSourceBricks],
   )
+  const highlightedSceneIds = useMemo(() => activeSelectedIds.filter(id => id !== selectedId), [activeSelectedIds, selectedId])
   const selectedBatchCount = activeSelectedIds.length
   const selectedStructure = useMemo(
     () => getExactSelectionStructure(plan, activeSelectedIds),
@@ -1479,10 +1493,12 @@ function App() {
     const selectedIdSet = new Set(activeSelectedIds)
     const sourceBricks = planRef.current.bricks.filter((brick) => selectedIdSet.has(brick.id))
     if (sourceBricks.length === 0) return
-    const stationaryData = getStationarySpatialState(planRef.current.bricks, selectedIdSet)
+    const background = canBackgroundDrop(sourceBricks)
     const dragPointerOffset = getBrickGroupDragPointerOffset(sourceBricks, brickId, point)
     const anchoredPoint = offsetBrickGroupDragPoint(point, dragPointerOffset)
-    const previewBricks = dropBrickGroupAtPoint(sourceBricks, brickId, anchoredPoint, stationaryData) ?? sourceBricks
+    const previewBricks = background ? sourceBricks : dropBrickGroupAtPoint(
+      sourceBricks, brickId, anchoredPoint, getStationarySpatialState(planRef.current.bricks, selectedIdSet),
+    ) ?? sourceBricks
     placementPointerKeyRef.current = `${normalizeHorizontalStud(anchoredPoint.x)}:${normalizeHorizontalStud(anchoredPoint.z)}`
     setPlacementSession({
       kind: 'move',
@@ -1490,8 +1506,9 @@ function App() {
       sourceBricks,
       previewBricks,
       dragPointerOffset,
+      backgroundDropPoint: background ? anchoredPoint : undefined,
     })
-  }, [activeSelectedIds, getStationarySpatialState, placementSession, planRef, worldEntityPlacement])
+  }, [activeSelectedIds, getStationarySpatialState, placementSession, planRef, setPlacementSession, worldEntityPlacement])
 
   const updatePlacementPoint = useCallback((point: VoxelPlacementSurface) => {
     const pointerKey = `${normalizeHorizontalStud(point.x)}:${normalizeYStud(point.y)}:${normalizeHorizontalStud(point.z)}:${point.normalX},${point.normalY},${point.normalZ}`
@@ -1499,6 +1516,14 @@ function App() {
     placementPointerKeyRef.current = pointerKey
     setPlacementSession((current) => {
       if (!current) return current
+      if (current.backgroundDropPoint) {
+        const anchored = offsetBrickGroupDragPoint(point, current.dragPointerOffset)
+        const anchor = current.sourceBricks.find(brick => brick.id === current.anchorBrickId)!
+        const frame = getBrickWorldFrame(brickById.get(anchor.brickId)!, anchor.pose)
+        const snapped = { x: frame.x + roundToGrid(anchored.x - frame.x, STUD_PITCH_WORLD), z: frame.z + roundToGrid(anchored.z - frame.z, STUD_PITCH_WORLD) }
+        if (snapped.x === current.backgroundDropPoint.x && snapped.z === current.backgroundDropPoint.z) return current
+        return { ...current, backgroundDropPoint: snapped }
+      }
       const excludedIds = current.kind === 'move'
         ? new Set(current.sourceBricks.map((brick) => brick.id))
         : new Set<string>()
@@ -1525,7 +1550,11 @@ function App() {
         ...stationaryData.stationaryBricks,
         ...surfaceAdjustedBricks,
       ]).filter((brick) => previewIdSet.has(brick.id))
-      const previewBricks = canAcceptBrickGroupPose(
+      // When contextual voxel rules change no piece, either validation branch
+      // selects the identical dropped poses, which already passed the exact
+      // drop collision test. Avoid repeating it on every pointer move.
+      const contextChanged = contextualBricks.length !== droppedBricks.length || contextualBricks.some((brick, index) => brick !== droppedBricks[index])
+      const previewBricks = contextChanged && canAcceptBrickGroupPose(
         contextualBricks,
         planRef.current.bricks,
         { action: 'voxelPlacementContext' },
@@ -1548,36 +1577,68 @@ function App() {
         },
       },
     } : current)
-  }, [canAcceptBrickGroupPose, getStationarySpatialState, planRef, worldRef])
+  }, [canAcceptBrickGroupPose, getStationarySpatialState, planRef, setPlacementSession, worldRef])
+
+  const backgroundDropSource = placementSession?.sourceBricks
+  const backgroundDropAnchor = placementSession?.anchorBrickId
+  const backgroundDropPoint = placementSession?.backgroundDropPoint
+  useEffect(() => {
+    if (!backgroundDropPoint || !backgroundDropSource || !backgroundDropAnchor || placementSessionRef.current?.backgroundDropPoint !== backgroundDropPoint) return
+    let canceled = false
+    getEditorDrop(plan.bricks, backgroundDropSource, backgroundDropAnchor, backgroundDropPoint).then(previewBricks => {
+      if (canceled || !previewBricks) return
+      setPlacementSession(current => current?.sourceBricks === backgroundDropSource && current.backgroundDropPoint === backgroundDropPoint
+        ? { ...current, previewBricks } : current)
+    }).catch(() => {
+      if (!canceled) setGenerationFailure(t('error.geometryLoad'))
+    })
+    return () => { canceled = true }
+  }, [backgroundDropAnchor, backgroundDropPoint, backgroundDropSource, placementSessionRef, plan.bricks, setGenerationFailure, setPlacementSession, t])
 
   const cancelPlacement = useCallback(() => {
     placementPointerKeyRef.current = ''
     setPlacementSession(undefined)
     setWorldEntityPlacement(undefined)
-  }, [])
+  }, [setPlacementSession])
 
-  const confirmPlacement = useCallback(() => {
-    if (!placementSession) return
-    const futureBricks = placementSession.kind === 'move'
-      ? planRef.current.bricks.map((brick) => placementSession.previewBricks.find((preview) => preview.id === brick.id) ?? brick)
-      : [...planRef.current.bricks, ...placementSession.previewBricks]
-    if (placementSession.previewBricks.some((brick) => !isVoxelPlantSupported(brick, futureBricks))) {
+  const confirmPlacement = useCallback(async () => {
+    let session = placementSessionRef.current
+    if (!session) return
+    if (session.backgroundDropPoint) {
+      const sourcePlan = planRef.current.bricks
+      try {
+        const previewBricks = await getEditorDrop(sourcePlan, session.sourceBricks, session.anchorBrickId, session.backgroundDropPoint)
+        const latest = placementSessionRef.current
+        // A moved pointer, cancellation, undo or another plan invalidates the
+        // pending confirmation. Never commit an older worker response.
+        if (!previewBricks || latest?.sourceBricks !== session.sourceBricks || latest.backgroundDropPoint !== session.backgroundDropPoint || planRef.current.bricks !== sourcePlan) return
+        session = { ...session, previewBricks }
+      } catch {
+        setGenerationFailure(t('error.geometryLoad'))
+        return
+      }
+    }
+    const previewById = new Map(session.previewBricks.map(brick => [brick.id, brick]))
+    const futureBricks = session.kind === 'move'
+      ? planRef.current.bricks.map((brick) => previewById.get(brick.id) ?? brick)
+      : [...planRef.current.bricks, ...session.previewBricks]
+    if (session.previewBricks.some((brick) => !isVoxelPlantSupported(brick, futureBricks))) {
       setGenerationFailure(t('error.voxelPlantSupport'))
       return
     }
-    const placedIds = placementSession.previewBricks.map((brick) => brick.id)
+    const placedIds = session.previewBricks.map((brick) => brick.id)
     const placedIdSet = new Set(placedIds)
 
     setPlan((current) => {
-      if (placementSession.kind === 'move') {
-        const previewById = new Map(placementSession.previewBricks.map((brick) => [brick.id, brick]))
+      if (session.kind === 'move') {
+        const previewById = new Map(session.previewBricks.map((brick) => [brick.id, brick]))
         return {
           ...current,
           bricks: current.bricks.map((brick) => previewById.get(brick.id) ?? brick),
         }
       }
 
-      return placementSession.previewBricks.reduce(
+      return session.previewBricks.reduce(
         (nextPlan, brick) => addBrickToManualStep(
           { ...nextPlan, bricks: [...nextPlan.bricks, brick] },
           brick.id,
@@ -1591,7 +1652,7 @@ function App() {
     setSelectedGroupIds(placedIdSet.size > 1 ? placedIds : [])
     placementPointerKeyRef.current = ''
     setPlacementSession(undefined)
-  }, [manualStepDescription, manualStepTitle, placementSession, planRef, setGenerationFailure, setPlan, t])
+  }, [manualStepDescription, manualStepTitle, placementSessionRef, planRef, setGenerationFailure, setPlacementSession, setPlan, t])
 
   const confirmActivePlacement = useCallback(() => {
     if (worldEntityPlacement) {
@@ -3074,7 +3135,7 @@ function App() {
               cameraFrameKey={`${plan.id}:asset-import-${assetImportFrameVersion}`}
               viewMode={sceneViewMode}
               stabilityAnalysis={sceneStabilityAnalysis}
-              highlightedIds={activeSelectedIds.filter((id) => id !== selectedId)}
+              highlightedIds={highlightedSceneIds}
               worldEntities={world.entities}
               worldEvents={world.events}
               worldElapsedSeconds={world.elapsedSeconds}

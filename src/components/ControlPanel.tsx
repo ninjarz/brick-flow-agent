@@ -5,8 +5,9 @@ import { worldEntityDefinitions } from '../data/worldEntityDefinitions'
 import { PLATE_HEIGHT_WORLD } from '../lib/brickUnits'
 import { getBrickCatalogName, getBrickCatalogSearchTerms } from '../lib/brickCatalog'
 import { loadCatalogPreferences, saveCatalogPreferences, type CatalogPackPreference } from '../lib/catalogPreferences'
-import { getBlockingBuildPlanIssues, summarizeBuildPlanIssues, validateBuildPlan, validateBuildPlanBasics } from '../lib/planUtils'
-import { preparePlanGeometry } from '../lib/planGeometry'
+import { getBlockingBuildPlanIssues, summarizeBuildPlanIssues, validateBuildPlanBasics } from '../lib/planUtils'
+import type { validateBuildPlan } from '../lib/planUtils'
+import { getEditorValidation } from '../lib/editorAnalysisClient'
 import { useI18n } from '../lib/i18n'
 import { LazyBrickGlyph } from './LazyBrickGlyph'
 import type { BuildPlan } from '../types/bricks'
@@ -100,9 +101,8 @@ export const ControlPanel = ({
   useEffect(() => {
     let isCanceled = false
     const timeoutId = window.setTimeout(() => {
-      void preparePlanGeometry(derivedPlan).then(() => {
+      void getEditorValidation(derivedPlan).then((issues) => {
         if (isCanceled) return
-        const issues = validateBuildPlan(derivedPlan)
         setGeometryLoadFailure(undefined)
         setBackgroundValidation({ plan: derivedPlan, issues })
       }).catch(() => {

@@ -5,15 +5,15 @@ import type { BrickConnector, BrickDefinition, PlacedBrick, VoxelFenceConnection
 import {
   getLoadedLDrawGeneratedVisualTriangles,
   onLDrawGeneratedVisualLoaded,
-} from './ldrawGeneratedVisualLoader'
-import { getTriangleBounds, type BrickBounds } from './ldrawBounds'
+} from './ldrawVisualRegistry'
+import { getTriangleBounds, transformBrickLocalBounds, type BrickBounds } from './ldrawBounds'
 import { normalizeLDrawPartNumber } from './ldrawPartNumbers'
 import { getConnectorLocalPoint, transformBrickLocalPoint } from './brickUnits'
 import { voxelizeMeshStructuralCells, type MeshTriangle } from './structuralVoxelizer'
 
 export const STRUCTURAL_VOXEL_SIZE = 1 / 5
 const STRUCTURAL_HASH_STEP = STRUCTURAL_VOXEL_SIZE
-const COLLISION_INDEX_HASH_STEP = 1
+const COLLISION_INDEX_HASH_STEP = 4
 const STRUCTURAL_OVERLAP_TOLERANCE = 0.000001
 const WORLD_STRUCTURAL_CACHE_LIMIT = 10000
 const structuralCellCache = new Map<string, StructuralCell[]>()
@@ -26,6 +26,8 @@ const worldRenderStructuralCellBoxCache = new Map<string, WorldStructuralCellBox
 const worldSupportCellBoxCache = new Map<string, WorldStructuralCellBox[]>()
 const worldSupportFaceCache = new Map<string, WorldStructuralSupportFaces>()
 const worldSupportBoundsCache = new Map<string, BrickBounds | undefined>()
+const localCollisionBoundsCache = new Map<string, BrickBounds | undefined>()
+const worldCollisionBoundsCache = new Map<string, BrickBounds | undefined>()
 const worldCollisionCellBoxCache = new Map<string, WorldStructuralCellBox[]>()
 const worldCollisionKeyCache = new Map<string, Set<string>>()
 let structuralCacheVersion = 0
@@ -73,14 +75,21 @@ export type StructuralCollisionIndex = {
   keyToBrickIds: Map<string, Set<string>>
   brickKeys: Map<string, Set<string>>
   bricksById: Map<string, PlacedBrick>
+  boundsById: Map<string, BrickBounds>
 }
 
 const round = (value: number) => Number(value.toFixed(6))
 
 const setLimitedWorldCache = <T>(cache: Map<string, T>, key: string, value: T) => {
   if (!cache.has(key) && cache.size >= WORLD_STRUCTURAL_CACHE_LIMIT) {
-    const oldestKey = cache.keys().next().value
-    if (oldestKey) cache.delete(oldestKey)
+    // Evict a small batch with one iterator. Starting a fresh iterator for
+    // each single eviction repeatedly scans Map tombstones during group drags.
+    const oldest = cache.keys()
+    for (let count = 0; count < WORLD_STRUCTURAL_CACHE_LIMIT / 10; count++) {
+      const entry = oldest.next()
+      if (entry.done) break
+      cache.delete(entry.value)
+    }
   }
 
   cache.set(key, value)
@@ -424,12 +433,23 @@ onLDrawGeneratedVisualLoaded((partNumbers) => {
   deleteDefinitionCacheEntries(worldSupportCellBoxCache, affectedDefinitionIds)
   deleteDefinitionCacheEntries(worldSupportFaceCache, affectedDefinitionIds)
   deleteDefinitionCacheEntries(worldSupportBoundsCache, affectedDefinitionIds)
+  deleteDefinitionCacheEntries(localCollisionBoundsCache, affectedDefinitionIds)
+  deleteDefinitionCacheEntries(worldCollisionBoundsCache, affectedDefinitionIds)
   deleteDefinitionCacheEntries(worldCollisionCellBoxCache, affectedDefinitionIds)
   deleteDefinitionCacheEntries(worldCollisionKeyCache, affectedDefinitionIds)
 })
 
 const makeStructuralDefinitionCacheKey = (definition: BrickDefinition) =>
   `${definition.id}:${definition.partNumber}:${definition.footprint.widthStuds},${definition.footprint.depthStuds},${definition.footprint.heightStuds}:${definition.voxelVisual?.shape ?? 'standard'}`
+
+/** Seed the same immutable cell sequence normally produced by the sampler. */
+export const seedBrickStructuralCells = (definition: BrickDefinition, cells: StructuralCell[]) => {
+  const key = makeStructuralDefinitionCacheKey(definition)
+  if (!structuralCellCache.has(key)) structuralCellCache.set(key, cells)
+}
+
+export const hasBrickStructuralCells = (definition: BrickDefinition) =>
+  structuralCellCache.has(makeStructuralDefinitionCacheKey(definition))
 
 export const getBrickStructuralCells = (definition: BrickDefinition): StructuralCell[] => {
   const cacheKey = makeStructuralDefinitionCacheKey(definition)
@@ -1083,7 +1103,7 @@ const getRotatedCellAxes = (definition: BrickDefinition, brick: PlacedBrick): Ce
   return axes
 }
 
-const getBrickWorldCollisionCellBoxes = (brick: PlacedBrick): WorldStructuralCellBox[] => {
+export const getBrickWorldCollisionCellBoxes = (brick: PlacedBrick): WorldStructuralCellBox[] => {
   const cacheKey = getPlacedBrickCacheKey(brick)
   const cached = worldCollisionCellBoxCache.get(cacheKey)
   if (cached) return cached
@@ -1123,7 +1143,7 @@ const doCellBoxesOverlap = (
 // The mesh occupancy must also overlap: a source envelope alone can cover a
 // real hollow socket (for example the underside of a round 1 x 1 plate).
 const sourceCollisionEnvelopeCache = new Map<string, WorldStructuralCellBox[] | undefined>()
-const getSourceCollisionEnvelope = (brick: PlacedBrick) => {
+export const getSourceCollisionEnvelope = (brick: PlacedBrick) => {
   const key = getPlacedBrickCacheKey(brick)
   if (sourceCollisionEnvelopeCache.has(key)) return sourceCollisionEnvelopeCache.get(key)
   const definition = brickById.get(brick.brickId)
@@ -1160,13 +1180,40 @@ export const getBrickWorldCollisionKeys = (brick: PlacedBrick) => {
   return keys
 }
 
+/** Conservative broad phase: transform the local occupancy envelope once,
+ * rather than transforming every occupied cell just to reject a distant pose.
+ * Real overlap still uses the unchanged precise cell and source-envelope tests.
+ */
+export const getBrickWorldCollisionBounds = (brick: PlacedBrick): BrickBounds | undefined => {
+  const key = getPlacedBrickCacheKey(brick)
+  if (worldCollisionBoundsCache.has(key)) return worldCollisionBoundsCache.get(key)
+  const definition = brickById.get(brick.brickId)
+  if (!definition) return undefined
+  if ((brick.brickId === 'minecraft-oak-door' && brick.voxelState?.open) ||
+      (definition.voxelVisual?.shape === 'fence' && brick.voxelState?.fenceConnections)) {
+    const bounds = getCellBoxBounds(getBrickWorldCollisionCellBoxes(brick))
+    setLimitedWorldCache(worldCollisionBoundsCache, key, bounds)
+    return bounds
+  }
+  const definitionKey = makeStructuralDefinitionCacheKey(definition)
+  if (!localCollisionBoundsCache.has(definitionKey)) {
+    localCollisionBoundsCache.set(definitionKey, getCellBoxBounds(getBrickInteractionStructuralCells(definition).filter(structuralCellBlocksCollision)))
+  }
+  const local = localCollisionBoundsCache.get(definitionKey)
+  const bounds = local ? transformBrickLocalBounds(definition, brick.pose, local) : undefined
+  setLimitedWorldCache(worldCollisionBoundsCache, key, bounds)
+  return bounds
+}
+
 export const createStructuralCollisionIndex = (bricks: PlacedBrick[]): StructuralCollisionIndex => {
   const keyToBrickIds = new Map<string, Set<string>>()
   const brickKeys = new Map<string, Set<string>>()
   const bricksById = new Map(bricks.map((brick) => [brick.id, brick]))
+  const boundsById = new Map<string, BrickBounds>()
 
   for (const brick of bricks) {
-    const collisionBounds = getCellBoxBounds(getBrickWorldCollisionCellBoxes(brick))
+    const collisionBounds = getBrickWorldCollisionBounds(brick)
+    if (collisionBounds) boundsById.set(brick.id, collisionBounds)
     const keys = new Set(collisionBounds
       ? getCellHashKeys(collisionBounds, COLLISION_INDEX_HASH_STEP)
       : [])
@@ -1182,7 +1229,7 @@ export const createStructuralCollisionIndex = (bricks: PlacedBrick[]): Structura
     }
   }
 
-  return { keyToBrickIds, brickKeys, bricksById }
+  return { keyToBrickIds, brickKeys, bricksById, boundsById }
 }
 
 export const getStructuralCollisionCandidateIds = (
@@ -1190,7 +1237,7 @@ export const getStructuralCollisionCandidateIds = (
   index: StructuralCollisionIndex,
 ) => {
   const candidateIds = new Set<string>()
-  const collisionBounds = getCellBoxBounds(getBrickWorldCollisionCellBoxes(brick))
+  const collisionBounds = getBrickWorldCollisionBounds(brick)
   if (!collisionBounds) return candidateIds
 
   for (const key of getCellHashKeys(collisionBounds, COLLISION_INDEX_HASH_STEP)) {
@@ -1198,7 +1245,14 @@ export const getStructuralCollisionCandidateIds = (
     if (!brickIds) continue
 
     for (const brickId of brickIds) {
-      if (brickId !== brick.id) candidateIds.add(brickId)
+      if (brickId === brick.id || candidateIds.has(brickId)) continue
+      const target = index.boundsById.get(brickId)
+      // Coarse cells reduce hashing work for large moulds. Reject disjoint
+      // envelopes before invoking the unchanged exact cell narrow phase.
+      if (target && (collisionBounds.minX > target.maxX || collisionBounds.maxX < target.minX ||
+          collisionBounds.minY > target.maxY || collisionBounds.maxY < target.minY ||
+          collisionBounds.minZ > target.maxZ || collisionBounds.maxZ < target.minZ)) continue
+      candidateIds.add(brickId)
     }
   }
 
@@ -1209,13 +1263,17 @@ export const getStructuralOverlapScore = (
   brick: PlacedBrick,
   index: StructuralCollisionIndex,
 ) => {
+  // No target can overlap. Avoid voxelizing a complete imported model merely
+  // to discover that the destination canvas is empty.
+  if (index.bricksById.size === 0) return 0
   let overlapVolume = 0
-  const sourceBoxes = getBrickWorldCollisionCellBoxes(brick)
+  let sourceBoxes: WorldStructuralCellBox[] | undefined
 
   for (const brickId of getStructuralCollisionCandidateIds(brick, index)) {
     const other = index.bricksById.get(brickId)
     if (!other || !sourceEnvelopesOverlap(brick, other)) continue
 
+    sourceBoxes ??= getBrickWorldCollisionCellBoxes(brick)
     overlapVolume += getCollisionBoxOverlapVolume(sourceBoxes, getBrickWorldCollisionCellBoxes(other), getSourceCollisionEnvelope(brick), getSourceCollisionEnvelope(other))
   }
 
@@ -1262,3 +1320,10 @@ export const doStructuralCellsCollide = (
   target: Pick<StructuralCell, 'kind'>,
 ) =>
   structuralCellBlocksCollision(source) && structuralCellBlocksCollision(target)
+
+/** Prime definition-only derived data outside the large scene's render task. */
+export const warmBrickStructuralData = (definition: BrickDefinition) => {
+  getBrickInteractionStructuralCells(definition)
+  getBrickLocalSupportFaces(definition)
+  getBrickLocalSupportBounds(definition)
+}

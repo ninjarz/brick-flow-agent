@@ -7,6 +7,8 @@ import {
   hasBrickCollision,
   isBrickAboveGround,
 } from './planUtils'
+import { getGuaranteedClearDropDistance } from './brickDropBroadPhase'
+import { getStructuralCacheVersion } from './structuralGrid'
 import { brickById } from '../data/basicBricks'
 import { STUD_PITCH_WORLD, WORLD_SNAP_STEP_STUDS, getBrickWorldFrame, roundToGrid, translateBrickPose } from './brickUnits'
 import type { PlacedBrick } from '../types/bricks'
@@ -109,7 +111,7 @@ const canPlaceDroppedGroup = (
  * The source array is never mutated, so callers can use the result as a ghost
  * preview and commit it only after explicit confirmation.
  */
-export const dropBrickGroupAtPoint = (
+const dropBrickGroupAtPointUncached = (
   bricks: PlacedBrick[],
   anchorBrickId: string,
   point: HorizontalDropPoint,
@@ -151,12 +153,17 @@ export const dropBrickGroupAtPoint = (
   let candidate = translateBrickGroup(horizontallyAligned, { yStud: startShift })
   const collisionIndex = stationaryData.spatialState.collisionIndex
 
+  const candidateGroundDistance = Math.min(...candidate.map(brick => getBrickBounds(brick)!.minY))
+  const clearDistance = getGuaranteedClearDropDistance(candidate, candidateGroundDistance, stationaryData)
+  const clearSteps = Math.max(0, Math.floor((clearDistance - boundsTolerance) / WORLD_SNAP_STEP_STUDS))
+  if (clearSteps > 0) candidate = translateBrickGroup(candidate, { yStud: -clearSteps * WORLD_SNAP_STEP_STUDS })
+
   if (!canPlaceDroppedGroup(candidate, stationaryData.stationaryBricks, collisionIndex)) return undefined
 
   // Descending from above deliberately stops at the first obstacle. This
   // prevents a preview from tunnelling through a roof into an enclosed gap.
   const maxDropSteps = Math.ceil((stationaryMaxY + 1) / WORLD_SNAP_STEP_STUDS) + 2
-  for (let step = 0; step < maxDropSteps; step += 1) {
+  for (let step = clearSteps; step < maxDropSteps; step += 1) {
     const lowered = translateBrickGroup(candidate, { yStud: -WORLD_SNAP_STEP_STUDS })
     // normalizeYStud clamps at ground level. Once any member can no longer
     // descend by the same delta, the rigid group has landed; continuing would
@@ -167,4 +174,29 @@ export const dropBrickGroupAtPoint = (
   }
 
   return candidate
+}
+
+// Pointer surfaces change at tenths of a stud, but rigid assemblies snap by
+// whole studs. Reuse those identical collision queries within one placement.
+const dropResults = new WeakMap<PlacedBrick[], WeakMap<StationaryPlanSpatialData['spatialState'], Map<string, PlacedBrick[] | undefined>>>()
+export const dropBrickGroupAtPoint = (
+  bricks: PlacedBrick[],
+  anchorBrickId: string,
+  point: HorizontalDropPoint,
+  stationaryData: Pick<StationaryPlanSpatialData, 'stationaryBricks' | 'spatialState'>,
+) => {
+  const anchor = bricks.find(brick => brick.id === anchorBrickId) ?? bricks[0]
+  const definition = anchor && brickById.get(anchor.brickId)
+  if (!anchor || !definition) return undefined
+  const frame = getBrickWorldFrame(definition, anchor.pose)
+  const key = `${getStructuralCacheVersion()}:${anchorBrickId}:${roundToGrid(point.x-frame.x,STUD_PITCH_WORLD)},${roundToGrid(point.z-frame.z,STUD_PITCH_WORLD)}`
+  let byStationary = dropResults.get(bricks)
+  if (!byStationary) { byStationary = new WeakMap(); dropResults.set(bricks, byStationary) }
+  let results = byStationary.get(stationaryData.spatialState)
+  if (!results) { results = new Map(); byStationary.set(stationaryData.spatialState, results) }
+  if (results.has(key)) return results.get(key)?.map(brick => ({ ...brick, pose: { ...brick.pose } }))
+  const result = dropBrickGroupAtPointUncached(bricks, anchorBrickId, point, stationaryData)
+  if (results.size >= 8) results.delete(results.keys().next().value!)
+  results.set(key, result?.map(brick => ({ ...brick, pose: { ...brick.pose } })))
+  return result
 }
