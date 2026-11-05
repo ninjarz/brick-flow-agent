@@ -14,6 +14,13 @@ import {
   normalizeYStud,
 } from './brickUnits'
 import { getBrickFootprintWorldBounds, getBrickWorldBounds } from './ldrawBounds'
+import {
+  createMechanicalBridgeIndex,
+  getCachedBrickConnectors,
+  getConnectorCacheKey,
+  getMechanicalBridgeCandidates,
+  type MechanicalBridgeIndex,
+} from './mechanicalBridgeIndex'
 import { PlanSpatialState, type WorldBrickConnector } from './planSpatialState'
 import {
   createStructuralCollisionIndex,
@@ -50,9 +57,6 @@ type PlanValidationContext = {
 const isMechanicalConnectorKind = (kind: WorldBrickConnector['kind']) =>
   kind === 'axle' || kind === 'bar' || kind === 'pin'
 
-const getConnectorCacheKey = (brick: PlacedBrick) =>
-  `${brick.id}:${brick.brickId}:${brick.pose.xStud},${brick.pose.yStud},${brick.pose.zStud},${brick.pose.rotationQuarterTurns},${brick.pose.verticalQuarterTurns ?? 0},${brick.pose.rollQuarterTurns ?? 0}:${brick.pose.orientationMatrix?.join(',') ?? ''}`
-
 const getBrickPoseGeometryCacheKey = (brick: PlacedBrick) =>
   `${brick.brickId}:${brick.pose.xStud},${brick.pose.yStud},${brick.pose.zStud},${brick.pose.rotationQuarterTurns},${brick.pose.verticalQuarterTurns ?? 0},${brick.pose.rollQuarterTurns ?? 0}:${brick.pose.orientationMatrix?.join(',') ?? ''}`
 
@@ -78,7 +82,9 @@ const getPlacedBrickConnectors = (
   const definition = brickById.get(brick.brickId)
   if (!definition) return []
 
-  if (!context) return getBrickConnectors(definition, brick.pose)
+  // Memoised by (definition, pose): a pure function, so this only avoids
+  // rebuilding connector lists for every brick on every collision check.
+  if (!context) return getCachedBrickConnectors(brick)
 
   const cacheKey = getConnectorCacheKey(brick)
   const cached = context.connectorCache.get(cacheKey)
@@ -760,6 +766,19 @@ export const createBuildGraph = (
   }
 }
 
+// Plan bricks are immutable in this project; a plan array can therefore keep
+// one mechanical-connector index for its whole lifetime.
+const mechanicalBridgeIndexCache = new WeakMap<PlacedBrick[], MechanicalBridgeIndex>()
+
+const getMechanicalBridgeIndex = (bricks: PlacedBrick[]) => {
+  const cached = mechanicalBridgeIndexCache.get(bricks)
+  if (cached && cached.bricksById.size === bricks.length) return cached
+
+  const index = createMechanicalBridgeIndex(bricks)
+  mechanicalBridgeIndexCache.set(bricks, index)
+  return index
+}
+
 const hasIndirectMechanicalConnectorClearance = (
   source: PlacedBrick,
   target: PlacedBrick,
@@ -772,7 +791,16 @@ const hasIndirectMechanicalConnectorClearance = (
   const targetCanUseMechanicalBridge = placedBrickHasMechanicalConnector(target, context)
   if (!sourceCanUseMechanicalBridge && !targetCanUseMechanicalBridge) return false
 
-  return bricks.some((bridge) => {
+  // A bridge must have a mechanical connector within 0.12 stud of one on the
+  // source or the target. Connector-coordinate cells therefore contain every
+  // possible bridge, so scanning the whole plan is unnecessary.
+  const candidates = getMechanicalBridgeCandidates(
+    getMechanicalBridgeIndex(bricks),
+    getPlacedBrickConnectors(source, context),
+    getPlacedBrickConnectors(target, context),
+  )
+
+  return candidates.some((bridge) => {
     if (bridge.id === source.id || bridge.id === target.id) return false
     if (context && !context.mechanicalConnectorBrickIds.has(bridge.id)) return false
     if (!context && !placedBrickHasMechanicalConnector(bridge)) return false

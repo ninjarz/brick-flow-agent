@@ -261,6 +261,18 @@ await writeFile(entry, `
       ['create AI snapshot for 60 NPCs and 1500 bricks x10', 150],
       ['partition 10,000 voxel blocks into render chunks', 80],
       ['synchronize 10,000 fences', 300],
+      // Large-scene guard: the moved-brick check used to take ~17 s on the
+      // 6,025-piece castle. Keep a strict ceiling so the mechanical-bridge
+      // narrow phase cannot regress to a full-plan scan.
+      ['single moved-brick collision checks on largest asset x200', 300],
+      // Monitoring ceilings for the other expensive stages (generous enough
+      // for slower CI hosts, tight enough to catch an order-of-magnitude hit).
+      ['validate all finished assets', 3200],
+      ['serialize all finished asset manuals', 2800],
+      ['analyze stability for largest finished asset', 2600],
+      ['simulate realistic wind for largest finished asset', 8000],
+      ['simulate realistic rain for largest finished asset', 6000],
+      ['simulate realistic earthquake for largest finished asset', 4500],
     ]);
     const failures = results.flatMap((result) => {
       const budget = budgets.get(result.name);
