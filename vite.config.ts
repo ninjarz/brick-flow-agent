@@ -26,6 +26,10 @@ export default defineConfig({
       maxParallelFileOps: 8,
       output: {
         manualChunks(id) {
+          // The 3.2 MB castle plan is a static dependency but changes far less
+          // often than app code. Isolating it keeps the shell small and gives
+          // the plan its own long-lived browser cache entry.
+          if (id.includes('/src/data/legoHogwartsPlan.json')) return 'hogwarts-plan'
           if (!id.includes('/node_modules/')) return undefined
           if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/scheduler/')) return 'react-vendor'
           if (id.includes('/lucide-react/')) return 'icons-vendor'

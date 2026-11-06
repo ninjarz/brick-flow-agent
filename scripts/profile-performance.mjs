@@ -74,7 +74,7 @@ await writeFile(entry, `
     getBrickWorldCollisionKeys,
   } = structuralGrid;
   const { loadLDrawPartGeometry } = ldrawVisualGeometry;
-  const { serializeBuildManual } = manualSerializer;
+  const { serializeBuildManual, formatBuildManualHtml } = manualSerializer;
 
   const initialPlan = measure('generate default plan', () => generateBuildPlan({ prompt: '一个蓝灰色机器人' }));
   measure('validate current default plan', () => validateBuildPlan(initialPlan));
@@ -84,6 +84,11 @@ await writeFile(entry, `
   measure('serialize all finished asset manuals', () => {
     for (const asset of defaultFinishedAssets) serializeBuildManual(asset.plan);
   });
+  // Guard the HTML manual export: it used to grow as O(steps x pieces) and
+  // crashed with "Invalid string length" on the 6,025-piece castle.
+  const largestManual = measure('serialize largest asset manual', () => serializeBuildManual(largestAsset.plan));
+  const largestManualHtml = measure('format largest asset manual HTML', () => formatBuildManualHtml(largestManual));
+  console.log('largest asset manual HTML: ' + (largestManualHtml.length / 1024 / 1024).toFixed(2) + ' MB');
   measure('build collision index for largest finished asset', () =>
     createBrickCollisionIndex(largestAsset.plan.bricks)
   );
@@ -269,6 +274,8 @@ await writeFile(entry, `
       // for slower CI hosts, tight enough to catch an order-of-magnitude hit).
       ['validate all finished assets', 3200],
       ['serialize all finished asset manuals', 2800],
+      ['serialize largest asset manual', 600],
+      ['format largest asset manual HTML', 4000],
       ['analyze stability for largest finished asset', 2600],
       ['simulate realistic wind for largest finished asset', 8000],
       ['simulate realistic rain for largest finished asset', 6000],

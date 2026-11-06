@@ -805,11 +805,11 @@ await writeFile(entry, `
     )
       ? 'Manual schema v6 must include camera and exploded assembly guidance'
       : '',
-    !smallScenePerformance.enableRealtimeShadows || smallScenePerformance.useSimplifiedView || smallScenePerformance.maxDevicePixelRatio !== 1.5
-      ? 'Small scenes must retain detailed rendering, shadows, and 1.5 DPR'
+    !smallScenePerformance.enableRealtimeShadows || smallScenePerformance.useSimplifiedView || smallScenePerformance.maxDevicePixelRatio !== 2
+      ? 'Small scenes must retain detailed rendering, shadows, and high-DPI detail'
       : '',
-    shadowReducedPerformance.enableRealtimeShadows || shadowReducedPerformance.maxDevicePixelRatio !== 1
-      ? 'Large scenes must disable realtime shadows and cap DPR at 1'
+    shadowReducedPerformance.enableRealtimeShadows || shadowReducedPerformance.maxDevicePixelRatio !== 2
+      ? 'Large scenes must disable realtime shadows but keep high-DPI detail'
       : '',
     !largeScenePerformance.useSimplifiedView || largeVoxelPerformance.useSimplifiedView
       ? 'Very large solid scenes must simplify while voxel debug keeps its instanced structural renderer'

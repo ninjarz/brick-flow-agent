@@ -25,6 +25,7 @@ const manualText: Record<ManualLocale, {
   vertical: string
   roll: string
   newPieceCaption: string
+  diagramOmitted: (count: number) => string
   placementDirection: Record<ManualPlacementDirection, string>
   sourceTemplateLocal: string
   sourceLlm: string
@@ -51,6 +52,7 @@ const manualText: Record<ManualLocale, {
     vertical: '垂直',
     roll: '轴向',
     newPieceCaption: '橙色描边为本步新增零件；箭头表示安装方向',
+    diagramOmitted: (count) => `为保证可读性，示意图省略了 ${count} 个既有零件`,
     placementDirection: {
       down: '从上向下安装',
       up: '从下向上安装',
@@ -84,6 +86,7 @@ const manualText: Record<ManualLocale, {
     vertical: 'Vertical',
     roll: 'Roll',
     newPieceCaption: 'Orange outlines mark new parts; arrows show installation direction',
+    diagramOmitted: (count) => `${count} existing parts omitted from the diagram for readability`,
     placementDirection: {
       down: 'Install downward from above',
       up: 'Install upward from below',
@@ -515,7 +518,51 @@ type DiagramCuboid = {
 
 const pointList = (points: DiagramPoint[]) => points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ')
 
-const renderStepDiagram = (step: ManualStepPage, cumulativePieces: ManualPiece[], locale: ManualLocale) => {
+/** Drawing every completed piece on every page is O(steps x pieces). */
+const DIAGRAM_PIECE_LIMIT = 160
+const DIAGRAM_MIN_PIECE_LIMIT = 40
+/** Rough ceiling on total cuboids so a long manual stays openable in a browser. */
+const DIAGRAM_TOTAL_BUDGET = 50_000
+/** Manuals below this size keep their original, complete diagrams. */
+const DIAGRAM_FULL_DETAIL_MAX_PIECES = 500
+
+const selectDiagramPieces = (cumulativePieces: ManualPiece[], newPieceIds: Set<string>, limit: number) => {
+  if (cumulativePieces.length <= limit) return { pieces: cumulativePieces, omitted: 0 }
+
+  // Keep the installation context around every new piece. Uniform sampling can
+  // omit its immediate support, leaving an assembly arrow pointing into space.
+  const newPieces = cumulativePieces.filter((piece) => newPieceIds.has(piece.instanceId))
+  const history = cumulativePieces.filter((piece) => !newPieceIds.has(piece.instanceId))
+  const bounds = (piece: ManualPiece) => {
+    const footprint = getPlanFootprint(piece)
+    return {
+      x: piece.pose.xStud, y: piece.pose.yStud, z: piece.pose.zStud,
+      width: footprint.widthStuds, height: piece.footprint.heightStuds, depth: footprint.depthStuds,
+    }
+  }
+  const newBounds = newPieces.map(bounds)
+  const nearby = history.map((piece) => {
+    const source = bounds(piece)
+    const distance = Math.min(...newBounds.map((target) => {
+      const dx = Math.max(0, source.x - target.x - target.width, target.x - source.x - source.width)
+      const dy = Math.max(0, source.y - target.y - target.height, target.y - source.y - source.height)
+      const dz = Math.max(0, source.z - target.z - target.depth, target.z - source.z - source.depth)
+      return dx * dx + dy * dy + dz * dz
+    }))
+    return { piece, distance }
+  }).sort((a, b) => a.distance - b.distance)
+  // The budget is soft for touching pieces: never discard an installation
+  // surface just because a wide new plate touches more parts than the budget.
+  const touchingCount = nearby.filter(({ distance }) => distance <= 1e-12).length
+  const budget = Math.max(touchingCount, limit - newPieces.length, 0)
+  const sampled = nearby.slice(0, budget).map(({ piece }) => piece)
+  return {
+    pieces: [...sampled, ...newPieces],
+    omitted: cumulativePieces.length - sampled.length - newPieces.length,
+  }
+}
+
+const renderStepDiagram = (step: ManualStepPage, cumulativePieces: ManualPiece[], locale: ManualLocale, diagramLimit: number) => {
   const labels = manualText[locale]
   if (cumulativePieces.length === 0) return ''
 
@@ -524,13 +571,14 @@ const renderStepDiagram = (step: ManualStepPage, cumulativePieces: ManualPiece[]
   const heightScale = 7
   const padding = 32
   const newPieceIds = new Set(step.addPieces.map((piece) => piece.instanceId))
+  const diagramSelection = selectDiagramPieces(cumulativePieces, newPieceIds, diagramLimit)
 
   const project = (xStud: number, zStud: number, yStud: number): DiagramPoint => ({
     x: (xStud - zStud) * studX,
     y: (xStud + zStud) * studZ - yStud * heightScale,
   })
 
-  const cuboids: DiagramCuboid[] = [...cumulativePieces]
+  const cuboids: DiagramCuboid[] = [...diagramSelection.pieces]
     .sort((source, target) =>
       (source.pose.xStud + source.pose.zStud + source.pose.yStud) -
       (target.pose.xStud + target.pose.zStud + target.pose.yStud),
@@ -614,13 +662,19 @@ const renderStepDiagram = (step: ManualStepPage, cumulativePieces: ManualPiece[]
         <rect width="${width}" height="${height}" rx="10" fill="#f8fafc" />
         ${pieces}
       </svg>
-      <figcaption>${escapeHtml(labels.newPieceCaption)}</figcaption>
+      <figcaption>${escapeHtml(labels.newPieceCaption)}${diagramSelection.omitted > 0 ? ` · ${escapeHtml(labels.diagramOmitted(diagramSelection.omitted))}` : ''}</figcaption>
     </figure>`
 }
 
 export const formatBuildManualHtml = (manual: BuildManual, locale: ManualLocale = 'zh-CN') => {
   const labels = manualText[locale]
   const cumulativePieces: ManualPiece[] = []
+  const diagramLimit = manual.totalPieces > DIAGRAM_FULL_DETAIL_MAX_PIECES
+    ? Math.max(
+      DIAGRAM_MIN_PIECE_LIMIT,
+      Math.min(DIAGRAM_PIECE_LIMIT, Math.floor(DIAGRAM_TOTAL_BUDGET / Math.max(1, manual.steps.length))),
+    )
+    : Number.POSITIVE_INFINITY
   const manualStepsHtml = manual.steps.map((step) => {
     cumulativePieces.push(...step.addPieces)
     return `<section class="step">
@@ -628,7 +682,7 @@ export const formatBuildManualHtml = (manual: BuildManual, locale: ManualLocale 
       <p>${escapeHtml(step.description)}</p>
       <p class="step-status${step.validation.ok ? (step.validation.issueCount > 0 ? ' notice' : '') : ' warn'}">${escapeHtml(step.validation.summary)}</p>
       <p class="count">${escapeHtml(labels.stepCount(step.addPieces.length, step.completedPieceCount))}</p>
-      ${renderStepDiagram(step, cumulativePieces, locale)}
+      ${renderStepDiagram(step, cumulativePieces, locale, diagramLimit)}
       <ul>
         ${step.addPieces.map((piece) => `<li><strong>${escapeHtml(piece.name)}</strong><br /><small>${escapeHtml(piece.brickId)} · ${escapeHtml(piece.color)} · x${piece.pose.xStud} y${piece.pose.yStud} z${piece.pose.zStud} · ${piece.orientationLabel ? escapeHtml(piece.orientationLabel) : `${escapeHtml(labels.horizontal)} ${piece.rotationDegrees}° · ${escapeHtml(labels.vertical)} ${piece.verticalRotationDegrees}°${piece.rollRotationDegrees ? ` · ${escapeHtml(labels.roll)} ${piece.rollRotationDegrees}°` : ''}`} · ${escapeHtml(piece.assembly.label)}</small></li>`).join('\n        ')}
       </ul>

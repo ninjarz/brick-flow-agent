@@ -66,6 +66,25 @@ describe('exact LEGO render batching', () => {
     expect(batch.material.side).not.toBe(DoubleSide)
     batch.dispose();batch.material.dispose()
   })
+
+  it('preserves individual risk-colour transparency when batching', () => {
+    const brick = makeBrick('brick-1x1', 'red', 0, 0, 0)
+    const options = { excludedIds: new Set<string>(), highlightedIds: new Set<string>(), supportedByBrickId: new Map<string, boolean>(), showEdges: false }
+    const result = buildLDrawSceneBatches([brick], {
+      ...options, displayColorByBrickId: new Map([[brick.id, '#ef4444']]),
+    })
+    expect(result.individualBricks).toHaveLength(0)
+    const mesh = createLDrawBatchMesh(result.meshBatches[0])
+    expect(mesh.material.transparent).toBe(true)
+    expect(mesh.material.opacity).toBe(0.92)
+    expect(mesh.material.depthWrite).toBe(false)
+    mesh.dispose(); mesh.material.dispose()
+
+    const opaque = createLDrawBatchMesh(buildLDrawSceneBatches([brick], options).meshBatches[0])
+    expect(opaque.material.transparent).toBe(false)
+    expect(opaque.material.depthWrite).toBe(true)
+    opaque.dispose(); opaque.material.dispose()
+  })
   it('keeps opaque print colours, normals and editable piece IDs after merging', () => {
     const geometry = new BoxGeometry(1,1,1).toNonIndexed()
     const red = makeBrick('brick-1x1','red',0,0,0), blue = makeBrick('brick-1x1','blue',0,0,0)

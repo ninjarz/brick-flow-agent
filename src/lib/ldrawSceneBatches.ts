@@ -50,10 +50,13 @@ export const getPositiveLDrawGeometry = (geometry: BufferGeometry, matrix: Matri
 }
 
 export type LDrawBatchInstance = { brick: PlacedBrick; matrix: Matrix4; color: string }
-export type LDrawMeshBatch = { key: string; geometry: BufferGeometry; instances: LDrawBatchInstance[]; print: boolean; doubleSide: boolean }
+export type LDrawMeshBatch = { key: string; geometry: BufferGeometry; instances: LDrawBatchInstance[]; print: boolean; doubleSide: boolean; opacity?: number }
 export type LDrawLineBatch = { key: string; color: string; points: Float32Array; sources: { brick: PlacedBrick; points: number[] }[] }
 
 export type LDrawSceneBatches = { meshBatches: LDrawMeshBatch[]; printBatches: LDrawPrintBatch[]; lineBatches: LDrawLineBatch[]; individualBricks: PlacedBrick[]; printSources: LDrawMeshBatch[] }
+
+/** Matches the opacity used by an individually rendered, risk-coloured brick. */
+const DISPLAY_COLOR_BATCH_OPACITY = 0.92
 
 type Options = {
   selectedId?: string
@@ -73,24 +76,45 @@ export const buildLDrawSceneBatches = (bricks: PlacedBrick[], options: Options, 
     group.items.push({ points, matrix, brick }); group.length += points.length
     lines.set(key, group)
   }
-  const addMesh = (geometry: BufferGeometry, matrix: Matrix4, brick: PlacedBrick, color: string, print: boolean, doubleSide: boolean) => {
+  const addMesh = (geometry: BufferGeometry, matrix: Matrix4, brick: PlacedBrick, color: string, print: boolean, doubleSide: boolean, opacity: number) => {
     const positive = getPositiveLDrawGeometry(geometry, matrix)
-    const key = `${positive.geometry.uuid}:${print}:${doubleSide}`
-    const group = groups.get(key) ?? { key, geometry: positive.geometry, instances: [], print, doubleSide }
+    const key = `${positive.geometry.uuid}:${print}:${doubleSide}:${opacity}`
+    const group = groups.get(key) ?? { key, geometry: positive.geometry, instances: [], print, doubleSide, opacity }
     group.instances.push({ brick, matrix: positive.matrix, color }); groups.set(key, group)
   }
+  // Body/print geometries only depend on the mould, not on the placed brick.
+  // A 6,000-piece castle reuses ~390 of them; resolve each mould once.
+  const geometryCache = new Map<string, {
+    body: BufferGeometry | undefined
+    prints: ReturnType<typeof createLDrawPrintGeometries>
+  }>()
   for (const brick of bricks) {
     const definition = brickById.get(brick.brickId)
-    const body = definition?.pack === 'lego' ? createLoadedLDrawBodyGeometry(definition.partNumber, definition.footprint) : undefined
-    const prints = definition && body ? createLDrawPrintGeometries(definition.partNumber, definition.footprint) : []
+    let resources = definition ? geometryCache.get(definition.id) : undefined
+    if (definition && !resources) {
+      const body = definition.pack === 'lego'
+        ? createLoadedLDrawBodyGeometry(definition.partNumber, definition.footprint)
+        : undefined
+      resources = { body, prints: body ? createLDrawPrintGeometries(definition.partNumber, definition.footprint) : [] }
+      geometryCache.set(definition.id, resources)
+    }
+    const body = resources?.body
+    const prints = resources?.prints ?? []
+    const displayColor = options.displayColorByBrickId?.get(brick.id)
+    // Printed faces keep their own colours and still need the independent
+    // renderer. Plain coloured bricks can stay instanced with an overridden
+    // instance colour, which avoids thousands of individual meshes in xray.
+    const needsIndividualRender = !definition || !body || brick.id === options.selectedId || options.excludedIds.has(brick.id)
+      || (displayColor !== undefined && prints.length > 0)
+      || colorOpacity[brick.color] < 1 || prints.some(layer => layer.opacity < 1) || brick.brickId.startsWith('tile-eye-')
     // Preserve the original sorted transparent path and procedural eye artwork.
-    if (!definition || !body || brick.id === options.selectedId || options.excludedIds.has(brick.id) || options.displayColorByBrickId?.has(brick.id)
-      || colorOpacity[brick.color] < 1 || prints.some(layer => layer.opacity < 1) || brick.brickId.startsWith('tile-eye-')) {
+    if (needsIndividualRender) {
       individualBricks.push(brick); continue
     }
-    const matrix = getLDrawSceneMatrix(definition, brick)
-    addMesh(body, matrix, brick, colorHex[brick.color], false, definition.kind === 'slope')
-    for (const layer of prints) addMesh(layer.geometry, matrix, brick, layer.color, true, false)
+    const matrix = getLDrawSceneMatrix(definition!, brick)
+    const opacity = displayColor !== undefined ? DISPLAY_COLOR_BATCH_OPACITY : 1
+    addMesh(body!, matrix, brick, displayColor ?? colorHex[brick.color], false, definition!.kind === 'slope', opacity)
+    for (const layer of prints) addMesh(layer.geometry, matrix, brick, layer.color, true, false, opacity)
     const highlighted = options.highlightedIds.has(brick.id)
     const floating = options.supportedByBrickId.get(brick.id) === false
     const chunk = `${Math.floor(brick.pose.xStud / edgeChunkSize)}:${Math.floor(brick.pose.zStud / edgeChunkSize)}`
@@ -127,9 +151,11 @@ export const buildLDrawSceneBatches = (bricks: PlacedBrick[], options: Options, 
 /** Local BVH per shared mould, without changing Mesh.prototype or other scenes. */
 export const createLDrawBatchMesh = (batch: LDrawMeshBatch) => {
   const geometry = batch.geometry
+  const opacity = batch.opacity ?? 1
   if (!geometry.boundsTree) geometry.boundsTree = new MeshBVH(geometry)
   const material = new MeshStandardMaterial({ color: 'white', roughness: batch.print ? .4 : .48, metalness: batch.print ? 0 : .02,
-    side: batch.doubleSide ? DoubleSide : FrontSide, polygonOffset: batch.print, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })
+    side: batch.doubleSide ? DoubleSide : FrontSide, polygonOffset: batch.print, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
+    transparent: opacity < 1, opacity, depthWrite: opacity >= 1 })
   const mesh = new InstancedMesh(geometry, material, batch.instances.length)
   const color = new Color()
   batch.instances.forEach((instance, i) => { mesh.setMatrixAt(i, instance.matrix); mesh.setColorAt(i, color.set(instance.color)) })

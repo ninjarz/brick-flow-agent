@@ -5,11 +5,15 @@ import type { LDrawMeshBatch } from './ldrawSceneBatches'
 export type LDrawPrintBatch = { key: string; geometry: BufferGeometry; brickIds: string[]; triangleBrickIndices: Uint32Array; sources: { batch: LDrawMeshBatch; index: number }[] }
 
 /** Opaque artwork shares one material. Vertex colours retain each original ink. */
+// Smaller spatial chunks keep a single selection change from rebuilding a
+// large merged print mesh (a 16-unit chunk cost ~230 ms on the 6k-piece castle).
+const PRINT_CHUNK_SIZE = 8
+
 export const mergeLDrawPrintBatches = (batches: LDrawMeshBatch[], previous: LDrawPrintBatch[] = []) => {
   const chunks = new Map<string, { batch: LDrawMeshBatch; index: number }[]>()
   for (const batch of batches) batch.instances.forEach((instance, index) => {
     const e = instance.matrix.elements
-    const key = `${Math.floor(e[12] / 16)}:${Math.floor(e[14] / 16)}`
+    const key = `${Math.floor(e[12] / PRINT_CHUNK_SIZE)}:${Math.floor(e[14] / PRINT_CHUNK_SIZE)}`
     const items = chunks.get(key) ?? []; items.push({ batch, index }); chunks.set(key, items)
   })
   const previousByKey = new Map(previous.map(batch => [batch.key, batch]))

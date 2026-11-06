@@ -44,6 +44,9 @@ const connectorSnapSearchTolerance = 0.6
 const connectorUnsnapTolerance = 0.000001
 const graphPairTolerance = 0.12
 const graphPairSpatialCellSize = 1
+// Small arrays (test fixtures, tiny plans) are sometimes mutated in place, so
+// result caches are only worth the invalidation risk on large scenes.
+const CACHE_MIN_BRICKS = 500
 const defaultLocalSearchRadiusStuds = 5
 const verticalLoadContactCacheLimit = 100000
 const verticalLoadContactCache = new Map<string, boolean>()
@@ -712,9 +715,9 @@ const computeGroundedIds = (
   return groundedIds
 }
 
-export const createBuildGraph = (
+const computeBuildGraph = (
   bricks: PlacedBrick[],
-  context = createPlanValidationContext(bricks),
+  context: PlanValidationContext,
 ): BuildGraph => {
   const attachmentEdges = new Map<string, Set<string>>()
   const bricksById = new Map(bricks.map((brick) => [brick.id, brick]))
@@ -764,6 +767,29 @@ export const createBuildGraph = (
     groundedIds,
     components,
   }
+}
+
+type CachedBuildGraph = { version: number; graph: BuildGraph }
+const buildGraphCache = new WeakMap<PlacedBrick[], CachedBuildGraph>()
+
+/**
+ * Stability analysis, disaster simulation, editor analysis and scene support
+ * all rebuild the same graph from the same immutable bricks array. Only the
+ * default-context path is cached: an explicit context can carry different
+ * connector data. The structural version invalidates it when geometry loads.
+ */
+export const createBuildGraph = (bricks: PlacedBrick[], context?: PlanValidationContext): BuildGraph => {
+  if (context || bricks.length < CACHE_MIN_BRICKS) {
+    return computeBuildGraph(bricks, context ?? createPlanValidationContext(bricks))
+  }
+
+  const version = getStructuralCacheVersion()
+  const cached = buildGraphCache.get(bricks)
+  if (cached && cached.version === version) return cached.graph
+
+  const graph = computeBuildGraph(bricks, createPlanValidationContext(bricks))
+  buildGraphCache.set(bricks, { version, graph })
+  return graph
 }
 
 // Plan bricks are immutable in this project; a plan array can therefore keep
@@ -1565,7 +1591,7 @@ export const isBuildPlanIssueBlocking = (issue: BuildPlanIssue) =>
 export const getBlockingBuildPlanIssues = (issues: BuildPlanIssue[]) =>
   issues.filter(isBuildPlanIssueBlocking)
 
-export const getConnectedBrickComponents = (bricks: PlacedBrick[]) => {
+const computeConnectedBrickComponents = (bricks: PlacedBrick[]) => {
   const attachmentEdges = new Map<string, Set<string>>()
   const context = createPlanValidationContext(bricks)
   const bricksById = new Map(bricks.map((brick) => [brick.id, brick]))
@@ -1598,6 +1624,24 @@ export const getConnectedBrickComponents = (bricks: PlacedBrick[]) => {
   }
 
   return computeConnectedComponentsFromEdges(bricks, attachmentEdges)
+}
+
+type CachedComponents = {
+  version: number
+  result: ReturnType<typeof computeConnectedBrickComponents>
+}
+const connectedComponentsCache = new WeakMap<PlacedBrick[], CachedComponents>()
+
+export const getConnectedBrickComponents = (bricks: PlacedBrick[]) => {
+  if (bricks.length < CACHE_MIN_BRICKS) return computeConnectedBrickComponents(bricks)
+
+  const version = getStructuralCacheVersion()
+  const cached = connectedComponentsCache.get(bricks)
+  if (cached && cached.version === version) return cached.result
+
+  const result = computeConnectedBrickComponents(bricks)
+  connectedComponentsCache.set(bricks, { version, result })
+  return result
 }
 
 export const validateBuildPlanBasics = (plan: BuildPlan): BuildPlanIssue[] => {
@@ -1717,10 +1761,34 @@ export const validateBuildPlanStructural = (plan: BuildPlan, preparedGraph?: Bui
   return issues
 }
 
-export const validateBuildPlan = (plan: BuildPlan, preparedGraph?: BuildGraph): BuildPlanIssue[] => [
-  ...validateBuildPlanBasics(plan),
-  ...validateBuildPlanStructural(plan, preparedGraph),
-]
+type CachedValidation = { version: number; graph?: BuildGraph; issues: BuildPlanIssue[] }
+const buildPlanValidationCache = new WeakMap<BuildPlan, CachedValidation>()
+
+/**
+ * Plan objects are immutable in this project. The result only changes when LDraw
+ * geometry loads (bumping the structural cache version) or when a caller passes
+ * a different prepared graph, so repeated checks during startup, saving, import
+ * and manual export can share one result.
+ */
+export const validateBuildPlan = (plan: BuildPlan, preparedGraph?: BuildGraph): BuildPlanIssue[] => {
+  if (plan.bricks.length < CACHE_MIN_BRICKS) {
+    return [
+      ...validateBuildPlanBasics(plan),
+      ...validateBuildPlanStructural(plan, preparedGraph),
+    ]
+  }
+
+  const version = getStructuralCacheVersion()
+  const cached = buildPlanValidationCache.get(plan)
+  if (cached && cached.version === version && cached.graph === preparedGraph) return [...cached.issues]
+
+  const issues = [
+    ...validateBuildPlanBasics(plan),
+    ...validateBuildPlanStructural(plan, preparedGraph),
+  ]
+  buildPlanValidationCache.set(plan, { version, graph: preparedGraph, issues })
+  return issues
+}
 
 type SummaryLocale = 'zh-CN' | 'en-US'
 
