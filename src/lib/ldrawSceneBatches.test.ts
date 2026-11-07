@@ -4,11 +4,11 @@ import { brickById } from '../data/basicBricks'
 import { getBrickWorldFrame } from './brickUnits'
 import { loadLDrawGeneratedVisual } from './ldrawGeneratedVisualLoader'
 import { buildLDrawSceneBatches, createLDrawBatchMesh, getLDrawSceneMatrix, getPositiveLDrawGeometry } from './ldrawSceneBatches'
-import { createLDrawPrintBatchMesh, mergeLDrawPrintBatches } from './ldrawPrintBatches'
+import { createLDrawPrintBatchMesh, mergeLDrawPrintBatches, prepareLDrawPrintBatches } from './ldrawPrintBatches'
 import { makeBrick } from './planUtils'
 
 describe('exact LEGO render batching', () => {
-  beforeAll(() => loadLDrawGeneratedVisual(['3005', '3024']), 30_000)
+  beforeAll(() => loadLDrawGeneratedVisual(['3005', '3024', '3068bpbf71043s60']), 30_000)
 
   it('matches the original nested group transform, including reflected source matrices', () => {
     const brick = makeBrick('brick-1x1', 'red', 2, 3, 4)
@@ -120,6 +120,70 @@ describe('exact LEGO render batching', () => {
     expect(second.meshBatches[0]).toBe(first.meshBatches[1])
     expect(second.lineBatches[0]).toBe(first.lineBatches[1])
     expect(second.individualBricks[0]).toBe(pieces[0])
+  })
+
+  it('keeps selected artwork in its unchanged batch, but removes it during movement', () => {
+    const definition = [...brickById.values()].find(def => def.partNumber === '3068bpbf71043s60')!
+    const brick = makeBrick(definition.id, definition.colors[0], 0, 0, 0)
+    const options = { excludedIds: new Set<string>(), highlightedIds: new Set<string>(), supportedByBrickId: new Map<string, boolean>(), showEdges: true }
+    const initial = buildLDrawSceneBatches([brick], options)
+    expect(initial.printBatches.length).toBeGreaterThan(0)
+    const selected = buildLDrawSceneBatches([brick], { ...options, selectedId: brick.id }, initial)
+    expect(selected.printBatches[0]).toBe(initial.printBatches[0])
+    expect(selected.individualBricks).toEqual([brick])
+    expect(selected.meshBatches).toHaveLength(0)
+    const moving = buildLDrawSceneBatches([brick], { ...options, selectedId: brick.id, excludedIds: new Set([brick.id]) }, selected)
+    expect(moving.printBatches).toHaveLength(0)
+    expect(moving.individualBricks).toEqual([brick])
+  })
+
+  it('keeps exact picking with translated and scaled parents and near/far clipping', () => {
+    const geometry = new BoxGeometry(1, 1, 1)
+    const brick = makeBrick('brick-1x1', 'red', 0, 0, 0)
+    const batch = createLDrawBatchMesh({ key: 'parent', geometry, print: false, doubleSide: false, instances: [{ brick, matrix: new Matrix4().makeTranslation(3, 0, 0), color: '#ff0000' }] })
+    batch.position.set(2, 0, 0); batch.scale.set(2, 3, 1); batch.updateMatrixWorld(true)
+    const reference = new Mesh(geometry, new MeshStandardMaterial())
+    reference.matrixAutoUpdate = false
+    reference.matrix.copy(batch.matrixWorld).multiply(new Matrix4().makeTranslation(3, 0, 0))
+    reference.updateMatrixWorld(true)
+    const ray = new Raycaster(new Vector3(8, 0, 5), new Vector3(0, 0, -1))
+    expect(ray.intersectObject(batch)[0].point.distanceTo(ray.intersectObject(reference)[0].point)).toBeLessThan(1e-12)
+    ray.far = 4
+    expect(ray.intersectObject(batch)).toHaveLength(0)
+    batch.dispose(); batch.material.dispose(); reference.material.dispose(); geometry.dispose()
+  })
+
+  it('prepares identical print vertices cooperatively and preserves rotated hit normals', async () => {
+    const geometry = new BoxGeometry(1, 1, 1).toNonIndexed()
+    const brick = makeBrick('brick-1x1', 'red', 0, 0, 0)
+    const matrix = new Matrix4().makeRotationY(Math.PI / 2).setPosition(2, 0, 0)
+    const source = { key: 'rotated', geometry, print: true, doubleSide: false, instances: [{ brick, matrix, color: '#ff0000' }] }
+    const sync = mergeLDrawPrintBatches([source])
+    const asyncBatches = await prepareLDrawPrintBatches([source])
+    for (const attribute of ['position', 'normal', 'color']) {
+      expect(asyncBatches[0].geometry.getAttribute(attribute).array).toEqual(sync[0].geometry.getAttribute(attribute).array)
+    }
+    const mesh = createLDrawPrintBatchMesh(asyncBatches[0])
+    const reference = new Mesh(sync[0].geometry, new MeshStandardMaterial())
+    const ray = new Raycaster(new Vector3(2, 0, 5), new Vector3(0, 0, -1))
+    const actual = ray.intersectObject(mesh)[0], expected = ray.intersectObject(reference)[0]
+    expect(actual.point.distanceTo(expected.point)).toBeLessThan(1e-6)
+    expect(actual.face!.normal.distanceTo(expected.face!.normal)).toBeLessThan(1e-6)
+    expect(asyncBatches[0].brickIds[asyncBatches[0].triangleBrickIndices[actual.faceIndex!]]).toBe(brick.id)
+    mesh.material.dispose(); reference.material.dispose()
+    for (const batch of [...sync, ...asyncBatches]) batch.geometry.dispose()
+    geometry.dispose()
+  })
+
+  it('restores an unchanged large scene without rebuilding its resources', () => {
+    const pieces = Array.from({ length: 800 }, (_, i) => makeBrick('brick-1x1', 'red', i * 2, 0, 0))
+    const options = { excludedIds: new Set<string>(), highlightedIds: new Set<string>(), supportedByBrickId: new Map<string, boolean>(), showEdges: false }
+    const initial = buildLDrawSceneBatches(pieces, options)
+    expect(buildLDrawSceneBatches(pieces, { ...options, excludedIds: new Set() }, initial)).toBe(initial)
+    options.excludedIds.add(pieces[0].id)
+    const changed = buildLDrawSceneBatches(pieces, options, initial)
+    expect(changed).not.toBe(initial)
+    expect(changed.individualBricks).toContain(pieces[0])
   })
 
 })

@@ -1,6 +1,6 @@
-import { memo, useMemo, useRef } from 'react'
+import { memo, useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import { DoubleSide, Vector2, type Group } from 'three'
+import { CustomBlending, DoubleSide, OneFactor, OneMinusSrcAlphaFactor, SrcAlphaFactor, Vector2, type Group, type ShaderMaterial } from 'three'
 
 const vertexShader = `
   varying vec2 vWorldGridPosition;
@@ -42,11 +42,20 @@ export const SceneGround = memo(function SceneGround({ receiveShadow, fade, onBa
   onBackgroundClick: () => boolean
 }) {
   const group = useRef<Group>(null)
+  const material = useRef<ShaderMaterial>(null)
   const uniforms = useMemo(() => ({
-    uCenter: { value: new Vector2(fade.centerX, fade.centerZ) },
-    uFadeStart: { value: fade.start },
-    uFadeEnd: { value: fade.end },
-  }), [fade])
+    uCenter: { value: new Vector2() },
+    uFadeStart: { value: 0 },
+    uFadeEnd: { value: 1 },
+  }), [])
+  useLayoutEffect(() => {
+    // Keep the uniform container stable: replacing it can leave the compiled
+    // material uploading the original scene's small fade radius.
+    uniforms.uCenter.value.set(fade.centerX, fade.centerZ)
+    uniforms.uFadeStart.value = fade.start
+    uniforms.uFadeEnd.value = fade.end
+    if (material.current) material.current.uniformsNeedUpdate = true
+  }, [fade.centerX, fade.centerZ, fade.start, fade.end, uniforms])
   useFrame(({ camera }) => {
     if (!group.current) return
     group.current.position.set(camera.position.x, 0, camera.position.z)
@@ -61,9 +70,13 @@ export const SceneGround = memo(function SceneGround({ receiveShadow, fade, onBa
     {receiveShadow && <mesh rotation={[-Math.PI/2,0,0]} position={[0,-.02,0]} receiveShadow raycast={() => null}>
       <planeGeometry args={[1,1]} /><shadowMaterial transparent opacity={.14} depthWrite={false} />
     </mesh>}
-    <mesh rotation={[-Math.PI/2,0,0]} position={[0,-.01,0]} onPointerUp={release}>
+    {/* Draw the faded grid as a background before all model surfaces. Keeping
+        it out of the transparent queue avoids depth competition with bottom
+        faces when viewing the ground from below. Custom alpha blending keeps
+        the existing soft edge while using the opaque queue's stable order. */}
+    <mesh rotation={[-Math.PI/2,0,0]} position={[0,-.01,0]} renderOrder={-1000} onPointerUp={release}>
       <planeGeometry args={[1,1]} />
-      <shaderMaterial uniforms={uniforms} vertexShader={vertexShader} fragmentShader={fragmentShader} transparent depthWrite={false} side={DoubleSide} toneMapped={false} />
+      <shaderMaterial ref={material} uniforms={uniforms} vertexShader={vertexShader} fragmentShader={fragmentShader} transparent={false} blending={CustomBlending} blendSrc={SrcAlphaFactor} blendDst={OneMinusSrcAlphaFactor} blendSrcAlpha={OneFactor} blendDstAlpha={OneMinusSrcAlphaFactor} depthTest={false} depthWrite={false} side={DoubleSide} toneMapped={false} />
     </mesh>
   </group>
 })

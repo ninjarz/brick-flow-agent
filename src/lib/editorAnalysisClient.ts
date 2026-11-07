@@ -21,11 +21,14 @@ const revisions = new WeakMap<PlacedBrick[], number>()
 let nextRevision = 0
 let nextRequest = 0
 let worker: Worker | undefined
+// Mirror the worker's two-entry FIFO; postMessage preserves send order.
+const sentRevisions = new Set<number>()
 const pending = new Map<number, { resolve: (result: EditorAnalysisResult) => void; reject: (error: Error) => void }>()
 
 const fail = () => {
   worker?.terminate()
   worker = undefined
+  sentRevisions.clear()
   for (const request of pending.values()) request.reject(new Error('EDITOR_ANALYSIS_WORKER_FAILED'))
   pending.clear()
 }
@@ -54,7 +57,7 @@ const getAnalysisGeometry = (bricks: PlacedBrick[]) => {
   return loading
 }
 
-const request = async (bricks: PlacedBrick[], plan?: BuildPlan, stability = false, drop?: EditorAnalysisRequest['drop']): Promise<EditorAnalysisResult> => {
+const request = async (bricks: PlacedBrick[], plan?: BuildPlan, stability = false, drop?: EditorAnalysisRequest['drop'], transform?: EditorAnalysisRequest['transform']): Promise<EditorAnalysisResult> => {
   const geometry = await getAnalysisGeometry(bricks)
   if (!worker) {
     worker = new Worker(new URL('../workers/editorAnalysisWorker.ts', import.meta.url), { type: 'module' })
@@ -79,7 +82,12 @@ const request = async (bricks: PlacedBrick[], plan?: BuildPlan, stability = fals
     try {
       // The canonical snapshot already carries the pieces; do not clone them
       // twice when validation also needs the plan metadata.
-      worker!.postMessage({ requestId, revision, bricks, plan: plan ? { ...plan, bricks: [] } : undefined, stability, geometry, drop })
+      const initialized = sentRevisions.has(revision)
+      worker!.postMessage({ requestId, revision, bricks: initialized ? [] : bricks, plan: plan ? { ...plan, bricks: [] } : undefined, stability, geometry: initialized ? [] : geometry, drop, transform })
+      if (!initialized) {
+        if (sentRevisions.size >= 2) sentRevisions.delete(sentRevisions.values().next().value!)
+        sentRevisions.add(revision)
+      }
     } catch (error) {
       pending.delete(requestId)
       reject(error)
@@ -165,3 +173,6 @@ export const getEditorDrop = (bricks: PlacedBrick[], source: PlacedBrick[], anch
   else start(job)
   return job.promise
 }
+
+export const getEditorTransform = (bricks: PlacedBrick[], next: PlacedBrick[], reposition: boolean) =>
+  request(bricks, undefined, false, undefined, { sourceIds: next.map(brick => brick.id), next, reposition }).then(result => result.transformedBricks)

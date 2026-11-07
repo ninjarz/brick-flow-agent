@@ -6061,3 +6061,19 @@ button:disabled {
 .workspace-storage-status { position: fixed; bottom: 6px; right: 12px; z-index: 70; padding: 4px 9px; border-radius: 6px; background: #f8fafcee; color: #475569; font-size: 11px; max-width: min(520px, 90vw); }
 .workspace-storage-status.recovery, .workspace-storage-status.unavailable { color: #92400e; background: #fffbeb; border: 1px solid #fcd34d; }
 .workspace-storage-status button { margin-left: 8px; cursor: pointer; }
+
+.scene-loading-progress {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 230px;
+  max-width: calc(100% - 24px);
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .94);
+  pointer-events: none;
+}
+.scene-loading-progress-label { display: flex; justify-content: space-between; gap: 12px; white-space: nowrap; font-size: 12px; color: #64748b; }
+.scene-loading-progress-track { height: 4px; margin-top: 8px; overflow: hidden; border-radius: 3px; background: #e2e8f0; }
+.scene-loading-progress-track > div { height: 100%; border-radius: inherit; background: #3478f6; transition: width 160ms ease; }

@@ -1,3 +1,4 @@
+import { yieldToBrowser } from '../lib/yieldToBrowser'
 import { useEffect, useState } from 'react'
 import {
   AmbientLight,
@@ -596,6 +597,20 @@ const renderGlyph = (
   return url
 }
 
+// Never generate a whole catalogue inside one React effect flush.
+const glyphJobs: Array<() => void> = []
+let renderingGlyphs = false
+const enqueueGlyph = (render: () => void) => {
+  glyphJobs.push(render)
+  if (renderingGlyphs) return
+  renderingGlyphs = true
+  void (async () => {
+    try {
+      while (glyphJobs.length) { await yieldToBrowser(); glyphJobs.shift()!() }
+    } finally { renderingGlyphs = false }
+  })()
+}
+
 export const BrickGlyph = ({ brickId, kind, footprint, color, className }: BrickGlyphProps) => {
   const bodyColor = color ? colorHex[color] : previewColor
   const bodyOpacity = color ? colorOpacity[color] : 1
@@ -603,15 +618,17 @@ export const BrickGlyph = ({ brickId, kind, footprint, color, className }: Brick
 
   useEffect(() => {
     let cancelled = false
-    setImageUrl(renderGlyph(kind, footprint, brickId, bodyColor, false, bodyOpacity))
-    const ldrawDefinition = brickId ? brickById.get(brickId) : undefined
-    if (!ldrawDefinition) return () => {
-      cancelled = true
-    }
-
-    loadLDrawPartGeometry(ldrawDefinition.partNumber, ldrawDefinition.footprint).then(() => {
-      if (!cancelled) setImageUrl(renderGlyph(kind, footprint, brickId, bodyColor, true, bodyOpacity))
+    const render = (loaded: boolean) => enqueueGlyph(() => {
+      if (!cancelled) setImageUrl(renderGlyph(kind, footprint, brickId, bodyColor, loaded, bodyOpacity))
     })
+    const ldrawDefinition = brickId ? brickById.get(brickId) : undefined
+    if (ldrawDefinition) {
+      // Use the final mould directly instead of building costly procedural
+      // geometry that is discarded as soon as the official mould loads.
+      loadLDrawPartGeometry(ldrawDefinition.partNumber, ldrawDefinition.footprint).then(() => {
+        if (!cancelled) render(true)
+      }).catch(() => { if (!cancelled) render(false) })
+    } else render(false)
 
     return () => {
       cancelled = true

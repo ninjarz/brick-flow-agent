@@ -1,11 +1,13 @@
-import { BoxGeometry, BufferGeometry, Color, DoubleSide, FrontSide, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Vector3, type Intersection, type Raycaster } from 'three'
+import { yieldToBrowser } from './yieldToBrowser'
+import { Box3, BoxGeometry, BufferGeometry, Color, DoubleSide, FrontSide, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Vector3, type Intersection, type Raycaster } from 'three'
 import { acceleratedRaycast, MeshBVH } from 'three-mesh-bvh'
 import { brickById, colorHex, colorOpacity } from '../data/basicBricks'
 import type { BrickDefinition, PlacedBrick } from '../types/bricks'
-import { mergeLDrawPrintBatches, type LDrawPrintBatch } from './ldrawPrintBatches'
+import { mergeLDrawPrintBatches, prepareLDrawPrintBatches, prepareLDrawPickingGeometry, type LDrawPrintBatch } from './ldrawPrintBatches'
 import { getBrickWorldFrame } from './brickUnits'
 import { getBrickWorldBoundsFrame } from './ldrawBounds'
 import { getLDrawEdgePoints } from './ldrawEdgePoints'
+import { onLDrawGeneratedVisualLoaded } from './ldrawGeneratedVisualLoader'
 import { createLoadedLDrawBodyGeometry, createLDrawPrintGeometries } from './ldrawVisualGeometry'
 
 const mirrorX = new Matrix4().makeScale(-1, 1, 1)
@@ -67,7 +69,22 @@ type Options = {
   showEdges: boolean
 }
 
-export const buildLDrawSceneBatches = (bricks: PlacedBrick[], options: Options, previous?: LDrawSceneBatches): LDrawSceneBatches => {
+let visualVersion = 0
+onLDrawGeneratedVisualLoaded(() => { visualVersion++ })
+const snapshots = new WeakMap<LDrawSceneBatches, { bricks: PlacedBrick[]; options: Options; version: number }>()
+const sameSet = (a: Set<string>, b: Set<string>) => a === b || (a.size === b.size && [...a].every(id => b.has(id)))
+
+const preparedScenes = new WeakMap<PlacedBrick[], LDrawSceneBatches>()
+export const buildLDrawSceneBatches = (bricks: PlacedBrick[], options: Options, previous?: LDrawSceneBatches,
+  mergePrints = mergeLDrawPrintBatches): LDrawSceneBatches => {
+  if (!previous?.printSources.length) previous = preparedScenes.get(bricks) ?? previous
+  const snapshot = previous && snapshots.get(previous)
+  if (bricks.length >= 800 && snapshot?.version === visualVersion && snapshot.bricks === bricks && snapshot.options.selectedId === options.selectedId
+    && snapshot.options.showEdges === options.showEdges
+    && snapshot.options.supportedByBrickId === options.supportedByBrickId
+    && snapshot.options.displayColorByBrickId === options.displayColorByBrickId
+    && sameSet(snapshot.options.highlightedIds, options.highlightedIds)
+    && sameSet(snapshot.options.excludedIds, options.excludedIds)) return previous!
   const groups = new Map<string, LDrawMeshBatch>()
   const lines = new Map<string, { color: string; items: { points: number[]; matrix: Matrix4; brick: PlacedBrick }[]; length: number }>()
   const individualBricks: PlacedBrick[] = []
@@ -104,7 +121,7 @@ export const buildLDrawSceneBatches = (bricks: PlacedBrick[], options: Options, 
     // Printed faces keep their own colours and still need the independent
     // renderer. Plain coloured bricks can stay instanced with an overridden
     // instance colour, which avoids thousands of individual meshes in xray.
-    const needsIndividualRender = !definition || !body || brick.id === options.selectedId || options.excludedIds.has(brick.id)
+    const needsIndividualRender = !definition || !body || options.excludedIds.has(brick.id)
       || (displayColor !== undefined && prints.length > 0)
       || colorOpacity[brick.color] < 1 || prints.some(layer => layer.opacity < 1) || brick.brickId.startsWith('tile-eye-')
     // Preserve the original sorted transparent path and procedural eye artwork.
@@ -113,8 +130,10 @@ export const buildLDrawSceneBatches = (bricks: PlacedBrick[], options: Options, 
     }
     const matrix = getLDrawSceneMatrix(definition!, brick)
     const opacity = displayColor !== undefined ? DISPLAY_COLOR_BATCH_OPACITY : 1
-    addMesh(body!, matrix, brick, displayColor ?? colorHex[brick.color], false, definition!.kind === 'slope', opacity)
+    if (brick.id === options.selectedId) individualBricks.push(brick)
+    else addMesh(body!, matrix, brick, displayColor ?? colorHex[brick.color], false, definition!.kind === 'slope', opacity)
     for (const layer of prints) addMesh(layer.geometry, matrix, brick, layer.color, true, false, opacity)
+    if (brick.id === options.selectedId) continue
     const highlighted = options.highlightedIds.has(brick.id)
     const floating = options.supportedByBrickId.get(brick.id) === false
     const chunk = `${Math.floor(brick.pose.xStud / edgeChunkSize)}:${Math.floor(brick.pose.zStud / edgeChunkSize)}`
@@ -145,7 +164,9 @@ export const buildLDrawSceneBatches = (bricks: PlacedBrick[], options: Options, 
     return cached?.instances.length === batch.instances.length && batch.instances.every((instance, i) => instance.brick === cached.instances[i].brick && instance.color === cached.instances[i].color) ? cached : batch
   })
   const printSources = allMeshes.filter(batch => batch.print)
-  return { meshBatches: allMeshes.filter(batch => !batch.print), printBatches: mergeLDrawPrintBatches(printSources, previous?.printBatches), printSources, lineBatches, individualBricks }
+  const result = { meshBatches: allMeshes.filter(batch => !batch.print), printBatches: mergePrints(printSources, previous?.printBatches), printSources, lineBatches, individualBricks }
+  snapshots.set(result, { bricks, version: visualVersion, options: { ...options, highlightedIds: new Set(options.highlightedIds), excludedIds: new Set(options.excludedIds) } })
+  return result
 }
 
 /** Local BVH per shared mould, without changing Mesh.prototype or other scenes. */
@@ -164,6 +185,12 @@ export const createLDrawBatchMesh = (batch: LDrawMeshBatch) => {
   mesh.computeBoundingSphere()
   const proxy = new Mesh(geometry, material)
   const hits: Intersection[] = []
+  // Reject missed instances before traversing their triangle BVHs. Test in
+  // world space so near/far and non-uniform parent transforms remain exact.
+  geometry.computeBoundingBox()
+  const instanceBounds = batch.instances.map(instance => geometry.boundingBox!.clone().applyMatrix4(instance.matrix))
+  const worldBounds = new Box3()
+
   const nativeRaycast = mesh.raycast.bind(mesh)
   mesh.raycast = (raycaster: Raycaster, intersects: Intersection[]) => {
     // Same per-instance transform and result shape as Three's native raycaster.
@@ -173,6 +200,8 @@ export const createLDrawBatchMesh = (batch: LDrawMeshBatch) => {
     raycaster.firstHitOnly = true
     try {
       batch.instances.forEach((instance, instanceId) => {
+        worldBounds.copy(instanceBounds[instanceId]).applyMatrix4(mesh.matrixWorld)
+        if (!raycaster.ray.intersectsBox(worldBounds)) return
         proxy.matrixWorld.multiplyMatrices(mesh.matrixWorld, instance.matrix)
         acceleratedRaycast.call(proxy, raycaster, hits)
         for (const hit of hits) intersects.push({ ...hit, object: mesh, instanceId })
@@ -181,4 +210,23 @@ export const createLDrawBatchMesh = (batch: LDrawMeshBatch) => {
     } finally { raycaster.firstHitOnly = previous }
   }
   return mesh
+}
+
+/** Prepare immutable large scenes cooperatively before enabling detailed view. */
+export const prepareLDrawSceneBatches = async (bricks: PlacedBrick[], onProgress?: (fraction: number) => void) => {
+  if (bricks.length < 800 || preparedScenes.has(bricks)) { onProgress?.(1); return }
+  const scene = buildLDrawSceneBatches(bricks, {
+    highlightedIds: new Set(), excludedIds: new Set(), supportedByBrickId: new Map(), showEdges: false,
+  }, undefined, () => [])
+  const geometries = new Set([...scene.meshBatches, ...scene.printSources].map(batch => batch.geometry))
+  let completed = 0
+  for (const geometry of geometries) {
+    prepareLDrawPickingGeometry(geometry)
+    if (scene.meshBatches.some(batch => batch.geometry === geometry)) getLDrawEdgePoints(geometry)
+    onProgress?.(.5 * ++completed / geometries.size)
+    await yieldToBrowser()
+  }
+  scene.printBatches = await prepareLDrawPrintBatches(scene.printSources, fraction => onProgress?.(.5 + fraction * .5))
+  preparedScenes.set(bricks, scene)
+  onProgress?.(1)
 }

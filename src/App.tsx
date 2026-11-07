@@ -1,3 +1,6 @@
+import { getEditorTransform } from './lib/editorAnalysisClient'
+import { rotateRigidBrickGroup, translateRigidBrickGroup } from './lib/rigidBrickGroup'
+import { createManualHtmlBlob } from './lib/manualExportClient'
 import { useIntentState } from './hooks/useIntentState'
 import { useModalFocus } from './hooks/useModalFocus'
 import { importLDrawInWorker } from './lib/ldrawImportWorkerClient'
@@ -24,16 +27,15 @@ import { buildLlmUserPrompt, generateLlmBuildPlan, llmSystemPrompt, requestLlmJs
 import { clearLlmConnection, normalizeMaxRepairAttempts, saveLlmConnection } from './lib/llmConfig'
 import { defaultFinishedAssets, needsFinishedAssetsRecovery, isDefaultFinishedAsset, mergeRecoveredFinishedAssets, loadAllDefaultFinishedAssets, loadFinishedAssets, loadFinishedAssetsFromIndexedDb, mergeWithDefaultAssets, saveFinishedAssets } from './lib/finishedAssets'
 import { preparePlanGeometry } from './lib/planGeometry'
-import { formatBuildManualHtml, formatBuildManualMarkdown, serializeBuildManual } from './lib/manualSerializer'
+import { formatBuildManualMarkdown, serializeBuildManual } from './lib/manualSerializer'
 import { getManualPageTabItems, getManualStepPage, manualStepPageSize } from './lib/manualPagination'
 import { countBricks, createBrickCollisionIndex, createPlanSpatialState, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickPlacementDiagnostics, getBrickRawOverlapScore, getConnectedBrickComponents, hasBrickCollision, isBrickAboveGround, makeBrick, repairBuildPlan, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
 import { loadCatalogPreferences, type CatalogPackPreference } from './lib/catalogPreferences'
-import { footprintToWorld, getBrickWorldFrame, normalizeHorizontalStud, normalizeQuarterTurns, normalizeVerticalQuarterTurns, normalizeYStud, roundToGrid, STUD_PITCH_WORLD, translateBrickPose } from './lib/brickUnits'
+import { getBrickWorldFrame, normalizeHorizontalStud, normalizeQuarterTurns, normalizeVerticalQuarterTurns, normalizeYStud, roundToGrid, STUD_PITCH_WORLD, translateBrickPose } from './lib/brickUnits'
 import { useI18n } from './lib/i18n'
 import type { ObjImportResult } from './lib/objImport'
 import { parseImportedProject, type ImportText } from './lib/planFileIO'
 import { prepareReferenceImage } from './lib/referenceImage'
-import { simplifiedBrickThreshold } from './lib/scenePerformance'
 import { toggleBrickSelection } from './lib/brickSelection'
 import { dissolveBrickStructure, getBrickStructure, getExactSelectionStructure, pruneBrickStructures, solidifyBrickSelection, updateBrickStructure } from './lib/brickStructures'
 import { changeAllWorldEntityControllers, createEmptyWorldState, createWorldEntity, issueWorldEntityCommand, issueWorldPartyOrder, leaveWorldParty, setWorldPartyMemberStatus } from './lib/worldEntity'
@@ -214,6 +216,7 @@ function App() {
   const [catalogPack, setCatalogPack] = useState<CatalogPackPreference>(() => loadCatalogPreferences().pack)
   const [isGenerating, setIsGenerating] = useState(false)
   const generationAbortRef = useRef<AbortController | undefined>(undefined)
+  const [exportingManualHtml, setExportingManualHtml] = useState(false)
   const [generationError, setGenerationError] = useState<string>()
   const [generationFeedbackTone, setGenerationFeedbackTone] = useState<'error' | 'warning'>('error')
   const [generationManualOffer, setGenerationManualOffer] = useState(false)
@@ -1271,6 +1274,7 @@ function App() {
       getBrickRawOverlapScore(brick, collisionData.stationaryBricks, collisionData.spatialState.collisionIndex) > 0
     )
     if (!hasStationaryOverlap) {
+      if (context?.rigid === true) return true
       const groupCollisionIndex = createBrickCollisionIndex(nextBricks)
       const hasGroupCollision = nextBricks.some((brick) => hasBrickCollision(brick, nextBricks, groupCollisionIndex))
       if (!hasGroupCollision) return true
@@ -1280,6 +1284,7 @@ function App() {
       hasBrickCollision(brick, collisionData.stationaryBricks, collisionData.spatialState.collisionIndex)
     )
     if (!hasStationaryCollision) {
+      if (context?.rigid === true) return true
       const groupCollisionIndex = createBrickCollisionIndex(nextBricks)
       const hasGroupCollision = nextBricks.some((brick) => hasBrickCollision(brick, nextBricks, groupCollisionIndex))
       if (!hasGroupCollision) return true
@@ -1295,94 +1300,17 @@ function App() {
     return false
   }, [getStationarySpatialState])
 
-  const rotateBrickGroupHorizontally = (
-    bricks: PlacedBrick[],
-    pivotBrick: PlacedBrick,
-    deltaQuarterTurns: number,
-  ) => {
-    const pivotDefinition = brickById.get(pivotBrick.brickId)
-    if (!pivotDefinition) return bricks
-
-    const pivot = getBrickWorldFrame(pivotDefinition, pivotBrick.pose)
-    const turns = normalizeQuarterTurns(deltaQuarterTurns)
-
-    return bricks.map((brick) => {
-      const definition = brickById.get(brick.brickId)
-      if (!definition) return brick
-
-      const frame = getBrickWorldFrame(definition, brick.pose)
-      const nextRotation = normalizeQuarterTurns(brick.pose.rotationQuarterTurns + turns)
-      const nextFootprint = footprintToWorld(
-        definition,
-        nextRotation,
-        brick.pose.verticalQuarterTurns ?? 0,
-        brick.pose.rollQuarterTurns ?? 0,
-        brick.pose.orientationMatrix,
-      )
-      const offsetX = frame.x - pivot.x
-      const offsetZ = frame.z - pivot.z
-      const rotatedOffset = turns === 1
-        ? { x: -offsetZ, z: offsetX }
-        : turns === 2
-          ? { x: -offsetX, z: -offsetZ }
-          : turns === 3
-            ? { x: offsetZ, z: -offsetX }
-            : { x: offsetX, z: offsetZ }
-
-      return {
-        ...brick,
-        pose: {
-          ...translateBrickPose(brick.pose, { xStud: pivot.x + rotatedOffset.x - nextFootprint.width / 2 - brick.pose.xStud, zStud: pivot.z + rotatedOffset.z - nextFootprint.depth / 2 - brick.pose.zStud }),
-          rotationQuarterTurns: nextRotation,
-        },
-      }
-    })
-  }
-
-  const rotateBrickGroupVertically = (
-    bricks: PlacedBrick[],
-    pivotBrick: PlacedBrick,
-    deltaQuarterTurns: number,
-  ) => {
-    const pivotDefinition = brickById.get(pivotBrick.brickId)
-    if (!pivotDefinition) return bricks
-
-    const pivot = getBrickWorldFrame(pivotDefinition, pivotBrick.pose)
-    const turns = normalizeVerticalQuarterTurns(deltaQuarterTurns)
-
-    return bricks.map((brick) => {
-      const definition = brickById.get(brick.brickId)
-      if (!definition) return brick
-
-      const frame = getBrickWorldFrame(definition, brick.pose)
-      const nextVerticalRotation = normalizeVerticalQuarterTurns(
-        (brick.pose.verticalQuarterTurns ?? 0) + turns,
-      )
-      const nextFootprint = footprintToWorld(
-        definition,
-        brick.pose.rotationQuarterTurns,
-        nextVerticalRotation,
-        brick.pose.rollQuarterTurns ?? 0,
-        brick.pose.orientationMatrix,
-      )
-      const offsetY = frame.y - pivot.y
-      const offsetZ = frame.z - pivot.z
-      const rotatedOffset = turns === 1
-        ? { y: offsetZ, z: -offsetY }
-        : turns === 2
-          ? { y: -offsetY, z: -offsetZ }
-          : turns === 3
-            ? { y: -offsetZ, z: offsetY }
-            : { y: offsetY, z: offsetZ }
-
-      return {
-        ...brick,
-        pose: {
-          ...translateBrickPose(brick.pose, { yStud: pivot.y + rotatedOffset.y - nextFootprint.height / 2 - brick.pose.yStud, zStud: pivot.z + rotatedOffset.z - nextFootprint.depth / 2 - brick.pose.zStud }),
-          verticalQuarterTurns: nextVerticalRotation,
-        },
-      }
-    })
+  const rotateBrickGroupHorizontally = (bricks: PlacedBrick[], pivot: PlacedBrick, turns: number) => rotateRigidBrickGroup(bricks, pivot, 'horizontal', turns)
+  const rotateBrickGroupVertically = (bricks: PlacedBrick[], pivot: PlacedBrick, turns: number) => rotateRigidBrickGroup(bricks, pivot, 'vertical', turns)
+  const groupEditPending = useRef(false)
+  const queueGroupEdit = (base: BuildPlan, next: PlacedBrick[], reposition: boolean) => {
+    if (groupEditPending.current) return
+    groupEditPending.current = true
+    void getEditorTransform(base.bricks, next, reposition).then(accepted => {
+      if (!accepted || planRef.current !== base) return
+      const byId = new Map(accepted.map(brick => [brick.id, brick]))
+      setPlan(current => current === base ? { ...current, bricks: current.bricks.map(brick => byId.get(brick.id) ?? brick) } : current)
+    }).catch(error => { console.error('Group transform failed', error) }).finally(() => { groupEditPending.current = false })
   }
 
   const updateBrick = (updated: PlacedBrick) => {
@@ -1416,8 +1344,9 @@ function App() {
               : brick.color,
             pose: translateBrickPose(brick.pose, delta),
           }))
+        if (current.bricks.length >= 800 && typeof Worker !== 'undefined') { queueGroupEdit(current, nextBricks, delta.rotationQuarterTurns !== 0 || delta.verticalQuarterTurns !== 0); return current }
         const stationaryData = getStationarySpatialState(current.bricks, selectionIdSet)
-        if (!canAcceptBrickGroupPose(nextBricks, current.bricks, { action: 'updateBrickGroup' }, stationaryData)) return current
+        if (!canAcceptBrickGroupPose(nextBricks, current.bricks, { action: 'updateBrickGroup', rigid: true }, stationaryData)) return current
         const nextBrickById = new Map(nextBricks.map((brick) => [brick.id, brick]))
 
         return {
@@ -2316,19 +2245,10 @@ function App() {
       const selected = current.bricks.find((brick) => brick.id === selectedId)
       if (!selected) return current
       if (selectionIds.length > 1) {
-        const nextBricks = current.bricks
-          .filter((brick) => selectionIdSet.has(brick.id))
-          .map((brick) => ({
-            ...brick,
-            pose: {
-              ...brick.pose,
-              xStud: normalizeHorizontalStud(brick.pose.xStud + (delta.xStud ?? 0)),
-              yStud: normalizeYStud(brick.pose.yStud + (delta.yStud ?? 0)),
-              zStud: normalizeHorizontalStud(brick.pose.zStud + (delta.zStud ?? 0)),
-            },
-          }))
+        const nextBricks = translateRigidBrickGroup(current.bricks.filter(brick => selectionIdSet.has(brick.id)), delta)
+        if (current.bricks.length >= 800 && typeof Worker !== 'undefined') { queueGroupEdit(current, nextBricks, false); return current }
         const stationaryData = getStationarySpatialState(current.bricks, selectionIdSet)
-        if (!canAcceptBrickGroupPose(nextBricks, current.bricks, { action: 'nudgeSelectedGroup', delta }, stationaryData)) return current
+        if (!canAcceptBrickGroupPose(nextBricks, current.bricks, { action: 'nudgeSelectedGroup', delta, rigid: true }, stationaryData)) return current
         const nextBrickById = new Map(nextBricks.map((brick) => [brick.id, brick]))
 
         return {
@@ -2337,15 +2257,7 @@ function App() {
         }
       }
 
-      const movedBrick: PlacedBrick = {
-        ...selected,
-        pose: {
-          ...selected.pose,
-          xStud: normalizeHorizontalStud(selected.pose.xStud + (delta.xStud ?? 0)),
-          yStud: normalizeYStud(selected.pose.yStud + (delta.yStud ?? 0)),
-          zStud: normalizeHorizontalStud(selected.pose.zStud + (delta.zStud ?? 0)),
-        },
-      }
+      const movedBrick: PlacedBrick = { ...selected, pose: translateBrickPose(selected.pose, delta) }
       const stationaryData = getStationarySpatialState(current.bricks, new Set([selected.id]))
       const nextBrick = isAutoSnapEnabled
         ? snapBrickToPlan(movedBrick, stationaryData.stationaryBricks, { previousBrick: selected, spatialState: stationaryData.spatialState })
@@ -2372,10 +2284,11 @@ function App() {
         const nextBricks = axis === 'horizontal'
           ? rotateBrickGroupHorizontally(selectedBricks, selected, deltaQuarterTurns)
           : rotateBrickGroupVertically(selectedBricks, selected, deltaQuarterTurns)
+        if (current.bricks.length >= 800 && typeof Worker !== 'undefined') { queueGroupEdit(current, nextBricks, true); return current }
         const stationaryData = getStationarySpatialState(current.bricks, selectionIdSet)
-        const acceptedBricks = canAcceptBrickGroupPose(nextBricks, current.bricks, { action: 'rotateSelectedGroup', axis, deltaQuarterTurns }, stationaryData)
+        const acceptedBricks = canAcceptBrickGroupPose(nextBricks, current.bricks, { action: 'rotateSelectedGroup', axis, deltaQuarterTurns, rigid: true }, stationaryData)
           ? nextBricks
-          : findNearestOpenBrickGroupAround(nextBricks, current.bricks, selectionIdSet, stationaryData)
+          : findNearestOpenBrickGroupAround(nextBricks, current.bricks, selectionIdSet, stationaryData, true)
         if (!acceptedBricks) return current
         const nextBrickById = new Map(acceptedBricks.map((brick) => [brick.id, brick]))
 
@@ -2465,7 +2378,7 @@ function App() {
     downloadFile(filename, text, 'text/markdown')
   }
 
-  const downloadFile = (filename: string, content: string, type: string) => {
+  const downloadFile = (filename: string, content: string | Blob, type: string) => {
     const blob = new Blob([content], { type })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -2503,9 +2416,15 @@ function App() {
     downloadText(`${buildManual.title || 'brick-manual'}-manual.md`, manualMarkdown)
   }
 
-  const exportManualHtml = () => {
-    if (!buildManual) return
-    downloadFile(`${buildManual.title || 'brick-manual'}-manual.html`, formatBuildManualHtml(buildManual, locale), 'text/html')
+  const exportManualHtml = async () => {
+    if (!buildManual || exportingManualHtml) return
+    setExportingManualHtml(true)
+    try {
+      const blob = await createManualHtmlBlob(buildManual, locale)
+      downloadFile(`${buildManual.title || 'brick-manual'}-manual.html`, blob, 'text/html')
+    } catch (error) {
+      setGenerationFailure(error instanceof Error ? error.message : t('error.generationFailed'))
+    } finally { setExportingManualHtml(false) }
   }
 
   const formatPromptPreviewText = () => [
@@ -3098,9 +3017,6 @@ function App() {
                 </section>
               )}
             </>
-          )}
-          {plan.bricks.length >= simplifiedBrickThreshold && sceneViewMode !== 'voxel' && (
-            <div className={`performance-badge ${visibleWorldEntities.length > 0 ? 'with-world-toolbar' : ''}`}>{t('scene.performanceMode')}</div>
           )}
           {sceneViewMode === 'voxel' && (
             <div className="voxel-legend" aria-label={t('voxel.legend')}>
@@ -3742,7 +3658,8 @@ function App() {
                       bricks={manualDisplayBricks}
                       selectedId=""
                       highlightedIds={selectedManualStep.addPieces.map((piece) => piece.instanceId)}
-                      cameraFrameKey={`${manualPlan?.id ?? 'manual'}:${selectedManualStep.stepNumber}:${isManualExploded ? 'exploded' : 'assembled'}`}
+                      cameraFrameKey={`manual:${manualPlan?.id ?? 'manual'}`}
+                      cameraFollowStepKey={`${selectedManualStep.stepNumber}:${isManualExploded ? 'exploded' : 'assembled'}`}
                       initialCameraAzimuthDegrees={selectedManualStep.cameraAzimuthDegrees}
                       onSelect={ignoreSceneInteraction}
                       onNudgeSelected={ignoreSceneInteraction}
@@ -3868,7 +3785,7 @@ function App() {
                 <Download size={16} />
                 {t('common.exportMarkdown')}
               </button>
-              <button className="secondary" type="button" onClick={exportManualHtml}>
+              <button className="secondary" type="button" disabled={exportingManualHtml} onClick={exportManualHtml}>
                 <Download size={16} />
                 {t('common.exportHtml')}
               </button>

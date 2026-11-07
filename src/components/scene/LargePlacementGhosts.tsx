@@ -1,6 +1,6 @@
 import { useMemo, useLayoutEffect, useEffect } from 'react'
 import { useThree } from '@react-three/fiber'
-import { BatchedMesh, BoxGeometry, Matrix4, MeshStandardMaterial, Vector3, type InterleavedBufferAttribute } from 'three'
+import { BatchedMesh, Box3, BoxGeometry, Matrix4, MeshStandardMaterial, Sphere, Vector3, type InterleavedBufferAttribute } from 'three'
 import { LineMaterial, LineSegments2, LineSegmentsGeometry } from 'three-stdlib'
 import type { PlacedBrick } from '../../types/bricks'
 import { getBrickBounds } from '../../lib/planUtils'
@@ -27,21 +27,31 @@ export const LargePlacementGhosts = ({ bricks }: { bricks: PlacedBrick[] }) => {
     return { box, edges, mesh, ids, line }
   }, [bounds.length])
   useLayoutEffect(() => {
-    const matrix = new Matrix4(), point = new Vector3()
+    const matrix = new Matrix4()
+    const sceneBounds = new Box3()
+    const min = new Vector3(), max = new Vector3()
     const attribute = resources.line.geometry.getAttribute('instanceStart') as InterleavedBufferAttribute
     const data = attribute.data.array as Float32Array
     let offset = 0
     bounds.forEach((box, index) => {
-      matrix.makeScale(box.maxX - box.minX, box.maxY - box.minY, box.maxZ - box.minZ)
-      matrix.setPosition((box.minX + box.maxX) / 2, (box.minY + box.maxY) / 2, (box.minZ + box.maxZ) / 2)
+      const width = box.maxX - box.minX, height = box.maxY - box.minY, depth = box.maxZ - box.minZ
+      const x = (box.minX + box.maxX) / 2, y = (box.minY + box.maxY) / 2, z = (box.minZ + box.maxZ) / 2
+      matrix.makeScale(width, height, depth)
+      matrix.setPosition(x, y, z)
+      sceneBounds.expandByPoint(min.set(box.minX, box.minY, box.minZ))
+      sceneBounds.expandByPoint(max.set(box.maxX, box.maxY, box.maxZ))
       resources.mesh.setMatrixAt(resources.ids[index], matrix)
       for (let i = 0; i < resources.edges.length; i += 3) {
-        point.fromArray(resources.edges, i).applyMatrix4(matrix).toArray(data, offset); offset += 3
+        data[offset++] = resources.edges[i] * width + x
+        data[offset++] = resources.edges[i + 1] * height + y
+        data[offset++] = resources.edges[i + 2] * depth + z
       }
     })
     attribute.data.needsUpdate = true
-    resources.line.geometry.computeBoundingBox()
-    resources.line.geometry.computeBoundingSphere()
+    // Include Float32 rounding without rescanning every preview vertex.
+    if (!sceneBounds.isEmpty()) sceneBounds.expandByScalar(Math.max(1, sceneBounds.min.length(), sceneBounds.max.length()) * 1e-7)
+    resources.line.geometry.boundingBox = sceneBounds
+    resources.line.geometry.boundingSphere = sceneBounds.getBoundingSphere(new Sphere())
   }, [bounds, resources])
   useLayoutEffect(() => { resources.line.material.resolution.set(size.width, size.height) }, [resources, size.width, size.height])
   useEffect(() => () => {

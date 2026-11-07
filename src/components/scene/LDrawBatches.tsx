@@ -8,8 +8,9 @@ import { useBrickInteractionHandlers } from './useBrickInteractionHandlers'
 
 type BrickInteractionCallbacks = Parameters<typeof useBrickInteractionHandlers>[0]
 
-export const LDrawBatch = ({ batch, selectedId, highlightedIdSet, placementActive, onSelect, onSelectConnected, onBeginDragSelected, onConfirmPlacement, onCancelPlacement }: {
+export const LDrawBatch = ({ batch, mesh, selectedId, highlightedIdSet, placementActive, onSelect, onSelectConnected, onBeginDragSelected, onConfirmPlacement, onCancelPlacement }: {
   batch: LDrawMeshBatch
+  mesh: ReturnType<typeof createLDrawBatchMesh>
   selectedId?: string
   highlightedIdSet: Set<string>
   placementActive: boolean
@@ -19,8 +20,6 @@ export const LDrawBatch = ({ batch, selectedId, highlightedIdSet, placementActiv
   onConfirmPlacement?: () => void
   onCancelPlacement?: () => void
 }) => {
-  const mesh = useMemo(() => createLDrawBatchMesh(batch), [batch])
-  useEffect(() => () => { mesh.dispose(); mesh.material.dispose() }, [mesh])
   const handlers = useBrickInteractionHandlers({
     resolveBrickId: event => batch.instances[event.instanceId ?? -1]?.brick.id,
     canBeginDrag: id => id === selectedId || highlightedIdSet.has(id),
@@ -29,8 +28,9 @@ export const LDrawBatch = ({ batch, selectedId, highlightedIdSet, placementActiv
   return <primitive object={mesh} {...handlers} />
 }
 
-export const LDrawPrints = ({ batch, selectedId, highlightedIdSet, placementActive, onSelect, onSelectConnected, onBeginDragSelected, onConfirmPlacement, onCancelPlacement }: {
+export const LDrawPrints = ({ batch, mesh, selectedId, highlightedIdSet, placementActive, onSelect, onSelectConnected, onBeginDragSelected, onConfirmPlacement, onCancelPlacement }: {
   batch: LDrawPrintBatch
+  mesh: ReturnType<typeof createLDrawPrintBatchMesh>
   selectedId?: string
   highlightedIdSet: Set<string>
   placementActive: boolean
@@ -40,8 +40,6 @@ export const LDrawPrints = ({ batch, selectedId, highlightedIdSet, placementActi
   onConfirmPlacement?: () => void
   onCancelPlacement?: () => void
 }) => {
-  const mesh = useMemo(() => createLDrawPrintBatchMesh(batch), [batch])
-  useEffect(() => () => { mesh.material.dispose() }, [mesh])
   const handlers = useBrickInteractionHandlers({
     resolveBrickId: event => batch.brickIds[batch.triangleBrickIndices[event.faceIndex ?? -1]],
     canBeginDrag: id => id === selectedId || highlightedIdSet.has(id),

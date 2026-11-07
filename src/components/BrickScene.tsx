@@ -1,3 +1,4 @@
+import { ManualCameraFollow } from './scene/ManualCameraFollow'
 import { getSceneGridFade } from '../lib/sceneGridFade'
 import { useLDrawBatchResources } from './scene/useLDrawBatchResources'
 import { useSceneCallbacks } from './scene/useSceneCallbacks'
@@ -7,12 +8,12 @@ import { useSceneCanvasGesture } from './scene/useSceneCanvasGesture'
 import { useBrickInteractionHandlers } from './scene/useBrickInteractionHandlers'
 import { LDrawBatch, LDrawPrints, LDrawBatchLines } from './scene/LDrawBatches'
 import { LargePlacementGhosts } from './scene/LargePlacementGhosts'
-import { buildLDrawSceneBatches, type LDrawSceneBatches } from '../lib/ldrawSceneBatches'
+import { buildLDrawSceneBatches, prepareLDrawSceneBatches, type LDrawSceneBatches } from '../lib/ldrawSceneBatches'
 import { Billboard, Edges, Html, Line, OrbitControls, Text } from '@react-three/drei'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
 import { memo, type CSSProperties, type ReactNode, type RefCallback, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { BufferGeometry, DoubleSide, Float32BufferAttribute, Matrix4, Object3D, Vector3, type DirectionalLight, type Group, type InstancedMesh } from 'three'
+import { Box3, BufferGeometry, DoubleSide, Float32BufferAttribute, Matrix4, Object3D, Vector3, type DirectionalLight, type Group, type InstancedMesh } from 'three'
 import { brickById, colorHex, colorOpacity } from '../data/basicBricks'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { getWorldCombatPresentationPhase } from '../lib/worldCombatPresentation'
@@ -63,6 +64,7 @@ export type BrickSceneProps = {
   bricks: PlacedBrick[]
   selectedId?: string
   highlightedIds?: string[]
+  cameraFollowStepKey?: string
   cameraFrameKey?: string
   cameraFocusBrickIds?: string[]
   preserveDrawingBuffer?: boolean
@@ -686,7 +688,7 @@ const KeyboardShortcuts = ({
       if (document.querySelector('[aria-modal="true"]')) { clearHeldNudge(); return }
       if (!selectedIdRef.current || isTypingTarget(event.target)) return
 
-      const key = event.key.toLowerCase()
+      const key = /^Key[WASDRFQE]$/.test(event.code) ? event.code.slice(3).toLowerCase() : event.key.toLowerCase()
       const isNudgeKey = ['w', 'a', 's', 'd', 'r', 'f'].includes(key)
 
       if (isNudgeKey) {
@@ -709,7 +711,7 @@ const KeyboardShortcuts = ({
     }
 
     const handleKeyUp = (event: KeyboardEvent) => {
-      if (heldNudgeRef.current?.key === event.key.toLowerCase()) {
+      if (heldNudgeRef.current?.key === (/^Key[WASDRFQE]$/.test(event.code) ? event.code.slice(3).toLowerCase() : event.key.toLowerCase())) {
         clearHeldNudge()
       }
     }
@@ -874,7 +876,7 @@ const SceneLighting = ({
   )
 }
 
-const BrickMesh = memo(function BrickMesh({ brick, selected, highlighted, floating, preferDetailedGeometry, showEdges, displayColor, ghost = false, placementActive, onSelect, onSelectConnected, onBeginDragSelected, onConfirmPlacement, onCancelPlacement }: {
+const BrickMesh = memo(function BrickMesh({ brick, selected, highlighted, floating, preferDetailedGeometry, showEdges, displayColor, batchedPrints, inactive = false, ghost = false, placementActive, onSelect, onSelectConnected, onBeginDragSelected, onConfirmPlacement, onCancelPlacement }: {
   brick: PlacedBrick
   selected: boolean
   highlighted: boolean
@@ -882,6 +884,8 @@ const BrickMesh = memo(function BrickMesh({ brick, selected, highlighted, floati
   preferDetailedGeometry: boolean
   showEdges: boolean
   displayColor?: string
+  batchedPrints?: boolean
+  inactive?: boolean
   ghost?: boolean
   placementActive: boolean
   onSelect: (id: string, options?: BrickSelectionOptions) => void
@@ -903,6 +907,8 @@ const BrickMesh = memo(function BrickMesh({ brick, selected, highlighted, floati
       preferDetailedGeometry={preferDetailedGeometry}
       showEdges={showEdges}
       displayColor={displayColor}
+      batchedPrints={batchedPrints}
+      inactive={inactive}
       ghost={ghost}
       placementActive={placementActive}
       onSelect={onSelect}
@@ -914,7 +920,7 @@ const BrickMesh = memo(function BrickMesh({ brick, selected, highlighted, floati
   )
 })
 
-const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, preferDetailedGeometry, showEdges, displayColor, ghost, placementActive, onSelect, onSelectConnected, onBeginDragSelected, onConfirmPlacement, onCancelPlacement }: {
+const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, preferDetailedGeometry, showEdges, displayColor, batchedPrints, inactive = false, ghost, placementActive, onSelect, onSelectConnected, onBeginDragSelected, onConfirmPlacement, onCancelPlacement }: {
   brick: PlacedBrick
   definition: BrickDefinition
   selected: boolean
@@ -923,6 +929,8 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
   preferDetailedGeometry: boolean
   showEdges: boolean
   displayColor?: string
+  batchedPrints?: boolean
+  inactive?: boolean
   ghost: boolean
   placementActive: boolean
   onSelect: (id: string, options?: BrickSelectionOptions) => void
@@ -976,7 +984,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
     ? createLoadedLDrawBodyGeometry(definition.partNumber, definition.footprint)
     : undefined
 
-  const interactionHandlers = useBrickInteractionHandlers({
+  const activeHandlers = useBrickInteractionHandlers({
     resolveBrickId: () => brick.id,
     canBeginDrag: () => selected || highlighted,
     placementActive,
@@ -986,6 +994,8 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
     onConfirmPlacement,
     onCancelPlacement,
   })
+
+  const interactionHandlers = inactive ? {} : activeHandlers
 
   const renderSelectedConnectorMarkers = () => selected && connectors.map((connector) => (
     <mesh
@@ -1016,7 +1026,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
 
   if (preferDetailedGeometry && ldrawGeometry) {
     return (
-      <group position={[frame.x, bodyY, frame.z]} {...interactionHandlers}>
+      <group position={[frame.x, bodyY, frame.z]} visible={!inactive} {...interactionHandlers}>
         {rotateWithPose(
           <>
             <mesh castShadow receiveShadow>
@@ -1031,7 +1041,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
               />
             </mesh>
             {isEyeTile && <RoundEyeTilePrints variant={brick.brickId} height={baseHeight} />}
-            {createLDrawPrintGeometries(definition.partNumber, definition.footprint).map((layer) => (
+            {!batchedPrints && createLDrawPrintGeometries(definition.partNumber, definition.footprint).map((layer) => (
               <mesh key={layer.color} geometry={layer.geometry} renderOrder={1}>
                 <meshStandardMaterial color={layer.color} roughness={0.4} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-1} transparent={ghost || Boolean(displayColor) || layer.opacity < 1} opacity={ghost ? 0.32 : displayColor ? 0.92 : layer.opacity} depthWrite={!ghost && !displayColor && layer.opacity >= 1} />
               </mesh>
@@ -1048,7 +1058,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
 
   if (definition.kind === 'wheel') {
     return (
-      <group position={[frame.x, origin.y + 0.14, frame.z]} rotation={[0, rotation, Math.PI / 2]} {...interactionHandlers}>
+      <group position={[frame.x, origin.y + 0.14, frame.z]} rotation={[0, rotation, Math.PI / 2]} visible={!inactive} {...interactionHandlers}>
         <mesh castShadow receiveShadow>
           <cylinderGeometry args={[0.42, 0.42, 0.32, 32]} />
           <meshStandardMaterial color={bodyColor} roughness={0.72} metalness={0.05} />
@@ -1077,7 +1087,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
 
   if (definition.kind === 'axle') {
     return (
-      <group position={[frame.x, origin.y + frame.height / 2, frame.z]} rotation={[0, rotation, Math.PI / 2]} {...interactionHandlers}>
+      <group position={[frame.x, origin.y + frame.height / 2, frame.z]} rotation={[0, rotation, Math.PI / 2]} visible={!inactive} {...interactionHandlers}>
         <mesh castShadow receiveShadow>
           <cylinderGeometry args={[0.09, 0.09, frame.width + 2, 16]} />
           <meshStandardMaterial color={bodyColor} roughness={0.54} metalness={0.05} />
@@ -1106,7 +1116,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
     const bladeOffset = baseWidth * 0.25
 
     return (
-      <group position={[frame.x, bodyY, frame.z]} {...interactionHandlers}>
+      <group position={[frame.x, bodyY, frame.z]} visible={!inactive} {...interactionHandlers}>
         {rotateWithPose(
           <>
             {Array.from({ length: 4 }).map((_, index) => {
@@ -1203,7 +1213,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
     }
 
     return (
-      <group position={[frame.x, bodyY, frame.z]} {...interactionHandlers}>
+      <group position={[frame.x, bodyY, frame.z]} visible={!inactive} {...interactionHandlers}>
         {rotateWithPose(renderSpecialBody())}
         {visibleStuds.map((connector) => {
           const direction = connectorDirection(connector)
@@ -1241,7 +1251,7 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
   }
 
   return (
-    <group position={[frame.x, bodyY, frame.z]} {...interactionHandlers}>
+    <group position={[frame.x, bodyY, frame.z]} visible={!inactive} {...interactionHandlers}>
       {definition.voxelVisual && !displayColor ? (
         rotateWithPose(
           <VoxelBlockBody
@@ -1993,8 +2003,9 @@ const VoxelOptimizedScene = memo(function VoxelOptimizedScene({
     else { ldrawBatchCache.current = result; placementBatchCache.current = undefined }
     return result
   }, [bricks, preferDetailedGeometry, selectedId, highlightedIdSet, supportedByBrickId, displayColorByBrickId, showEdges, hiddenBrickIdSet, transformsByBrickId, placementActive])
-  const lineGeometries = useLDrawBatchResources(ldrawBatches, ldrawBatchCache.current, placementBatchCache.current)
-  const remainingBricks = preferDetailedGeometry ? ldrawBatches.individualBricks : bricks
+  const batchedPrintIds = useMemo(() => new Set(ldrawBatches.printSources.flatMap(batch => batch.instances.map(instance => instance.brick.id))), [ldrawBatches])
+  const batchResources = useLDrawBatchResources(ldrawBatches, ldrawBatchCache.current, placementBatchCache.current)
+  const remainingBricks = preferDetailedGeometry ? ldrawBatches.individualBricks : bricks.filter(brick => brickById.get(brick.brickId)?.pack !== 'lego')
   const { groups, individualBricks } = useMemo(() => {
     const candidates = new Map<string, VoxelBoxInstanceGroup>()
     const individual: PlacedBrick[] = []
@@ -2049,12 +2060,21 @@ const VoxelOptimizedScene = memo(function VoxelOptimizedScene({
     () => new Set(selectedId ? [selectedId, ...highlightedIdSet] : highlightedIdSet),
     [highlightedIdSet, selectedId],
   )
+  // Preserve the settled individual meshes while the placement preview hides
+  // them. Cancel restores visibility rather than remounting hundreds of parts.
+  const settledIndividuals = useRef<PlacedBrick[]>([])
+  if (!placementActive) settledIndividuals.current = individualBricks
+  const currentIndividualIds = new Set(individualBricks.map(brick => brick.id))
+  const retainedIds = new Set(settledIndividuals.current.map(brick => brick.id))
+  const renderedIndividuals = placementActive
+    ? [...settledIndividuals.current, ...individualBricks.filter(brick => !retainedIds.has(brick.id))]
+    : individualBricks
 
   return (
     <>
-      {ldrawBatches.meshBatches.map(batch => <LDrawBatch key={batch.key} batch={batch} selectedId={selectedId} highlightedIdSet={highlightedIdSet} placementActive={placementActive} onSelect={onSelect} onSelectConnected={onSelectConnected} onBeginDragSelected={onBeginDragSelected} onConfirmPlacement={onConfirmPlacement} onCancelPlacement={onCancelPlacement} />)}
-      {ldrawBatches.printBatches.map(batch => <LDrawPrints key={batch.key} batch={batch} selectedId={selectedId} highlightedIdSet={highlightedIdSet} placementActive={placementActive} onSelect={onSelect} onSelectConnected={onSelectConnected} onBeginDragSelected={onBeginDragSelected} onConfirmPlacement={onConfirmPlacement} onCancelPlacement={onCancelPlacement} />)}
-      {ldrawBatches.lineBatches.map(batch => <LDrawBatchLines key={batch.key} batch={batch} geometry={lineGeometries.get(batch)!} />)}
+      {ldrawBatches.meshBatches.map(batch => <LDrawBatch key={batch.key} batch={batch} mesh={batchResources.bodies.get(batch)!} selectedId={selectedId} highlightedIdSet={highlightedIdSet} placementActive={placementActive} onSelect={onSelect} onSelectConnected={onSelectConnected} onBeginDragSelected={onBeginDragSelected} onConfirmPlacement={onConfirmPlacement} onCancelPlacement={onCancelPlacement} />)}
+      {ldrawBatches.printBatches.map(batch => <LDrawPrints key={batch.key} batch={batch} mesh={batchResources.prints.get(batch)!} selectedId={selectedId} highlightedIdSet={highlightedIdSet} placementActive={placementActive} onSelect={onSelect} onSelectConnected={onSelectConnected} onBeginDragSelected={onBeginDragSelected} onConfirmPlacement={onConfirmPlacement} onCancelPlacement={onCancelPlacement} />)}
+      {ldrawBatches.lineBatches.map(batch => <LDrawBatchLines key={batch.key} batch={batch} geometry={batchResources.lines.get(batch)!} />)}
       {groups.map((group) => (
         <VoxelBoxInstances
           key={group.key}
@@ -2069,16 +2089,18 @@ const VoxelOptimizedScene = memo(function VoxelOptimizedScene({
           onCancelPlacement={onCancelPlacement}
         />
       ))}
-      {individualBricks.map((brick) => (
+      {renderedIndividuals.map((brick) => (
         <TransformedBrick key={brick.id} transform={transformsByBrickId?.get(brick.id)}>
           <BrickMesh
             brick={brick}
+            inactive={!currentIndividualIds.has(brick.id)}
             selected={brick.id === selectedId}
             highlighted={highlightedIdSet.has(brick.id)}
             floating={supportedByBrickId.get(brick.id) === false}
             preferDetailedGeometry={preferDetailedGeometry}
             showEdges={showEdges}
             displayColor={displayColorByBrickId?.get(brick.id)}
+            batchedPrints={batchedPrintIds.has(brick.id)}
             ghost={hiddenBrickIdSet.has(brick.id)}
             placementActive={placementActive}
             onSelect={onSelect}
@@ -2647,6 +2669,7 @@ export const BrickScene = ({
   selectedId,
   highlightedIds = [],
   cameraFrameKey,
+  cameraFollowStepKey,
   cameraFocusBrickIds,
   preserveDrawingBuffer = false,
   initialCameraAzimuthDegrees,
@@ -2712,21 +2735,25 @@ export const BrickScene = ({
     },
     [bricks, cameraFocusBrickIds, hiddenBrickIdSet, showHiddenObjects],
   )
+  const [loadingPercent, setLoadingPercent] = useState(0)
   const [ldrawBoundsVersion, setLDrawBoundsVersion] = useState(0)
+  const [preparedDefinitionIds, setPreparedDefinitionIds] = useState(() => new Set<string>())
+  const visibleBricksRef = useRef(visibleBricks)
+  visibleBricksRef.current = visibleBricks
   // Placement hides source meshes and shows ghosts instead. Camera framing
   // must keep using the stable source plan, otherwise a long press can look
   // like a model-bounds change and reset the user's view.
   const deferredFrameBricks = useDeferredValue(cameraFrameBricks)
   const deferredCameraFrameKey = useDeferredValue(cameraFrameKey)
   const frameBricks = deferredFrameBricks
-  const frameLDrawDefinitionIdsKey = useMemo(() => Array.from(new Set(frameBricks.flatMap((brick) => {
+  const renderLDrawDefinitionIdsKey = useMemo(() => Array.from(new Set(visibleBricks.flatMap((brick) => {
     const definition = brickById.get(brick.brickId)
     return definition?.pack === 'lego' ? [definition.id] : []
-  }))).sort().join('|'), [frameBricks])
+  }))).sort().join('|'), [visibleBricks])
   const performanceSettings = getScenePerformanceSettings(visibleBricks.length, viewMode)
   const worldAnimationFps = getWorldAnimationFps(bricks.length, worldEntities.length)
   const enableRealtimeShadows = performanceSettings.enableRealtimeShadows
-  const preferDetailedGeometry = ldrawBoundsVersion > 0
+  const preferDetailedGeometry = ldrawBoundsVersion > 0 && (visibleBricks.length < 800 || renderLDrawDefinitionIdsKey.split('|').every(id => preparedDefinitionIds.has(id)))
   const useSimplifiedInteractionView = performanceSettings.useSimplifiedView && !showHiddenObjects && !visibleBricks.every(brick => brickById.get(brick.brickId)?.pack === 'lego')
   const resolvedCameraFrameKey = useMemo(
     () => getSceneCameraFrameRequestKey(deferredCameraFrameKey, frameBricks.map((brick) => brick.id)),
@@ -2743,16 +2770,43 @@ export const BrickScene = ({
   const orbitTargetKeyRef = useRef('')
 
   useEffect(() => {
+    if (renderLDrawDefinitionIdsKey.split('|').every(id => preparedDefinitionIds.has(id))) return
     let cancelled = false
-    prepareBrickDefinitionsGeometry(frameLDrawDefinitionIdsKey ? frameLDrawDefinitionIdsKey.split('|').map(id => brickById.get(id)!) : []).then(() => {
-      if (!cancelled) setLDrawBoundsVersion((version) => version + 1)
+    setLoadingPercent(0)
+    const report = (fraction: number) => {
+      if (!cancelled) setLoadingPercent(previous => Math.max(previous, Math.min(99, Math.floor(fraction * 100))))
+    }
+    prepareBrickDefinitionsGeometry(renderLDrawDefinitionIdsKey ? renderLDrawDefinitionIdsKey.split('|').map(id => brickById.get(id)!) : [], fraction => report(fraction * .7)).then(async () => {
+      if (!cancelled) await prepareLDrawSceneBatches(visibleBricksRef.current, fraction => report(.7 + .3 * fraction))
+      if (!cancelled) { setPreparedDefinitionIds(previous => new Set([...previous, ...renderLDrawDefinitionIdsKey.split('|')])); setLDrawBoundsVersion((version) => version + 1) }
     })
 
     return () => {
       cancelled = true
     }
-  }, [frameLDrawDefinitionIdsKey])
+  }, [renderLDrawDefinitionIdsKey, preparedDefinitionIds])
 
+  const followBounds = useMemo(() => {
+    void ldrawBoundsVersion
+    const bounds = new Box3()
+    if (cameraFollowStepKey) for (const brick of bricks) {
+      if (!highlightedIdSet.has(brick.id)) continue
+      const box = getBrickBounds(brick)
+      if (box) { bounds.expandByPoint(new Vector3(box.minX, box.minY, box.minZ)); bounds.expandByPoint(new Vector3(box.maxX, box.maxY, box.maxZ)) }
+    }
+    return bounds
+  }, [bricks, cameraFollowStepKey, highlightedIdSet, ldrawBoundsVersion])
+  const sceneGridFade = useMemo(() => {
+    void ldrawBoundsVersion
+    let minX = -defaultGridExtent, maxX = defaultGridExtent, minZ = -defaultGridExtent, maxZ = defaultGridExtent
+    for (const brick of settledVisibleBricks) {
+      const bounds = getBrickBounds(brick)
+      if (!bounds) continue
+      minX = Math.min(minX, bounds.minX - gridPadding); maxX = Math.max(maxX, bounds.maxX + gridPadding)
+      minZ = Math.min(minZ, bounds.minZ - gridPadding); maxZ = Math.max(maxZ, bounds.maxZ + gridPadding)
+    }
+    return getSceneGridFade({ minX, maxX, minZ, maxZ })
+  }, [settledVisibleBricks, ldrawBoundsVersion])
   const gridFrame = useMemo(() => {
     void ldrawBoundsVersion
 
@@ -2853,6 +2907,10 @@ export const BrickScene = ({
       {...canvasGestureHandlers}
       onPointerMissed={clearBackgroundSelection}
     >
+      {!preferDetailedGeometry && visibleBricks.some(brick => brickById.get(brick.brickId)?.pack === 'lego') && <Html fullscreen calculatePosition={(_object, _camera, size) => [size.width / 2, size.height / 2]} style={{ pointerEvents: 'none' }}><div className="scene-loading-progress" role="progressbar" aria-label={t('scene.loading')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={loadingPercent}>
+        <div className="scene-loading-progress-label"><span>{t('scene.loading')}</span><span>{loadingPercent}%</span></div>
+        <div className="scene-loading-progress-track"><div style={{ width: `${loadingPercent}%` }} /></div>
+      </div></Html>}
       <color attach="background" args={['#eef2f5']} />
       <SceneLighting
         centerX={gridFrame.centerX}
@@ -2879,7 +2937,7 @@ export const BrickScene = ({
           sceneCallbacks.onCancelPlacement?.()
         } : undefined}
       >
-        <SceneGround fade={gridFrame.gridFade} receiveShadow={enableRealtimeShadows} onBackgroundClick={clearBackgroundSelection} />
+        <SceneGround fade={sceneGridFade} receiveShadow={enableRealtimeShadows} onBackgroundClick={clearBackgroundSelection} />
         {structuralDebug ? (
           <StructuralVoxelScene
             bricks={visibleBricks}
@@ -2969,6 +3027,7 @@ export const BrickScene = ({
         frameKey={cameraFrameRequestKey}
         azimuthDegrees={initialCameraAzimuthDegrees}
       />
+      <ManualCameraFollow bounds={followBounds} stepKey={cameraFollowStepKey} frameKey={cameraFrameRequestKey} />
       <CameraAzimuthObserver onChange={sceneCallbacks.onCameraAzimuthChange} />
       <SceneAnimationDriver
         active={worldEntities.length > 0 && !worldPaused}

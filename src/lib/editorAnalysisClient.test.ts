@@ -30,6 +30,9 @@ describe('shared editor analysis requests',()=>{
     const worker=FakeWorker.instances[0]
     expect(worker.messages).toHaveLength(2)
     expect(worker.messages[0].revision).toBe(worker.messages[1].revision)
+    expect(worker.messages[0].bricks).toHaveLength(800)
+    expect(worker.messages[1].bricks).toEqual([])
+    expect(worker.messages[1].geometry).toEqual([])
     const supported=new Map([['0',true]])
     worker.reply({requestId:worker.messages[1].requestId,type:'result',result:{supported,issues:[]}})
     worker.reply({requestId:worker.messages[0].requestId,type:'result',result:{supported}})
@@ -54,6 +57,7 @@ describe('shared editor analysis requests',()=>{
     expect(FakeWorker.instances[0].terminate).toHaveBeenCalledOnce()
     const retry=api.getEditorSupport(parts);await flush()
     const next=FakeWorker.instances[1]
+    expect(next.messages[0].bricks).toHaveLength(800)
     next.reply({requestId:next.messages[0].requestId,type:'result',result:{supported:new Map()}})
     expect(await retry).toEqual(new Map())
   })
@@ -75,6 +79,39 @@ describe('shared editor analysis requests',()=>{
     expect(worker.messages[1].drop?.point.x).toBe(3)
     worker.reply({ requestId: worker.messages[1].requestId, type: 'result', result: { supported: new Map(), dropBricks: source } })
     expect(await latest).toEqual(source)
+  })
+
+  it('resends an evicted snapshot before reusing its revision', async () => {
+    const api = await import('./editorAnalysisClient')
+    const a = bricks(), b = bricks(), c = bricks()
+    const jobs = []
+    for (const parts of [a, b, c, a]) {
+      jobs.push(api.getEditorValidation({ id: 'plan', title: '', prompt: '', source: 'template-local', bricks: parts, steps: [] }))
+      await flush()
+    }
+    const worker = FakeWorker.instances[0]
+    expect(worker.messages.map(message => message.bricks.length)).toEqual([800, 800, 800, 800])
+    expect(worker.messages[0].revision).toBe(worker.messages[3].revision)
+    for (const message of worker.messages) worker.reply({ requestId: message.requestId, type: 'result', result: { supported: new Map(), issues: [] } })
+    await Promise.all(jobs)
+  })
+
+  it('routes group edits through the shared worker without retransmitting the model', async () => {
+    const api = await import('./editorAnalysisClient'), parts = bricks()
+    const support = api.getEditorSupport(parts)
+    await flush()
+    const worker = FakeWorker.instances[0]
+    worker.reply({ requestId: worker.messages[0].requestId, type: 'result', result: { supported: new Map() } })
+    await support
+    const next = parts.slice(0, 72).map(brick => ({ ...brick, pose: { ...brick.pose, xStud: brick.pose.xStud + .2 } }))
+    const edit = api.getEditorTransform(parts, next, true)
+    await flush()
+    const message = worker.messages[1]
+    expect(message.bricks).toEqual([])
+    expect(message.transform?.next).toEqual(next)
+    expect(message.transform?.reposition).toBe(true)
+    worker.reply({ requestId: message.requestId, type: 'result', result: { supported: new Map(), transformedBricks: next } })
+    expect(await edit).toEqual(next)
   })
 
 })

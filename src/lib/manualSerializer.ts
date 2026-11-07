@@ -8,7 +8,7 @@ import {
   validateBuildPlan,
 } from './planUtils'
 
-type ManualLocale = 'zh-CN' | 'en-US'
+export type ManualLocale = 'zh-CN' | 'en-US'
 
 const manualText: Record<ManualLocale, {
   lang: string

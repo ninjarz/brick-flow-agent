@@ -87,7 +87,7 @@ export const BrickEditorPanel = ({
 
   const setPose = (axis: 'xStud' | 'yStud' | 'zStud', value: number) => {
     if (!Number.isFinite(value)) return
-    const nextValue = axis === 'yStud' ? normalizeYStud(value) : normalizeEditableStud(value)
+    const nextValue = selectedBrick.pose.orientationMatrix ? (axis === 'yStud' ? Math.max(0, value) : value) : axis === 'yStud' ? normalizeYStud(value) : normalizeEditableStud(value)
     const next: PlacedBrick = {
       ...selectedBrick,
       pose: {
@@ -140,15 +140,15 @@ export const BrickEditorPanel = ({
       <div className="field-grid">
         <label>
           {t('control.x')}
-          <input type="number" step={WORLD_EDIT_STEP_STUDS} value={selectedBrick.pose.xStud} onChange={(event) => setPose('xStud', Number(event.target.value))} />
+          <input type="number" step={WORLD_EDIT_STEP_STUDS} value={Number(selectedBrick.pose.xStud.toFixed(3))} onChange={(event) => setPose('xStud', Number(event.target.value))} />
         </label>
         <label>
           {t('control.y')}
-          <input type="number" step={WORLD_EDIT_STEP_STUDS} value={selectedBrick.pose.yStud} onChange={(event) => setPose('yStud', Number(event.target.value))} />
+          <input type="number" step={WORLD_EDIT_STEP_STUDS} value={Number(selectedBrick.pose.yStud.toFixed(3))} onChange={(event) => setPose('yStud', Number(event.target.value))} />
         </label>
         <label>
           {t('control.z')}
-          <input type="number" step={WORLD_EDIT_STEP_STUDS} value={selectedBrick.pose.zStud} onChange={(event) => setPose('zStud', Number(event.target.value))} />
+          <input type="number" step={WORLD_EDIT_STEP_STUDS} value={Number(selectedBrick.pose.zStud.toFixed(3))} onChange={(event) => setPose('zStud', Number(event.target.value))} />
         </label>
         <label>
           {t('control.horizontalRotation')}

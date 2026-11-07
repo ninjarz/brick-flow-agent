@@ -42,6 +42,7 @@ export const findNearestOpenBrickGroupAround = (
   allBricks: PlacedBrick[],
   selectedIds: Set<string>,
   stationaryData?: StationaryPlanSpatialData,
+  rigid = false,
 ) => {
   const stationaryBricks = stationaryData?.stationaryBricks ?? allBricks.filter((brick) => !selectedIds.has(brick.id))
   const stationaryCollisionIndex = stationaryData?.spatialState.collisionIndex ?? createBrickCollisionIndex(stationaryBricks)
@@ -49,14 +50,16 @@ export const findNearestOpenBrickGroupAround = (
   for (const offset of getNearestHorizontalSearchOffsets(rotationRepositionSearchRadiusStuds)) {
     const candidateBricks = liftBrickGroupAboveGround(rotatedBricks.map((brick) => ({
       ...brick,
-      pose: translateBrickPose(brick.pose, offset),
+      pose: { ...brick.pose, xStud: brick.pose.xStud + (offset.xStud ?? 0), zStud: brick.pose.zStud + (offset.zStud ?? 0) },
     })))
 
     if (candidateBricks.some((brick) => !isBrickAboveGround(brick))) continue
     if (candidateBricks.some((brick) => hasBrickCollision(brick, stationaryBricks, stationaryCollisionIndex))) continue
 
-    const groupCollisionIndex = createBrickCollisionIndex(candidateBricks)
-    if (candidateBricks.some((brick) => hasBrickCollision(brick, candidateBricks, groupCollisionIndex))) continue
+    if (!rigid) {
+      const groupCollisionIndex = createBrickCollisionIndex(candidateBricks)
+      if (candidateBricks.some((brick) => hasBrickCollision(brick, candidateBricks, groupCollisionIndex))) continue
+    }
     return candidateBricks
   }
 
