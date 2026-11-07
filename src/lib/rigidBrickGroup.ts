@@ -7,10 +7,10 @@ export const translateRigidBrickGroup = (bricks: PlacedBrick[], delta: { xStud?:
   xStud: brick.pose.xStud + (delta.xStud ?? 0), yStud: brick.pose.yStud + (delta.yStud ?? 0), zStud: brick.pose.zStud + (delta.zStud ?? 0),
 } }))
 
-export const rotateRigidBrickGroup = (bricks: PlacedBrick[], pivotBrick: PlacedBrick, axis: 'horizontal' | 'vertical', turns: number) => {
+export const rotateRigidBrickGroup = (bricks: PlacedBrick[], pivotBrick: PlacedBrick, axis: 'horizontal' | 'vertical', turns: number, reference?: { x: number; y: number; z: number }) => {
   const pivotDefinition = brickById.get(pivotBrick.brickId)
   if (!pivotDefinition) return bricks
-  const p = getBrickWorldFrame(pivotDefinition, pivotBrick.pose)
+  const p = reference ?? getBrickWorldFrame(pivotDefinition, pivotBrick.pose)
   const pivot = new Vector3(p.x, p.y, p.z)
   const rotation = axis === 'horizontal' ? new Matrix4().makeRotationY(-turns * Math.PI / 2) : new Matrix4().makeRotationX(-turns * Math.PI / 2)
   const euler = (pose: PlacedBrick['pose']) => new Matrix4().makeRotationY(-pose.rotationQuarterTurns * Math.PI / 2)

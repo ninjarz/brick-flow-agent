@@ -1,3 +1,4 @@
+import { getBrickSelectionReference } from './lib/brickEditorCoordinates'
 import { getEditorTransform } from './lib/editorAnalysisClient'
 import { rotateRigidBrickGroup, translateRigidBrickGroup } from './lib/rigidBrickGroup'
 import { createManualHtmlBlob } from './lib/manualExportClient'
@@ -1300,8 +1301,13 @@ function App() {
     return false
   }, [getStationarySpatialState])
 
-  const rotateBrickGroupHorizontally = (bricks: PlacedBrick[], pivot: PlacedBrick, turns: number) => rotateRigidBrickGroup(bricks, pivot, 'horizontal', turns)
-  const rotateBrickGroupVertically = (bricks: PlacedBrick[], pivot: PlacedBrick, turns: number) => rotateRigidBrickGroup(bricks, pivot, 'vertical', turns)
+  const rotateSelection = (bricks: PlacedBrick[], pivot: PlacedBrick, axis: 'horizontal' | 'vertical', turns: number) => {
+    const structure = getExactSelectionStructure(planRef.current, bricks.map(brick => brick.id))
+    const reference = getBrickSelectionReference(bricks, structure)
+    return rotateRigidBrickGroup(bricks, reference?.brick ?? pivot, axis, turns, reference?.position)
+  }
+  const rotateBrickGroupHorizontally = (bricks: PlacedBrick[], pivot: PlacedBrick, turns: number) => rotateSelection(bricks, pivot, 'horizontal', turns)
+  const rotateBrickGroupVertically = (bricks: PlacedBrick[], pivot: PlacedBrick, turns: number) => rotateSelection(bricks, pivot, 'vertical', turns)
   const groupEditPending = useRef(false)
   const queueGroupEdit = (base: BuildPlan, next: PlacedBrick[], reposition: boolean) => {
     if (groupEditPending.current) return
@@ -3110,6 +3116,7 @@ function App() {
             plan={plan}
             selectedBrick={selectedBrick}
             selectedCount={selectedBatchCount}
+            selectedBrickIds={activeSelectedIds}
             selectedStructure={selectedStructure}
             onUpdateBrick={updateBrick}
             onDuplicate={duplicateSelected}

@@ -1,7 +1,8 @@
+import { getBrickSelectionReference } from '../lib/brickEditorCoordinates'
 import { Boxes, Copy, RotateCw, Trash2, Unlink2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { brickById, colorHex } from '../data/basicBricks'
-import { WORLD_EDIT_STEP_STUDS, normalizeEditableStud, normalizeYStud } from '../lib/brickUnits'
+import { WORLD_EDIT_STEP_STUDS, normalizeQuarterTurns } from '../lib/brickUnits'
 import { useI18n } from '../lib/i18n'
 import type { BrickColor, BrickStructure, BuildPlan, PlacedBrick } from '../types/bricks'
 import { getVoxelInteractionKind, toggleVoxelBlockInteraction } from '../lib/voxelBlockState'
@@ -9,6 +10,7 @@ import { getVoxelInteractionKind, toggleVoxelBlockInteraction } from '../lib/vox
 type BrickEditorPanelProps = {
   plan: BuildPlan
   selectedBrick?: PlacedBrick
+  selectedBrickIds?: string[]
   selectedCount?: number
   selectedStructure?: BrickStructure
   onUpdateBrick: (brick: PlacedBrick) => void
@@ -68,6 +70,7 @@ export const BrickEditorPanel = ({
   plan,
   selectedBrick,
   selectedCount = 0,
+  selectedBrickIds,
   selectedStructure,
   onUpdateBrick,
   onDuplicate,
@@ -85,9 +88,15 @@ export const BrickEditorPanel = ({
   const selectedStep = plan.steps.find((step) => step.brickIds.includes(selectedBrick.id))
   const voxelInteractionKind = getVoxelInteractionKind(selectedBrick)
 
+  const ids = new Set(selectedBrickIds?.length ? selectedBrickIds : selectedStructure?.brickIds ?? [selectedBrick.id])
+  const reference = getBrickSelectionReference(plan.bricks.filter(brick => ids.has(brick.id)), selectedStructure)!
+  const referenceBrick = reference.brick
+  const assemblyPosition = reference.position
+
   const setPose = (axis: 'xStud' | 'yStud' | 'zStud', value: number) => {
     if (!Number.isFinite(value)) return
-    const nextValue = selectedBrick.pose.orientationMatrix ? (axis === 'yStud' ? Math.max(0, value) : value) : axis === 'yStud' ? normalizeYStud(value) : normalizeEditableStud(value)
+    const component = axis === 'xStud' ? 'x' : axis === 'yStud' ? 'y' : 'z'
+    const nextValue = selectedBrick.pose[axis] + value - assemblyPosition[component]
     const next: PlacedBrick = {
       ...selectedBrick,
       pose: {
@@ -137,29 +146,30 @@ export const BrickEditorPanel = ({
       )}
 
       {selectedBrick.pose.orientationMatrix && <p className="subtle-text">{t('control.exactOrientation')}</p>}
+      <p className="subtle-text">{t(selectedCount > 1 ? 'control.groupAssemblyReference' : 'control.partAssemblyReference')}</p>
       <div className="field-grid">
         <label>
           {t('control.x')}
-          <input type="number" step={WORLD_EDIT_STEP_STUDS} value={Number(selectedBrick.pose.xStud.toFixed(3))} onChange={(event) => setPose('xStud', Number(event.target.value))} />
+          <input type="number" step={WORLD_EDIT_STEP_STUDS} value={Number(assemblyPosition.x.toFixed(3))} onChange={(event) => setPose('xStud', Number(event.target.value))} />
         </label>
         <label>
           {t('control.y')}
-          <input type="number" step={WORLD_EDIT_STEP_STUDS} value={Number(selectedBrick.pose.yStud.toFixed(3))} onChange={(event) => setPose('yStud', Number(event.target.value))} />
+          <input type="number" step={WORLD_EDIT_STEP_STUDS} value={Number(assemblyPosition.y.toFixed(3))} onChange={(event) => setPose('yStud', Number(event.target.value))} />
         </label>
         <label>
           {t('control.z')}
-          <input type="number" step={WORLD_EDIT_STEP_STUDS} value={Number(selectedBrick.pose.zStud.toFixed(3))} onChange={(event) => setPose('zStud', Number(event.target.value))} />
+          <input type="number" step={WORLD_EDIT_STEP_STUDS} value={Number(assemblyPosition.z.toFixed(3))} onChange={(event) => setPose('zStud', Number(event.target.value))} />
         </label>
         <label>
           {t('control.horizontalRotation')}
           <select
-            value={selectedBrick.pose.rotationQuarterTurns}
+            value={referenceBrick.pose.rotationQuarterTurns}
             onChange={(event) =>
               onUpdateBrick({
                 ...selectedBrick,
                 pose: {
                   ...selectedBrick.pose,
-                  rotationQuarterTurns: Number(event.target.value) as 0 | 1 | 2 | 3,
+                  rotationQuarterTurns: normalizeQuarterTurns(selectedBrick.pose.rotationQuarterTurns + Number(event.target.value) - referenceBrick.pose.rotationQuarterTurns),
                 },
               })
             }
@@ -173,13 +183,13 @@ export const BrickEditorPanel = ({
         <label>
           {t('control.verticalRotation')}
           <select
-            value={selectedBrick.pose.verticalQuarterTurns ?? 0}
+            value={referenceBrick.pose.verticalQuarterTurns ?? 0}
             onChange={(event) =>
               onUpdateBrick({
                 ...selectedBrick,
                 pose: {
                   ...selectedBrick.pose,
-                  verticalQuarterTurns: Number(event.target.value) as 0 | 1 | 2 | 3,
+                  verticalQuarterTurns: normalizeQuarterTurns((selectedBrick.pose.verticalQuarterTurns ?? 0) + Number(event.target.value) - (referenceBrick.pose.verticalQuarterTurns ?? 0)),
                 },
               })
             }
