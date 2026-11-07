@@ -1,3 +1,5 @@
+import { createKeyboardMoveSession } from './lib/keyboardMoveSession'
+import { getEditorKeyboardMove } from './lib/editorAnalysisClient'
 import { getBrickSelectionReference } from './lib/brickEditorCoordinates'
 import { getEditorTransform } from './lib/editorAnalysisClient'
 import { rotateRigidBrickGroup, translateRigidBrickGroup } from './lib/rigidBrickGroup'
@@ -15,7 +17,7 @@ import { BookOpen, Box, Boxes, ClipboardList, Download, Eye, EyeOff, FileUp, Gau
 import { BrickEditorPanel } from './components/BrickEditorPanel'
 import { BrickCountsPanel } from './components/BrickCountsPanel'
 import type { WorldCommandTargetOption } from './components/WorldEntityEditorPanel'
-import type { BrickSceneViewMode } from './components/BrickScene'
+import type { BrickSceneTransform, BrickSceneViewMode } from './components/BrickScene'
 import { ControlPanel } from './components/ControlPanel'
 import { useWorkspace } from './hooks/useWorkspace'
 import { useWorldSimulationLoop } from './hooks/useWorldSimulationLoop'
@@ -1308,6 +1310,46 @@ function App() {
   }
   const rotateBrickGroupHorizontally = (bricks: PlacedBrick[], pivot: PlacedBrick, turns: number) => rotateSelection(bricks, pivot, 'horizontal', turns)
   const rotateBrickGroupVertically = (bricks: PlacedBrick[], pivot: PlacedBrick, turns: number) => rotateSelection(bricks, pivot, 'vertical', turns)
+  const [keyboardTransforms, setKeyboardTransforms] = useState<Map<string, BrickSceneTransform>>()
+  const keyboardMove = useRef<{ base: BuildPlan; key: string; session: ReturnType<typeof createKeyboardMoveSession> }>()
+  const keyboardSelectionKey = activeSelectedIds.join('|')
+  const keyboardSelection = useRef(keyboardSelectionKey)
+  keyboardSelection.current = keyboardSelectionKey
+  useEffect(() => {
+    const current = keyboardMove.current
+    if (current && (current.base !== plan || current.key !== keyboardSelectionKey)) current.session.cancel()
+  }, [plan, keyboardSelectionKey])
+  useEffect(() => () => keyboardMove.current?.session.cancel(), [])
+  const endKeyboardMove = (cancel = false) => {
+    if (cancel) keyboardMove.current?.session.cancel()
+    else keyboardMove.current?.session.finish()
+  }
+  const moveKeyboardGroup = (base: BuildPlan, ids: string[], delta: { xStud?: number; yStud?: number; zStud?: number }) => {
+    if (!keyboardMove.current) {
+      const idSet = new Set(ids)
+      const source = base.bricks.filter(brick => idSet.has(brick.id))
+      const key = keyboardSelection.current
+      const session: ReturnType<typeof createKeyboardMoveSession> = createKeyboardMoveSession({
+        source,
+        valid: () => planRef.current === base && keyboardSelection.current === key,
+        validate: (from, steps) => getEditorKeyboardMove(base.bricks, from, steps),
+        preview: accepted => {
+          const a = accepted[0].pose, b = source[0].pose
+          const translation = { x: a.xStud - b.xStud, y: a.yStud - b.yStud, z: a.zStud - b.zStud }
+          setKeyboardTransforms(new Map(source.map(brick => [brick.id, { translation }])))
+        },
+        commit: accepted => {
+          const byId = new Map(accepted.map(brick => [brick.id, brick]))
+          setPlan(current => current === base ? { ...current, bricks: current.bricks.map(brick => byId.get(brick.id) ?? brick) } : current)
+        },
+        close: () => { if (keyboardMove.current?.session === session) { keyboardMove.current = undefined; setKeyboardTransforms(undefined) } },
+        error: error => { console.error('Keyboard movement failed', error) },
+      })
+      keyboardMove.current = { base, key, session }
+    }
+    keyboardMove.current.session.move(delta)
+  }
+
   const groupEditPending = useRef(false)
   const queueGroupEdit = (base: BuildPlan, next: PlacedBrick[], reposition: boolean) => {
     if (groupEditPending.current) return
@@ -1320,6 +1362,7 @@ function App() {
   }
 
   const updateBrick = (updated: PlacedBrick) => {
+    keyboardMove.current?.session.cancel()
     setPlan((current) => {
       const currentBrick = current.bricks.find((brick) => brick.id === updated.id)
       if (!currentBrick) return current
@@ -2244,6 +2287,9 @@ function App() {
 
   const nudgeSelected = (delta: { xStud?: number; yStud?: number; zStud?: number }) => {
     if (!selectedId) return
+    const base = planRef.current
+    const ids = getSelectedIdsForPlan(base.bricks)
+    if (base.bricks.length >= 800 && ids.length > 1 && typeof Worker !== 'undefined') { moveKeyboardGroup(base, ids, delta); return }
 
     setPlan((current) => {
       const selectionIds = getSelectedIdsForPlan(current.bricks)
@@ -2278,6 +2324,7 @@ function App() {
   }
 
   const rotateSelected = (axis: 'horizontal' | 'vertical', deltaQuarterTurns: -1 | 1) => {
+    keyboardMove.current?.session.cancel()
     if (!selectedId) return
 
     setPlan((current) => {
@@ -3077,6 +3124,9 @@ function App() {
               onConfirmPlacement={confirmActivePlacement}
               onCancelPlacement={cancelPlacement}
               onBeginDragSelected={beginSelectedPlacement}
+              analysisPaused={Boolean(keyboardTransforms)}
+              transformsByBrickId={keyboardTransforms}
+              onEndNudge={endKeyboardMove}
               onNudgeSelected={nudgeSelected}
               onRotateSelected={rotateSelected}
               keyboardEnabled={!isConfigOpen && !isPromptPreviewOpen && !isAssetLibraryOpen && !isObjImportOpen && !isImportDiagnosticsOpen && !isManualOpen && !isStabilityLabOpen && !isTavernOpen}
@@ -3144,6 +3194,7 @@ function App() {
       </section>
 
       <ControlPanel
+        analysisPaused={Boolean(keyboardTransforms)}
         engineStatusLabel={t('control.engineStatus', { status: llmEngineStatusLabel })}
         engineStatusTone={llmEngineStatusTone}
         onEngineStatusClick={llmEngineStatus === 'connected' ? undefined : () => setIsConfigOpen(true)}

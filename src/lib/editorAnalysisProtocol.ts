@@ -11,7 +11,7 @@ export type EditorAnalysisRequest = {
   geometry: Array<{ brickId: string; partNumber: string; bounds?: BrickBounds; cells?: StructuralCell[] }>
   plan?: BuildPlan
   stability?: boolean
-  transform?: { sourceIds: string[]; next: PlacedBrick[]; reposition: boolean }
+  transform?: { sourceIds: string[]; next: PlacedBrick[]; reposition: boolean; steps?: Array<{ xStud?: number; yStud?: number; zStud?: number }> }
   drop?: { sourceIds: string[]; anchorId: string; point: HorizontalDropPoint }
 }
 export type EditorAnalysisResult = { transformedBricks?: PlacedBrick[]; supported: Map<string, boolean>; issues?: BuildPlanIssue[]; stability?: StabilityAnalysis; dropBricks?: PlacedBrick[] }

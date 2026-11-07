@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import { analyzeBuildStability, type StabilityAnalysis } from '../lib/stabilityAnalysis'
-import { findNearestOpenBrickGroupAround, dropBrickGroupAtPoint } from '../lib/brickGroupPlacement'
+import { moveBrickGroupAlongSteps, findNearestOpenBrickGroupAround, dropBrickGroupAtPoint } from '../lib/brickGroupPlacement'
 import { brickById } from '../data/basicBricks'
 import type { BrickDefinition } from '../types/bricks'
 import { createBuildGraph, createPlanSpatialState, validateBuildPlan, hasBrickCollision, isBrickAboveGround, type BuildGraph } from '../lib/planUtils'
@@ -15,6 +15,7 @@ type Snapshot = {
   graph?: BuildGraph
   supported?: Map<string, boolean>
   stability?: StabilityAnalysis
+  edit?: { key: string; stationaryBricks: Snapshot['bricks']; spatialState: ReturnType<typeof createPlanSpatialState> }
   drop?: { key: string; source: EditorAnalysisRequest['bricks']; stationaryBricks: EditorAnalysisRequest['bricks']; spatialState: ReturnType<typeof createPlanSpatialState> }
 }
 // Support colours, validation and X-ray share the same exact structural graph.
@@ -34,8 +35,17 @@ scope.onmessage = async ({ data }: MessageEvent<EditorAnalysisRequest>) => {
     await snapshot.ready
     if (data.transform) {
       const ids = new Set(data.transform.sourceIds)
-      const stationaryBricks = snapshot.bricks.filter(brick => !ids.has(brick.id))
-      const spatialState = createPlanSpatialState(stationaryBricks)
+      const key = data.transform.sourceIds.join('|')
+      if (snapshot.edit?.key !== key) {
+        const stationaryBricks = snapshot.bricks.filter(brick => !ids.has(brick.id))
+        snapshot.edit = { key, stationaryBricks, spatialState: createPlanSpatialState(stationaryBricks) }
+      }
+      const { stationaryBricks, spatialState } = snapshot.edit
+      if (data.transform.steps) {
+        const transformedBricks = moveBrickGroupAlongSteps(data.transform.next, data.transform.steps, stationaryBricks, spatialState.collisionIndex)
+        scope.postMessage({ requestId: data.requestId, type: 'result', result: { supported: new Map(), transformedBricks } } satisfies EditorAnalysisResponse)
+        return
+      }
       const next = data.transform.next
       let transformedBricks = next.every(brick => isBrickAboveGround(brick) && !hasBrickCollision(brick, stationaryBricks, spatialState.collisionIndex)) ? next : undefined
       if (!transformedBricks && data.transform.reposition) transformedBricks = findNearestOpenBrickGroupAround(next, snapshot.bricks, ids, { stationaryBricks, spatialState, excludedKey: [...ids].sort().join('|') }, true)

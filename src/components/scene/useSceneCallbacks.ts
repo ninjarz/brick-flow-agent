@@ -4,7 +4,7 @@ import type { BrickSceneProps } from '../BrickScene'
 const keys = [
   'onSelect', 'onSelectConnected', 'onSelectWorldEntity', 'onPlacementPointChange',
   'onConfirmPlacement', 'onCancelPlacement', 'onBeginDragSelected',
-  'onNudgeSelected', 'onRotateSelected', 'onDeleteSelected', 'onCameraAzimuthChange',
+  'onNudgeSelected', 'onEndNudge', 'onRotateSelected', 'onDeleteSelected', 'onCameraAzimuthChange',
 ] as const
 type Callbacks = Pick<BrickSceneProps, typeof keys[number]>
 

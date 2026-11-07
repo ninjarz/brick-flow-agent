@@ -13,6 +13,7 @@ import { LazyBrickGlyph } from './LazyBrickGlyph'
 import type { BuildPlan } from '../types/bricks'
 
 type ControlPanelProps = {
+  analysisPaused?: boolean
   engineStatusLabel?: string
   engineStatusTone?: 'neutral' | 'warning' | 'pending' | 'success' | 'error'
   onEngineStatusClick?: () => void
@@ -56,6 +57,7 @@ const validationDebounceMs = 120
 const initialVisiblePartCount = 12
 
 export const ControlPanel = ({
+  analysisPaused = false,
   engineStatusLabel,
   engineStatusTone = 'neutral',
   onEngineStatusClick,
@@ -99,6 +101,7 @@ export const ControlPanel = ({
   const basicPlanIssues = useMemo(() => validateBuildPlanBasics(derivedPlan), [derivedPlan])
 
   useEffect(() => {
+    if (analysisPaused) return
     let isCanceled = false
     const timeoutId = window.setTimeout(() => {
       void getEditorValidation(derivedPlan).then((issues) => {
@@ -108,13 +111,13 @@ export const ControlPanel = ({
       }).catch(() => {
         if (!isCanceled) setGeometryLoadFailure(derivedPlan)
       })
-    }, validationDebounceMs)
+    }, derivedPlan.bricks.length >= 800 ? 300 : validationDebounceMs)
 
     return () => {
       isCanceled = true
       window.clearTimeout(timeoutId)
     }
-  }, [derivedPlan])
+  }, [derivedPlan, analysisPaused])
 
   const hasGeometryLoadFailure = geometryLoadFailure === derivedPlan
   const isStructureChecking = !hasGeometryLoadFailure && backgroundValidation?.plan !== derivedPlan

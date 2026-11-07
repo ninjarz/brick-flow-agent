@@ -1,3 +1,4 @@
+import { CameraKeyboardNavigation } from './scene/CameraKeyboardNavigation'
 import { ManualCameraFollow } from './scene/ManualCameraFollow'
 import { getSceneGridFade } from '../lib/sceneGridFade'
 import { useLDrawBatchResources } from './scene/useLDrawBatchResources'
@@ -61,6 +62,7 @@ export type BrickSelectionOptions = {
 }
 
 export type BrickSceneProps = {
+  analysisPaused?: boolean
   bricks: PlacedBrick[]
   selectedId?: string
   highlightedIds?: string[]
@@ -94,6 +96,7 @@ export type BrickSceneProps = {
   onConfirmPlacement?: () => void
   onCancelPlacement?: () => void
   onBeginDragSelected?: (id: string, point: { x: number; z: number }) => void
+  onEndNudge?: (cancel?: boolean) => void
   onNudgeSelected: (delta: { xStud?: number; yStud?: number; zStud?: number }) => void
   onRotateSelected: (axis: 'horizontal' | 'vertical', deltaQuarterTurns: -1 | 1) => void
   onDeleteSelected: () => void
@@ -617,11 +620,13 @@ const toStudDelta = (direction: Vector3) => {
 const KeyboardShortcuts = ({
   selectedId,
   onNudgeSelected,
+  onEndNudge,
   onRotateSelected,
   onDeleteSelected,
-}: Pick<BrickSceneProps, 'selectedId' | 'onNudgeSelected' | 'onRotateSelected' | 'onDeleteSelected'>) => {
+}: Pick<BrickSceneProps, 'selectedId' | 'onNudgeSelected' | 'onEndNudge' | 'onRotateSelected' | 'onDeleteSelected'>) => {
   const { camera } = useThree()
   const selectedIdRef = useRef(selectedId)
+  const onEndNudgeRef = useRef(onEndNudge)
   const onNudgeSelectedRef = useRef(onNudgeSelected)
   const onRotateSelectedRef = useRef(onRotateSelected)
   const onDeleteSelectedRef = useRef(onDeleteSelected)
@@ -633,17 +638,19 @@ const KeyboardShortcuts = ({
 
   useEffect(() => {
     selectedIdRef.current = selectedId
+    onEndNudgeRef.current = onEndNudge
     onNudgeSelectedRef.current = onNudgeSelected
     onRotateSelectedRef.current = onRotateSelected
     onDeleteSelectedRef.current = onDeleteSelected
-  }, [onDeleteSelected, onNudgeSelected, onRotateSelected, selectedId])
+  }, [onDeleteSelected, onNudgeSelected, onEndNudge, onRotateSelected, selectedId])
 
   useEffect(() => {
-    const clearHeldNudge = () => {
+    const clearHeldNudge = (finish: boolean | Event = true) => {
       const held = heldNudgeRef.current
       if (held?.delayId !== undefined) window.clearTimeout(held.delayId)
       if (held?.intervalId !== undefined) window.clearInterval(held.intervalId)
       heldNudgeRef.current = undefined
+      if (held && finish !== false) onEndNudgeRef.current?.()
     }
 
     const getNudgeDelta = (key: string) => {
@@ -667,12 +674,12 @@ const KeyboardShortcuts = ({
 
     const triggerNudge = (key: string) => {
       const delta = getNudgeDelta(key)
-      if (document.querySelector('[aria-modal="true"]')) { clearHeldNudge(); return }
+      if (document.querySelector('[aria-modal="true"]') || isTypingTarget(document.activeElement)) { clearHeldNudge(); return }
       if (delta && selectedIdRef.current) onNudgeSelectedRef.current(delta)
     }
 
     const startHeldNudge = (key: string) => {
-      clearHeldNudge()
+      clearHeldNudge(false)
       triggerNudge(key)
 
       const delayId = window.setTimeout(() => {
@@ -685,16 +692,20 @@ const KeyboardShortcuts = ({
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (document.querySelector('[aria-modal="true"]')) { clearHeldNudge(); return }
+      if (document.querySelector('[aria-modal="true"]') || isTypingTarget(document.activeElement)) { clearHeldNudge(); return }
+      if (event.ctrlKey || event.metaKey || event.altKey) { clearHeldNudge(false); onEndNudgeRef.current?.(true); return }
       if (!selectedIdRef.current || isTypingTarget(event.target)) return
 
       const key = /^Key[WASDRFQE]$/.test(event.code) ? event.code.slice(3).toLowerCase() : event.key.toLowerCase()
       const isNudgeKey = ['w', 'a', 's', 'd', 'r', 'f'].includes(key)
+      if (['q', 'e'].includes(key) || event.key === 'Backspace') { clearHeldNudge(false); onEndNudgeRef.current?.(true) }
 
       if (isNudgeKey) {
         event.preventDefault()
         if (event.repeat || heldNudgeRef.current?.key === key) return
         startHeldNudge(key)
+      } else if (event.key === 'Escape') {
+        clearHeldNudge(false); onEndNudgeRef.current?.(true)
       } else if (key === 'q') {
         if (event.repeat) return
         event.preventDefault()
@@ -1994,15 +2005,18 @@ const VoxelOptimizedScene = memo(function VoxelOptimizedScene({
   const groupCacheRef = useRef(new Map<string, VoxelBoxInstanceGroup>())
   const ldrawBatchCache = useRef<LDrawSceneBatches>()
   const placementBatchCache = useRef<LDrawSceneBatches>()
+  const transientBatches = placementActive || Boolean(transformsByBrickId?.size)
+  const transformIdsKey = [...(transformsByBrickId?.keys() ?? [])].sort().join('|')
+  const batchExcludedIds = useMemo(() => new Set([...hiddenBrickIdSet, ...(transformIdsKey ? transformIdsKey.split('|') : [])]), [hiddenBrickIdSet, transformIdsKey])
   const ldrawBatches = useMemo(() => {
     const result = buildLDrawSceneBatches(preferDetailedGeometry ? bricks : [], {
       selectedId, highlightedIds: highlightedIdSet, supportedByBrickId, displayColorByBrickId, showEdges,
-      excludedIds: new Set([...hiddenBrickIdSet, ...(transformsByBrickId?.keys() ?? [])]),
-    }, placementActive ? placementBatchCache.current ?? ldrawBatchCache.current : ldrawBatchCache.current)
-    if (placementActive) placementBatchCache.current = result
+      excludedIds: batchExcludedIds,
+    }, transientBatches ? placementBatchCache.current ?? ldrawBatchCache.current : ldrawBatchCache.current)
+    if (transientBatches) placementBatchCache.current = result
     else { ldrawBatchCache.current = result; placementBatchCache.current = undefined }
     return result
-  }, [bricks, preferDetailedGeometry, selectedId, highlightedIdSet, supportedByBrickId, displayColorByBrickId, showEdges, hiddenBrickIdSet, transformsByBrickId, placementActive])
+  }, [bricks, preferDetailedGeometry, selectedId, highlightedIdSet, supportedByBrickId, displayColorByBrickId, showEdges, batchExcludedIds, transientBatches])
   const batchedPrintIds = useMemo(() => new Set(ldrawBatches.printSources.flatMap(batch => batch.instances.map(instance => instance.brick.id))), [ldrawBatches])
   const batchResources = useLDrawBatchResources(ldrawBatches, ldrawBatchCache.current, placementBatchCache.current)
   const remainingBricks = preferDetailedGeometry ? ldrawBatches.individualBricks : bricks.filter(brick => brickById.get(brick.brickId)?.pack !== 'lego')
@@ -2669,6 +2683,7 @@ export const BrickScene = ({
   selectedId,
   highlightedIds = [],
   cameraFrameKey,
+  analysisPaused = false,
   cameraFollowStepKey,
   cameraFocusBrickIds,
   preserveDrawingBuffer = false,
@@ -2699,10 +2714,11 @@ export const BrickScene = ({
   onCancelPlacement,
   onBeginDragSelected,
   onNudgeSelected,
+  onEndNudge,
   onRotateSelected,
   onDeleteSelected,
 }: BrickSceneProps) => {
-  const sceneCallbacks = useSceneCallbacks({ onSelect, onSelectConnected, onSelectWorldEntity, onPlacementPointChange, onConfirmPlacement, onCancelPlacement, onBeginDragSelected, onNudgeSelected, onRotateSelected, onDeleteSelected, onCameraAzimuthChange })
+  const sceneCallbacks = useSceneCallbacks({ onSelect, onSelectConnected, onSelectWorldEntity, onPlacementPointChange, onConfirmPlacement, onCancelPlacement, onBeginDragSelected, onNudgeSelected, onEndNudge, onRotateSelected, onDeleteSelected, onCameraAzimuthChange })
   const { t } = useI18n()
   const { handlers: canvasGestureHandlers, canClearSelection, canConfirmPlacement } = useSceneCanvasGesture(placementActive)
   const { onSelect: selectSceneBrick, onConfirmPlacement: confirmPlacement } = sceneCallbacks
@@ -2843,13 +2859,13 @@ export const BrickScene = ({
   const deferredSupportBricks = useDeferredValue(bricks)
   const [backgroundStability, setBackgroundStability] = useState<{ bricks: PlacedBrick[]; analysis: StabilityAnalysis }>()
   useEffect(() => {
-    if (!xrayDebug || stabilityAnalysis || deferredSupportBricks.length < backgroundAnalysisThreshold) return
+    if (analysisPaused || !xrayDebug || stabilityAnalysis || deferredSupportBricks.length < backgroundAnalysisThreshold) return
     let canceled = false
-    getEditorStability(deferredSupportBricks).then(analysis => {
+    const timer = window.setTimeout(() => { void getEditorStability(deferredSupportBricks).then(analysis => {
       if (!canceled) setBackgroundStability({ bricks: deferredSupportBricks, analysis })
-    }).catch(() => { /* Keep the last committed view if background analysis fails. */ })
-    return () => { canceled = true }
-  }, [deferredSupportBricks, stabilityAnalysis, xrayDebug])
+    }).catch(() => { /* Keep the last committed view if background analysis fails. */ }) }, 300)
+    return () => { canceled = true; window.clearTimeout(timer) }
+  }, [deferredSupportBricks, stabilityAnalysis, xrayDebug, analysisPaused])
   const resolvedStabilityAnalysis = useMemo(() => {
     if (stabilityAnalysis) return stabilityAnalysis
     if (!xrayDebug) return undefined
@@ -2867,13 +2883,13 @@ export const BrickScene = ({
   const resolvedDisplayColorByBrickId = xrayColorByBrickId ?? displayColorByBrickId
   const [backgroundSupport, setBackgroundSupport] = useState<{ bricks: PlacedBrick[]; supported: Map<string, boolean> }>()
   useEffect(() => {
-    if (deferredSupportBricks.length < backgroundAnalysisThreshold || resolvedStabilityAnalysis) return
+    if (analysisPaused || deferredSupportBricks.length < backgroundAnalysisThreshold || resolvedStabilityAnalysis) return
     let canceled = false
-    getEditorSupport(deferredSupportBricks).then(supported => {
+    const timer = window.setTimeout(() => { void getEditorSupport(deferredSupportBricks).then(supported => {
       if (!canceled) setBackgroundSupport({ bricks: deferredSupportBricks, supported })
-    }).catch(() => { /* Validation UI reports analysis failures; keep pending colours neutral. */ })
-    return () => { canceled = true }
-  }, [deferredSupportBricks, resolvedStabilityAnalysis])
+    }).catch(() => { /* Validation UI reports analysis failures; keep pending colours neutral. */ }) }, 300)
+    return () => { canceled = true; window.clearTimeout(timer) }
+  }, [deferredSupportBricks, resolvedStabilityAnalysis, analysisPaused])
   const supportedByBrickId = useMemo(() => {
     void ldrawBoundsVersion
 
@@ -3014,11 +3030,13 @@ export const BrickScene = ({
       {!placementActive && keyboardEnabled && (
         <KeyboardShortcuts
           selectedId={selectedId}
+          onEndNudge={sceneCallbacks.onEndNudge}
           onNudgeSelected={sceneCallbacks.onNudgeSelected}
           onRotateSelected={sceneCallbacks.onRotateSelected}
           onDeleteSelected={sceneCallbacks.onDeleteSelected}
         />
       )}
+      {keyboardEnabled && !placementActive && <CameraKeyboardNavigation enabled={!selectedId && !selectedWorldEntityId} />}
       <CameraFrame
         centerX={gridFrame.modelCenterX}
         centerY={gridFrame.centerY}

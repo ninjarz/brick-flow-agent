@@ -176,3 +176,6 @@ export const getEditorDrop = (bricks: PlacedBrick[], source: PlacedBrick[], anch
 
 export const getEditorTransform = (bricks: PlacedBrick[], next: PlacedBrick[], reposition: boolean) =>
   request(bricks, undefined, false, undefined, { sourceIds: next.map(brick => brick.id), next, reposition }).then(result => result.transformedBricks)
+
+export const getEditorKeyboardMove = (bricks: PlacedBrick[], from: PlacedBrick[], steps: NonNullable<EditorAnalysisRequest['transform']>['steps']) =>
+  request(bricks, undefined, false, undefined, { sourceIds: from.map(brick => brick.id), next: from, reposition: false, steps }).then(result => result.transformedBricks)

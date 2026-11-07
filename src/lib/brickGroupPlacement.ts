@@ -1,3 +1,5 @@
+import { translateRigidBrickGroup } from './rigidBrickGroup'
+import type { MoveDelta } from './keyboardMoveSession'
 import {
   createBrickCollisionIndex,
   createPlanSpatialState,
@@ -202,4 +204,14 @@ export const dropBrickGroupAtPoint = (
   if (results.size >= 8) results.delete(results.keys().next().value!)
   results.set(key, result?.map(brick => ({ ...brick, pose: { ...brick.pose } })))
   return result
+}
+
+/** Validate every requested grid step, so batching cannot jump through a wall. */
+export const moveBrickGroupAlongSteps = (from: PlacedBrick[], steps: MoveDelta[], stationaryBricks: PlacedBrick[], collisionIndex: ReturnType<typeof createBrickCollisionIndex>) => {
+  let accepted = from
+  for (const delta of steps) {
+    const candidate = translateRigidBrickGroup(accepted, delta)
+    if (candidate.every(brick => isBrickAboveGround(brick) && !hasBrickCollision(brick, stationaryBricks, collisionIndex))) accepted = candidate
+  }
+  return accepted
 }
