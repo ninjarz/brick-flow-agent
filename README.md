@@ -17,6 +17,29 @@ brick-flow-agent, also named 积流工坊 in Chinese, turns prompts, imported pl
 
 The app uses React + Three.js for the editor, LDraw data for part rendering, and connector plus structural voxel rules for collision, support, and validation. It also includes a local asset library, voxel debugging, build-manual preview, and Markdown/HTML/JSON export
 
+## Hogwarts Castle · In Detail
+
+LEGO 71043 · 6,025 editable components. Captured directly from the project’s 3D model with consistent studio lighting and background.
+
+<p align="center">
+  <img src="preview/hogwarts/castle.webp" alt="Hogwarts Castle panorama" width="100%">
+</p>
+
+<table>
+  <tr>
+    <td width="50%" align="center"><img src="preview/hogwarts/hall-interior.webp" alt="Inside the Great Hall · House Banners & Tables" width="100%"><br><sub>Inside the Great Hall · House Banners & Tables</sub></td>
+    <td width="50%" align="center"><img src="preview/hogwarts/chamber.webp" alt="Chamber of Secrets · Basilisk & Serpent Statues" width="100%"><br><sub>Chamber of Secrets · Basilisk & Serpent Statues</sub></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="preview/hogwarts/great-hall.webp" alt="Great Hall · Windows & Buttresses" width="100%"><br><sub>Great Hall · Windows & Buttresses</sub></td>
+    <td width="50%" align="center"><img src="preview/hogwarts/grand-tower.webp" alt="Grand Tower · Spires & Dragon" width="100%"><br><sub>Grand Tower · Spires & Dragon</sub></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="preview/hogwarts/hagrids-hut.webp" alt="Hagrid’s Hut · Pumpkins & Stonework" width="100%"><br><sub>Hagrid’s Hut · Pumpkins & Stonework</sub></td>
+    <td width="50%" align="center"><img src="preview/hogwarts/founders.webp" alt="The Founders · House Crests" width="100%"><br><sub>The Founders · House Crests</sub></td>
+  </tr>
+</table>
+
 ## ✨ Highlights
 
 - Prompt- and reference-image-to-build generation through multimodal OpenAI-compatible LLM endpoints

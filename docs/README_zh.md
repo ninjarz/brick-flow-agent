@@ -10,6 +10,29 @@
 
 项目使用 React + Three.js 构建编辑器，使用 LDraw 数据渲染零件，并通过连接点、结构体素、碰撞和支撑规则来校验模型；同时支持素材库、体素调试、搭建手册预览和 Markdown/HTML/JSON 导出
 
+## 霍格沃茨 · 细节巡礼
+
+LEGO 71043 · 6,025 个可编辑组件。以下图片直接取自项目中的 3D 模型，采用统一的摄影光照与背景。
+
+<p align="center">
+  <img src="../preview/hogwarts/castle.webp" alt="霍格沃茨城堡全景" width="100%">
+</p>
+
+<table>
+  <tr>
+    <td width="50%" align="center"><img src="../preview/hogwarts/hall-interior.webp" alt="礼堂内部 · 学院旗帜与长桌" width="100%"><br><sub>礼堂内部 · 学院旗帜与长桌</sub></td>
+    <td width="50%" align="center"><img src="../preview/hogwarts/chamber.webp" alt="斯莱特林密室 · 蛇怪与蛇形雕像" width="100%"><br><sub>斯莱特林密室 · 蛇怪与蛇形雕像</sub></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="../preview/hogwarts/great-hall.webp" alt="礼堂 · 彩窗与扶壁" width="100%"><br><sub>礼堂 · 彩窗与扶壁</sub></td>
+    <td width="50%" align="center"><img src="../preview/hogwarts/grand-tower.webp" alt="主塔 · 尖顶与飞龙" width="100%"><br><sub>主塔 · 尖顶与飞龙</sub></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="../preview/hogwarts/hagrids-hut.webp" alt="海格小屋 · 南瓜与石墙" width="100%"><br><sub>海格小屋 · 南瓜与石墙</sub></td>
+    <td width="50%" align="center"><img src="../preview/hogwarts/founders.webp" alt="四位创始人 · 学院纹章" width="100%"><br><sub>四位创始人 · 学院纹章</sub></td>
+  </tr>
+</table>
+
 ## ✨ 功能亮点
 
 - 通过多模态 OpenAI-compatible 接口按提示词和参考图生成搭建方案
