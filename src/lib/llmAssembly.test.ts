@@ -111,11 +111,13 @@ describe('procedural LEGO assembly', () => {
       .mockResolvedValueOnce(response({ commands: [command] }))
       .mockResolvedValueOnce(response({ commands: [command] }))
     vi.stubGlobal('fetch', fetchMock)
-    const plan = await generateLlmBuildPlan({ prompt: 'tower', config: {
+    const plan = await generateLlmBuildPlan({ prompt: 'tower', inventoryOverrides: { 'brick-2x4': 0 }, config: {
       modelName: 'test-model', endpoint: 'https://example.test/chat', apiKey: 'test-key',
       requestMode: 'direct', enableThinking: false, autoRepair: true,
     } })
     expect(fetchMock).toHaveBeenCalledTimes(3)
+    const modulePrompt = JSON.parse(String(fetchMock.mock.calls[1][1].body)).messages[1].content
+    expect(modulePrompt).toMatch(/brick-2x4:[^\n]*inventory 0/)
     expect(plan.bricks).toHaveLength(2)
     expect(plan.structures).toHaveLength(2)
   })

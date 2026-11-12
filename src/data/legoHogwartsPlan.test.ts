@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import hogwartsJson from './legoHogwartsPlan.json'
 import { brickById } from './basicBricks'
-import { loadLDrawGeneratedVisual } from '../lib/ldrawGeneratedVisualLoader'
+import { prepareStructuralGeometry } from '../lib/prepareStructuralGeometry'
 import { getBlockingBuildPlanIssues, validateBuildPlan } from '../lib/planUtils'
 import { serializeBuildManual } from '../lib/manualSerializer'
 import { parseImportedPlan } from '../lib/planFileIO'
@@ -10,7 +10,9 @@ import type { BuildPlan } from '../types/bricks'
 const plan = hogwartsJson as BuildPlan
 
 beforeAll(async () => {
-  await loadLDrawGeneratedVisual([...new Set(plan.bricks.map((brick) => brickById.get(brick.brickId)!.partNumber))])
+  // Match editor preparation. The cache suite separately checks every cell
+  // against the original exact sampler, so this suite can focus on assembly.
+  await prepareStructuralGeometry([...new Set(plan.bricks.map(brick => brick.brickId))].map(id => brickById.get(id)!))
 }, 60_000)
 
 describe('complete Hogwarts replica', () => {

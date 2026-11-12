@@ -33,7 +33,8 @@ await writeFile(entry, `
   import { officialPartColorsByPartNumber } from ${JSON.stringify(`${workspace}/src/data/officialPartColors.ts`)};
   import { loadAllDefaultFinishedAssets } from ${JSON.stringify(`${workspace}/src/lib/finishedAssets.ts`)};
   import { generateBuildPlan } from ${JSON.stringify(`${workspace}/src/lib/localGenerator.ts`)};
-  import { buildLlmRepairPrompt, buildLlmUserPrompt, maxLlmBricks } from ${JSON.stringify(`${workspace}/src/lib/llmGenerator.ts`)};
+  import { buildLlmRepairPrompt, buildLlmUserPrompt } from ${JSON.stringify(`${workspace}/src/lib/llmGenerator.ts`)};
+  import { assemblyLimits } from ${JSON.stringify(`${workspace}/src/lib/llmAssembly.ts`)};
   import { getBrickConnectors } from ${JSON.stringify(`${workspace}/src/lib/brickUnits.ts`)};
   import { serializeBuildManual } from ${JSON.stringify(`${workspace}/src/lib/manualSerializer.ts`)};
   import { normalizeImportedPlan, normalizeImportedPose, tryNormalizeImportedPlan } from ${JSON.stringify(`${workspace}/src/lib/planImport.ts`)};
@@ -309,13 +310,9 @@ await writeFile(entry, `
   const resurfacedRetiredPrompts = retiredPromptResults.filter((result) =>
     retiredLocalGeneratorTitles.has(result.title),
   );
-  const ghostReferencePlan = generateBuildPlan({ prompt: '一个 Classic 小幽灵' });
   const llmPrompt = buildLlmUserPrompt({ prompt: 'test prompt' });
   const minecraftLlmPrompt = buildLlmUserPrompt({ prompt: 'voxel hut', pack: 'minecraft' });
-  const limitedInventoryPrompt = buildLlmUserPrompt({ prompt: 'limited inventory', inventoryOverrides: { 'brick-2x4': 0 } });
   const llmRepairPrompt = buildLlmRepairPrompt(objImportRegression.plan, '2 disconnected structures, 1 collision');
-  const llmPromptGhostExampleMatch = llmPrompt.match(/Good official-replica example[\\s\\S]*?\\n(\\{[\\s\\S]*\\})$/);
-  const llmPromptGhostExample = llmPromptGhostExampleMatch ? JSON.parse(llmPromptGhostExampleMatch[1]) : undefined;
   const duplicateDefinitionIds = brickDefinitions
     .map((brick) => brick.id)
     .filter((id, index, ids) => ids.indexOf(id) !== index);
@@ -917,14 +914,14 @@ await writeFile(entry, `
     resurfacedRetiredPrompts.length > 0
       ? 'Retired Classic local templates resurfaced: ' + JSON.stringify(resurfacedRetiredPrompts)
       : '',
-    !llmPromptGhostExample || llmPromptGhostExample.bricks?.length !== ghostReferencePlan.bricks.length
-      ? 'LLM prompt ghost example must be generated from the current Classic ghost plan'
+    !llmPrompt.includes('"modules"') || !llmPrompt.includes('"tool"') || !llmPrompt.includes('"origin"')
+      ? 'LEGO planning must return ordered modules with explicit tools and origins'
       : '',
     /\bsteps\b/i.test(llmPrompt) || /brickIndexes/.test(llmPrompt)
       ? 'LLM prompt must not mention build steps or brickIndexes'
       : '',
-    !llmPrompt.includes('Use 1 to ' + maxLlmBricks + ' bricks.')
-      ? 'LLM prompt brick limit must use maxLlmBricks'
+    !llmPrompt.includes('Use 1–' + assemblyLimits.modules + ' modules') || !llmPrompt.includes(assemblyLimits.bricks + ' total')
+      ? 'LEGO planning limits must match the assembly compiler'
       : '',
     llmPrompt.includes('minecraft-basic-block')
       ? 'Default LLM prompt should not include Minecraft parts until generation supports pack selection'
@@ -941,9 +938,6 @@ await writeFile(entry, `
       : '',
     getBlockingBuildPlanIssues(minecraftLlmSampleIssues).length > 0
       ? 'Fixed Minecraft LLM sample must stay structurally valid: ' + summarizeBuildPlanIssues(minecraftLlmSampleIssues)
-      : '',
-    !limitedInventoryPrompt.includes('brick-2x4:') || !limitedInventoryPrompt.match(/brick-2x4:[^\\n]*inventory 0/)
-      ? 'LLM prompt must respect per-part inventory overrides'
       : '',
     !llmRepairPrompt.includes('2 disconnected structures, 1 collision') ||
       !llmRepairPrompt.includes(objImportRegression.plan.bricks[0].brickId)

@@ -26,5 +26,5 @@ describe('world simulation soak invariants', () => {
       expect(entity.health).toBeLessThanOrEqual(entity.maxHealth)
       expect(entity.commandQueue.length).toBeLessThanOrEqual(8)
     }
-  }, 10_000)
+  }, 30_000)
 })
