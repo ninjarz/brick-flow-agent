@@ -3,7 +3,7 @@ import { IncomingMessage, ServerResponse } from 'node:http'
 import { Socket } from 'node:net'
 import { handleLlmProxyRequest, llmProxyTimeoutMs } from './llmProxy'
 
-const fixture = () => {
+const fixture = (operation?: 'models') => {
   const request = new IncomingMessage(new Socket())
   request.method = 'POST'
   const response = new ServerResponse(request)
@@ -13,7 +13,7 @@ const fixture = () => {
   const end = vi.spyOn(response, 'end')
   const run = () => {
     const done = handleLlmProxyRequest(request, response)
-    request.emit('data', Buffer.from(JSON.stringify({ endpoint: 'https://fixture.invalid/chat', apiKey: 'fixture', payload: {} })))
+    request.emit('data', Buffer.from(JSON.stringify({ endpoint: 'https://fixture.invalid/chat', apiKey: 'fixture', payload: operation ? undefined : {}, operation })))
     request.emit('end')
     return done
   }
@@ -97,4 +97,48 @@ describe('LLM proxy streaming lifetime', () => {
     expect(upstreamSignal.aborted).toBe(true)
     expect(reader.cancel).toHaveBeenCalledOnce()
   })
+})
+
+
+describe('model listing proxy', () => {
+  it('requests models with GET and no upstream body', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{"data":[{"id":"test-model"}]}', { headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { run, response, end } = fixture('models')
+    await run()
+    expect(response.statusCode).toBe(200)
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'GET', body: undefined })
+    expect(end).toHaveBeenCalled()
+  })
+})
+
+it('keeps an active stream alive beyond the original total timeout', async () => {
+  vi.useFakeTimers()
+  const reader = readerFixture()
+  let signal!: AbortSignal
+  let nextChunk!: (value: { done: boolean; value: Uint8Array }) => void
+  vi.stubGlobal('fetch', vi.fn(async (_input: unknown, init: RequestInit) => {
+    signal = init.signal!
+    reader.read.mockResolvedValueOnce(chunk)
+      .mockImplementationOnce(() => new Promise(resolve => { nextChunk = resolve }))
+      .mockImplementation(() => waitForAbort(signal))
+    return mockUpstream(reader)
+  }))
+  const { run, response } = fixture()
+  const done = run()
+  await vi.advanceTimersByTimeAsync(llmProxyTimeoutMs * 0.75)
+  nextChunk(chunk)
+  await vi.advanceTimersByTimeAsync(llmProxyTimeoutMs * 0.75)
+  expect(signal.aborted).toBe(false)
+  response.emit('close')
+  await done
+  expect(signal.aborted).toBe(true)
+})
+
+it('preserves provider rate limits and Retry-After instead of turning them into 502', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{"error":{"code":429}}', { status: 429, headers: { 'Retry-After': '60' } })))
+  const { run, response } = fixture()
+  await run()
+  expect(response.statusCode).toBe(429)
+  expect(response.getHeader('Retry-After')).toBe('60')
 })

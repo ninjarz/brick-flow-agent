@@ -1,8 +1,9 @@
+import { chatCompletionEndpoint } from '../src/lib/llmEndpoint'
 import { once } from 'node:events'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Connect, Plugin } from 'vite'
 
-export const llmProxyTimeoutMs = 45_000
+export const llmProxyTimeoutMs = 120_000
 
 const readRequestBody = (request: IncomingMessage) =>
   new Promise<string>((resolve, reject) => {
@@ -46,24 +47,33 @@ export const handleLlmProxyRequest = async (request: IncomingMessage, response: 
       endpoint?: unknown
       apiKey?: unknown
       payload?: unknown
+      operation?: unknown
     } | null
     const endpoint = typeof body?.endpoint === 'string' ? body.endpoint.trim() : ''
     const apiKey = typeof body?.apiKey === 'string' ? body.apiKey.trim() : ''
-    if (!endpoint || !apiKey || !body?.payload) {
+    const listingModels = body?.operation === 'models'
+    if (!endpoint || !apiKey || (!listingModels && !body?.payload)) {
       json(400, { error: 'Missing endpoint, apiKey, or payload' })
       return
     }
     controller.signal.throwIfAborted()
-    timeout = setTimeout(() => { timedOut = true; controller.abort() }, llmProxyTimeoutMs)
-    const upstream = await fetch(endpoint, {
-      method: 'POST',
+    const resetIdleTimeout = () => {
+      clearTimeout(timeout)
+      timeout = setTimeout(() => { timedOut = true; controller.abort() }, llmProxyTimeoutMs)
+    }
+    resetIdleTimeout()
+    const upstream = await fetch(listingModels ? endpoint : chatCompletionEndpoint(endpoint), {
+      method: listingModels ? 'GET' : 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body.payload),
+      body: listingModels ? undefined : JSON.stringify(body?.payload),
       signal: controller.signal,
     })
+    resetIdleTimeout()
     if (!upstream.ok) {
       const text = await upstream.text()
-      json(502, { error: 'Upstream LLM request failed', endpoint, upstreamStatus: upstream.status, upstreamBody: text.slice(0, 500) })
+      const retryAfter = upstream.headers.get('retry-after')
+      if (retryAfter) response.setHeader('Retry-After', retryAfter)
+      json(upstream.status === 429 ? 429 : 502, { error: 'Upstream LLM request failed', endpoint, upstreamStatus: upstream.status, upstreamBody: text.slice(0, 500) })
       return
     }
 
@@ -79,6 +89,7 @@ export const handleLlmProxyRequest = async (request: IncomingMessage, response: 
       const chunk = await reader.read()
       controller.signal.throwIfAborted()
       if (chunk.done) break
+      resetIdleTimeout()
       if (!response.write(Buffer.from(chunk.value))) await once(response, 'drain', { signal: controller.signal })
     }
     response.end()

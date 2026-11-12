@@ -218,6 +218,8 @@ function App() {
   const [inventoryOverrides, setInventoryOverrides] = useState(() => loadInventoryOverrides())
   const [catalogPack, setCatalogPack] = useState<CatalogPackPreference>(() => loadCatalogPreferences().pack)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [generationPhase, setGenerationPhase] = useState<'planning' | 'thinking' | 'building'>('planning')
+  const [generationPreview, setGenerationPreview] = useState<BuildPlan & { frameBricks: PlacedBrick[] }>()
   const generationAbortRef = useRef<AbortController | undefined>(undefined)
   const [exportingManualHtml, setExportingManualHtml] = useState(false)
   const [generationError, setGenerationError] = useState<string>()
@@ -337,6 +339,7 @@ function App() {
       worldScenarioAiRequestKeyRef.current = ''
       cancelConfigTest()
       setIsGenerating(false)
+      setGenerationPreview(undefined)
       setIsTavernAiThinking(false)
       setIsTavernDirectorThinking(false)
       setIsTestingLlmConfig(false)
@@ -370,12 +373,12 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!generationError) return
+    if (!generationError || generationFeedbackTone === 'error') return
 
     const timeoutId = window.setTimeout(() => {
       setGenerationError(undefined)
       setGenerationFeedbackTone('error')
-    }, generationFeedbackTone === 'error' ? 5200 : 4200)
+    }, 4200)
 
     return () => window.clearTimeout(timeoutId)
   }, [generationError, generationFeedbackTone])
@@ -1095,11 +1098,38 @@ function App() {
     }
 
     setIsGenerating(true)
+    setGenerationPhase('planning')
+    setGenerationPreview(undefined)
     generationAbortRef.current?.abort()
     const requestEpoch = workspaceSession.getEpoch()
     const generationController = new AbortController()
     generationAbortRef.current = generationController
 
+    let shownCount = 0
+    let previewPlanId = ''
+    const showBuildProgress = async (candidate: BuildPlan) => {
+      if (previewPlanId !== candidate.id) { shownCount = 0; previewPlanId = candidate.id }
+      for (let count = shownCount + 48; count < candidate.bricks.length + 48; count += 48) {
+        generationController.signal.throwIfAborted()
+        if (workspaceSession.getEpoch() !== requestEpoch || generationAbortRef.current !== generationController) return
+        shownCount = Math.min(count, candidate.bricks.length)
+        setGenerationPreview({ ...candidate, frameBricks: candidate.bricks, bricks: candidate.bricks.slice(0, shownCount) })
+        await new Promise<void>(resolve => window.setTimeout(resolve, 50))
+      }
+      generationController.signal.throwIfAborted()
+      setGenerationPreview({ ...candidate, frameBricks: candidate.bricks })
+    }
+
+    let lastDraftAt = 0
+    const showDraft = (candidate: BuildPlan) => {
+      if (generationController.signal.aborted || workspaceSession.getEpoch() !== requestEpoch || generationAbortRef.current !== generationController) return
+      const now = performance.now()
+      if (candidate.bricks.length && now - lastDraftAt < 120) return
+      lastDraftAt = now
+      previewPlanId = candidate.id
+      shownCount = candidate.bricks.length
+      setGenerationPreview({ ...candidate, frameBricks: candidate.bricks, bricks: candidate.bricks })
+    }
     try {
       const validateCandidate = (candidate: BuildPlan) => {
         const issues = validateBuildPlan(candidate)
@@ -1118,7 +1148,7 @@ function App() {
         }
       }
 
-      const initialPlan = await generateLlmBuildPlan({ ...input, config: llmConfig, signal: generationController.signal, locale })
+      const initialPlan = await generateLlmBuildPlan({ ...input, config: llmConfig, signal: generationController.signal, locale, onProgress: showBuildProgress, onDraft: showDraft, onPhase: phase => { if (!generationController.signal.aborted && workspaceSession.getEpoch() === requestEpoch && generationAbortRef.current === generationController) setGenerationPhase(phase) } })
       if (generationController.signal.aborted || workspaceSession.getEpoch() !== requestEpoch) return
       let candidatePlan = initialPlan
       let result = validateCandidate(candidatePlan)
@@ -1171,6 +1201,7 @@ function App() {
       if (generationAbortRef.current === generationController) {
         generationAbortRef.current = undefined
         setIsGenerating(false)
+        setGenerationPreview(undefined)
       }
     }
   }
@@ -3099,13 +3130,16 @@ function App() {
           )}
           <Suspense fallback={<div className="scene-loading">{t('scene.loading')}</div>}>
             <BrickScene
-              bricks={plan.bricks}
-              selectedId={selectedId}
-              cameraFrameKey={`${plan.id}:asset-import-${assetImportFrameVersion}`}
+              bricks={generationPreview?.bricks ?? plan.bricks}
+              building={isGenerating}
+              buildingLabel={t(`scene.${generationPhase}`)}
+              framingBricks={generationPreview?.frameBricks}
+              selectedId={generationPreview ? undefined : selectedId}
+              cameraFrameKey={`${generationPreview?.id ?? plan.id}:asset-import-${assetImportFrameVersion}${generationPreview ? `:module-${generationPreview.structures?.length ?? 0}` : ''}`}
               viewMode={sceneViewMode}
-              stabilityAnalysis={sceneStabilityAnalysis}
+              stabilityAnalysis={generationPreview ? undefined : sceneStabilityAnalysis}
               highlightedIds={highlightedSceneIds}
-              worldEntities={world.entities}
+              worldEntities={generationPreview ? [] : world.entities}
               worldEvents={world.events}
               worldElapsedSeconds={world.elapsedSeconds}
               worldPaused={world.paused}
@@ -3117,19 +3151,19 @@ function App() {
               placementPreviewBricks={placementSession?.previewBricks}
               placementSourceBrickIds={placementSourceBrickIds}
               placementActive={Boolean(placementSession || worldEntityPlacement)}
-              onSelect={selectBrick}
-              onSelectConnected={selectConnectedGroup}
+              onSelect={generationPreview ? () => undefined : selectBrick}
+              onSelectConnected={generationPreview ? undefined : selectConnectedGroup}
               onSelectWorldEntity={selectWorldEntity}
               onPlacementPointChange={updatePlacementPoint}
               onConfirmPlacement={confirmActivePlacement}
               onCancelPlacement={cancelPlacement}
               onBeginDragSelected={beginSelectedPlacement}
-              analysisPaused={Boolean(keyboardTransforms)}
+              analysisPaused={isGenerating || Boolean(keyboardTransforms)}
               transformsByBrickId={keyboardTransforms}
               onEndNudge={endKeyboardMove}
               onNudgeSelected={nudgeSelected}
               onRotateSelected={rotateSelected}
-              keyboardEnabled={!isConfigOpen && !isPromptPreviewOpen && !isAssetLibraryOpen && !isObjImportOpen && !isImportDiagnosticsOpen && !isManualOpen && !isStabilityLabOpen && !isTavernOpen}
+              keyboardEnabled={!isGenerating && !isConfigOpen && !isPromptPreviewOpen && !isAssetLibraryOpen && !isObjImportOpen && !isImportDiagnosticsOpen && !isManualOpen && !isStabilityLabOpen && !isTavernOpen}
               onDeleteSelected={deleteSelected}
             />
           </Suspense>

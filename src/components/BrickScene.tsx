@@ -62,6 +62,9 @@ export type BrickSelectionOptions = {
 }
 
 export type BrickSceneProps = {
+  building?: boolean
+  buildingLabel?: string
+  framingBricks?: PlacedBrick[]
   analysisPaused?: boolean
   bricks: PlacedBrick[]
   selectedId?: string
@@ -2680,6 +2683,9 @@ const StabilityOverlay = ({ analysis }: { analysis: StabilityAnalysis }) => {
 
 export const BrickScene = ({
   bricks,
+  building = false,
+  buildingLabel,
+  framingBricks,
   selectedId,
   highlightedIds = [],
   cameraFrameKey,
@@ -2747,9 +2753,9 @@ export const BrickScene = ({
   const cameraFrameBricks = useMemo(
     () => {
       const focusIds = cameraFocusBrickIds?.length ? new Set(cameraFocusBrickIds) : undefined
-      return bricks.filter((brick) => (showHiddenObjects || !hiddenBrickIdSet.has(brick.id)) && (!focusIds || focusIds.has(brick.id)))
+      return (framingBricks ?? bricks).filter((brick) => (showHiddenObjects || !hiddenBrickIdSet.has(brick.id)) && (!focusIds || focusIds.has(brick.id)))
     },
-    [bricks, cameraFocusBrickIds, hiddenBrickIdSet, showHiddenObjects],
+    [bricks, framingBricks, cameraFocusBrickIds, hiddenBrickIdSet, showHiddenObjects],
   )
   const [loadingPercent, setLoadingPercent] = useState(0)
   const [ldrawBoundsVersion, setLDrawBoundsVersion] = useState(0)
@@ -2923,9 +2929,9 @@ export const BrickScene = ({
       {...canvasGestureHandlers}
       onPointerMissed={clearBackgroundSelection}
     >
-      {!preferDetailedGeometry && visibleBricks.some(brick => brickById.get(brick.brickId)?.pack === 'lego') && <Html fullscreen calculatePosition={(_object, _camera, size) => [size.width / 2, size.height / 2]} style={{ pointerEvents: 'none' }}><div className="scene-loading-progress" role="progressbar" aria-label={t('scene.loading')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={loadingPercent}>
-        <div className="scene-loading-progress-label"><span>{t('scene.loading')}</span><span>{loadingPercent}%</span></div>
-        <div className="scene-loading-progress-track"><div style={{ width: `${loadingPercent}%` }} /></div>
+      {(building || !preferDetailedGeometry && visibleBricks.some(brick => brickById.get(brick.brickId)?.pack === 'lego')) && <Html fullscreen calculatePosition={(_object, _camera, size) => [size.width / 2, size.height / 2]} style={{ pointerEvents: 'none' }}><div className="scene-loading-progress" role="progressbar" data-building-parts={building ? bricks.length : undefined} aria-label={(building ? buildingLabel ?? t('scene.building') : t('scene.loading'))} aria-valuemin={0} aria-valuemax={100} aria-valuenow={building ? undefined : loadingPercent}>
+        <div className="scene-loading-progress-label"><span>{(building ? buildingLabel ?? t('scene.building') : t('scene.loading'))}</span>{!building && <span>{loadingPercent}%</span>}</div>
+        <div className="scene-loading-progress-track"><div className={building ? 'scene-building-indeterminate' : undefined} style={building ? undefined : { width: `${loadingPercent}%` }} /></div>
       </div></Html>}
       <color attach="background" args={['#eef2f5']} />
       <SceneLighting

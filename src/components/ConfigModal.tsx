@@ -1,3 +1,6 @@
+import { ModelNameInput } from './ModelNameInput'
+import { useEffect, useRef, useState } from 'react'
+import { listLlmModels } from '../lib/llmModels'
 import { Globe2, KeyRound, Link, Settings2, ShieldCheck, X } from 'lucide-react'
 import { appVersion } from '../lib/appDiagnostics'
 import { clearAllLocalAppData } from '../lib/localData'
@@ -20,6 +23,36 @@ type Props = {
 export const ConfigModal = ({ config, engineStatusLabel, testing, feedback, onUpdate, onFeedback, onTest, onClose }: Props) => {
   const { locale, setLocale, t } = useI18n()
   const zh = locale === 'zh-CN'
+  const [modelList, setModelList] = useState<string[]>([])
+  const [listing, setListing] = useState(false)
+  const [listMessage, setListMessage] = useState('')
+  const listRequest = useRef<AbortController>()
+  useEffect(() => {
+    listRequest.current?.abort()
+    setModelList([])
+    setListing(false)
+    setListMessage('')
+    return () => listRequest.current?.abort()
+  }, [config.endpoint, config.apiKey, config.requestMode])
+  const loadModels = async () => {
+    listRequest.current?.abort()
+    const controller = new AbortController()
+    listRequest.current = controller
+    setListing(true)
+    setListMessage('')
+    try {
+      const models = await listLlmModels(config, controller.signal)
+      if (controller.signal.aborted) return
+      setModelList(models)
+      if (!models.length) setListMessage(zh ? '服务商返回的模型列表为空，可手动填写。' : 'The provider returned no models. Enter a model manually.')
+    } catch {
+      if (controller.signal.aborted) return
+      setModelList([])
+      setListMessage(zh ? '无法获取模型列表，请检查地址、密钥和接口支持。直连可能受跨域限制，可尝试本地代理或手动填写。' : 'Could not list models. Check the endpoint, key, and provider support. Browser CORS restrictions may require local proxy mode. You can also enter a model manually.')
+    } finally {
+      if (!controller.signal.aborted) setListing(false)
+    }
+  }
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section className="config-modal" role="dialog" aria-modal="true" aria-labelledby="config-title" onMouseDown={(event) => event.stopPropagation()}>
@@ -31,9 +64,16 @@ export const ConfigModal = ({ config, engineStatusLabel, testing, feedback, onUp
           </section>
           <section className="config-section">
             <div className="config-section-title"><Settings2 size={16} /><div><h3>{t('config.llmSection')}</h3><p>{engineStatusLabel}</p></div></div>
-            <label>{t('config.modelName')}<input value={config.modelName} onChange={(event) => onUpdate({ ...config, modelName: event.target.value })} placeholder={t('config.modelPlaceholder')} autoComplete="off" /></label>
-            <label>{t('config.endpoint')}<span className="input-with-icon"><Link size={15} /><input value={config.endpoint} onChange={(event) => onUpdate({ ...config, endpoint: event.target.value })} placeholder="https://api.example.com/v1/chat/completions" type="url" autoComplete="off" /></span></label>
+            <label>{t('config.endpoint')}<span className="input-with-icon"><Link size={15} /><input value={config.endpoint} onChange={(event) => onUpdate({ ...config, endpoint: event.target.value })} placeholder="https://api.example.com/v1" type="url" autoComplete="off" /></span></label>
             <label>api_key<span className="input-with-icon"><KeyRound size={15} /><input value={config.apiKey} onChange={(event) => onUpdate({ ...config, apiKey: event.target.value })} placeholder="sk-..." type="password" autoComplete="off" /></span></label>
+            <div className="config-field">
+              <span>{t('config.modelName')}</span>
+              <div className="model-name-row">
+                <ModelNameInput value={config.modelName} models={modelList} label={t('config.modelName')} placeholder={t('config.modelPlaceholder')} onChange={modelName => onUpdate({ ...config, modelName })} />
+                <button type="button" className="secondary model-list-button" onClick={loadModels} disabled={listing || !config.endpoint.trim() || !config.apiKey.trim()}>{listing ? (zh ? '获取中…' : 'Loading…') : (zh ? '获取模型列表' : 'List models')}</button>
+              </div>
+              {listMessage && <p className="config-field-note" role="status">{listMessage}</p>}
+            </div>
             <div className="config-field"><span>{t('config.requestMode')}</span><div className="request-mode-options" role="group" aria-label={t('config.requestMode')}>{(['direct', 'proxy'] as const).map((requestMode) => <button key={requestMode} type="button" className={config.requestMode === requestMode ? 'active' : ''} onClick={() => onUpdate({ ...config, requestMode })}>{requestMode === 'direct' ? <Globe2 size={15} /> : <Link size={15} />}<span>{t(`config.requestMode.${requestMode}`)}</span></button>)}</div><p className="config-field-note">{t(`config.requestModeDescription.${config.requestMode}`)}</p></div>
             <label className="config-toggle"><input type="checkbox" checked={config.enableThinking} onChange={(event) => onUpdate({ ...config, enableThinking: event.target.checked })} /><span><strong>{t('config.thinkingMode')}</strong><small>{t(`config.thinkingModeDescription.${config.enableThinking ? 'on' : 'off'}`)}</small></span></label>
             <label className="config-toggle"><input type="checkbox" checked={config.autoRepair} onChange={(event) => onUpdate({ ...config, autoRepair: event.target.checked })} /><span><strong>{t('config.autoRepair')}</strong><small>{t(`config.autoRepairDescription.${config.autoRepair ? 'on' : 'off'}`)}</small></span></label>

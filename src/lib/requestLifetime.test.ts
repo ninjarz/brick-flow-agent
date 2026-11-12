@@ -9,7 +9,11 @@ describe('request lifecycle', () => {
   it.each(['generate', 'json', 'test'])('cancels %s after headers even if the body stalls', async (kind) => {
     let bodyStarted!: () => void
     const started = new Promise<void>((resolve) => { bodyStarted = resolve })
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, text: () => { bodyStarted(); return new Promise<string>(() => {}) } })))
+    const response = new Response()
+    const stalledBody = () => { bodyStarted(); return new Promise<never>(() => {}) }
+    vi.spyOn(response, 'text').mockImplementation(stalledBody)
+    vi.spyOn(response, 'json').mockImplementation(stalledBody)
+    vi.stubGlobal('fetch', vi.fn(async () => response))
     const controller = new AbortController()
     const pending = kind === 'generate' ? generateLlmBuildPlan({ prompt: 'mock', config, signal: controller.signal })
       : kind === 'json' ? requestLlmJsonContent({ config, systemPrompt: '', userPrompt: '', signal: controller.signal })
@@ -31,7 +35,9 @@ describe('request lifecycle', () => {
 
   it('times out while waiting for the response body', async () => {
     vi.useFakeTimers()
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, text: () => new Promise<string>(() => {}) })))
+    const response = new Response()
+    vi.spyOn(response, 'text').mockImplementation(() => new Promise<string>(() => {}))
+    vi.stubGlobal('fetch', vi.fn(async () => response))
     const result = expect(testLlmConnection(config, 'en-US')).rejects.toThrow(/timed out|timeout/i)
     await vi.runAllTimersAsync()
     await result

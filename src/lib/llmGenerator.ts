@@ -1,3 +1,11 @@
+import { createStreamedAssembly } from './streamedAssembly'
+import { LlmServiceError } from './llmServiceError'
+import { LlmOutputLimitError } from './llmOutputLimit'
+import { assemblyCheckpointSignature, clearAssemblyCheckpoint, loadAssemblyCheckpoint, saveAssemblyCheckpoint } from './llmAssemblyCheckpoint'
+import type { AssemblyCheckpoint } from './llmAssemblyCheckpoint'
+import { chatCompletionEndpoint } from './llmEndpoint'
+import { assemblyLimits, generateAssembly, parseAssemblyLayout } from './llmAssembly'
+import { normalizeMaxRepairAttempts } from './llmConfig'
 import { aiTasks } from './aiTasks'
 import { createRequestLifetime, withAbortSignal } from './requestLifetime'
 import { brickById, brickDefinitions, colorHex } from '../data/basicBricks'
@@ -27,6 +35,8 @@ type LlmBrick = {
 
 type LlmPlan = {
   title?: unknown
+  modules?: unknown
+  commands?: unknown
   bricks?: unknown
 }
 
@@ -36,6 +46,9 @@ type LlmGenerateInput = GeneratorInput & {
   locale?: LlmLocale
   repairFeedback?: string
   previousPlan?: BuildPlan
+  onProgress?: (plan: BuildPlan) => void | Promise<void>
+  onDraft?: (plan: BuildPlan) => void
+  onPhase?: (phase: 'planning' | 'thinking' | 'building') => void
 }
 
 type LlmRequestPayload = Record<string, unknown>
@@ -66,6 +79,9 @@ export type LlmJsonRequestInput = {
   locale?: LlmLocale
   temperature?: number
   maxTokens?: number
+  stream?: boolean
+  onContent?: (text: string) => void
+  onReasoning?: () => void
 }
 
 export type LlmStreamRequestInput = Omit<LlmJsonRequestInput, 'systemPrompt' | 'userPrompt'> & {
@@ -79,18 +95,20 @@ export type LlmStreamRequestInput = Omit<LlmJsonRequestInput, 'systemPrompt' | '
 const clientRequestTimeoutMs = 240_000
 const configTestTimeoutMs = 15_000
 const configTestMaxTokens = 128
-const generationMaxTokens = 25_600
-const generationThinkingMaxTokens = 128_000
+const generationMaxTokens = 12_288
+const generationThinkingMaxTokens = 24_576
 const emptyStreamRetryFloorTokens = 8_192
 const emptyStreamRetryMaxTokens = 32_768
 export const maxLlmBricks = 64
 
 let omitUnsupportedThinkingParameters = false
 let omitUnsupportedStreamOptions = false
+const mandatoryReasoningModels = new Set<string>()
 
 export const resetLlmThinkingCompatibility = () => {
   omitUnsupportedThinkingParameters = false
   omitUnsupportedStreamOptions = false
+  mandatoryReasoningModels.clear()
 }
 
 const llmText: Record<LlmLocale, {
@@ -221,8 +239,9 @@ const formatInventoryForPrompt = (inventory: number) =>
 const formatLegoHeightForPrompt = (heightStuds: number) =>
   Number((heightStuds / PLATE_HEIGHT_WORLD).toFixed(3))
 
-const getInventorySummary = (pack: BrickPack = 'lego', inventoryOverrides?: Record<string, number>) => brickDefinitions
-  .filter((brick) => brick.pack === pack)
+const getInventorySummary = (pack: BrickPack = 'lego', inventoryOverrides?: Record<string, number>, partIds?: string[]) => brickDefinitions
+  .filter((brick) => brick.pack === pack && (pack !== 'lego' || (!brick.id.startsWith('hogwarts-') && !brick.id.startsWith('architecture-'))))
+  .filter(brick => !partIds || partIds.includes(brick.id))
   .map((brick) => {
     const inventory = inventoryOverrides?.[brick.id] ?? brick.inventory
     if (pack === 'minecraft') {
@@ -230,7 +249,7 @@ const getInventorySummary = (pack: BrickPack = 'lego', inventoryOverrides?: Reco
       const supportNote = shape === 'cross' ? ', plant: must sit on a solid cube top' : ''
       return `${brick.id}: ${brick.name}, shape ${shape}, size ${brick.footprint.widthStuds}x${brick.footprint.depthStuds}x${brick.footprint.heightStuds} blocks, colors ${brick.colors.join('/')}, inventory ${formatInventoryForPrompt(inventory)}${supportNote}`
     }
-    return `${brick.id}: ${brick.name}, footprint ${brick.footprint.widthStuds}x${brick.footprint.depthStuds}, height ${formatLegoHeightForPrompt(brick.footprint.heightStuds)} plates, colors ${brick.colors.join('/')}, inventory ${formatInventoryForPrompt(inventory)}`
+    return `${brick.id}: ${brick.name}, footprint ${brick.footprint.widthStuds}x${brick.footprint.depthStuds}, height ${formatLegoHeightForPrompt(brick.footprint.heightStuds)} plates, ${brick.kind === 'tile' ? 'smooth top: cannot support another brick' : brick.kind === 'slope' ? 'sloped top: use actual stud positions, not full footprint support' : 'kind ' + brick.kind}, colors ${brick.colors.join('/')}, inventory ${formatInventoryForPrompt(inventory)}`
   })
   .join('\n')
 
@@ -307,7 +326,7 @@ const legoRules = `Rules:
 Good official-replica example, calibrated from LEGO Classic 10696 Ghost:
 ${formatOfficialReplicaExample()}`
 
-export const buildLlmUserPrompt = ({ prompt, imageName, inventoryOverrides, pack = 'lego' }: GeneratorInput) => `You generate small ${pack === 'minecraft' ? 'voxel block build plans' : 'brick build plans'} for a browser 3D editor.
+const buildSmallLlmUserPrompt = ({ prompt, imageName, inventoryOverrides, pack = 'lego' }: GeneratorInput) => `You generate small ${pack === 'minecraft' ? 'voxel block build plans' : 'brick build plans'} for a browser 3D editor.
 
 User request: ${prompt}
 Reference image file name: ${imageName || 'none'}
@@ -332,6 +351,29 @@ Return only valid JSON with this exact shape:
 }
 
 ${pack === 'minecraft' ? minecraftRules : legoRules}`
+
+export const buildLlmUserPrompt = (input: GeneratorInput): string => {
+  if (input.pack === 'minecraft') return buildSmallLlmUserPrompt(input)
+  return `You design LEGO brick build plans for a browser 3D editor.
+User request: ${input.prompt}
+Reference image: ${input.imageName ?? 'none'}
+Tool registry: building creates a complete parametric architectural hall. sculpture compiles named ellipsoid/box volumes with visible curved-surface markings into real plates for characters and animals. parts assembles custom details from individual real bricks and repeated arrays. Each parts module will receive the precise part/colour/inventory catalogue (including brick-1x1) at assembly time. Plan shapes, proportions, palette and attachment interfaces now.
+Choose the scale and architectural proportions from the request and reference image. Identify the distinctive silhouette, colour palette and important details before allocating parts.
+For a small object, use one parts module. For a large object, split into connected modules. Return only a compact module layout, never an individual brick list in this planning stage.
+For a recognizable character, use one sculpture module with the sculpture-shapes tool. It models the head, torso, arms/hands and feet as separate overlapping ellipsoid/box volumes, with visible curved-surface markings for the face and clothing. State the actual subject's head/body proportions, shape, distinctive anatomy and essential features. Plan a genuinely three-dimensional figure, usually 16–20 studs wide, 10–14 deep and 20–26 tall, within 2048 parts. Front is maximum Z, facing the default editor camera. Distinguish eye whites and pupils, a projecting nose, mouth and characteristic small accessories. Leave exact geometry to the sculpture stage.
+This stage only names the main shapes and their overall proportions. Leave individual brick placements, connector calculations and collision checking to the assembly stage. Keep each module description under 80 words. Produce the layout immediately without solving the entire assembly in advance.
+For architectural requests, prefer a FIRST module using the deterministic building tool: a connected foundation, hall, windows, buttresses, ceiling and roof. It accepts width 8 or 16, wallCourses 6–10 and base/wall/window/trim/roof colours. Its complete outer base is (width+4) x 12 studs; roof ridge Y=origin.y+1.2+wallCourses*1.2+4.8. This tool yields roughly 250–500 editable pieces. Do not plan a separate foundation underneath it. Later modules may attach towers, a porch or details OUTSIDE its occupied volume. Avoid mechanisms and extra rooms absent from the request. Prefer one complete building-tool module and at most one attached detail module. Use only 1–3 modules when that meets the user's requested complexity.
+For a detailed building or larger object, return an assembly layout instead:
+{"title":"English title","modules":[{"name":"Main hall","tool":"building","description":"Exact dimensions, palette and requested architectural character","origin":[0,0,0]}]}.
+Use 1–${assemblyLimits.modules} modules in construction order, at most ${assemblyLimits.moduleBricks} expanded parts per module and ${assemblyLimits.bricks} total. A shared connected foundation must precede walls, towers, roofs and decoration. Adjacent ground plates alone are disconnected: use two overlapping staggered layers of plates to bridge every seam. A plate has studs only at its listed grid positions, not on arbitrary edges. Later modules attach to previously accepted modules. Describe their interfaces in world coordinates and use local coordinates relative to each origin during assembly.
+For a building-tool module, include its complete program in the planning response to avoid another model request:
+"program":{"commands":[{"kind":"building","at":[0,0,0],"width":16,"wallCourses":8,"wallColor":"tan","roofColor":"gray","windowColor":"black","trimColor":"white","baseColor":"gray"}]}.
+The building tool accepts width 8 or 16, wallCourses 6–10 and the listed colour parameters. Do not expand it into raw bricks. For custom parts modules, omit program until the assembly stage.
+Every module MUST specify tool: "building" for a parameterized hall, "sculpture" for characters/animals, or "parts" for custom brick details. The first module of a building request should use tool:"building". Budget the whole model before splitting it. Allocate enough detail to characteristic windows, roofs and interiors requested by the user. Repeated windows and masonry can be generated as arrays in later module programs.
+Every parts or sculpture module must also specify requiredColors, an array of the exact colour ids essential to its identifying features (include the body, face, pupils, clothing and small accents wherever their colours identify the subject). These colours will be checked against the actual compiled parts. In the description explicitly assign each required colour to its visible feature. They must survive structural repairs. Include all characteristic facial features instead of leaving a blank face.
+Positions are the minimum X/Z corner and bottom Y of the rotated footprint, not its centre. A 4x2 brick at [0,0,0] occupies X=0..4, Z=0..2, Y=0..1.2. Odd horizontal quarter turns swap width and depth. All coordinates are in studs on the 0.1-stud grid. One plate is 0.4 studs tall. Use actual part dimensions and compatible connectors, legal colours and available inventory. Every construction prefix must be connected and supported. Avoid overlaps. Quarter turns are integers from 0 to 3.
+Return only the chosen JSON shape. Module programs will be requested separately. Do not claim fidelity to an official set without its instructions and inventory.`
+}
 
 export const buildLlmRepairPrompt = (previousPlan: BuildPlan, repairFeedback: string) => `
 
@@ -372,7 +414,7 @@ const extractTextContent = (value: unknown): string => {
 }
 
 const stringifyDirectJsonPayload = (payload: Record<string, unknown>) => {
-  if (typeof payload.ok === 'boolean' || Array.isArray(payload.bricks)) return JSON.stringify(payload)
+  if (typeof payload.ok === 'boolean' || Array.isArray(payload.bricks) || Array.isArray(payload.modules) || Array.isArray(payload.commands)) return JSON.stringify(payload)
   return ''
 }
 
@@ -496,10 +538,37 @@ const parseJsonContent = (content: string, locale: LlmLocale): LlmPlan => {
   return parsed as LlmPlan
 }
 
+const quotaError = (locale: LlmLocale, seconds?: number) => {
+  const wait = seconds && seconds > 0 ? (locale === 'zh-CN' ? `请在 ${seconds} 秒后重试` : `Retry after ${seconds} seconds`) : (locale === 'zh-CN' ? '请稍后重试' : 'Try again later')
+  return new LlmServiceError(locale === 'zh-CN'
+    ? `模型服务已触发请求或 Token 配额限制（429）。${wait}，或更换可用模型。`
+    : `The model service hit its request or token quota (429). ${wait}, or choose another available model.`, 429)
+}
+
+const checkProviderError = (payload: unknown, locale: LlmLocale): void => {
+  if (Array.isArray(payload)) { payload.forEach(item => checkProviderError(item, locale)); return }
+  if (!isRecord(payload) || !payload.error) return
+  const error = isRecord(payload.error) ? payload.error : { message: String(payload.error) }
+  const status = Number(error.code ?? payload.code) || (error.status === 'RESOURCE_EXHAUSTED' ? 429 : 502)
+  if (status === 429) throw quotaError(locale)
+  const message = String(error.message ?? 'Upstream generation failed').slice(0, 240)
+  throw new LlmServiceError(locale === 'zh-CN' ? `模型服务返回错误（${status}）：${message}` : `Model service error (${status}): ${message}`, status)
+}
+
 const formatRequestError = async (response: Response, requestMode: LlmConfig['requestMode'], locale: LlmLocale) => {
   const labels = llmText[locale]
   const detail = await response.text()
 
+  let upstreamStatus = response.status
+  try {
+    const body = JSON.parse(detail)
+    if (typeof body?.upstreamStatus === 'number') upstreamStatus = body.upstreamStatus
+  } catch { /* Non-JSON errors still retain their HTTP status. */ }
+  if (upstreamStatus === 429) {
+    const retryAfter = response.headers.get('retry-after')
+    const seconds = retryAfter && /^\d+$/.test(retryAfter) ? Number(retryAfter) : undefined
+    throw quotaError(locale, seconds)
+  }
   if (requestMode === 'proxy' && response.status === 404) {
     return labels.proxyUnavailable
   }
@@ -521,9 +590,22 @@ const formatRequestError = async (response: Response, requestMode: LlmConfig['re
 
 const requestLlmChat = (config: LlmConfig, payload: LlmRequestPayload, signal: AbortSignal) => {
   signal.throwIfAborted()
-  payload = { ...payload, max_tokens: aiTasks.request(signal, Number(payload.max_tokens) || 4096) }
-  const endpoint = config.endpoint.trim()
+  const endpoint = chatCompletionEndpoint(config.endpoint)
   const apiKey = config.apiKey.trim()
+  const mandatory = mandatoryReasoningModels.has(`${endpoint}\n${config.modelName}`)
+  const requestedTokens = Number(payload.max_tokens) || 4096
+  const maxTokens = mandatory && requestedTokens > configTestMaxTokens
+    ? Math.max(requestedTokens, 32_768) : requestedTokens
+  payload = { ...payload, max_tokens: aiTasks.request(signal, maxTokens) }
+  if (new URL(endpoint).hostname === 'openrouter.ai') {
+    const enabled = payload.enable_thinking === true
+    const reasoning = enabled ? { enabled: true, effort: 'high' }
+      : mandatory ? { enabled: true, effort: 'low' } : { enabled: false }
+    payload = { ...payload, reasoning }
+    delete payload.enable_thinking
+    delete payload.thinking
+    delete payload.reasoning_effort
+  }
 
   if (config.requestMode === 'proxy') {
     return fetch('/api/llm/chat', {
@@ -578,6 +660,14 @@ const requestLlmChatWithCompatibility = async (
   let response = await requestLlmChat(config, compatiblePayload(), signal)
   if (response.ok) return response
   let detail = (await withAbortSignal(signal, () => response.clone().text())).toLowerCase()
+  const endpoint = chatCompletionEndpoint(config.endpoint)
+  if (new URL(endpoint).hostname === 'openrouter.ai'
+    && detail.includes('reasoning is mandatory') && detail.includes('cannot be disabled')) {
+    mandatoryReasoningModels.add(`${endpoint}\n${config.modelName}`)
+    response = await requestLlmChat(config, compatiblePayload(), signal)
+    if (response.ok) return response
+    detail = (await withAbortSignal(signal, () => response.clone().text())).toLowerCase()
+  }
   if (!omitUnsupportedThinkingParameters && (detail.includes('thinking') || detail.includes('enable_thinking'))) {
     omitUnsupportedThinkingParameters = true
     response = await requestLlmChat(config, compatiblePayload(), signal)
@@ -754,6 +844,7 @@ const testLlmConnectionImpl = async (config: LlmConfig, locale: LlmLocale = 'zh-
 
     aiTasks.phase(signal, 'validating')
     const payload = JSON.parse(responseText) as unknown
+    checkProviderError(payload, locale)
     const content = extractMessageContent(payload)
     if (!content) throw new Error(formatEmptyContentError(payload, llmText[locale].configTestContext, locale))
   } catch (error) {
@@ -774,6 +865,8 @@ const requestLlmJsonContentImpl = async ({
   locale = 'zh-CN',
   temperature = 0.2,
   maxTokens = 4_096,
+  stream = false,
+  onContent, onReasoning,
 }: LlmJsonRequestInput) => {
   if (!isLlmConfigComplete(config)) throw new Error(llmText[locale].incompleteConfig)
 
@@ -790,20 +883,14 @@ const requestLlmJsonContentImpl = async ({
       ],
       temperature,
       max_tokens: maxTokens,
-      stream: false,
+      stream,
       response_format: { type: 'json_object' },
     }, config.enableThinking), controller.signal)
 
     if (!response.ok) throw new Error(await formatRequestError(response, config.requestMode, locale))
     aiTasks.phase(signal, 'receiving')
-    const responseText = await withAbortSignal(controller.signal, () => response.text())
-    controller.signal.throwIfAborted()
-    if (!responseText.trim()) throw new Error(llmText[locale].emptyGenerationResponse)
-    aiTasks.phase(signal, 'validating')
-    const payload = JSON.parse(responseText) as unknown
-    const content = extractMessageContent(payload)
-    if (!content) throw new Error(formatEmptyContentError(payload, llmText[locale].responseContext, locale))
-    return content
+    return await readGenerationContent(response, controller.signal, locale, onContent, onReasoning)
+
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       if (signal?.aborted) throw new Error(llmText[locale].generationCanceled)
@@ -819,6 +906,7 @@ const readLlmEventStream = async (
   response: Response,
   onDelta: (text: string) => void,
   onReasoningDelta?: (text: string) => void,
+  locale: LlmLocale = 'zh-CN',
 ) => {
   if (!response.body) return { content: '', maxTokens: 0, retryCount: 0 } satisfies LlmStreamResult
   const reader = response.body.getReader()
@@ -830,42 +918,48 @@ const readLlmEventStream = async (
   const emitPayload = (payloadText: string) => {
     const trimmed = payloadText.trim()
     if (!trimmed || trimmed === '[DONE]') return
-    try {
-      const payload = JSON.parse(trimmed) as unknown
-      usage = extractLlmTokenUsage(payload) ?? usage
-      finishReason = extractLlmFinishReason(payload) ?? finishReason
-      const reasoningDelta = extractReasoningContent(payload)
-      if (reasoningDelta) onReasoningDelta?.(reasoningDelta)
-      const delta = extractMessageContent(payload)
-      if (!delta) return
-      content += delta
-      onDelta(delta)
-    } catch {
+    let payload: unknown
+    try { payload = JSON.parse(trimmed) } catch {
       content += payloadText
       onDelta(payloadText)
+      return
     }
+    checkProviderError(payload, locale)
+    usage = extractLlmTokenUsage(payload) ?? usage
+    finishReason = extractLlmFinishReason(payload) ?? finishReason
+    const reasoningDelta = extractReasoningContent(payload)
+    if (reasoningDelta) onReasoningDelta?.(reasoningDelta)
+    const delta = extractMessageContent(payload)
+    if (!delta) return
+    content += delta
+    onDelta(delta)
   }
 
-  while (true) {
-    const chunk = await reader.read()
-    transportBuffer += decoder.decode(chunk.value, { stream: !chunk.done })
-    const records = transportBuffer.split(/\r?\n\r?\n/)
-    transportBuffer = records.pop() ?? ''
-    for (const record of records) {
-      const dataLines = record.split(/\r?\n/)
-        .filter((line) => line.startsWith('data:'))
-        .map((line) => line.slice(5).trimStart())
-      if (dataLines.length > 0) emitPayload(dataLines.join('\n'))
-      else if (record.trim()) emitPayload(record)
+  try {
+    while (true) {
+      const chunk = await reader.read()
+      transportBuffer += decoder.decode(chunk.value, { stream: !chunk.done })
+      const records = transportBuffer.split(/\r?\n\r?\n/)
+      transportBuffer = records.pop() ?? ''
+      for (const record of records) {
+        const dataLines = record.split(/\r?\n/)
+          .filter((line) => line.startsWith('data:'))
+          .map((line) => line.slice(5).trimStart())
+        if (dataLines.length > 0) emitPayload(dataLines.join('\n'))
+        else if (/^[{[]/.test(record.trim())) emitPayload(record)
+      }
+      if (chunk.done) break
     }
-    if (chunk.done) break
-  }
-  if (transportBuffer.trim()) {
-    const data = transportBuffer.startsWith('data:')
-      ? transportBuffer.split(/\r?\n/).map((line) => line.replace(/^data:\s?/, '')).join('\n')
-      : transportBuffer
-    emitPayload(data)
-  }
+    if (transportBuffer.trim()) {
+      const lines = transportBuffer.split(/\r?\n/).filter(line => line.startsWith('data:'))
+      if (lines.length) emitPayload(lines.map(line => line.slice(5).trimStart()).join('\n'))
+      else if (/^[{[]/.test(transportBuffer.trim())) emitPayload(transportBuffer)
+    }
+  } catch (error) {
+    await reader.cancel().catch(() => undefined)
+    throw error
+  } finally { reader.releaseLock() }
+
   return {
     content,
     ...(usage ? { usage } : {}),
@@ -873,6 +967,35 @@ const readLlmEventStream = async (
     maxTokens: 0,
     retryCount: 0,
   } satisfies LlmStreamResult
+}
+
+const readGenerationContent = async (response: Response, signal: AbortSignal, locale: LlmLocale, onContent?: (text: string) => void, onReasoning?: () => void) => {
+  let content: string
+  let finishReason: string | undefined
+  let reasoningLength = 0
+  if (response.headers.get('content-type')?.includes('text/event-stream')) {
+    const result = await withAbortSignal(signal, () => readLlmEventStream(response, text => onContent?.(text), text => { reasoningLength += text.length; onReasoning?.() }, locale))
+    aiTasks.usage(signal, result.usage?.outputTokens)
+    content = result.content
+    finishReason = result.finishReason
+  } else {
+    const payload: unknown = await withAbortSignal(signal, () => response.json())
+    checkProviderError(payload, locale)
+    content = extractMessageContent(payload)
+    if (content) onContent?.(content)
+    finishReason = extractLlmFinishReason(payload)
+    reasoningLength = extractReasoningContent(payload).length
+    aiTasks.usage(signal, extractLlmTokenUsage(payload)?.outputTokens)
+    if (!content && finishReason !== 'length') throw new Error(formatEmptyContentError(payload, llmText[locale].responseContext, locale))
+  }
+  if (finishReason === 'length') {
+    // A provider can report length after emitting an already complete JSON object.
+    try { parseJsonContent(content, locale) } catch {
+      throw new LlmOutputLimitError(locale, !content.trim() && reasoningLength > 0)
+    }
+  }
+  if (!content.trim()) throw new Error(llmText[locale].emptyGenerationResponse)
+  return content
 }
 
 export const getLlmEmptyResponseRetryTokens = (maxTokens: number) => Math.min(
@@ -922,6 +1045,7 @@ const requestLlmTextStreamImpl = async ({
       const contentType = response.headers.get('content-type')?.toLowerCase() ?? ''
       if (!contentType.includes('text/event-stream') && contentType.includes('application/json')) {
         const payload = await withAbortSignal(controller.signal, () => response.json()) as unknown
+        checkProviderError(payload, locale)
         const reasoning = extractReasoningContent(payload)
         if (reasoning) onReasoningDelta?.(reasoning)
         const content = extractMessageContent(payload)
@@ -940,7 +1064,7 @@ const requestLlmTextStreamImpl = async ({
           retryCount: attempt,
         } satisfies LlmStreamResult
       }
-      const result = await withAbortSignal(controller.signal, () => readLlmEventStream(response, onDelta, onReasoningDelta))
+      const result = await withAbortSignal(controller.signal, () => readLlmEventStream(response, onDelta, onReasoningDelta, locale))
       if (result.content.trim()) {
         return { ...result, maxTokens: attemptMaxTokens, retryCount: attempt }
       }
@@ -958,55 +1082,100 @@ const requestLlmTextStreamImpl = async ({
   }
 }
 
-const generateLlmBuildPlanImpl = async ({ prompt, imageName, imageDataUrl, inventoryOverrides, pack, config, signal, locale = 'zh-CN', repairFeedback, previousPlan }: LlmGenerateInput): Promise<BuildPlan> => {
+const generatePlannedAssembly = async (checkpoint: AssemblyCheckpoint, input: LlmGenerateInput) => {
+  const { prompt, imageName, config, inventoryOverrides, signal, locale = 'zh-CN' } = input
+  saveAssemblyCheckpoint(checkpoint)
+  const plan = await generateAssembly(checkpoint.layout, { prompt, imageName }, async (modulePrompt, tool, onProgram) => {
+    input.onPhase?.('planning')
+    const push = createStreamedAssembly(program => { input.onPhase?.('building'); onProgram?.(program) })
+    const content = await requestLlmJsonContentImpl({
+      config, signal, locale, systemPrompt: llmSystemPrompt,
+      userPrompt: `User request: ${prompt}\nAvailable parts:\n${tool === 'building' ? 'The building tool uses real standard LEGO parts. Choose parameter colours from its allowed palette.' : getInventorySummary('lego', inventoryOverrides, tool === 'sculpture' ? ['plate-1x1', 'plate-1x2', 'plate-1x3', 'plate-1x4', 'plate-2x2', 'plate-2x3', 'plate-2x4', 'plate-4x4'] : undefined)}\n${modulePrompt}`,
+      maxTokens: tool === 'building' ? 1_024 : config.enableThinking ? generationThinkingMaxTokens : generationMaxTokens, stream: true,
+      onContent: push, onReasoning: () => input.onPhase?.('thinking'),
+    })
+    return parseJsonContent(content, locale)
+  }, signal, inventoryOverrides, config.autoRepair ? normalizeMaxRepairAttempts(config.maxRepairAttempts) : 0, locale, {
+    programs: checkpoint.programs,
+    save: programs => saveAssemblyCheckpoint({ ...checkpoint, programs }),
+    onProgress: async plan => { input.onPhase?.('building'); await input.onProgress?.(plan) },
+    onDraft: input.onDraft,
+  })
+  clearAssemblyCheckpoint(checkpoint.signature)
+  return plan
+}
+
+const generateLlmBuildPlanImpl = async ({ prompt, imageName, imageDataUrl, inventoryOverrides, pack, config, signal, locale = 'zh-CN', repairFeedback, previousPlan, onProgress, onDraft, onPhase }: LlmGenerateInput): Promise<BuildPlan> => {
   if (!isLlmConfigComplete(config)) throw new Error(llmText[locale].incompleteConfig)
+
+  const input = { prompt, imageName, imageDataUrl, inventoryOverrides, pack, config, signal, locale, onProgress, onDraft, onPhase }
+  onPhase?.('planning')
+  const signature = (pack ?? 'lego') === 'lego' && !previousPlan ? await assemblyCheckpointSignature(input, config) : ''
+  signal?.throwIfAborted()
+  const checkpoint = signature ? loadAssemblyCheckpoint(signature) : undefined
+  if (checkpoint) return generatePlannedAssembly(checkpoint, input)
 
   const { controller, dispose } = createRequestLifetime(signal, clientRequestTimeoutMs)
   aiTasks.bind(signal, controller.signal)
   let response: Response
-  const userPrompt = `${buildLlmUserPrompt({ prompt, imageName, inventoryOverrides, pack })}${
+  const userPrompt = `${(previousPlan ? buildSmallLlmUserPrompt : buildLlmUserPrompt)({ prompt, imageName, inventoryOverrides, pack })}${
     repairFeedback && previousPlan ? buildLlmRepairPrompt(previousPlan, repairFeedback) : ''
   }`
 
   try {
-    response = await requestLlmChatWithCompatibility(config, applyThinkingMode({
-      model: config.modelName.trim(),
-      messages: [
-        {
-          role: 'system',
-          content: llmSystemPrompt,
-        },
-        {
-          role: 'user',
-          content: imageDataUrl
-            ? [
-                { type: 'text', text: userPrompt },
-                { type: 'image_url', image_url: { url: imageDataUrl, detail: 'low' } },
-              ]
-            : userPrompt,
-        },
-      ],
-      temperature: 0.2,
-      max_tokens: config.enableThinking ? generationThinkingMaxTokens : generationMaxTokens,
-      stream: false,
-      response_format: { type: 'json_object' },
-    }, config.enableThinking), controller.signal)
+    let content = ''
+    for (let attempt = 0; attempt < 2; attempt++) {
+      controller.signal.throwIfAborted()
+      const recovery = (pack ?? 'lego') === 'lego'
+        ? '\nThe previous response exceeded the output budget. Return ONLY a compact layout {"title":"name","modules":[{"name":"module","tool":"parts","description":"construction dimensions, palette and connections","origin":[0,0,0]}]}. Use at most 8 small modules in construction order, each description under 100 words. Do not output any bricks, commands or inline programs in this response. Preserve the requested subject and colours. Do not substitute an architectural hall for an animal or character.'
+        : '\nThe previous response exceeded the output budget. Return compact JSON for at most 32 blocks, preserving the requested silhouette. No reasoning or explanatory text.'
+      const attemptPrompt = attempt === 0 ? userPrompt : `${userPrompt}${recovery}`
+      try {
+        response = await requestLlmChatWithCompatibility(config, applyThinkingMode({
+          model: config.modelName.trim(),
+          messages: [
+            {
+              role: 'system',
+              content: llmSystemPrompt,
+            },
+            {
+              role: 'user',
+              content: imageDataUrl
+                ? [
+                    { type: 'text', text: attemptPrompt },
+                    { type: 'image_url', image_url: { url: imageDataUrl, detail: 'high' } },
+                  ]
+                : attemptPrompt,
+            },
+          ],
+          temperature: 0.2,
+          max_tokens: attempt === 0 ? (config.enableThinking ? generationThinkingMaxTokens : 4_096) : 8_192,
+          stream: true,
+          response_format: { type: 'json_object' },
+        }, attempt === 0 && config.enableThinking), controller.signal)
 
-    if (!response.ok) {
-      throw new Error(await formatRequestError(response, config.requestMode, locale))
+        if (!response.ok) {
+          throw new Error(await formatRequestError(response, config.requestMode, locale))
+        }
+
+        aiTasks.phase(signal, 'receiving')
+        content = await readGenerationContent(response, controller.signal, locale, undefined, () => onPhase?.('thinking'))
+
+        break
+      } catch (error) {
+        if (!(error instanceof LlmOutputLimitError) || attempt > 0) throw error
+      }
     }
 
-    aiTasks.phase(signal, 'receiving')
-    const responseText = await withAbortSignal(controller.signal, () => response.text())
-    controller.signal.throwIfAborted()
-    if (!responseText.trim()) throw new Error(llmText[locale].emptyGenerationResponse)
-
-    aiTasks.phase(signal, 'validating')
-    const payload = JSON.parse(responseText) as unknown
-    const content = extractMessageContent(payload)
-    if (!content) throw new Error(formatEmptyContentError(payload, llmText[locale].responseContext, locale))
-
     const rawPlan = parseJsonContent(content, locale)
+    if ((pack ?? 'lego') === 'lego' && isRecord(rawPlan) && rawPlan.modules !== undefined) {
+      dispose()
+      const layout = parseAssemblyLayout(rawPlan)
+      return await generatePlannedAssembly({ signature, layout, programs: [] }, input)
+    }
+    if ((pack ?? 'lego') === 'lego' && Array.isArray(rawPlan.bricks) && rawPlan.bricks.length > maxLlmBricks) {
+      throw new Error('Use an assembly layout for designs exceeding 64 individual parts.')
+    }
     const bricks = normalizeBricks(rawPlan.bricks, locale, inventoryOverrides, pack ?? 'lego')
     const steps = normalizeSteps(bricks)
 

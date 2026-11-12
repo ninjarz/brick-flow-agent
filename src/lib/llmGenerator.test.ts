@@ -30,6 +30,20 @@ const payloadAt = (fetchMock: ReturnType<typeof vi.fn>, index: number) => {
   return JSON.parse(String(init.body)) as Record<string, unknown>
 }
 
+it.each([
+  'data: {"error":{"code":429,"message":"Quota exhausted"}}\n\n',
+  '[{\n  "error": {"code": 429, "status": "RESOURCE_EXHAUSTED", "message": "Resource exhausted"}\n}]',
+])('propagates provider errors appended after HTTP 200 and partial SSE content', async errorTail => {
+  vi.stubGlobal('window', { setTimeout, clearTimeout })
+  const body = 'data: {"choices":[{"delta":{"content":"{\\"commands\\":["}}]}\n\n' + errorTail
+  const fetchMock = vi.fn().mockResolvedValue(new Response(body, { headers: { 'content-type': 'text/event-stream' } }))
+  vi.stubGlobal('fetch', fetchMock)
+  try {
+    await expect(requestLlmJsonContent({ config, systemPrompt: 'JSON', userPrompt: 'Build', stream: true })).rejects.toMatchObject({ name: 'LlmServiceError', status: 429 })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  } finally { vi.unstubAllGlobals() }
+})
+
 describe('LLM thinking parameter compatibility', () => {
   beforeEach(() => {
     resetLlmThinkingCompatibility()
@@ -326,4 +340,138 @@ describe('pack-aware build plan generation', () => {
     expect(userMessage.content).toContain('minecraft-grass-block')
     expect(userMessage.content).toContain('plant: must sit on a solid cube top')
   })
+})
+
+describe('streamed generation JSON', () => {
+  afterEach(() => vi.unstubAllGlobals())
+  it('reads JSON across SSE chunks and accepts a versioned base URL', async () => {
+    vi.stubGlobal('window', { setTimeout, clearTimeout })
+    const chunks = ['{"ok":', 'true}'].map(content => `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`).join('') + 'data: [DONE]\n\n'
+    const fetchMock = vi.fn().mockResolvedValue(new Response(chunks, { headers: { 'Content-Type': 'text/event-stream' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(requestLlmJsonContent({ config: { ...config, endpoint: 'https://example.test/v1' }, systemPrompt: 'Return JSON', userPrompt: 'test', stream: true })).resolves.toBe('{"ok":true}')
+    expect(fetchMock.mock.calls[0][0]).toBe('https://example.test/v1/chat/completions')
+  })
+})
+
+describe('generation output budget recovery', () => {
+  afterEach(() => vi.unstubAllGlobals())
+  const response = (content: string, finishReason = 'stop') => new Response(JSON.stringify({ choices: [{ message: { content }, finish_reason: finishReason }] }), { headers: { 'Content-Type': 'application/json' } })
+
+  it('automatically retries a truncated initial answer as compact modules', async () => {
+    vi.stubGlobal('window', { setTimeout, clearTimeout })
+    const layout = { title: 'Blue cat', modules: [{ name: 'Body', description: 'A blue base', origin: [0, 0, 0], tool: 'parts' }] }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response('{"bricks":[', 'length'))
+      .mockResolvedValueOnce(response(JSON.stringify(layout)))
+      .mockResolvedValueOnce(response('{"commands":[{"brickId":"brick-1x1","color":"blue","at":[0,0,0]}]}'))
+    vi.stubGlobal('fetch', fetchMock)
+    const plan = await generateLlmBuildPlan({ prompt: '一只叮当猫', config: { ...config, enableThinking: false } })
+    expect(plan.bricks).toHaveLength(1)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(payloadAt(fetchMock, 0).max_tokens).toBe(4096)
+    expect(payloadAt(fetchMock, 1).max_tokens).toBe(8192)
+    expect(JSON.stringify(payloadAt(fetchMock, 1).messages)).toContain('compact layout')
+    expect(plan.prompt).toBe('一只叮当猫')
+  })
+
+  it('accepts complete JSON even if the provider reports a length finish', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response('{"ok":true}', 'length')))
+    await expect(requestLlmJsonContent({ config, systemPrompt: 'JSON', userPrompt: 'test' })).resolves.toBe('{"ok":true}')
+  })
+
+  it('bounds recovery when reasoning consumes the second output budget too', async () => {
+    vi.stubGlobal('window', { setTimeout, clearTimeout })
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ choices: [{ message: { content: '', reasoning_content: 'thinking' }, finish_reason: 'length' }] }), { headers: { 'Content-Type': 'application/json' } })))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(generateLlmBuildPlan({ prompt: 'cat', config })).rejects.toThrow('耗尽')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(payloadAt(fetchMock, 1).enable_thinking).toBe(false)
+  })
+})
+
+describe('provider quota failures', () => {
+  afterEach(() => vi.unstubAllGlobals())
+  it.each([429, 502])('recognizes direct or proxy quota errors with HTTP %i', async status => {
+    const body = status === 429 ? [{ error: { code: 429, message: 'TPM quota exhausted' } }] : { error: 'Upstream LLM request failed', upstreamStatus: 429, upstreamBody: 'TPM quota exhausted' }
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(body), { status, headers: { 'Retry-After': '60' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(requestLlmJsonContent({ config, systemPrompt: 'JSON', userPrompt: 'test' })).rejects.toThrow('60 秒')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the planning prompt small without enumerating the full catalogue', () => {
+    const prompt = buildLlmUserPrompt({ prompt: '一只叮当猫' })
+    expect(prompt.length).toBeLessThan(6000)
+    expect(prompt).toContain('compact module layout')
+    expect(prompt).not.toContain('inventory unlimited')
+  })
+})
+
+it('ignores OpenRouter heartbeat comments and identifies reasoning-only truncation', async () => {
+  const data = { choices: [{ delta: { reasoning: 'thinking', content: '' }, finish_reason: 'length' }] }
+  const body = `: OPENROUTER PROCESSING\n\ndata: ${JSON.stringify(data)}\n\n: OPENROUTER PROCESSING\n\ndata: [DONE]\n\n`
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body, { headers: { 'Content-Type': 'text/event-stream' } })))
+  try {
+    await expect(requestLlmJsonContent({ config, systemPrompt: 'JSON', userPrompt: 'cat', stream: true })).rejects.toMatchObject({ name: 'LlmOutputLimitError', reasoningOnly: true })
+  } finally { vi.unstubAllGlobals() }
+})
+
+it('renders complete streamed commands before a module response finishes', async () => {
+  vi.stubGlobal('window', { setTimeout, clearTimeout })
+  const layout = { title: 'Cat', modules: [{ name: 'Body', description: 'blue body', origin: [0, 0, 0], tool: 'parts' }] }
+  const encoder = new TextEncoder()
+  const event = (content: string) => encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`)
+  let writer!: ReadableStreamDefaultController<Uint8Array>
+  const stream = new ReadableStream<Uint8Array>({ start(controller) { writer = controller } })
+  vi.stubGlobal('fetch', vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(layout) } }] })))
+    .mockResolvedValueOnce(new Response(stream, { headers: { 'Content-Type': 'text/event-stream' } })))
+  const draft = vi.fn(), accepted = vi.fn()
+  const done = generateLlmBuildPlan({ prompt: 'cat', config, onDraft: draft, onProgress: accepted })
+  writer.enqueue(event('{"commands":[{"brickId":"brick-1x1","color":"blue","at":[0,0,0]}'))
+  await vi.waitFor(() => expect(draft).toHaveBeenCalled())
+  expect(accepted).not.toHaveBeenCalled()
+  expect(draft.mock.calls[0][0].bricks).toHaveLength(1)
+  writer.enqueue(event(',{"brickId":"brick-1x1","color":"blue","at":[0,1.2,0]}]}'))
+  writer.enqueue(encoder.encode('data: [DONE]\n\n'))
+  writer.close()
+  try {
+    const plan = await done
+    expect(plan.bricks).toHaveLength(2)
+    expect(accepted).toHaveBeenCalledTimes(1)
+  } finally { vi.unstubAllGlobals() }
+})
+
+it('uses OpenRouter native controls when thinking is disabled', async () => {
+  resetLlmThinkingCompatibility()
+  const fetchMock = vi.fn().mockResolvedValue(new Response('{"choices":[{"message":{"content":"{\\"ok\\":true}"}}]}'))
+  vi.stubGlobal('fetch', fetchMock)
+  try {
+    await requestLlmJsonContent({ config: { ...config, endpoint: 'https://openrouter.ai/api/v1', enableThinking: false }, systemPrompt: 'JSON', userPrompt: 'test' })
+    expect(payloadAt(fetchMock, 0).reasoning).toEqual({ enabled: false })
+    expect(payloadAt(fetchMock, 0)).not.toHaveProperty('thinking')
+  } finally { vi.unstubAllGlobals() }
+})
+
+it('retries mandatory reasoning models with low effort and scopes the fallback to that model', async () => {
+  resetLlmThinkingCompatibility()
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: 'Reasoning is mandatory for this endpoint and cannot be disabled.' } }), { status: 400 }))
+    .mockImplementation(() => Promise.resolve(successResponse()))
+  vi.stubGlobal('fetch', fetchMock)
+  const input = { config: { ...config, endpoint: 'https://openrouter.ai/api/v1', enableThinking: false }, systemPrompt: 'JSON', userPrompt: 'test' }
+  try {
+    await requestLlmJsonContent(input)
+    expect(payloadAt(fetchMock, 0).reasoning).toEqual({ enabled: false })
+    expect(payloadAt(fetchMock, 1).reasoning).toEqual({ enabled: true, effort: 'low' })
+    expect(payloadAt(fetchMock, 1).max_tokens).toBe(32_768)
+    await requestLlmJsonContent(input)
+    expect(payloadAt(fetchMock, 2).reasoning).toEqual({ enabled: true, effort: 'low' })
+    await requestLlmJsonContent({ ...input, config: { ...input.config, modelName: 'another-model' } })
+    expect(payloadAt(fetchMock, 3).reasoning).toEqual({ enabled: false })
+  } finally {
+    resetLlmThinkingCompatibility()
+    vi.unstubAllGlobals()
+  }
 })

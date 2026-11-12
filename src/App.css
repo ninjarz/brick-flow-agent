@@ -6077,3 +6077,24 @@ button:disabled {
 .scene-loading-progress-label { display: flex; justify-content: space-between; gap: 12px; white-space: nowrap; font-size: 12px; color: #64748b; }
 .scene-loading-progress-track { height: 4px; margin-top: 8px; overflow: hidden; border-radius: 3px; background: #e2e8f0; }
 .scene-loading-progress-track > div { height: 100%; border-radius: inherit; background: #3478f6; transition: width 160ms ease; }
+
+.model-name-row { display: flex; align-items: stretch; gap: 8px; min-width: 0; }
+.model-name-combobox { position: relative; flex: 1; min-width: 0; }
+.model-name-combobox input { width: 100%; padding-right: 34px; }
+.model-list-button { flex-shrink: 0; white-space: nowrap; }
+.model-name-toggle { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; background: transparent; color: inherit; }
+.model-name-options { position: absolute; z-index: 5; top: 100%; left: 0; right: 0; max-height: 220px; overflow: auto; margin: 4px 0 0; padding: 4px; list-style: none; border: 1px solid var(--line); border-radius: 8px; background: #fff; box-shadow: 0 8px 24px #0f172a1a; }
+.model-name-options li { padding: 8px; overflow-wrap: anywhere; cursor: pointer; border-radius: 4px; }
+.model-name-options li:hover, .model-name-options li[aria-selected="true"] { background: #eaf2ff; }
+
+.scene-loading-progress-track > .scene-building-indeterminate {
+  width: 35%;
+  animation: scene-building-sweep 1.2s ease-in-out infinite alternate;
+}
+@keyframes scene-building-sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(286%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .scene-loading-progress-track > .scene-building-indeterminate { animation-duration: 3s; }
+}
