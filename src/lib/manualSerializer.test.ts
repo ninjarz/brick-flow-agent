@@ -70,4 +70,33 @@ describe('build manual 2.0', () => {
     const finalDiagram = html.slice(html.lastIndexOf('<figure'), html.lastIndexOf('</figure>'))
     for (const support of supports) expect(finalDiagram).toContain(`<title>${support.name} `)
   })
+
+  it('recomputes installation context when the same manual is modified between exports', () => {
+    const manual = serializeBuildManual({ ...plan, bricks: [base] }, 'en-US')
+    const template = manual.steps[0]
+    const history = Array.from({ length: 500 }, (_, index) => ({
+      ...template.addPieces[0], instanceId: `history-${index}`, name: `history-${index}`,
+      pose: { ...base.pose, xStud: index * 3 },
+    }))
+    const added = {
+      ...template.addPieces[0], instanceId: 'added', name: 'added',
+      pose: { ...base.pose, yStud: 1.2 },
+    }
+    const mutableManual = {
+      ...manual, totalPieces: 501, totalSteps: 2,
+      steps: [
+        { ...template, addPieces: history, completedPieceCount: 500 },
+        { ...template, stepNumber: 2, addPieces: [added], completedPieceCount: 501 },
+      ],
+    }
+    formatBuildManualHtml(mutableManual, 'en-US')
+    history[0].pose.xStud = 9999
+    history[499].pose.xStud = 0
+    const updatedHtml = formatBuildManualHtml(mutableManual, 'en-US')
+    expect(updatedHtml).toBe(formatBuildManualHtml(structuredClone(mutableManual), 'en-US'))
+    const finalDiagram = updatedHtml.slice(updatedHtml.lastIndexOf('<figure'), updatedHtml.lastIndexOf('</figure>'))
+    expect(finalDiagram).toContain('<title>history-499 ')
+    expect(finalDiagram).not.toContain('<title>history-0 ')
+  })
+
 })

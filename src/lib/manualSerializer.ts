@@ -526,7 +526,17 @@ const DIAGRAM_TOTAL_BUDGET = 50_000
 /** Manuals below this size keep their original, complete diagrams. */
 const DIAGRAM_FULL_DETAIL_MAX_PIECES = 500
 
-const selectDiagramPieces = (cumulativePieces: ManualPiece[], newPieceIds: Set<string>, limit: number) => {
+const getDiagramPieceBounds = (piece: ManualPiece) => {
+  const footprint = getPlanFootprint(piece)
+  return {
+    x: piece.pose.xStud, y: piece.pose.yStud, z: piece.pose.zStud,
+    width: footprint.widthStuds, height: piece.footprint.heightStuds, depth: footprint.depthStuds,
+  }
+}
+
+type DiagramBoundsCache = Map<ManualPiece, ReturnType<typeof getDiagramPieceBounds>>
+
+const selectDiagramPieces = (cumulativePieces: ManualPiece[], newPieceIds: Set<string>, limit: number, boundsCache: DiagramBoundsCache) => {
   if (cumulativePieces.length <= limit) return { pieces: cumulativePieces, omitted: 0 }
 
   // Keep the installation context around every new piece. Uniform sampling can
@@ -534,21 +544,23 @@ const selectDiagramPieces = (cumulativePieces: ManualPiece[], newPieceIds: Set<s
   const newPieces = cumulativePieces.filter((piece) => newPieceIds.has(piece.instanceId))
   const history = cumulativePieces.filter((piece) => !newPieceIds.has(piece.instanceId))
   const bounds = (piece: ManualPiece) => {
-    const footprint = getPlanFootprint(piece)
-    return {
-      x: piece.pose.xStud, y: piece.pose.yStud, z: piece.pose.zStud,
-      width: footprint.widthStuds, height: piece.footprint.heightStuds, depth: footprint.depthStuds,
+    let value = boundsCache.get(piece)
+    if (!value) {
+      value = getDiagramPieceBounds(piece)
+      boundsCache.set(piece, value)
     }
+    return value
   }
   const newBounds = newPieces.map(bounds)
   const nearby = history.map((piece) => {
     const source = bounds(piece)
-    const distance = Math.min(...newBounds.map((target) => {
+    let distance = Infinity
+    for (const target of newBounds) {
       const dx = Math.max(0, source.x - target.x - target.width, target.x - source.x - source.width)
       const dy = Math.max(0, source.y - target.y - target.height, target.y - source.y - source.height)
       const dz = Math.max(0, source.z - target.z - target.depth, target.z - source.z - source.depth)
-      return dx * dx + dy * dy + dz * dz
-    }))
+      distance = Math.min(distance, dx * dx + dy * dy + dz * dz)
+    }
     return { piece, distance }
   }).sort((a, b) => a.distance - b.distance)
   // The budget is soft for touching pieces: never discard an installation
@@ -562,7 +574,7 @@ const selectDiagramPieces = (cumulativePieces: ManualPiece[], newPieceIds: Set<s
   }
 }
 
-const renderStepDiagram = (step: ManualStepPage, cumulativePieces: ManualPiece[], locale: ManualLocale, diagramLimit: number) => {
+const renderStepDiagram = (step: ManualStepPage, cumulativePieces: ManualPiece[], locale: ManualLocale, diagramLimit: number, boundsCache: DiagramBoundsCache) => {
   const labels = manualText[locale]
   if (cumulativePieces.length === 0) return ''
 
@@ -571,7 +583,7 @@ const renderStepDiagram = (step: ManualStepPage, cumulativePieces: ManualPiece[]
   const heightScale = 7
   const padding = 32
   const newPieceIds = new Set(step.addPieces.map((piece) => piece.instanceId))
-  const diagramSelection = selectDiagramPieces(cumulativePieces, newPieceIds, diagramLimit)
+  const diagramSelection = selectDiagramPieces(cumulativePieces, newPieceIds, diagramLimit, boundsCache)
 
   const project = (xStud: number, zStud: number, yStud: number): DiagramPoint => ({
     x: (xStud - zStud) * studX,
@@ -669,6 +681,7 @@ const renderStepDiagram = (step: ManualStepPage, cumulativePieces: ManualPiece[]
 export const formatBuildManualHtml = (manual: BuildManual, locale: ManualLocale = 'zh-CN') => {
   const labels = manualText[locale]
   const cumulativePieces: ManualPiece[] = []
+  const boundsCache: DiagramBoundsCache = new Map()
   const diagramLimit = manual.totalPieces > DIAGRAM_FULL_DETAIL_MAX_PIECES
     ? Math.max(
       DIAGRAM_MIN_PIECE_LIMIT,
@@ -682,7 +695,7 @@ export const formatBuildManualHtml = (manual: BuildManual, locale: ManualLocale 
       <p>${escapeHtml(step.description)}</p>
       <p class="step-status${step.validation.ok ? (step.validation.issueCount > 0 ? ' notice' : '') : ' warn'}">${escapeHtml(step.validation.summary)}</p>
       <p class="count">${escapeHtml(labels.stepCount(step.addPieces.length, step.completedPieceCount))}</p>
-      ${renderStepDiagram(step, cumulativePieces, locale, diagramLimit)}
+      ${renderStepDiagram(step, cumulativePieces, locale, diagramLimit, boundsCache)}
       <ul>
         ${step.addPieces.map((piece) => `<li><strong>${escapeHtml(piece.name)}</strong><br /><small>${escapeHtml(piece.brickId)} · ${escapeHtml(piece.color)} · x${piece.pose.xStud} y${piece.pose.yStud} z${piece.pose.zStud} · ${piece.orientationLabel ? escapeHtml(piece.orientationLabel) : `${escapeHtml(labels.horizontal)} ${piece.rotationDegrees}° · ${escapeHtml(labels.vertical)} ${piece.verticalRotationDegrees}°${piece.rollRotationDegrees ? ` · ${escapeHtml(labels.roll)} ${piece.rollRotationDegrees}°` : ''}`} · ${escapeHtml(piece.assembly.label)}</small></li>`).join('\n        ')}
       </ul>

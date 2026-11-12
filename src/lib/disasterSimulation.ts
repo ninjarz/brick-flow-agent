@@ -1,4 +1,5 @@
 import { createBuildGraph } from './planUtils'
+import { createProjectedSpatialIndex } from './projectedSpatialIndex'
 import {
   analyzeBuildStability,
   createConvexHull,
@@ -625,12 +626,16 @@ const createWindOcclusionField = (
   const projectedSampleCountByBrickId = new Map(projections.map(({ brickId }) => [brickId, 0]))
   const projectedAreaByBrickId = new Map(projections.map(({ brickId, projectedArea }) => [brickId, projectedArea]))
 
+  const candidatesAt = createProjectedSpatialIndex(projections, (projection) => ({
+    minX: projection.minCrosswind, maxX: projection.maxCrosswind,
+    minY: projection.bounds.minY, maxY: projection.bounds.maxY,
+  }))
   const addRay = (crosswindPosition: number, y: number) => {
     const origin = {
       x: windDirection.x * minimumWindDepth + crosswind.x * crosswindPosition,
       z: windDirection.z * minimumWindDepth + crosswind.z * crosswindPosition,
     }
-    const hits = projections.flatMap((candidate) => {
+    const hits = candidatesAt(crosswindPosition, y).flatMap((candidate) => {
       if (crosswindPosition <= candidate.minCrosswind + epsilon ||
         crosswindPosition >= candidate.maxCrosswind - epsilon ||
         y < candidate.bounds.minY + epsilon ||
@@ -793,8 +798,11 @@ const createRainOcclusionField = (
   const projectedSampleCountByBrickId = new Map(projections.map(({ brickId }) => [brickId, 0]))
   const projectedAreaByBrickId = new Map(projections.map(({ brickId, projectedArea }) => [brickId, projectedArea]))
 
+  const candidatesAt = createProjectedSpatialIndex(projections, ({ bounds }) => ({
+    minX: bounds.minX, maxX: bounds.maxX, minY: bounds.minZ, maxY: bounds.maxZ,
+  }))
   const addRay = (x: number, z: number) => {
-    const hits = projections
+    const hits = candidatesAt(x, z)
       .filter(({ bounds }) => (
         x > bounds.minX + epsilon && x < bounds.maxX - epsilon &&
         z > bounds.minZ + epsilon && z < bounds.maxZ - epsilon
