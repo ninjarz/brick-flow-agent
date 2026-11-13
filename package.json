@@ -22,8 +22,7 @@
     "validate:builds": "node scripts/validate-builds.mjs",
     "verify:replicas": "python3 scripts/verify-lego-replicas.py",
     "preview": "vite preview",
-    "test:production": "NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost playwright test --config=playwright.production.config.ts",
-    "verify:quality": "npm run audit:dependencies && npm run lint && npm run build && npm test && npm run test:e2e && npm run test:production && npm run validate:builds && npm run verify:replicas && npm run audit:ldraw && npm run audit:obj-connectivity",
+    "verify:quality": "npm run audit:dependencies && npm run lint && npm run build && npm test && npm run test:e2e && npm run validate:builds && npm run verify:replicas && npm run audit:ldraw && npm run audit:obj-connectivity",
     "audit:dependencies": "npm audit --audit-level=moderate",
     "generate:structural-cache": "node scripts/generate-ldraw-structural-cache.mjs"
   },

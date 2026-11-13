@@ -116,7 +116,6 @@ npm run build                # type-check and build
 npm run lint                 # run ESLint
 npm test                     # run focused Vitest regressions
 npm run test:e2e             # run browser workflows with Playwright
-npm run test:production      # test a previously built app, including browser performance sampling
 npm run validate:builds      # validate default assets and regression cases
 npm run verify:replicas      # verify replica counts, hashes, and all LDraw dependencies
 npm run audit:obj-connectivity # require every generated OBJ asset to stay connected
