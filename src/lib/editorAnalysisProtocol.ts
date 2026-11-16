@@ -1,3 +1,4 @@
+import type { BuildManual, ManualLocale } from './manualSerializer'
 import type { StructuralCell } from './structuralGrid'
 import type { HorizontalDropPoint } from './brickGroupPlacement'
 import type { BrickBounds } from './ldrawBounds'
@@ -10,11 +11,12 @@ export type EditorAnalysisRequest = {
   bricks: PlacedBrick[]
   geometry: Array<{ brickId: string; partNumber: string; bounds?: BrickBounds; cells?: StructuralCell[] }>
   plan?: BuildPlan
+  manualLocale?: ManualLocale
   stability?: boolean
   transform?: { sourceIds: string[]; next: PlacedBrick[]; reposition: boolean; steps?: Array<{ xStud?: number; yStud?: number; zStud?: number }> }
   drop?: { sourceIds: string[]; anchorId: string; point: HorizontalDropPoint }
 }
-export type EditorAnalysisResult = { transformedBricks?: PlacedBrick[]; supported: Map<string, boolean>; issues?: BuildPlanIssue[]; stability?: StabilityAnalysis; dropBricks?: PlacedBrick[] }
+export type EditorAnalysisResult = { manual?: BuildManual; transformedBricks?: PlacedBrick[]; supported: Map<string, boolean>; issues?: BuildPlanIssue[]; stability?: StabilityAnalysis; dropBricks?: PlacedBrick[] }
 export type EditorAnalysisResponse = { requestId: number } & (
   { type: 'result'; result: EditorAnalysisResult } | { type: 'error'; message: string }
 )

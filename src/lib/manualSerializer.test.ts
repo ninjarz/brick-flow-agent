@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { BuildPlan } from '../types/bricks'
 import { formatBuildManualHtml, serializeBuildManual } from './manualSerializer'
-import { makeBrick } from './planUtils'
+import { validateBuildPlan, makeBrick } from './planUtils'
 
 const base = makeBrick('brick-1x1', 'gray', 0, 0, 0)
 const sidePiece = makeBrick('tile-1x1', 'gray', 1, 0, 0, 0, 1)
@@ -99,4 +99,8 @@ describe('build manual 2.0', () => {
     expect(finalDiagram).not.toContain('<title>history-0 ')
   })
 
+})
+
+it('reuses exact prepared issues without changing the manual or validation', () => {
+  expect(serializeBuildManual(plan, 'en-US', validateBuildPlan(plan))).toEqual(serializeBuildManual(plan, 'en-US'))
 })

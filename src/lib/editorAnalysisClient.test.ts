@@ -96,7 +96,7 @@ describe('shared editor analysis requests',()=>{
     await Promise.all(jobs)
   })
 
-  it('routes group edits through the shared worker without retransmitting the model', async () => {
+  it('isolates group edits from background analysis and reuses the interactive snapshot', async () => {
     const api = await import('./editorAnalysisClient'), parts = bricks()
     const support = api.getEditorSupport(parts)
     await flush()
@@ -106,12 +106,79 @@ describe('shared editor analysis requests',()=>{
     const next = parts.slice(0, 72).map(brick => ({ ...brick, pose: { ...brick.pose, xStud: brick.pose.xStud + .2 } }))
     const edit = api.getEditorTransform(parts, next, true)
     await flush()
-    const message = worker.messages[1]
-    expect(message.bricks).toEqual([])
+    const interactive = FakeWorker.instances[1]
+    const message = interactive.messages[0]
+    expect(message.bricks).toHaveLength(800)
     expect(message.transform?.next).toEqual(next)
     expect(message.transform?.reposition).toBe(true)
-    worker.reply({ requestId: message.requestId, type: 'result', result: { supported: new Map(), transformedBricks: next } })
+    interactive.reply({ requestId: message.requestId, type: 'result', result: { supported: new Map(), transformedBricks: next } })
     expect(await edit).toEqual(next)
+    const again = api.getEditorTransform(parts, next, false)
+    await flush()
+    expect(interactive.messages[1].bricks).toEqual([])
+    interactive.reply({ requestId: interactive.messages[1].requestId, type: 'result', result: { supported: new Map(), transformedBricks: next } })
+    await again
   })
 
+})
+
+it('deduplicates manual preparation by plan and locale and retries failures', async () => {
+  const api = await import('./editorAnalysisClient')
+  const plan: BuildPlan = { id: 'manual', title: 'Original', prompt: '', source: 'template-local', bricks: bricks(), steps: [] }
+  const first = api.getEditorManual(plan, 'en-US')
+  expect(api.getEditorManual(plan, 'en-US')).toBe(first)
+  await flush()
+  const worker = FakeWorker.instances[0]
+  expect(worker.messages[0].manualLocale).toBe('en-US')
+  const rejected = expect(first).rejects.toThrow('manual failed')
+  worker.reply({ requestId: worker.messages[0].requestId, type: 'error', message: 'manual failed' })
+  await rejected
+  const retry = api.getEditorManual(plan, 'en-US')
+  const renamed = api.getEditorManual({ ...plan, title: 'Renamed' }, 'en-US')
+  const translated = api.getEditorManual(plan, 'zh-CN')
+  await flush()
+  expect(worker.messages[1].bricks).toHaveLength(800)
+  expect(worker.messages.slice(1).map(message => message.plan?.title)).toEqual(['Original', 'Renamed', 'Original'])
+  expect(worker.messages.at(-1)?.manualLocale).toBe('zh-CN')
+  for (const message of worker.messages.slice(1)) worker.reply({ requestId: message.requestId, type: 'result', result: { supported: new Map(), manual: { title: message.plan!.title } as NonNullable<import('./editorAnalysisProtocol').EditorAnalysisResult['manual']> } })
+  expect((await retry).title).toBe('Original')
+  expect((await renamed).title).toBe('Renamed')
+  await translated
+})
+
+it('keeps interaction results independent of a failed background worker', async () => {
+  const api = await import('./editorAnalysisClient')
+  const parts = bricks()
+  const support = api.getEditorSupport(parts)
+  const rejected = expect(support).rejects.toThrow('EDITOR_ANALYSIS_WORKER_FAILED')
+  await flush()
+  const edit = api.getEditorTransform(parts, parts.slice(0, 2), false)
+  await flush()
+  const background = FakeWorker.instances[0], interactive = FakeWorker.instances[1]
+  background.onerror?.()
+  await rejected
+  const message = interactive.messages[0]
+  interactive.reply({ requestId: message.requestId, type: 'result', result: { supported: new Map(), transformedBricks: message.transform!.next } })
+  expect(await edit).toEqual(parts.slice(0, 2))
+  expect(interactive.terminate).not.toHaveBeenCalled()
+})
+
+it('releases idle worker caches while allowing requested exports and transforms to finish', async () => {
+  const api = await import('./editorAnalysisClient'), parts = bricks()
+  api.setEditorAnalysisActive(true)
+  const edit = api.getEditorTransform(parts, parts.slice(0, 2), false)
+  await flush()
+  const worker = FakeWorker.instances[0]
+  api.setEditorAnalysisActive(false)
+  expect(worker.terminate).not.toHaveBeenCalled()
+  worker.reply({ requestId: worker.messages[0].requestId, type: 'result', result: { supported: new Map(), transformedBricks: parts.slice(0, 2) } })
+  expect(await edit).toEqual(parts.slice(0, 2))
+  expect(worker.terminate).toHaveBeenCalledOnce()
+  api.setEditorAnalysisActive(true)
+  const retry = api.getEditorTransform(parts, parts.slice(0, 2), false)
+  await flush()
+  const replacement = FakeWorker.instances[1]
+  expect(replacement.messages[0].bricks).toHaveLength(parts.length)
+  replacement.reply({ requestId: replacement.messages[0].requestId, type: 'result', result: { supported: new Map(), transformedBricks: parts.slice(0, 2) } })
+  await retry
 })

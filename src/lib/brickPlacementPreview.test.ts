@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { makeBrick } from './planUtils'
-import { getVisibleBricksDuringPlacement } from './brickPlacementPreview'
+import { getVisibleBricksDuringPlacement, getVisibleSceneBricks } from './brickPlacementPreview'
 
 describe('getVisibleBricksDuringPlacement', () => {
   it('hides only the source bricks while a placed group is moving', () => {
@@ -20,4 +20,11 @@ describe('getVisibleBricksDuringPlacement', () => {
 
     expect(getVisibleBricksDuringPlacement(bricks, [])).toBe(bricks)
   })
+})
+
+it('preserves prepared scene identity when hidden filters are empty or disabled', () => {
+  const bricks = [makeBrick('brick-1x1', 'red', 0, 0, 0)]
+  expect(getVisibleSceneBricks(bricks, new Set(), false)).toBe(bricks)
+  expect(getVisibleSceneBricks(bricks, new Set([bricks[0].id]), true)).toBe(bricks)
+  expect(getVisibleSceneBricks(bricks, new Set([bricks[0].id]), false)).toEqual([])
 })

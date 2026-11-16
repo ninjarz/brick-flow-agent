@@ -26,7 +26,12 @@ export const createKeyboardMoveSession = (options: {
         const steps = pending; pending = []
         const next = await options.validate(accepted, steps)
         if (closed || !options.valid()) { close(); return }
-        if (next && changed(next, accepted)) { accepted = next; options.preview(next) }
+        if (next && changed(next, accepted)) {
+          accepted = next
+          // A released key can commit immediately. Avoid constructing a full
+          // transient scene that would be discarded in the same transaction.
+          if (!ended || pending.length > 0) options.preview(next)
+        }
       }
       if (ended && !closed) {
         if (changed(accepted, options.source)) options.commit(accepted)

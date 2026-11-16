@@ -1,3 +1,4 @@
+import { serializeBuildManual, type BuildManual, type ManualLocale } from './manualSerializer'
 import { loadPrecomputedStructuralCells } from './ldrawStructuralCache'
 import { getBrickStructuralCells } from './structuralGrid'
 import type { HorizontalDropPoint } from './brickGroupPlacement'
@@ -13,6 +14,7 @@ import type { BrickDefinition, BuildPlan, PlacedBrick } from '../types/bricks'
 import type { EditorAnalysisResponse, EditorAnalysisResult } from './editorAnalysisProtocol'
 
 export const backgroundAnalysisThreshold = 800
+const manualCache = new WeakMap<BuildPlan, Map<ManualLocale, Promise<BuildManual>>>()
 const supportCache = new WeakMap<PlacedBrick[], Promise<Map<string, boolean>>>()
 const validationCache = new WeakMap<BuildPlan, Promise<BuildPlanIssue[]>>()
 const stabilityCache = new WeakMap<PlacedBrick[], Promise<StabilityAnalysis>>()
@@ -20,17 +22,29 @@ const geometryInputs = new WeakMap<PlacedBrick[], Promise<EditorAnalysisRequest[
 const revisions = new WeakMap<PlacedBrick[], number>()
 let nextRevision = 0
 let nextRequest = 0
-let worker: Worker | undefined
-// Mirror the worker's two-entry FIFO; postMessage preserves send order.
-const sentRevisions = new Set<number>()
-const pending = new Map<number, { resolve: (result: EditorAnalysisResult) => void; reject: (error: Error) => void }>()
+type AnalysisChannel = {
+  retireWhenIdle?: boolean
+  worker?: Worker
+  sentRevisions: Set<number>
+  pending: Map<number, { revision: number; resolve: (result: EditorAnalysisResult) => void; reject: (error: Error) => void }>
+}
+const backgroundChannel: AnalysisChannel = { sentRevisions: new Set(), pending: new Map() }
+const interactionChannel: AnalysisChannel = { sentRevisions: new Set(), pending: new Map() }
 
-const fail = () => {
-  worker?.terminate()
-  worker = undefined
-  sentRevisions.clear()
-  for (const request of pending.values()) request.reject(new Error('EDITOR_ANALYSIS_WORKER_FAILED'))
-  pending.clear()
+const fail = (channel: AnalysisChannel) => {
+  channel.worker?.terminate()
+  channel.worker = undefined
+  channel.sentRevisions.clear()
+  for (const request of channel.pending.values()) request.reject(new Error('EDITOR_ANALYSIS_WORKER_FAILED'))
+  channel.pending.clear()
+}
+
+/** Empty/small workspaces release large worker caches after authorized jobs finish. */
+export const setEditorAnalysisActive = (active: boolean) => {
+  for (const channel of [backgroundChannel, interactionChannel]) {
+    channel.retireWhenIdle = !active
+    if (!active && channel.pending.size === 0) fail(channel)
+  }
 }
 
 const getAnalysisGeometry = (bricks: PlacedBrick[]) => {
@@ -57,19 +71,22 @@ const getAnalysisGeometry = (bricks: PlacedBrick[]) => {
   return loading
 }
 
-const request = async (bricks: PlacedBrick[], plan?: BuildPlan, stability = false, drop?: EditorAnalysisRequest['drop'], transform?: EditorAnalysisRequest['transform']): Promise<EditorAnalysisResult> => {
+const request = async (bricks: PlacedBrick[], plan?: BuildPlan, stability = false, drop?: EditorAnalysisRequest['drop'], transform?: EditorAnalysisRequest['transform'], manualLocale?: ManualLocale): Promise<EditorAnalysisResult> => {
   const geometry = await getAnalysisGeometry(bricks)
-  if (!worker) {
-    worker = new Worker(new URL('../workers/editorAnalysisWorker.ts', import.meta.url), { type: 'module' })
-    worker.onmessage = ({ data }: MessageEvent<EditorAnalysisResponse>) => {
+  const channel = transform || drop ? interactionChannel : backgroundChannel
+  const { sentRevisions, pending } = channel
+  if (!channel.worker) {
+    channel.worker = new Worker(new URL('../workers/editorAnalysisWorker.ts', import.meta.url), { type: 'module' })
+    channel.worker.onmessage = ({ data }: MessageEvent<EditorAnalysisResponse>) => {
       const job = pending.get(data.requestId)
       if (!job) return
       pending.delete(data.requestId)
       if (data.type === 'result') job.resolve(data.result)
-      else job.reject(new Error(data.message))
+      else { channel.sentRevisions.delete(job.revision); job.reject(new Error(data.message)) }
+      if (channel.retireWhenIdle && channel.pending.size === 0) fail(channel)
     }
-    worker.onerror = fail
-    worker.onmessageerror = fail
+    channel.worker.onerror = () => fail(channel)
+    channel.worker.onmessageerror = () => fail(channel)
   }
   let revision = revisions.get(bricks)
   if (revision === undefined) {
@@ -78,12 +95,12 @@ const request = async (bricks: PlacedBrick[], plan?: BuildPlan, stability = fals
   }
   const requestId = ++nextRequest
   return new Promise((resolve, reject) => {
-    pending.set(requestId, { resolve, reject })
+    pending.set(requestId, { revision, resolve, reject })
     try {
       // The canonical snapshot already carries the pieces; do not clone them
       // twice when validation also needs the plan metadata.
       const initialized = sentRevisions.has(revision)
-      worker!.postMessage({ requestId, revision, bricks: initialized ? [] : bricks, plan: plan ? { ...plan, bricks: [] } : undefined, stability, geometry: initialized ? [] : geometry, drop, transform })
+      channel.worker!.postMessage({ requestId, revision, bricks: initialized ? [] : bricks, plan: plan ? { ...plan, bricks: [] } : undefined, stability, manualLocale, geometry: initialized ? [] : geometry, drop, transform })
       if (!initialized) {
         if (sentRevisions.size >= 2) sentRevisions.delete(sentRevisions.values().next().value!)
         sentRevisions.add(revision)
@@ -131,7 +148,7 @@ export const getEditorStability = (bricks: PlacedBrick[]) => {
   return result
 }
 
-if (import.meta.hot) import.meta.hot.dispose(fail)
+if (import.meta.hot) import.meta.hot.dispose(() => { fail(backgroundChannel); fail(interactionChannel) })
 
 /** One in-flight drop plus the newest pointer position: never queue a trail of
  * obsolete collision jobs behind a fast pointer. */
@@ -179,3 +196,17 @@ export const getEditorTransform = (bricks: PlacedBrick[], next: PlacedBrick[], r
 
 export const getEditorKeyboardMove = (bricks: PlacedBrick[], from: PlacedBrick[], steps: NonNullable<EditorAnalysisRequest['transform']>['steps']) =>
   request(bricks, undefined, false, undefined, { sourceIds: from.map(brick => brick.id), next: from, reposition: false, steps }).then(result => result.transformedBricks)
+
+/** The immutable plan and locale identify the exact manual, including metadata. */
+export const getEditorManual = (plan: BuildPlan, locale: ManualLocale): Promise<BuildManual> => {
+  let locales = manualCache.get(plan)
+  if (!locales) { locales = new Map(); manualCache.set(plan, locales) }
+  const cached = locales.get(locale)
+  if (cached) return cached
+  const result = plan.bricks.length >= backgroundAnalysisThreshold && typeof Worker !== 'undefined'
+    ? request(plan.bricks, plan, false, undefined, undefined, locale).then(result => result.manual!)
+    : preparePlanGeometry(plan).then(() => serializeBuildManual(plan, locale))
+  locales.set(locale, result)
+  void result.catch(() => locales.delete(locale))
+  return result
+}

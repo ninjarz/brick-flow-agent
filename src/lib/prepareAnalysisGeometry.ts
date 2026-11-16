@@ -1,7 +1,7 @@
 import type { BrickDefinition } from '../types/bricks'
 import { seedLDrawLocalBounds } from './ldrawBounds'
 import { loadPrecomputedStructuralCells } from './ldrawStructuralCache'
-import { seedBrickStructuralCells, warmBrickStructuralData } from './structuralGrid'
+import { seedBrickStructuralCells } from './structuralGrid'
 import type { EditorAnalysisRequest } from './editorAnalysisProtocol'
 
 /** Exact cached occupancy plus reviewed bounds keep rendering triangles out
@@ -17,6 +17,5 @@ export const prepareAnalysisGeometry = async (definitions: BrickDefinition[], ge
     const exactCells = cells ?? supplied.get(definition.id)?.cells
     if (!exactCells) throw new Error('EDITOR_ANALYSIS_GEOMETRY_MISSING')
     seedBrickStructuralCells(definition, exactCells)
-    warmBrickStructuralData(definition)
   }
 }

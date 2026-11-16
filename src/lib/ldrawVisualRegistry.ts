@@ -22,3 +22,14 @@ export const getLoadedLDrawPrintLayers = (partNumber: string) => {
   const part = normalizeLDrawPartNumber(partNumber)
   return loaded.get(part)?.getLDrawGeneratedPrintLayers(part)
 }
+
+/** Packed source coordinates avoid materializing millions of point objects for rendering. */
+export const getLoadedLDrawGeneratedVisualValues = (partNumber: string) => {
+  const part = normalizeLDrawPartNumber(partNumber)
+  return loaded.get(part)?.getLDrawGeneratedVisualValues?.(part)
+}
+
+export const getLoadedLDrawGeneratedEdgePoints = (partNumber: string, footprint: import('../types/bricks').BrickFootprint) => {
+  const part = normalizeLDrawPartNumber(partNumber)
+  return loaded.get(part)?.getLDrawGeneratedEdgePoints?.(part, footprint)
+}

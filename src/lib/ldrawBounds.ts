@@ -1,5 +1,5 @@
 import type { BrickDefinition, BrickPose } from '../types/bricks'
-import { getLoadedLDrawGeneratedVisualTriangles } from './ldrawVisualRegistry'
+import { getLoadedLDrawGeneratedVisualTriangles, getLoadedLDrawGeneratedVisualValues } from './ldrawVisualRegistry'
 import { normalizeLDrawPartNumber } from './ldrawPartNumbers'
 import { transformBrickLocalPoint } from './brickUnits'
 import type { MeshTriangle } from './structuralVoxelizer'
@@ -69,6 +69,17 @@ export const getLoadedLDrawLocalBounds = (partNumber: string) => {
   const cached = localBoundsCache.get(normalizedPartNumber)
   if (cached) return cached
 
+  const values = getLoadedLDrawGeneratedVisualValues(normalizedPartNumber)
+  if (values?.length) {
+    const bounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, minZ: Infinity, maxZ: -Infinity }
+    for (let i = 0; i < values.length; i += 3) {
+      bounds.minX = Math.min(bounds.minX, values[i]); bounds.maxX = Math.max(bounds.maxX, values[i])
+      bounds.minY = Math.min(bounds.minY, values[i + 1]); bounds.maxY = Math.max(bounds.maxY, values[i + 1])
+      bounds.minZ = Math.min(bounds.minZ, values[i + 2]); bounds.maxZ = Math.max(bounds.maxZ, values[i + 2])
+    }
+    localBoundsCache.set(normalizedPartNumber, bounds)
+    return bounds
+  }
   const triangles = getLoadedLDrawGeneratedVisualTriangles(normalizedPartNumber)
   if (!triangles) return undefined
 

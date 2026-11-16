@@ -53,6 +53,11 @@ export const LDrawBatchLines = ({ batch, geometry }: { batch: LDrawLineBatch; ge
   const line = useMemo(() => {
     const material = new LineMaterial({ color: new Color(batch.color).getHex(), linewidth: 1 })
     const object = new LineSegments2(geometry, material)
+    if (batch.transform) {
+      object.matrix.copy(batch.transform)
+      object.matrixAutoUpdate = false
+      object.matrixWorldNeedsUpdate = true
+    }
     object.raycast = () => undefined
     return object
   }, [batch, geometry])

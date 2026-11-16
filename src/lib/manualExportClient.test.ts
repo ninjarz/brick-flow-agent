@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createManualHtmlBlob, type ManualExportResponse } from './manualExportClient'
+import { createManualHtmlBlob, createLDrawBlob, type ManualExportResponse } from './manualExportClient'
 import { formatBuildManualHtml, serializeBuildManual } from './manualSerializer'
+import { formatLDrawPlan } from './ldrawPlan'
 import { makeBrick } from './planUtils'
 
 const manual = serializeBuildManual({ id: 'test', title: 'Manual', prompt: '', source: 'template-local', bricks: [makeBrick('brick-1x1', 'gray', 0, 0, 0)], steps: [] })
@@ -37,4 +38,18 @@ describe('manual HTML export', () => {
     await expect(pending).rejects.toThrow('MANUAL_EXPORT_FAILED')
     expect(FakeWorker.last.terminate).toHaveBeenCalledOnce()
   })
+})
+
+it('preserves small LDraw exports and snapshots large plans in a disposable worker', async () => {
+  const plan = { id: 'export', title: 'Export', prompt: '', source: 'template-local' as const, bricks: [makeBrick('brick-1x1', 'red', 0, 0, 0)], steps: [] }
+  expect(await (await createLDrawBlob(plan)).text()).toBe(formatLDrawPlan(plan))
+  vi.stubGlobal('Worker', FakeWorker)
+  const large = { ...plan, bricks: Array.from({ length: 501 }, () => plan.bricks[0]) }
+  const pending = createLDrawBlob(large)
+  const worker = FakeWorker.last
+  expect(worker.postMessage).toHaveBeenCalledWith({ plan: large })
+  const blob = new Blob([formatLDrawPlan(large)], { type: 'text/plain' })
+  worker.onmessage!({ data: { blob } })
+  expect(await (await pending).text()).toBe(formatLDrawPlan(large))
+  expect(worker.terminate).toHaveBeenCalledOnce()
 })

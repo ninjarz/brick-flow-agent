@@ -1,3 +1,7 @@
+import { BufferGeometry, Float32BufferAttribute } from 'three'
+import { getLoadedLDrawGeneratedVisualTriangles } from './ldrawGeneratedVisualLoader'
+import { getLoadedLDrawLocalBounds, getTriangleBounds } from './ldrawBounds'
+import { registerLDrawVisualChunk } from './ldrawVisualRegistry'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { brickById } from '../data/basicBricks'
 import { loadLDrawGeneratedVisual } from './ldrawGeneratedVisualLoader'
@@ -56,4 +60,32 @@ describe('large printed replica parts', () => {
     expect(body.getAttribute('position').count).toBeGreaterThan(0)
     expect(body.getAttribute('position').count+ink.reduce((sum,l)=>sum+l.geometry.getAttribute('position').count,0)).toBe(full.getAttribute('position').count)
   })
+})
+
+it.each(['3005', '59349pbf71043s37', '3068bpbf71043s60'])('packed rendering preserves the legacy positions, normals and bounds for %s', async part => {
+  await loadLDrawGeneratedVisual([part])
+  const def = definition(part)
+  const triangles = getLoadedLDrawGeneratedVisualTriangles(part)!
+  const values = new Float32Array(triangles.length * 9)
+  let offset = 0
+  for (const triangle of triangles) for (const point of triangle) {
+    values[offset++] = point.x - def.footprint.widthStuds / 2
+    values[offset++] = point.y - def.footprint.heightStuds / 2
+    values[offset++] = point.z - def.footprint.depthStuds / 2
+  }
+  const reference = new BufferGeometry().setAttribute('position', new Float32BufferAttribute(values, 3))
+  reference.computeVertexNormals()
+  const packed = createLoadedLDrawPartGeometry(part, def.footprint)!
+  expect(packed.getAttribute('position').array).toEqual(reference.getAttribute('position').array)
+  expect(packed.getAttribute('normal').array).toEqual(reference.getAttribute('normal').array)
+  expect(getLoadedLDrawLocalBounds(part)).toEqual(getTriangleBounds(triangles))
+  reference.dispose()
+})
+
+it('keeps legacy chunks without packed coordinates usable', () => {
+  const part = 'legacy-geometry-unit'
+  registerLDrawVisualChunk([part], { getLDrawGeneratedVisualTriangles: () => [[{ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }]], getLDrawGeneratedPrintLayers: () => [] })
+  const geometry = createLoadedLDrawPartGeometry(part, { widthStuds: 1, depthStuds: 1, heightStuds: 1 })!
+  expect(geometry.getAttribute('position').count).toBe(3)
+  expect(Array.from(geometry.getAttribute('position').array)).toEqual([-.5, -.5, -.5, .5, -.5, -.5, -.5, .5, -.5])
 })

@@ -1,5 +1,10 @@
+import { mergeLDrawLineBatches, prepareLDrawLineBatches, type LDrawLineGroup } from './ldrawLineBatches'
+import type { LDrawLineBatch } from './ldrawLineBatches'
+export type { LDrawLineBatch } from './ldrawLineBatches'
+import { createInstanceBoundsQuery } from './instanceBoundsTree'
+import { getSharedBatchTransform } from './sharedBatchTransform'
 import { yieldToBrowser } from './yieldToBrowser'
-import { Box3, BoxGeometry, BufferGeometry, Color, DoubleSide, FrontSide, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Vector3, type Intersection, type Raycaster } from 'three'
+import { Box3, Sphere, DynamicDrawUsage, BoxGeometry, BufferGeometry, Color, DoubleSide, FrontSide, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Vector3, type Intersection, type Raycaster } from 'three'
 import { acceleratedRaycast, MeshBVH } from 'three-mesh-bvh'
 import { brickById, colorHex, colorOpacity } from '../data/basicBricks'
 import type { BrickDefinition, PlacedBrick } from '../types/bricks'
@@ -52,8 +57,8 @@ export const getPositiveLDrawGeometry = (geometry: BufferGeometry, matrix: Matri
 }
 
 export type LDrawBatchInstance = { brick: PlacedBrick; matrix: Matrix4; color: string }
-export type LDrawMeshBatch = { key: string; geometry: BufferGeometry; instances: LDrawBatchInstance[]; print: boolean; doubleSide: boolean; opacity?: number }
-export type LDrawLineBatch = { key: string; color: string; points: Float32Array; sources: { brick: PlacedBrick; points: number[] }[] }
+export type LDrawMeshBatch = { key: string; geometry: BufferGeometry; instances: LDrawBatchInstance[]; print: boolean; doubleSide: boolean; opacity?: number; scope?: 'active'; transform?: Matrix4 }
+
 
 export type LDrawSceneBatches = { meshBatches: LDrawMeshBatch[]; printBatches: LDrawPrintBatch[]; lineBatches: LDrawLineBatch[]; individualBricks: PlacedBrick[]; printSources: LDrawMeshBatch[] }
 
@@ -74,10 +79,16 @@ onLDrawGeneratedVisualLoaded(() => { visualVersion++ })
 const snapshots = new WeakMap<LDrawSceneBatches, { bricks: PlacedBrick[]; options: Options; version: number }>()
 const sameSet = (a: Set<string>, b: Set<string>) => a === b || (a.size === b.size && [...a].every(id => b.has(id)))
 
-const preparedScenes = new WeakMap<PlacedBrick[], LDrawSceneBatches>()
-export const buildLDrawSceneBatches = (bricks: PlacedBrick[], options: Options, previous?: LDrawSceneBatches,
-  mergePrints = mergeLDrawPrintBatches): LDrawSceneBatches => {
-  if (!previous?.printSources.length) previous = preparedScenes.get(bricks) ?? previous
+const preparedScenes = new Map<PlacedBrick[], LDrawSceneBatches>()
+export const clearPreparedLDrawScenes = () => preparedScenes.clear()
+function* generateLDrawSceneBatches(bricks: PlacedBrick[], options: Options, previous?: LDrawSceneBatches,
+  mergePrints = mergeLDrawPrintBatches, mergeLines = mergeLDrawLineBatches): Generator<void, LDrawSceneBatches> {
+  // A prepared destination supersedes the previous step, including when that
+  // step already contains artwork. Otherwise jumping steps merges every print
+  // triangle synchronously despite the completed cooperative preparation.
+  const prepared = preparedScenes.get(bricks)
+  if (prepared && snapshots.get(prepared)?.version === visualVersion
+    && (!previous || snapshots.get(previous)?.bricks !== bricks)) previous = prepared
   const snapshot = previous && snapshots.get(previous)
   if (bricks.length >= 800 && snapshot?.version === visualVersion && snapshot.bricks === bricks && snapshot.options.selectedId === options.selectedId
     && snapshot.options.showEdges === options.showEdges
@@ -86,17 +97,18 @@ export const buildLDrawSceneBatches = (bricks: PlacedBrick[], options: Options, 
     && sameSet(snapshot.options.highlightedIds, options.highlightedIds)
     && sameSet(snapshot.options.excludedIds, options.excludedIds)) return previous!
   const groups = new Map<string, LDrawMeshBatch>()
-  const lines = new Map<string, { color: string; items: { points: number[]; matrix: Matrix4; brick: PlacedBrick }[]; length: number }>()
+  const lines = new Map<string, LDrawLineGroup>()
   const individualBricks: PlacedBrick[] = []
-  const appendLines = (key: string, color: string, points: number[], matrix: Matrix4, brick: PlacedBrick) => {
-    const group = lines.get(key) ?? { color, items: [], length: 0 }
+  const appendLines = (key: string, color: string, points: number[], matrix: Matrix4, brick: PlacedBrick, rigid = false) => {
+    const group = lines.get(key) ?? { color, items: [], length: 0, rigid }
     group.items.push({ points, matrix, brick }); group.length += points.length
     lines.set(key, group)
   }
   const addMesh = (geometry: BufferGeometry, matrix: Matrix4, brick: PlacedBrick, color: string, print: boolean, doubleSide: boolean, opacity: number) => {
     const positive = getPositiveLDrawGeometry(geometry, matrix)
-    const key = `${positive.geometry.uuid}:${print}:${doubleSide}:${opacity}`
-    const group = groups.get(key) ?? { key, geometry: positive.geometry, instances: [], print, doubleSide, opacity }
+    const scope = opacity >= 1 && options.highlightedIds.size > 1 && options.highlightedIds.has(brick.id) ? 'active' as const : undefined
+    const key = `${positive.geometry.uuid}:${print}:${doubleSide}:${opacity}:${scope ?? ''}`
+    const group = groups.get(key) ?? { key, geometry: positive.geometry, instances: [], print, doubleSide, opacity, scope }
     group.instances.push({ brick, matrix: positive.matrix, color }); groups.set(key, group)
   }
   // Body/print geometries only depend on the mould, not on the placed brick.
@@ -105,7 +117,9 @@ export const buildLDrawSceneBatches = (bricks: PlacedBrick[], options: Options, 
     body: BufferGeometry | undefined
     prints: ReturnType<typeof createLDrawPrintGeometries>
   }>()
+  let sliceStart = performance.now()
   for (const brick of bricks) {
+    if (performance.now() - sliceStart >= 8) { yield; sliceStart = performance.now() }
     const definition = brickById.get(brick.brickId)
     let resources = definition ? geometryCache.get(definition.id) : undefined
     if (definition && !resources) {
@@ -137,36 +151,97 @@ export const buildLDrawSceneBatches = (bricks: PlacedBrick[], options: Options, 
     const highlighted = options.highlightedIds.has(brick.id)
     const floating = options.supportedByBrickId.get(brick.id) === false
     const chunk = `${Math.floor(brick.pose.xStud / edgeChunkSize)}:${Math.floor(brick.pose.zStud / edgeChunkSize)}`
-    if (options.showEdges || highlighted || floating) appendLines(`body:${chunk}`, '#172033', getLDrawEdgePoints(body), matrix, brick)
+    if (options.showEdges || highlighted || floating) {
+      const rigid = options.highlightedIds.size > 1 && highlighted
+      appendLines(`body:${rigid ? 'active:' : ''}${chunk}`, '#172033', getLDrawEdgePoints(body), matrix, brick, rigid)
+    }
     if (highlighted || floating) {
       const bounds = getBrickWorldBoundsFrame(definition, brick.pose)
       const boundsMatrix = (x: number, y: number, z: number) => new Matrix4().makeTranslation(bounds.x, bounds.y, bounds.z)
         .scale(new Vector3(bounds.width + x, bounds.height + y, bounds.depth + z))
-      if (highlighted) appendLines(`highlight:${chunk}`, '#f59e0b', boxEdges, boundsMatrix(.16, .2, .16), brick)
-      if (floating) appendLines(`floating:${chunk}`, '#ef4444', boxEdges, boundsMatrix(.14, .18, .14), brick)
+      const rigid = options.highlightedIds.size > 1 && highlighted
+      if (highlighted) appendLines(`highlight:${rigid ? 'active:' : ''}${chunk}`, '#f59e0b', boxEdges, boundsMatrix(.16, .2, .16), brick, rigid)
+      if (floating) appendLines(`floating:${rigid ? 'active:' : ''}${chunk}`, '#ef4444', boxEdges, boundsMatrix(.14, .18, .14), brick, rigid)
     }
   }
-  const previousLines = new Map(previous?.lineBatches.map(batch => [batch.key, batch]))
-  const point = new Vector3()
-  const lineBatches: LDrawLineBatch[] = [...lines].map(([key, group]) => {
-    const cached = previousLines.get(key)
-    if (cached?.sources.length === group.items.length && group.items.every((item, i) => item.brick === cached.sources[i].brick && item.points === cached.sources[i].points)) return cached
-    const points = new Float32Array(group.length)
-    let offset = 0
-    for (const item of group.items) for (let i = 0; i < item.points.length; i += 3) {
-      point.fromArray(item.points, i).applyMatrix4(item.matrix).toArray(points, offset); offset += 3
-    }
-    return { key, color: group.color, points, sources: group.items }
-  })
+  const lineBatches = mergeLines(lines, previous?.lineBatches)
   const previousMeshes = new Map([...(previous?.meshBatches ?? []), ...(previous?.printSources ?? [])].map(batch => [batch.key, batch]))
   const allMeshes = [...groups.values()].map(batch => {
     const cached = previousMeshes.get(batch.key)
-    return cached?.instances.length === batch.instances.length && batch.instances.every((instance, i) => instance.brick === cached.instances[i].brick && instance.color === cached.instances[i].color) ? cached : batch
+    const sameInstances = cached?.instances.length === batch.instances.length
+    if (sameInstances && batch.instances.every((instance, i) => instance.brick === cached.instances[i].brick && instance.color === cached.instances[i].color)) return cached
+    if (!batch.print && batch.scope === 'active' && sameInstances && batch.instances.every((instance, i) => instance.brick.id === cached.instances[i].brick.id)) {
+      const delta = getSharedBatchTransform(batch.instances.map(instance => instance.matrix), cached.instances.map(instance => instance.matrix))
+      if (delta) return { ...batch, transform: delta.multiply(cached.transform ?? new Matrix4()) }
+    }
+    return batch
   })
   const printSources = allMeshes.filter(batch => batch.print)
   const result = { meshBatches: allMeshes.filter(batch => !batch.print), printBatches: mergePrints(printSources, previous?.printBatches), printSources, lineBatches, individualBricks }
   snapshots.set(result, { bricks, version: visualVersion, options: { ...options, highlightedIds: new Set(options.highlightedIds), excludedIds: new Set(options.excludedIds) } })
   return result
+}
+
+export const buildLDrawSceneBatches = (bricks: PlacedBrick[], options: Options, previous?: LDrawSceneBatches,
+  mergePrints = mergeLDrawPrintBatches, mergeLines = mergeLDrawLineBatches): LDrawSceneBatches => {
+  const builder = generateLDrawSceneBatches(bricks, options, previous, mergePrints, mergeLines)
+  while (true) {
+    const next = builder.next()
+    if (next.done === true) return next.value
+  }
+}
+
+type BatchMeshState = { batch: LDrawMeshBatch; localMatrices: Matrix4[]; query: ReturnType<typeof createInstanceBoundsQuery> }
+const batchMeshStates = new WeakMap<InstancedMesh, BatchMeshState>()
+
+/** Reuse allocated GPU storage while preserving the instance IDs used by picking. */
+export const updateLDrawBatchMesh = (mesh: InstancedMesh, batch: LDrawMeshBatch) => {
+  const previous = batchMeshStates.get(mesh)
+  if (mesh.geometry !== batch.geometry || mesh.instanceMatrix.count < batch.instances.length) throw new Error('LDRAW_BATCH_CAPACITY')
+  const color = new Color()
+  const transform = batch.transform ?? new Matrix4()
+  const inverse = transform.clone().invert()
+  const localMatrices = batch.instances.map(instance => batch.transform ? new Matrix4().multiplyMatrices(inverse, instance.matrix) : instance.matrix)
+  mesh.matrix.copy(transform)
+  mesh.matrixAutoUpdate = !batch.transform
+  mesh.matrixWorldNeedsUpdate = true
+  let firstMatrix = Infinity, lastMatrix = -1, firstColor = Infinity, lastColor = -1
+  batch.instances.forEach((instance, index) => {
+    const old = previous?.batch.instances[index]
+    const matrix = localMatrices[index]
+    if (!previous?.localMatrices[index] || matrix.elements.some((value, i) => Math.abs(value - previous.localMatrices[index].elements[i]) > 1e-10)) {
+      mesh.setMatrixAt(index, matrix)
+      firstMatrix = Math.min(firstMatrix, index); lastMatrix = index
+    } else localMatrices[index] = previous!.localMatrices[index]
+    if (!old || old.color !== instance.color) {
+      mesh.setColorAt(index, color.set(instance.color))
+      firstColor = Math.min(firstColor, index); lastColor = index
+    }
+  })
+  // Merge pending writes as a single span, including updates made before the
+  // renderer next uploads the attribute. Three r168 submits each range separately.
+  const mark = (attribute: typeof mesh.instanceMatrix, first: number, last: number, stride: number) => {
+    if (last < 0) return
+    let start = first * stride, end = (last + 1) * stride
+    for (const range of attribute.updateRanges) { start = Math.min(start, range.start); end = Math.max(end, range.start + range.count) }
+    attribute.clearUpdateRanges()
+    attribute.addUpdateRange(start, end - start)
+    attribute.needsUpdate = true
+  }
+  mark(mesh.instanceMatrix, firstMatrix, lastMatrix, 16)
+  if (mesh.instanceColor) { mesh.instanceColor.setUsage(DynamicDrawUsage); mark(mesh.instanceColor, firstColor, lastColor, 3) }
+  mesh.count = batch.instances.length
+  if (firstMatrix === Infinity && previous?.localMatrices.length === localMatrices.length) {
+    batchMeshStates.set(mesh, { batch, localMatrices, query: previous.query })
+    return
+  }
+  if (!batch.geometry.boundingBox) batch.geometry.computeBoundingBox()
+  const bounds = localMatrices.map(matrix => batch.geometry.boundingBox!.clone().applyMatrix4(matrix))
+  const envelope = new Box3()
+  for (const box of bounds) envelope.union(box)
+  mesh.boundingBox = envelope
+  mesh.boundingSphere = envelope.getBoundingSphere(new Sphere())
+  batchMeshStates.set(mesh, { batch, localMatrices, query: createInstanceBoundsQuery(bounds) })
 }
 
 /** Local BVH per shared mould, without changing Mesh.prototype or other scenes. */
@@ -178,55 +253,60 @@ export const createLDrawBatchMesh = (batch: LDrawMeshBatch) => {
     side: batch.doubleSide ? DoubleSide : FrontSide, polygonOffset: batch.print, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
     transparent: opacity < 1, opacity, depthWrite: opacity >= 1 })
   const mesh = new InstancedMesh(geometry, material, batch.instances.length)
-  const color = new Color()
-  batch.instances.forEach((instance, i) => { mesh.setMatrixAt(i, instance.matrix); mesh.setColorAt(i, color.set(instance.color)) })
-  mesh.instanceMatrix.needsUpdate = true
+  mesh.instanceMatrix.setUsage(DynamicDrawUsage)
   mesh.castShadow = !batch.print; mesh.receiveShadow = !batch.print; mesh.renderOrder = batch.print ? 1 : 0
-  mesh.computeBoundingSphere()
+  updateLDrawBatchMesh(mesh, batch)
   const proxy = new Mesh(geometry, material)
   const hits: Intersection[] = []
-  // Reject missed instances before traversing their triangle BVHs. Test in
-  // world space so near/far and non-uniform parent transforms remain exact.
-  geometry.computeBoundingBox()
-  const instanceBounds = batch.instances.map(instance => geometry.boundingBox!.clone().applyMatrix4(instance.matrix))
-  const worldBounds = new Box3()
-
   const nativeRaycast = mesh.raycast.bind(mesh)
   mesh.raycast = (raycaster: Raycaster, intersects: Intersection[]) => {
-    // Same per-instance transform and result shape as Three's native raycaster.
-    // The shared BVH replaces triangle scans; no broad boxes are used as hits.
     if (!geometry.boundsTree) return nativeRaycast(raycaster, intersects)
+    const state = batchMeshStates.get(mesh)!
     const previous = raycaster.firstHitOnly
     raycaster.firstHitOnly = true
     try {
-      batch.instances.forEach((instance, instanceId) => {
-        worldBounds.copy(instanceBounds[instanceId]).applyMatrix4(mesh.matrixWorld)
-        if (!raycaster.ray.intersectsBox(worldBounds)) return
-        proxy.matrixWorld.multiplyMatrices(mesh.matrixWorld, instance.matrix)
+      for (const instanceId of state.query(raycaster.ray, mesh.matrixWorld)) {
+        proxy.matrixWorld.multiplyMatrices(mesh.matrixWorld, state.localMatrices[instanceId])
         acceleratedRaycast.call(proxy, raycaster, hits)
         for (const hit of hits) intersects.push({ ...hit, object: mesh, instanceId })
         hits.length = 0
-      })
+      }
     } finally { raycaster.firstHitOnly = previous }
   }
   return mesh
 }
 
 /** Prepare immutable large scenes cooperatively before enabling detailed view. */
-export const prepareLDrawSceneBatches = async (bricks: PlacedBrick[], onProgress?: (fraction: number) => void) => {
-  if (bricks.length < 800 || preparedScenes.has(bricks)) { onProgress?.(1); return }
-  const scene = buildLDrawSceneBatches(bricks, {
-    highlightedIds: new Set(), excludedIds: new Set(), supportedByBrickId: new Map(), showEdges: false,
-  }, undefined, () => [])
+export const prepareLDrawSceneBatches = async (bricks: PlacedBrick[], onProgress?: (fraction: number) => void, options?: Options, canceled: () => boolean = () => false) => {
+  if (bricks.length < 800 || preparedScenes.has(bricks)) { onProgress?.(1); return preparedScenes.get(bricks) }
+  let lineSources = new Map<string, LDrawLineGroup>()
+  const builder = generateLDrawSceneBatches(bricks, options ?? {
+    highlightedIds: new Set(), excludedIds: new Set(), supportedByBrickId: new Map(), showEdges: true,
+  }, undefined, () => [], sources => { lineSources = sources; return [] })
+  const collect = async () => {
+    while (!canceled()) {
+      const next = builder.next()
+      if (next.done === true) return next.value
+      await yieldToBrowser()
+    }
+  }
+  const scene = await collect()
+  if (!scene) return undefined
   const geometries = new Set([...scene.meshBatches, ...scene.printSources].map(batch => batch.geometry))
   let completed = 0
+  let sliceStart = performance.now()
   for (const geometry of geometries) {
+    if (canceled()) return undefined
     prepareLDrawPickingGeometry(geometry)
-    if (scene.meshBatches.some(batch => batch.geometry === geometry)) getLDrawEdgePoints(geometry)
-    onProgress?.(.5 * ++completed / geometries.size)
-    await yieldToBrowser()
+    onProgress?.(.4 * ++completed / geometries.size)
+    if (performance.now() - sliceStart >= 8) { await yieldToBrowser(); sliceStart = performance.now() }
   }
-  scene.printBatches = await prepareLDrawPrintBatches(scene.printSources, fraction => onProgress?.(.5 + fraction * .5))
+  scene.printBatches = await prepareLDrawPrintBatches(scene.printSources, fraction => onProgress?.(.4 + fraction * .4), canceled)
+  scene.lineBatches = await prepareLDrawLineBatches(lineSources, fraction => onProgress?.(.8 + fraction * .2), canceled)
+  if (canceled()) return undefined
+  // Undo history can keep plan arrays alive long after their derived buffers retire.
+  if (preparedScenes.size >= 2) preparedScenes.delete(preparedScenes.keys().next().value!)
   preparedScenes.set(bricks, scene)
   onProgress?.(1)
+  return scene
 }

@@ -27,3 +27,5 @@ export const getLDrawGeneratedVisualTriangles = (partNumber: string) => {
 import type { LDrawFixedColorLayer } from '../ldrawGeneratedVisual'
 const printLayers: Record<string, LDrawFixedColorLayer[]> = JSON.parse("{\"3010pbf71043s07r\":[{\"color\":41575232,\"hex\":\"#7a6340\",\"opacity\":1,\"triangleIndices\":[364,365,366,367,368,369,370,371,372,373,374,375,376,377,378,379,380,381,382,383,384,385,386,387,388,389,390,391,392,393,394,395,396,397,398,399,400,401,402,403,404,405,406,407,408,409,410,411,412,413,414,415,416,417,418,419,420,421,422,423]}]}")
 export const getLDrawGeneratedPrintLayers = (partNumber: string) => printLayers[partNumber]
+
+export const getLDrawGeneratedVisualValues = (partNumber: string) => ldrawGeneratedVisualTriangleValues[partNumber]

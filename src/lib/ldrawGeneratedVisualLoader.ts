@@ -1,6 +1,6 @@
 import { yieldToBrowser } from './yieldToBrowser'
 import { registerLDrawVisualChunk } from './ldrawVisualRegistry'
-export { onLDrawGeneratedVisualLoaded, getLoadedLDrawGeneratedVisualTriangles, getLoadedLDrawPrintLayers } from './ldrawVisualRegistry'
+export { onLDrawGeneratedVisualLoaded, getLoadedLDrawGeneratedVisualTriangles, getLoadedLDrawGeneratedVisualValues, getLoadedLDrawGeneratedEdgePoints, getLoadedLDrawPrintLayers } from './ldrawVisualRegistry'
 import {
   ldrawGeneratedVisualChunkLoaders,
   ldrawGeneratedVisualPartNumbers,
@@ -21,12 +21,13 @@ for (const [partNumber, loader] of Object.entries(ldrawGeneratedVisualChunkLoade
 const getVisualChunkLoader = (partNumber: string) =>
   ldrawGeneratedVisualChunkLoaders[normalizeLDrawPartNumber(partNumber)]
 
-// One queue covers renderer, analysis and previews; concurrent callers must
-// not each start their own burst of large JS modules.
+// A shared queue bounds transfer memory. Worker-decoded assets can overlap
+// more I/O without scheduling additional large JavaScript parses on the UI thread.
+const concurrentLoads = typeof window !== 'undefined' && typeof Worker !== 'undefined' && typeof DecompressionStream !== 'undefined' ? 4 : 2
 let activeLoads = 0
 const waitingLoads: Array<() => void> = []
 const scheduleLoad = async <T>(load: () => Promise<T>): Promise<T> => {
-  if (activeLoads >= 2) await new Promise<void>(resolve => waitingLoads.push(resolve))
+  if (activeLoads >= concurrentLoads) await new Promise<void>(resolve => waitingLoads.push(resolve))
   else activeLoads++
   try { await yieldToBrowser(); return await load() } finally {
     const next = waitingLoads.shift()

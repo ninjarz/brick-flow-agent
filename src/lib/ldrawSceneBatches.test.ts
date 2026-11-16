@@ -1,9 +1,9 @@
 import { beforeAll, describe, expect, it } from 'vitest'
-import { BoxGeometry, Color, DoubleSide, FrontSide, Matrix4, Mesh, MeshStandardMaterial, Raycaster, Vector3 } from 'three'
+import { BoxGeometry, Color, DoubleSide, FrontSide, Matrix3, Matrix4, Mesh, MeshStandardMaterial, Raycaster, Vector3 } from 'three'
 import { brickById } from '../data/basicBricks'
 import { getBrickWorldFrame } from './brickUnits'
 import { loadLDrawGeneratedVisual } from './ldrawGeneratedVisualLoader'
-import { buildLDrawSceneBatches, createLDrawBatchMesh, getLDrawSceneMatrix, getPositiveLDrawGeometry } from './ldrawSceneBatches'
+import { buildLDrawSceneBatches, clearPreparedLDrawScenes, prepareLDrawSceneBatches, createLDrawBatchMesh, updateLDrawBatchMesh, getLDrawSceneMatrix, getPositiveLDrawGeometry } from './ldrawSceneBatches'
 import { createLDrawPrintBatchMesh, mergeLDrawPrintBatches, prepareLDrawPrintBatches } from './ldrawPrintBatches'
 import { makeBrick } from './planUtils'
 
@@ -186,4 +186,173 @@ describe('exact LEGO render batching', () => {
     expect(changed.individualBricks).toContain(pieces[0])
   })
 
+})
+
+it('reuses rigid artwork buffers while preserving world hits, normals and piece identities', () => {
+  const geometry = new BoxGeometry(1, 1, 1).toNonIndexed()
+  const pieces = [makeBrick('brick-1x1', 'red', 1, 0, 1), makeBrick('brick-1x1', 'blue', 3, 0, 1)]
+  const source = { key: 'rigid', geometry, print: true, doubleSide: false, instances: pieces.map((brick, i) => ({ brick, matrix: new Matrix4().makeTranslation(1 + i * 2, 0, 1), color: '#ff0000' })) }
+  const original = mergeLDrawPrintBatches([source])
+  let previous = original
+  for (const delta of [new Matrix4().makeTranslation(0, 10, 0), new Matrix4().makeRotationY(.1).setPosition(16, 20, 0)]) {
+    const moved = { ...source, instances: source.instances.map(item => ({ ...item, brick: { ...item.brick, pose: { ...item.brick.pose, yStud: 20 } }, matrix: new Matrix4().multiplyMatrices(delta, item.matrix) })) }
+    const reused = mergeLDrawPrintBatches([moved], previous)
+    const rebuilt = mergeLDrawPrintBatches([moved])
+    expect(reused[0].geometry).toBe(original[0].geometry)
+    const actual = createLDrawPrintBatchMesh(reused[0]), reference = createLDrawPrintBatchMesh(rebuilt[0])
+    const parent = new Mesh()
+    parent.scale.set(-2, .5, 3)
+    parent.rotation.y = .3
+    parent.add(actual, reference)
+    parent.updateMatrixWorld(true)
+    const center = new Vector3(1, 0, 1).applyMatrix4(delta)
+    const ray = new Raycaster(center.clone().add(new Vector3(0, 0, 5)).applyMatrix4(parent.matrixWorld), new Vector3(0, 0, -1).transformDirection(parent.matrixWorld))
+    const hit = ray.intersectObject(actual)[0], expected = ray.intersectObject(reference)[0]
+    expect(hit, 'reused artwork hit').toBeDefined()
+    expect(expected, 'rebuilt artwork hit').toBeDefined()
+    expect(hit.point.distanceTo(expected.point)).toBeLessThan(1e-6)
+    const worldNormal = hit.face!.normal.clone().applyNormalMatrix(new Matrix3().getNormalMatrix(actual.matrixWorld))
+    expect(worldNormal.distanceTo(expected.face!.normal.clone().applyNormalMatrix(new Matrix3().getNormalMatrix(reference.matrixWorld)))).toBeLessThan(1e-6)
+    expect(reused[0].brickIds[reused[0].triangleBrickIndices[hit.faceIndex!]]).toBe(pieces[0].id)
+    actual.material.dispose(); reference.material.dispose(); rebuilt[0].geometry.dispose()
+    previous = reused
+  }
+  const changed = { ...source, instances: source.instances.map((item, i) => i === 0 ? { ...item, brick: { ...item.brick }, matrix: new Matrix4().makeTranslation(1, 2, 1) } : item) }
+  const changedBatches = mergeLDrawPrintBatches([changed], original)
+  expect(changedBatches[0].geometry).not.toBe(original[0].geometry)
+  for (const batch of [...changedBatches, ...original]) batch.geometry.dispose()
+  geometry.dispose()
+})
+
+it('keeps edge buffers through rigid translations and matches freshly generated world endpoints', () => {
+  const pieces = [makeBrick('brick-1x1', 'red', 1, 0, 1), makeBrick('brick-1x1', 'blue', 3, 0, 1)]
+  const options = { excludedIds: new Set<string>(), highlightedIds: new Set(pieces.map(piece => piece.id)), supportedByBrickId: new Map<string, boolean>(), showEdges: true }
+  const original = buildLDrawSceneBatches(pieces, options)
+  let previous = original
+  for (const height of [10, 20]) {
+    const moved = pieces.map(piece => ({ ...piece, pose: { ...piece.pose, yStud: height, xStud: piece.pose.xStud + 32 } }))
+    const reused = buildLDrawSceneBatches(moved, options, previous)
+    const fresh = buildLDrawSceneBatches(moved, options)
+    for (const batch of reused.lineBatches) {
+      expect(original.lineBatches.some(line => line.points === batch.points)).toBe(true)
+      const expected = fresh.lineBatches.find(line => line.color === batch.color && line.sources.map(source => source.brick.id).join('|') === batch.sources.map(source => source.brick.id).join('|'))!.points
+      for (let i = 0; i < batch.points.length; i += 3) {
+        const point = new Vector3().fromArray(batch.points, i).applyMatrix4(batch.transform!)
+        expect(point.distanceTo(new Vector3().fromArray(expected, i))).toBeLessThan(4e-6)
+      }
+    }
+    previous = reused
+  }
+})
+
+it('updates reused body storage, dirty spans, bounds and picking after reordering and shrinking', () => {
+  const geometry = new BoxGeometry(1, 1, 1)
+  const pieces = [0, 1, 2].map(i => makeBrick('brick-1x1', 'red', i * 2, 0, 0))
+  const first = { key: 'updates', geometry, print: false, doubleSide: false, instances: pieces.map((brick, i) => ({ brick, matrix: new Matrix4().makeTranslation(i * 2, 0, 0), color: '#ff0000' })) }
+  const mesh = createLDrawBatchMesh(first)
+  const storage = mesh.instanceMatrix.array
+  mesh.instanceMatrix.clearUpdateRanges(); mesh.instanceColor!.clearUpdateRanges()
+  const moved = { ...first, instances: first.instances.map((instance, i) => i === 1 ? { ...instance, brick: { ...instance.brick }, matrix: new Matrix4().makeTranslation(9, 0, 0), color: '#0000ff' } : instance) }
+  updateLDrawBatchMesh(mesh, moved)
+  expect(mesh.instanceMatrix.array).toBe(storage)
+  expect(mesh.instanceMatrix.updateRanges).toEqual([{ start: 16, count: 16 }])
+  expect(mesh.instanceColor!.updateRanges).toEqual([{ start: 3, count: 3 }])
+  mesh.updateMatrixWorld(true)
+  const hit = new Raycaster(new Vector3(9, 0, 5), new Vector3(0, 0, -1)).intersectObject(mesh)[0]
+  expect(hit.instanceId).toBe(1)
+  expect(mesh.boundingBox!.containsPoint(hit.point)).toBe(true)
+  const reordered = { ...moved, instances: [moved.instances[2], moved.instances[1]] }
+  updateLDrawBatchMesh(mesh, reordered)
+  expect(mesh.count).toBe(2)
+  expect(new Raycaster(new Vector3(4, 0, 5), new Vector3(0, 0, -1)).intersectObject(mesh)[0].instanceId).toBe(0)
+  expect(new Raycaster(new Vector3(0, 0, 5), new Vector3(0, 0, -1)).intersectObject(mesh)).toHaveLength(0)
+  expect(() => updateLDrawBatchMesh(mesh, { ...first, instances: [...first.instances, first.instances[0]] })).toThrow('LDRAW_BATCH_CAPACITY')
+  mesh.dispose(); mesh.material.dispose(); geometry.dispose()
+})
+
+it('uses prepared destination artwork when jumping from another printed step', async () => {
+  const definition = [...brickById.values()].find(def => def.partNumber === '3068bpbf71043s60')!
+  const pieces = Array.from({ length: 800 }, (_, i) => makeBrick(i === 0 ? definition.id : 'brick-1x1', 'red', i * 2, 0, 0))
+  const options = { excludedIds: new Set<string>(), highlightedIds: new Set<string>(), supportedByBrickId: new Map<string, boolean>(), showEdges: true }
+  const firstStep = buildLDrawSceneBatches(pieces.slice(0, 1), options)
+  await prepareLDrawSceneBatches(pieces)
+  const prepared = buildLDrawSceneBatches(pieces, options)
+  const finalStep = buildLDrawSceneBatches(pieces, { ...options, highlightedIds: new Set([pieces[1].id]) }, firstStep)
+  expect(firstStep.printBatches.length).toBeGreaterThan(0)
+  expect(finalStep.printBatches[0].geometry).toBe(prepared.printBatches[0].geometry)
+  expect(finalStep.lineBatches.filter(batch => batch.key.startsWith('body:')).map(batch => batch.points))
+    .toEqual(prepared.lineBatches.map(batch => batch.points))
+  expect(finalStep.lineBatches.some(batch => batch.key.startsWith('highlight:'))).toBe(true)
+})
+
+it('keeps active print chunks and stationary artwork uploaded across rigid chunk boundary edits', () => {
+  const geometry = new BoxGeometry(1, 1, 1).toNonIndexed()
+  const pieces = [7.9, 8.1, 8.2].map(x => makeBrick('brick-1x1', 'red', x, 0, 0))
+  const source = { key: 'active', scope: 'active' as const, geometry, print: true, doubleSide: false, instances: pieces.slice(0, 2).map(brick => ({ brick, matrix: new Matrix4().makeTranslation(brick.pose.xStud, 0, 0), color: '#ff0000' })) }
+  const stationary = { ...source, key: 'stationary', scope: undefined, instances: [{ brick: pieces[2], matrix: new Matrix4().makeTranslation(8.2, 0, 0), color: '#ff0000' }] }
+  const first = mergeLDrawPrintBatches([stationary, source])
+  const delta = new Matrix4().makeRotationY(Math.PI / 2).setPosition(30, 4, 16)
+  const moved = { ...source, instances: source.instances.map(item => ({ ...item, brick: { ...item.brick }, matrix: new Matrix4().multiplyMatrices(delta, item.matrix) })) }
+  const reused = mergeLDrawPrintBatches([stationary, moved], first)
+  const fresh = mergeLDrawPrintBatches([stationary, moved])
+  expect(reused).toHaveLength(first.length)
+  for (const batch of reused) expect(first.some(old => old.geometry === batch.geometry)).toBe(true)
+  const vertices = (batches: typeof reused) => batches.flatMap(batch => {
+    const position = batch.geometry.getAttribute('position')
+    return Array.from({ length: position.count }, (_, i) => new Vector3().fromBufferAttribute(position, i).applyMatrix4(batch.transform ?? new Matrix4()).toArray().map(value => value.toFixed(5)).join(','))
+  }).sort()
+  expect(vertices(reused)).toEqual(vertices(fresh))
+  const edited = { ...moved, instances: moved.instances.map((item, i) => i ? { ...item, brick: { ...item.brick, pose: { ...item.brick.pose, xStud: 0, yStud: 2 } }, matrix: item.matrix.clone().setPosition(0, 2, 0) } : item) }
+  const rebuilt = mergeLDrawPrintBatches([stationary, edited], reused)
+  const reference = mergeLDrawPrintBatches([stationary, edited])
+  expect(vertices(rebuilt)).toEqual(vertices(reference))
+  for (const batch of new Set([...first, ...reused, ...fresh, ...rebuilt, ...reference].map(batch => batch.geometry))) batch.dispose()
+  geometry.dispose()
+})
+
+it('changes only the root transform for rigid bodies while retaining upload storage and correct world picking', () => {
+  const geometry = new BoxGeometry(1, 1, 1)
+  const brick = makeBrick('brick-1x1', 'red', 2, 0, 0)
+  const batch = { key: 'body-root', geometry, print: false, doubleSide: false, instances: [{ brick, matrix: new Matrix4().makeTranslation(2, 0, 0), color: '#ff0000' }] }
+  const mesh = createLDrawBatchMesh(batch)
+  mesh.instanceMatrix.clearUpdateRanges()
+  const version = mesh.instanceMatrix.version
+  const bounds = mesh.boundingBox
+  const delta = new Matrix4().makeRotationY(Math.PI / 2).setPosition(20, 10, 0)
+  updateLDrawBatchMesh(mesh, { ...batch, transform: delta, instances: batch.instances.map(item => ({ ...item, brick: { ...item.brick }, matrix: new Matrix4().multiplyMatrices(delta, item.matrix) })) })
+  expect(mesh.instanceMatrix.version).toBe(version)
+  expect(mesh.instanceMatrix.updateRanges).toEqual([])
+  expect(mesh.boundingBox).toBe(bounds)
+  mesh.updateMatrixWorld(true)
+  const center = new Vector3(2, 0, 0).applyMatrix4(delta)
+  const hit = new Raycaster(center.clone().add(new Vector3(0, 0, 5)), new Vector3(0, 0, -1)).intersectObject(mesh)[0]
+  expect(hit.instanceId).toBe(0)
+  expect(hit.point.distanceTo(center)).toBeCloseTo(.5, 8)
+  mesh.dispose(); mesh.material.dispose(); geometry.dispose()
+})
+
+it('bounds derived scene retention even when undo history keeps old plan arrays alive', async () => {
+  clearPreparedLDrawScenes()
+  const plans = Array.from({ length: 3 }, () => Array.from({ length: 800 }, (_, i) => makeBrick('brick-1x1', 'red', i * 2, 0, 0)))
+  for (const pieces of plans) await prepareLDrawSceneBatches(pieces)
+  const options = { excludedIds: new Set<string>(), highlightedIds: new Set<string>(), supportedByBrickId: new Map<string, boolean>(), showEdges: true }
+  let previousLines: unknown
+  buildLDrawSceneBatches(plans[0], options, undefined, () => [], (_lines, previous) => { previousLines = previous; return [] })
+  expect(previousLines).toBeUndefined()
+  buildLDrawSceneBatches(plans[1], options, undefined, () => [], (_lines, previous) => { previousLines = previous; return [] })
+  expect(previousLines).toBeDefined()
+  expect(await prepareLDrawSceneBatches(plans[0], undefined, undefined, () => true)).toBeUndefined()
+  clearPreparedLDrawScenes()
+})
+
+it('keeps translucent diagnostic instances in their original group and source order', () => {
+  const pieces = Array.from({ length: 3 }, (_, i) => makeBrick('brick-1x1', 'red', i, 0, 0))
+  const result = buildLDrawSceneBatches(pieces, {
+    excludedIds: new Set(), highlightedIds: new Set(pieces.slice(0, 2).map(brick => brick.id)), supportedByBrickId: new Map(), showEdges: true,
+    displayColorByBrickId: new Map(pieces.map(brick => [brick.id, '#ef4444'])),
+  })
+  expect(result.meshBatches).toHaveLength(1)
+  expect(result.meshBatches[0].opacity).toBe(.92)
+  expect(result.meshBatches[0].scope).toBeUndefined()
+  expect(result.meshBatches[0].instances.map(instance => instance.brick.id)).toEqual(pieces.map(brick => brick.id))
 })

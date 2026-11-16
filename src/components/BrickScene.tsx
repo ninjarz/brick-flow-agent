@@ -9,7 +9,9 @@ import { useSceneCanvasGesture } from './scene/useSceneCanvasGesture'
 import { useBrickInteractionHandlers } from './scene/useBrickInteractionHandlers'
 import { LDrawBatch, LDrawPrints, LDrawBatchLines } from './scene/LDrawBatches'
 import { LargePlacementGhosts } from './scene/LargePlacementGhosts'
-import { buildLDrawSceneBatches, prepareLDrawSceneBatches, type LDrawSceneBatches } from '../lib/ldrawSceneBatches'
+import { PreparedSceneUpload, type SceneUploadRequest } from './scene/PreparedSceneUpload'
+import { prepareLDrawResources, releasePreparedLDrawResources, type PreparedLDrawResources } from '../lib/prepareLDrawResources'
+import { buildLDrawSceneBatches, clearPreparedLDrawScenes, prepareLDrawSceneBatches, type LDrawSceneBatches } from '../lib/ldrawSceneBatches'
 import { Billboard, Edges, Html, Line, OrbitControls, Text } from '@react-three/drei'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
@@ -23,7 +25,7 @@ import { getBrickWorldBoundsFrame } from '../lib/ldrawBounds'
 import { prepareBrickDefinitionsGeometry } from '../lib/planGeometry'
 import { getLDrawEdgePoints } from '../lib/ldrawEdgePoints'
 import { createLoadedLDrawBodyGeometry, createLDrawPrintGeometries } from '../lib/ldrawVisualGeometry'
-import { getVisibleBricksDuringPlacement } from '../lib/brickPlacementPreview'
+import { getVisibleBricksDuringPlacement, getVisibleSceneBricks } from '../lib/brickPlacementPreview'
 import { createBuildGraph, getBrickBounds } from '../lib/planUtils'
 import { getScenePerformanceSettings, getWorldAnimationFps, shouldInstanceVoxelGroup } from '../lib/scenePerformance'
 import { getSceneCameraFrameRequestKey } from '../lib/sceneCamera'
@@ -1972,12 +1974,13 @@ const VoxelBoxInstances = memo(function VoxelBoxInstances({
 })
 
 
-const VoxelOptimizedScene = memo(function VoxelOptimizedScene({
+const VoxelOptimizedScene = memo(function VoxelOptimizedSceneLayer({
   bricks,
   selectedId,
   highlightedIdSet,
   supportedByBrickId,
   preferDetailedGeometry,
+  preparedResources,
   showEdges,
   displayColorByBrickId,
   transformsByBrickId,
@@ -1994,6 +1997,7 @@ const VoxelOptimizedScene = memo(function VoxelOptimizedScene({
   highlightedIdSet: Set<string>
   supportedByBrickId: Map<string, boolean>
   preferDetailedGeometry: boolean
+  preparedResources?: PreparedLDrawResources
   showEdges: boolean
   displayColorByBrickId?: Map<string, string>
   transformsByBrickId?: Map<string, BrickSceneTransform>
@@ -2010,24 +2014,36 @@ const VoxelOptimizedScene = memo(function VoxelOptimizedScene({
   const placementBatchCache = useRef<LDrawSceneBatches>()
   const transientBatches = placementActive || Boolean(transformsByBrickId?.size)
   const transformIdsKey = [...(transformsByBrickId?.keys() ?? [])].sort().join('|')
+  const firstTransform = transformsByBrickId?.values().next().value as BrickSceneTransform | undefined
+  const sharedTransform = transformsByBrickId && transformsByBrickId.size > 1 && [...transformsByBrickId.values()].every(transform =>
+    transform.translation === firstTransform?.translation && transform.rotation === firstTransform?.rotation,
+  ) ? firstTransform : undefined
+  const hasSharedTransform = Boolean(sharedTransform)
+  const sharedTransformBricks = useMemo(() => {
+    if (!hasSharedTransform) return []
+    const ids = new Set(transformIdsKey.split('|'))
+    return bricks.filter(brick => ids.has(brick.id))
+  }, [bricks, hasSharedTransform, transformIdsKey])
+
   const batchExcludedIds = useMemo(() => new Set([...hiddenBrickIdSet, ...(transformIdsKey ? transformIdsKey.split('|') : [])]), [hiddenBrickIdSet, transformIdsKey])
   const ldrawBatches = useMemo(() => {
     const result = buildLDrawSceneBatches(preferDetailedGeometry ? bricks : [], {
       selectedId, highlightedIds: highlightedIdSet, supportedByBrickId, displayColorByBrickId, showEdges,
       excludedIds: batchExcludedIds,
-    }, transientBatches ? placementBatchCache.current ?? ldrawBatchCache.current : ldrawBatchCache.current)
+    }, transientBatches ? placementBatchCache.current ?? ldrawBatchCache.current : preparedResources?.scene ?? ldrawBatchCache.current)
     if (transientBatches) placementBatchCache.current = result
     else { ldrawBatchCache.current = result; placementBatchCache.current = undefined }
     return result
-  }, [bricks, preferDetailedGeometry, selectedId, highlightedIdSet, supportedByBrickId, displayColorByBrickId, showEdges, batchExcludedIds, transientBatches])
+  }, [bricks, preferDetailedGeometry, selectedId, highlightedIdSet, supportedByBrickId, displayColorByBrickId, showEdges, batchExcludedIds, transientBatches, preparedResources])
   const batchedPrintIds = useMemo(() => new Set(ldrawBatches.printSources.flatMap(batch => batch.instances.map(instance => instance.brick.id))), [ldrawBatches])
-  const batchResources = useLDrawBatchResources(ldrawBatches, ldrawBatchCache.current, placementBatchCache.current)
+  const batchResources = useLDrawBatchResources(ldrawBatches, ldrawBatchCache.current, placementBatchCache.current, preparedResources)
   const remainingBricks = preferDetailedGeometry ? ldrawBatches.individualBricks : bricks.filter(brick => brickById.get(brick.brickId)?.pack !== 'lego')
   const { groups, individualBricks } = useMemo(() => {
     const candidates = new Map<string, VoxelBoxInstanceGroup>()
     const individual: PlacedBrick[] = []
 
     for (const brick of remainingBricks) {
+      if (hasSharedTransform && transformsByBrickId?.has(brick.id)) continue
       const definition = brickById.get(brick.brickId)
       const visual = definition?.voxelVisual
       const canInstance = Boolean(
@@ -2072,7 +2088,7 @@ const VoxelOptimizedScene = memo(function VoxelOptimizedScene({
     }
     groupCacheRef.current = new Map(nextGroups.map((group) => [group.key, group]))
     return { groups: nextGroups, individualBricks: individual }
-  }, [remainingBricks, displayColorByBrickId, hiddenBrickIdSet, highlightedIdSet, selectedId, supportedByBrickId, transformsByBrickId])
+  }, [remainingBricks, displayColorByBrickId, hiddenBrickIdSet, highlightedIdSet, selectedId, supportedByBrickId, transformsByBrickId, hasSharedTransform])
   const draggableIds = useMemo(
     () => new Set(selectedId ? [selectedId, ...highlightedIdSet] : highlightedIdSet),
     [highlightedIdSet, selectedId],
@@ -2089,9 +2105,27 @@ const VoxelOptimizedScene = memo(function VoxelOptimizedScene({
 
   return (
     <>
+      {sharedTransform && <TransformedBrick transform={sharedTransform}>
+        <VoxelOptimizedScene
+          bricks={sharedTransformBricks}
+          selectedId={selectedId}
+          highlightedIdSet={highlightedIdSet}
+          supportedByBrickId={supportedByBrickId}
+          preferDetailedGeometry={preferDetailedGeometry}
+          showEdges={showEdges}
+          displayColorByBrickId={displayColorByBrickId}
+          hiddenBrickIdSet={hiddenBrickIdSet}
+          placementActive={placementActive}
+          onSelect={onSelect}
+          onSelectConnected={onSelectConnected}
+          onBeginDragSelected={onBeginDragSelected}
+          onConfirmPlacement={onConfirmPlacement}
+          onCancelPlacement={onCancelPlacement}
+        />
+      </TransformedBrick>}
       {ldrawBatches.meshBatches.map(batch => <LDrawBatch key={batch.key} batch={batch} mesh={batchResources.bodies.get(batch)!} selectedId={selectedId} highlightedIdSet={highlightedIdSet} placementActive={placementActive} onSelect={onSelect} onSelectConnected={onSelectConnected} onBeginDragSelected={onBeginDragSelected} onConfirmPlacement={onConfirmPlacement} onCancelPlacement={onCancelPlacement} />)}
       {ldrawBatches.printBatches.map(batch => <LDrawPrints key={batch.key} batch={batch} mesh={batchResources.prints.get(batch)!} selectedId={selectedId} highlightedIdSet={highlightedIdSet} placementActive={placementActive} onSelect={onSelect} onSelectConnected={onSelectConnected} onBeginDragSelected={onBeginDragSelected} onConfirmPlacement={onConfirmPlacement} onCancelPlacement={onCancelPlacement} />)}
-      {ldrawBatches.lineBatches.map(batch => <LDrawBatchLines key={batch.key} batch={batch} geometry={batchResources.lines.get(batch)!} />)}
+      {ldrawBatches.lineBatches.map(batch => <LDrawBatchLines key={batch.key} batch={batch} geometry={batchResources.lines.get(batch.points)!} />)}
       {groups.map((group) => (
         <VoxelBoxInstances
           key={group.key}
@@ -2681,13 +2715,18 @@ const StabilityOverlay = ({ analysis }: { analysis: StabilityAnalysis }) => {
   )
 }
 
+const emptySceneIds: string[] = []
+const emptySceneBricks: PlacedBrick[] = []
+const emptySceneEntities: WorldEntity[] = []
+const emptySceneEvents: NonNullable<BrickSceneProps['worldEvents']> = []
+
 export const BrickScene = ({
   bricks,
   building = false,
   buildingLabel,
   framingBricks,
   selectedId,
-  highlightedIds = [],
+  highlightedIds = emptySceneIds,
   cameraFrameKey,
   analysisPaused = false,
   cameraFollowStepKey,
@@ -2698,17 +2737,17 @@ export const BrickScene = ({
   stabilityAnalysis,
   displayColorByBrickId,
   transformsByBrickId,
-  worldEntities = [],
-  worldEvents = [],
+  worldEntities = emptySceneEntities,
+  worldEvents = emptySceneEvents,
   worldElapsedSeconds = 0,
   worldPaused = false,
-  hiddenBrickIds = [],
-  hiddenWorldEntityIds = [],
+  hiddenBrickIds = emptySceneIds,
+  hiddenWorldEntityIds = emptySceneIds,
   showHiddenObjects = false,
   worldEntityPlacementPreview,
   selectedWorldEntityId,
-  placementPreviewBricks = [],
-  placementSourceBrickIds = [],
+  placementPreviewBricks = emptySceneBricks,
+  placementSourceBrickIds = emptySceneIds,
   placementActive = false,
   keyboardEnabled = true,
   onCameraAzimuthChange,
@@ -2743,7 +2782,7 @@ export const BrickScene = ({
   const hiddenBrickIdSet = useMemo(() => new Set(hiddenBrickIds), [hiddenBrickIds])
   const hiddenWorldEntityIdSet = useMemo(() => new Set(hiddenWorldEntityIds), [hiddenWorldEntityIds])
   const settledVisibleBricks = useMemo(
-    () => bricks.filter(brick => showHiddenObjects || !hiddenBrickIdSet.has(brick.id)),
+    () => getVisibleSceneBricks(bricks, hiddenBrickIdSet, showHiddenObjects),
     [bricks, hiddenBrickIdSet, showHiddenObjects],
   )
   const visibleBricks = useMemo(
@@ -2757,9 +2796,20 @@ export const BrickScene = ({
     },
     [bricks, framingBricks, cameraFocusBrickIds, hiddenBrickIdSet, showHiddenObjects],
   )
+  const stagedResourcesRef = useRef(new Set<PreparedLDrawResources>())
+  useEffect(() => {
+    const pending = stagedResourcesRef.current
+    return () => { for (const resources of pending) releasePreparedLDrawResources(resources); pending.clear(); clearPreparedLDrawScenes() }
+  }, [])
+  const preparationOptionsRef = useRef<Parameters<typeof buildLDrawSceneBatches>[1]>()
+  const displayedSceneRef = useRef<{ bricks: PlacedBrick[]; detailed: boolean }>({ bricks: [], detailed: false })
+  const [preparedSceneBricks, setPreparedSceneBricks] = useState<PlacedBrick[]>()
+  const [sceneUpload, setSceneUpload] = useState<SceneUploadRequest>()
+  const [preparedResources, setPreparedResources] = useState<PreparedLDrawResources>()
   const [loadingPercent, setLoadingPercent] = useState(0)
   const [ldrawBoundsVersion, setLDrawBoundsVersion] = useState(0)
   const [preparedDefinitionIds, setPreparedDefinitionIds] = useState(() => new Set<string>())
+  useEffect(() => { if (visibleBricks.length === 0) clearPreparedLDrawScenes() }, [visibleBricks.length])
   const visibleBricksRef = useRef(visibleBricks)
   visibleBricksRef.current = visibleBricks
   // Placement hides source meshes and shows ghosts instead. Camera framing
@@ -2775,7 +2825,12 @@ export const BrickScene = ({
   const performanceSettings = getScenePerformanceSettings(visibleBricks.length, viewMode)
   const worldAnimationFps = getWorldAnimationFps(bricks.length, worldEntities.length)
   const enableRealtimeShadows = performanceSettings.enableRealtimeShadows
-  const preferDetailedGeometry = ldrawBoundsVersion > 0 && (visibleBricks.length < 800 || renderLDrawDefinitionIdsKey.split('|').every(id => preparedDefinitionIds.has(id)))
+  const scenePreparationBricks = placementSourceBrickIds.length === 0 && visibleBricks.length >= 800
+    && Math.abs(visibleBricks.length - displayedSceneRef.current.bricks.length) > 128 && preparedSceneBricks !== visibleBricks ? visibleBricks : undefined
+  const preferDetailedGeometry = !scenePreparationBricks && ldrawBoundsVersion > 0 && (visibleBricks.length < 800 || renderLDrawDefinitionIdsKey.split('|').every(id => preparedDefinitionIds.has(id)))
+  const displayedBricks = scenePreparationBricks ? displayedSceneRef.current.bricks : visibleBricks
+  const displayedDetailedGeometry = scenePreparationBricks ? displayedSceneRef.current.detailed : preferDetailedGeometry
+  if (!scenePreparationBricks) displayedSceneRef.current = { bricks: visibleBricks, detailed: preferDetailedGeometry }
   const useSimplifiedInteractionView = performanceSettings.useSimplifiedView && !showHiddenObjects && !visibleBricks.every(brick => brickById.get(brick.brickId)?.pack === 'lego')
   const resolvedCameraFrameKey = useMemo(
     () => getSceneCameraFrameRequestKey(deferredCameraFrameKey, frameBricks.map((brick) => brick.id)),
@@ -2792,21 +2847,45 @@ export const BrickScene = ({
   const orbitTargetKeyRef = useRef('')
 
   useEffect(() => {
-    if (renderLDrawDefinitionIdsKey.split('|').every(id => preparedDefinitionIds.has(id))) return
+    if (!scenePreparationBricks && renderLDrawDefinitionIdsKey.split('|').every(id => preparedDefinitionIds.has(id))) return
     let cancelled = false
+    let staged: PreparedLDrawResources | undefined
+    let installed = false
     setLoadingPercent(0)
     const report = (fraction: number) => {
       if (!cancelled) setLoadingPercent(previous => Math.max(previous, Math.min(99, Math.floor(fraction * 100))))
     }
     prepareBrickDefinitionsGeometry(renderLDrawDefinitionIdsKey ? renderLDrawDefinitionIdsKey.split('|').map(id => brickById.get(id)!) : [], fraction => report(fraction * .7)).then(async () => {
-      if (!cancelled) await prepareLDrawSceneBatches(visibleBricksRef.current, fraction => report(.7 + .3 * fraction))
+      if (!cancelled) {
+        const targetBricks = visibleBricksRef.current
+        const scene = await prepareLDrawSceneBatches(targetBricks, fraction => report(.7 + .2 * fraction), preparationOptionsRef.current, () => cancelled)
+        if (scene && !cancelled) staged = await prepareLDrawResources(scene, () => cancelled, fraction => report(.9 + .05 * fraction))
+        if (staged && !cancelled) {
+          const resources = staged
+          stagedResourcesRef.current.add(resources)
+          resources.onReleased = () => stagedResourcesRef.current.delete(resources)
+          await new Promise<void>(resolve => {
+            setSceneUpload({ resources, canceled: () => cancelled, progress: fraction => report(.95 + .05 * fraction), complete: resolve })
+          })
+          if (!cancelled) setSceneUpload(undefined)
+        }
+        if (cancelled && staged) releasePreparedLDrawResources(staged)
+        else {
+          installed = true
+          setPreparedResources(staged)
+          if (scenePreparationBricks) setPreparedSceneBricks(targetBricks)
+        }
+      }
       if (!cancelled) { setPreparedDefinitionIds(previous => new Set([...previous, ...renderLDrawDefinitionIdsKey.split('|')])); setLDrawBoundsVersion((version) => version + 1) }
     })
 
     return () => {
       cancelled = true
+      // Canvas owns a separate React root and may adopt these after this
+      // effect is cleaned up. Its resource hook releases unclaimed objects.
+      if (staged && !installed) releasePreparedLDrawResources(staged)
     }
-  }, [renderLDrawDefinitionIdsKey, preparedDefinitionIds])
+  }, [renderLDrawDefinitionIdsKey, preparedDefinitionIds, scenePreparationBricks])
 
   const followBounds = useMemo(() => {
     void ldrawBoundsVersion
@@ -2918,6 +2997,12 @@ export const BrickScene = ({
     orbitTargetRef.current = [gridFrame.modelCenterX, gridFrame.centerY, gridFrame.modelCenterZ]
   }
 
+  preparationOptionsRef.current = {
+    selectedId, highlightedIds: highlightedIdSet, supportedByBrickId,
+    displayColorByBrickId: resolvedDisplayColorByBrickId, showEdges: showBrickEdges,
+    excludedIds: new Set([...hiddenBrickIdSet, ...(transformsByBrickId?.keys() ?? [])]),
+  }
+
   return (
     <Canvas
       data-geometry-ready={preferDetailedGeometry ? 'true' : 'false'}
@@ -2933,6 +3018,7 @@ export const BrickScene = ({
         <div className="scene-loading-progress-label"><span>{(building ? buildingLabel ?? t('scene.building') : t('scene.loading'))}</span>{!building && <span>{loadingPercent}%</span>}</div>
         <div className="scene-loading-progress-track"><div className={building ? 'scene-building-indeterminate' : undefined} style={building ? undefined : { width: `${loadingPercent}%` }} /></div>
       </div></Html>}
+      <PreparedSceneUpload request={sceneUpload} />
       <color attach="background" args={['#eef2f5']} />
       <SceneLighting
         centerX={gridFrame.centerX}
@@ -2990,11 +3076,12 @@ export const BrickScene = ({
           />
         ) : (
           <VoxelOptimizedScene
-            bricks={visibleBricks}
+            bricks={displayedBricks}
             selectedId={selectedId}
             highlightedIdSet={highlightedIdSet}
             supportedByBrickId={supportedByBrickId}
-            preferDetailedGeometry={preferDetailedGeometry}
+            preferDetailedGeometry={displayedDetailedGeometry}
+            preparedResources={preparedResources}
             showEdges={showBrickEdges}
             displayColorByBrickId={resolvedDisplayColorByBrickId}
             transformsByBrickId={transformsByBrickId}

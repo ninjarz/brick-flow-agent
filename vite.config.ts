@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react-swc'
 import { readFileSync } from 'node:fs'
+import { ldrawBinaryAssetsPlugin } from './server/ldrawBinaryAssets'
 import { llmProxyPlugin } from './server/llmProxy'
 
 const packageVersion = (JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string }).version
@@ -13,7 +14,7 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(packageVersion),
   },
-  plugins: [react(), llmProxyPlugin()],
+  plugins: [ldrawBinaryAssetsPlugin(), react(), llmProxyPlugin()],
   worker: {
     format: 'es',
     // Workers have their own Rollup graph and need the same geometry bound.

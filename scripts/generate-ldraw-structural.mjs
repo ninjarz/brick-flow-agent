@@ -708,18 +708,22 @@ const visualChunkNames = generatedVisualChunks.map((_, index) => `chunk-${String
 const makeGeneratedVisualManifest = () => {
   const loaderDeclarations = visualChunkNames.flatMap((chunkName, index) =>
     generatedVisualChunks[index].length
-      ? [`const loadVisualChunk${index} = () => import('./ldrawGeneratedVisualChunks/${chunkName}')`]
+      ? [`const loadVisualChunk${index} = () => loadBinaryLDrawVisualChunk(new URL('../../node_modules/.cache/brick-flow-visuals/${chunkName}.bin.gz', import.meta.url).href, () => import('./ldrawGeneratedVisualChunks/${chunkName}'))`]
       : [],
   ).join('\n')
   const loaderEntries = generatedVisualChunks.flatMap((profiles, index) => profiles.map((profile) =>
     `  ${JSON.stringify(profile.partNumber)}: loadVisualChunk${index},`,
   )).join('\n')
 
-  return `import type { MeshTriangle } from './structuralVoxelizer'
+  return `import { loadBinaryLDrawVisualChunk } from './ldrawBinaryVisual'
+import type { BrickFootprint } from '../types/bricks'
+import type { MeshTriangle } from './structuralVoxelizer'
 
 export type LDrawFixedColorLayer = { color: number; hex: string; opacity: number; triangleIndices: number[] }
 
 export type LDrawGeneratedVisualChunk = {
+  getLDrawGeneratedEdgePoints?: (partNumber: string, footprint: BrickFootprint) => Float64Array | undefined
+  getLDrawGeneratedVisualValues?: (partNumber: string) => readonly number[] | Float64Array | undefined
   getLDrawGeneratedPrintLayers: (partNumber: string) => LDrawFixedColorLayer[] | undefined
   getLDrawGeneratedVisualTriangles: (partNumber: string) => MeshTriangle[] | undefined
 }
@@ -779,7 +783,7 @@ await Promise.all(generatedVisualChunks.map((profiles, index) => writeFile(
     'visualTriangleCache',
     profiles,
     '../structuralVoxelizer',
-  ) + `\nimport type { LDrawFixedColorLayer } from '../ldrawGeneratedVisual'\nconst printLayers: Record<string, LDrawFixedColorLayer[]> = JSON.parse(${JSON.stringify(JSON.stringify(Object.fromEntries(profiles.filter(p => printedParts[p.partNumber]?.length).map(p => [p.partNumber, printedParts[p.partNumber]]))))})\nexport const getLDrawGeneratedPrintLayers = (partNumber: string) => printLayers[partNumber]\n`,
+  ) + `\nimport type { LDrawFixedColorLayer } from '../ldrawGeneratedVisual'\nconst printLayers: Record<string, LDrawFixedColorLayer[]> = JSON.parse(${JSON.stringify(JSON.stringify(Object.fromEntries(profiles.filter(p => printedParts[p.partNumber]?.length).map(p => [p.partNumber, printedParts[p.partNumber]]))))})\nexport const getLDrawGeneratedPrintLayers = (partNumber: string) => printLayers[partNumber]\n` + `\nexport const getLDrawGeneratedVisualValues = (partNumber: string) => ldrawGeneratedVisualTriangleValues[partNumber]\n`,
 )))
 await writeFile(visualOutputPath, makeGeneratedVisualManifest())
 await writeFile(connectorOutputPath, makeGeneratedConnectorModule(generatedConnectorProfiles))

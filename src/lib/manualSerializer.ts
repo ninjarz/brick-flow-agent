@@ -6,6 +6,7 @@ import {
   getBlockingBuildPlanIssues,
   summarizeBuildPlanIssues,
   validateBuildPlan,
+  type BuildPlanIssue,
 } from './planUtils'
 
 export type ManualLocale = 'zh-CN' | 'en-US'
@@ -376,7 +377,7 @@ const groupManualSequence = (sequence: ReturnType<typeof sequenceBricksForManual
   return groups
 }
 
-export const serializeBuildManual = (plan: BuildPlan, locale: ManualLocale = 'zh-CN'): BuildManual => {
+export const serializeBuildManual = (plan: BuildPlan, locale: ManualLocale = 'zh-CN', preparedIssues?: BuildPlanIssue[]): BuildManual => {
   const labels = manualText[locale]
   let completedPieceCount = 0
   const planCenterX = plan.bricks.reduce((total, brick) => total + brick.pose.xStud, 0) / Math.max(1, plan.bricks.length)
@@ -409,7 +410,7 @@ export const serializeBuildManual = (plan: BuildPlan, locale: ManualLocale = 'zh
   })
 
   const allPieces = plan.bricks.map((brick) => toManualPiece(brick, locale))
-  const issues = validateBuildPlan(plan)
+  const issues = preparedIssues ?? validateBuildPlan(plan)
   const blockingIssues = getBlockingBuildPlanIssues(issues)
 
   return {

@@ -24,7 +24,7 @@ describe('keyboard move transactions', () => {
     expect(commit).toHaveBeenCalledOnce(); expect(close).toHaveBeenCalledOnce()
     expect(commit.mock.calls[0][0][0].pose.xStud).toBeCloseTo(.4)
     expect(commit.mock.calls[0][0][0].pose.zStud).toBeCloseTo(-.2)
-    expect(preview).toHaveBeenCalledTimes(2)
+    expect(preview).toHaveBeenCalledTimes(1)
   })
   it.each(['cancel', 'stale'] as const)('ignores late worker results after %s', async mode => {
     let resolve!: (parts: PlacedBrick[]) => void, valid = true
@@ -69,4 +69,17 @@ describe('keyboard move transactions', () => {
     const retreat = moveBrickGroupAlongSteps(result, [{ xStud: -.2 }], wall, index)
     expect(retreat[0].pose.xStud).toBeCloseTo(result[0].pose.xStud - .2)
   })
+})
+
+it('commits a released single step directly and still previews a held key', async () => {
+  const jobs: Array<(parts: PlacedBrick[]) => void> = []
+  const initial = source(), preview = vi.fn(), commit = vi.fn()
+  const session = createKeyboardMoveSession({ source: initial, valid: () => true, validate: () => new Promise(resolve => jobs.push(resolve)), preview, commit, close: vi.fn(), error: vi.fn() })
+  session.move({ xStud: .2 })
+  jobs[0](translateRigidBrickGroup(initial, { xStud: .2 })); await flush()
+  expect(preview).toHaveBeenCalledOnce()
+  session.move({ xStud: .2 }); session.finish()
+  jobs[1](translateRigidBrickGroup(initial, { xStud: .4 })); await flush()
+  expect(preview).toHaveBeenCalledOnce()
+  expect(commit).toHaveBeenCalledOnce()
 })

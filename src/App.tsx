@@ -1,9 +1,9 @@
 import { createKeyboardMoveSession } from './lib/keyboardMoveSession'
 import { getEditorKeyboardMove } from './lib/editorAnalysisClient'
 import { getBrickSelectionReference } from './lib/brickEditorCoordinates'
-import { getEditorTransform } from './lib/editorAnalysisClient'
+import { getEditorManual, getEditorTransform, setEditorAnalysisActive, backgroundAnalysisThreshold } from './lib/editorAnalysisClient'
 import { rotateRigidBrickGroup, translateRigidBrickGroup } from './lib/rigidBrickGroup'
-import { createManualHtmlBlob } from './lib/manualExportClient'
+import { createManualHtmlBlob, createLDrawBlob } from './lib/manualExportClient'
 import { useIntentState } from './hooks/useIntentState'
 import { useModalFocus } from './hooks/useModalFocus'
 import { importLDrawInWorker } from './lib/ldrawImportWorkerClient'
@@ -30,7 +30,7 @@ import { buildLlmUserPrompt, generateLlmBuildPlan, llmSystemPrompt, requestLlmJs
 import { clearLlmConnection, normalizeMaxRepairAttempts, saveLlmConnection } from './lib/llmConfig'
 import { defaultFinishedAssets, needsFinishedAssetsRecovery, isDefaultFinishedAsset, mergeRecoveredFinishedAssets, loadAllDefaultFinishedAssets, loadFinishedAssets, loadFinishedAssetsFromIndexedDb, mergeWithDefaultAssets, saveFinishedAssets } from './lib/finishedAssets'
 import { preparePlanGeometry } from './lib/planGeometry'
-import { formatBuildManualMarkdown, serializeBuildManual } from './lib/manualSerializer'
+import { formatBuildManualMarkdown, type BuildManual } from './lib/manualSerializer'
 import { getManualPageTabItems, getManualStepPage, manualStepPageSize } from './lib/manualPagination'
 import { countBricks, createBrickCollisionIndex, createPlanSpatialState, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickPlacementDiagnostics, getBrickRawOverlapScore, getConnectedBrickComponents, hasBrickCollision, isBrickAboveGround, makeBrick, repairBuildPlan, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
 import { loadCatalogPreferences, type CatalogPackPreference } from './lib/catalogPreferences'
@@ -55,7 +55,7 @@ import { buildTavernDirectorPrompt, createTavernDirectorStreamParser, tavernDire
 import { createWorldAiSnapshot } from './lib/worldAi'
 import type { StabilityAnalysis } from './lib/stabilityAnalysis'
 import { canBackgroundDrop, getEditorDrop, getEditorStability } from './lib/editorAnalysisClient'
-import { formatLDrawPlan, ldrawImportLimits, parseLDrawPlan } from './lib/ldrawPlan'
+import { ldrawImportLimits, parseLDrawPlan } from './lib/ldrawPlan'
 import { getEffectiveInventory, loadInventoryOverrides, saveInventoryOverrides } from './lib/userInventory'
 import { importAssetPlanIncrementally } from './lib/incrementalAssetImport'
 import { addWorldScenario, startWorldScenario } from './lib/worldScenarioImport'
@@ -253,7 +253,12 @@ function App() {
     session: WorldDirectorPlaybackSession
     simulationStarted: boolean
   }>()
+  const manualRequest = useRef(0)
+  const [isManualPreparing, setIsManualPreparing] = useState(false)
+  const exportPending = useRef(false)
+  const [isExportingPlan, setIsExportingPlan] = useState(false)
   const [isManualOpen, setIsManualOpen] = useState(false)
+  const [preparedManual, setPreparedManual] = useState<{ plan: BuildPlan; locale: typeof locale; manual: BuildManual }>()
   const [manualPlan, setManualPlan] = useState<BuildPlan>()
   const [manualStepIndex, setManualStepIndex] = useState(0)
   const [isManualPlaying, setIsManualPlaying] = useState(false)
@@ -349,6 +354,9 @@ function App() {
   }, [cancelConfigTest, setIsTestingLlmConfig, workspaceSession])
 
   const closeManual = useCallback(() => {
+    manualRequest.current++
+    setIsManualPreparing(false)
+    setPreparedManual(undefined)
     setIsManualOpen(false)
     setManualPlan(undefined)
     setManualCopyStatus('idle')
@@ -523,11 +531,23 @@ function App() {
   const hiddenScenarioEntityIds = useMemo(() => [...worldHiddenTargets.hiddenEntityIds], [worldHiddenTargets])
   const hiddenScenarioBrickIds = useMemo(() => [...worldHiddenTargets.hiddenBrickIds], [worldHiddenTargets])
   const manualSourcePlan = isManualOpen ? manualPlan ?? plan : undefined
-  const buildManual = useMemo(() => manualSourcePlan ? serializeBuildManual(manualSourcePlan, locale) : undefined, [locale, manualSourcePlan])
+  useEffect(() => {
+    setEditorAnalysisActive(plan.bricks.length >= backgroundAnalysisThreshold || (manualSourcePlan?.bricks.length ?? 0) >= backgroundAnalysisThreshold || isManualPreparing)
+  }, [plan.bricks.length, manualSourcePlan, isManualPreparing])
+
+  const buildManual = preparedManual && preparedManual.plan === manualSourcePlan && preparedManual.locale === locale ? preparedManual.manual : undefined
+  useEffect(() => {
+    if (!manualSourcePlan) return
+    let active = true
+    void getEditorManual(manualSourcePlan, locale).then(manual => {
+      if (active) setPreparedManual({ plan: manualSourcePlan, locale, manual })
+    }).catch(error => { if (active) setGenerationFailure(error instanceof Error ? error.message : t('error.generationFailed')) })
+    return () => { active = false }
+  }, [manualSourcePlan, locale, setGenerationFailure, t])
   const manualMarkdown = useMemo(() => buildManual ? formatBuildManualMarkdown(buildManual, locale) : '', [buildManual, locale])
-  const manualIssues = useMemo(() => manualSourcePlan ? validateBuildPlan(manualSourcePlan) : [], [manualSourcePlan])
-  const manualBlockingIssues = useMemo(() => getBlockingBuildPlanIssues(manualIssues), [manualIssues])
-  const manualIssueSummary = useMemo(() => summarizeBuildPlanIssues(manualIssues, locale), [locale, manualIssues])
+  const manualIssueCount = buildManual?.validation.issueCount ?? 0
+  const manualBlockingIssueCount = buildManual?.validation.blockingIssueCount ?? 0
+  const manualIssueSummary = buildManual?.validation.summary ?? ''
   const selectedManualStep = buildManual?.steps[Math.min(manualStepIndex, Math.max(0, buildManual.steps.length - 1))]
   const manualStepPage = getManualStepPage(buildManual?.steps.length ?? 0, manualStepIndex)
   const visibleManualSteps = buildManual?.steps.slice(manualStepPage.start, manualStepPage.end) ?? []
@@ -790,7 +810,7 @@ function App() {
   }, [buildManual, isManualOpen, isManualPlaying, manualPlaybackIntervalMs, manualStepIndex])
 
   useEffect(() => {
-    if (!isConfigOpen && !isPromptPreviewOpen && !isAssetLibraryOpen && !isObjImportOpen && !isImportDiagnosticsOpen && !isManualOpen && !isStabilityLabOpen && !isTavernOpen) return
+    if (!isConfigOpen && !isPromptPreviewOpen && !isAssetLibraryOpen && !isObjImportOpen && !isImportDiagnosticsOpen && !isManualOpen && !isManualPreparing && !isStabilityLabOpen && !isTavernOpen) return
 
     const handleModalEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
@@ -798,7 +818,7 @@ function App() {
 
       if (isTavernOpen) {
         setIsTavernOpen(false)
-      } else if (isManualOpen) {
+      } else if (isManualOpen || isManualPreparing) {
         closeManual()
       } else if (isStabilityLabOpen) {
         setIsStabilityLabOpen(false)
@@ -818,7 +838,7 @@ function App() {
 
     window.addEventListener('keydown', handleModalEscape)
     return () => window.removeEventListener('keydown', handleModalEscape)
-  }, [closeManual, isAssetLibraryOpen, isConfigOpen, isImportDiagnosticsOpen, isManualOpen, isObjImportOpen, isPromptPreviewOpen, isStabilityLabOpen, isTavernOpen])
+  }, [closeManual, isAssetLibraryOpen, isConfigOpen, isImportDiagnosticsOpen, isManualOpen, isManualPreparing, isObjImportOpen, isPromptPreviewOpen, isStabilityLabOpen, isTavernOpen])
 
   useEffect(() => {
     const handleHistoryKeyDown = (event: KeyboardEvent) => {
@@ -841,7 +861,7 @@ function App() {
 
     window.addEventListener('keydown', handleHistoryKeyDown)
     return () => window.removeEventListener('keydown', handleHistoryKeyDown)
-  }, [isAssetLibraryOpen, isConfigOpen, isImportDiagnosticsOpen, isManualOpen, isObjImportOpen, isPromptPreviewOpen, isStabilityLabOpen, isTavernOpen, redoPlan, undoPlan])
+  }, [isAssetLibraryOpen, isConfigOpen, isImportDiagnosticsOpen, isManualOpen, isManualPreparing, isObjImportOpen, isPromptPreviewOpen, isStabilityLabOpen, isTavernOpen, redoPlan, undoPlan])
 
 
   const handleImage = async (file?: File) => {
@@ -2474,20 +2494,36 @@ function App() {
     URL.revokeObjectURL(url)
   }
 
-  const exportPlan = () => {
-    const manual = serializeBuildManual(plan, locale)
-    downloadJson(`${plan.title || 'brick-plan'}.json`, {
-      schemaVersion: 6,
-      worldSchemaVersion: 1,
-      exportedAt: new Date().toISOString(),
-      plan,
-      world,
-      manual,
-    })
+  const exportPlan = async () => {
+    if (exportPending.current) return
+    exportPending.current = true
+    setIsExportingPlan(true)
+    const snapshot = plan
+    const snapshotWorld = world
+    try {
+      const manual = await getEditorManual(snapshot, locale)
+      downloadJson(`${snapshot.title || 'brick-plan'}.json`, {
+        schemaVersion: 6,
+        worldSchemaVersion: 1,
+        exportedAt: new Date().toISOString(),
+        plan: snapshot,
+        world: snapshotWorld,
+        manual,
+      })
+    } catch (error) { setGenerationFailure(error instanceof Error ? error.message : t('error.generationFailed')) }
+    finally { exportPending.current = false; setIsExportingPlan(false) }
   }
 
-  const exportLDraw = () => {
-    downloadFile(`${plan.title || 'brick-plan'}.ldr`, formatLDrawPlan(plan), 'text/plain')
+  const exportLDraw = async () => {
+    if (exportPending.current) return
+    exportPending.current = true
+    setIsExportingPlan(true)
+    const snapshot = plan
+    try {
+      const blob = await createLDrawBlob(snapshot)
+      downloadFile(`${snapshot.title || 'brick-plan'}.ldr`, blob, 'text/plain')
+    } catch (error) { setGenerationFailure(error instanceof Error ? error.message : t('error.generationFailed')) }
+    finally { exportPending.current = false; setIsExportingPlan(false) }
   }
 
   const exportManual = () => {
@@ -2737,24 +2773,34 @@ function App() {
   }
 
   const openManual = async (sourcePlan?: BuildPlan) => {
+    const requestId = ++manualRequest.current
+    const epoch = workspaceSession.getEpoch()
     const nextManualPlan = sourcePlan ?? planRef.current
-    try { await preparePlanGeometry(nextManualPlan) } catch {
-      setGenerationFailure(t('error.geometryLoad'))
-      return
+    setIsManualPreparing(true)
+    try {
+      await preparePlanGeometry(nextManualPlan)
+      const manual = await getEditorManual(nextManualPlan, locale)
+      if (manualRequest.current !== requestId || workspaceSession.getEpoch() !== epoch) return
+      if (!sourcePlan && planRef.current !== nextManualPlan) return
+      if (manual.validation.blockingIssueCount > 0) {
+        setGenerationFailure(t('error.manualInvalid', { summary: manual.validation.summary }))
+        setIsAssetLibraryOpen(false)
+        return
+      }
+      setPreparedManual({ plan: nextManualPlan, locale, manual })
+      setManualPlan(sourcePlan)
+      setManualStepIndex(0)
+      setIsManualPlaying(false)
+      setIsManualExploded(true)
+      setManualCopyStatus('idle')
+      setIsManualOpen(true)
+    } catch (error) {
+      if (manualRequest.current === requestId && workspaceSession.getEpoch() === epoch) {
+        setGenerationFailure(error instanceof Error ? error.message : t('error.geometryLoad'))
+      }
+    } finally {
+      if (manualRequest.current === requestId) setIsManualPreparing(false)
     }
-    const issues = validateBuildPlan(nextManualPlan)
-    if (getBlockingBuildPlanIssues(issues).length > 0) {
-      setGenerationFailure(t('error.manualInvalid', { summary: summarizeBuildPlanIssues(issues, locale) }))
-      setIsAssetLibraryOpen(false)
-      return
-    }
-
-    setManualPlan(sourcePlan)
-    setManualStepIndex(0)
-    setIsManualPlaying(false)
-    setIsManualExploded(true)
-    setManualCopyStatus('idle')
-    setIsManualOpen(true)
   }
 
   return (
@@ -3131,8 +3177,8 @@ function App() {
           <Suspense fallback={<div className="scene-loading">{t('scene.loading')}</div>}>
             <BrickScene
               bricks={generationPreview?.bricks ?? plan.bricks}
-              building={isGenerating}
-              buildingLabel={t(`scene.${generationPhase}`)}
+              building={isGenerating || isManualPreparing || isExportingPlan}
+              buildingLabel={isGenerating ? t(`scene.${generationPhase}`) : isExportingPlan ? (locale === 'zh-CN' ? '正在导出' : 'Exporting') : (locale === 'zh-CN' ? '正在准备手册' : 'Preparing manual')}
               framingBricks={generationPreview?.frameBricks}
               selectedId={generationPreview ? undefined : selectedId}
               cameraFrameKey={`${generationPreview?.id ?? plan.id}:asset-import-${assetImportFrameVersion}${generationPreview ? `:module-${generationPreview.structures?.length ?? 0}` : ''}`}
@@ -3684,8 +3730,8 @@ function App() {
 
             <section className="manual-inventory">
               <h3>{t('manual.inventory')}</h3>
-              <p className={`structure-status ${manualIssues.length > 0 ? (manualBlockingIssues.length > 0 ? 'warn' : 'notice') : 'ok'}`}>
-                {manualIssues.length > 0 ? manualIssueSummary : t('common.structureOk')}
+              <p className={`structure-status ${manualIssueCount > 0 ? (manualBlockingIssueCount > 0 ? 'warn' : 'notice') : 'ok'}`}>
+                {manualIssueCount > 0 ? manualIssueSummary : t('common.structureOk')}
               </p>
               <div>
                 {buildManual.inventory.map((item) => (

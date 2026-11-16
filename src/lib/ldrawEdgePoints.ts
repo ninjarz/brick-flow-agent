@@ -15,3 +15,9 @@ export const getLDrawEdgePoints = (geometry: BufferGeometry, threshold = 15) => 
   }
   return points
 }
+
+export const seedLDrawEdgePoints = (geometry: BufferGeometry, points: ArrayLike<number>) => {
+  let thresholds = outlines.get(geometry)
+  if (!thresholds) { thresholds = new Map(); outlines.set(geometry, thresholds) }
+  if (!thresholds.has(15)) thresholds.set(15, Array.from(points))
+}
