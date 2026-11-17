@@ -50,9 +50,9 @@
   },
   "replica": {
     "plan": "src/data/legoHogwartsPlan.json",
-    "sha256": "1f17d7b3fddabf7608240dd3273662b57b82c180f52744cd8b49afa017d876d6",
+    "sha256": "6e836c1c3acfb35b3ce21aa8d1032f77df01012133af5b0898b58cd1cb25e2bc",
     "editablePieces": 6025,
-    "assemblySteps": 819,
+    "assemblySteps": 1906,
     "castleNumberedSteps": 771,
     "castleInsetChecks": 1035,
     "components": [
@@ -96,6 +96,12 @@
       "countNote": "6016 factory inventory units include four two-wand sprues. The assembled model uses four single wands; nine factory hinges each expand into two editable leaves. The advertised 6020 count includes four unused spare wands."
     },
     "artwork": "Set-specific stickers and printed figures are retained as fixed-colour mesh layers.",
-    "assemblyPoses": "The editable asset stores final display poses. Temporary flipped or folded construction stages were checked separately against official insets."
+    "assemblyPoses": "Official construction frames include flips, relative articulation, inset subassemblies, pending artwork, installation-only stages and the final display overview. All 1906 stages pass native collision and support validation with exact mould contact hulls.",
+    "constructionValidation": "src/data/hogwartsConstructionValidation.json",
+    "constructionUiSpotChecks": 11,
+    "constructionUiEngines": [
+      "Chromium",
+      "WebKit"
+    ]
   }
 }

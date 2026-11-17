@@ -90,7 +90,7 @@ export const defaultFinishedAssets: FinishedAsset[] = [
     id: 'finished-lego-71043', title: 'LEGO 71043 霍格沃茨城堡', category: 'Classic',
     description: '按官方四册说明书完整复刻，6025 个可编辑零件，含礼堂、主塔、东楼、海格小屋、打人柳、五艘渡船、四位创始人与微缩人物。铰链上下半件可分别编辑。',
     instructionUrl: 'https://www.lego.com/en-us/service/building-instructions/71043',
-    instructionStatus: 'mapped', plan: hogwartsPlan as BuildPlan,
+    instructionStatus: 'mapped', plan: hogwartsPlan as unknown as BuildPlan,
   },
   {
     id: 'finished-lego-21000', title: 'LEGO 21000 西尔斯大厦', category: 'Classic',

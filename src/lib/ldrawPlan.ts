@@ -6,6 +6,7 @@ import sourceFrames from '../data/ldrawSourceFrames.json' with { type: 'json' }
 import { normalizeLDrawPartNumber } from './ldrawPartNumbers'
 import { tryNormalizeImportedPlan } from './planImport'
 import { createSingleBrickSteps } from './planUtils'
+import { getRigidBrickMatrix } from './rigidBrickTransform'
 
 type Matrix3 = [number, number, number, number, number, number, number, number, number]
 type Vector3Tuple = [number, number, number]
@@ -128,11 +129,8 @@ const matrixDistance = (source: Matrix3, target: Matrix3) => source.reduce(
   0,
 )
 
-const formatNumber = (value: number) => {
-  const rounded = Math.round(value * 1000) / 1000
-  return Object.is(rounded, -0) ? '0' : String(rounded)
-}
-const formatExactNumber = (value: number) => String(Math.round(value * 100_000_000) / 100_000_000)
+const formatNumber = (value: number) => Object.is(value, -0) ? '0' : String(value)
+const formatExactNumber = formatNumber
 
 const encodeBase64 = (value: string) => {
   const bytes = new TextEncoder().encode(value)
@@ -200,8 +198,9 @@ export const formatLDrawPlan = (plan: BuildPlan) => {
         return [result.x*20, -result.y*20, -result.z*20]
       }
       const origin = local([0,0,0])
-      const columns = [[1,0,0], [0,1,0], [0,0,1]].map(axis => local(axis as Vector3Tuple).map((n,i) => n-origin[i]))
-      const exactMatrix = Array.from({ length: 9 }, (_,i) => columns[i%3][Math.floor(i/3)])
+      const world = getRigidBrickMatrix(definition, brick.pose).elements
+      const orientation: Matrix3 = [world[0], world[4], world[8], world[1], world[5], world[9], world[2], world[6], world[10]]
+      const exactMatrix = multiplyMatrices(multiplyMatrices(nativeFromLDraw, orientation), localFromSource(source.swapped))
       lines.push([1, colorToLDrawCode[brick.color], ...origin.map(formatExactNumber), ...exactMatrix.map(formatExactNumber), `${part}.dat`].join(' '))
       continue
     }

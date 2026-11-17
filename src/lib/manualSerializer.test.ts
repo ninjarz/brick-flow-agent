@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import * as rigidTransforms from './rigidBrickTransform'
 import type { BuildPlan } from '../types/bricks'
-import { formatBuildManualHtml, serializeBuildManual } from './manualSerializer'
+import { formatBuildManualHtml, formatBuildManualMarkdown, serializeBuildManual } from './manualSerializer'
 import { validateBuildPlan, makeBrick } from './planUtils'
 
 const base = makeBrick('brick-1x1', 'gray', 0, 0, 0)
@@ -15,6 +16,23 @@ const plan: BuildPlan = {
 }
 
 describe('build manual 2.0', () => {
+  it('reports preserved template steps as unchecked instead of claiming structural success', () => {
+    const floating = makeBrick('brick-1x1', 'gray', 0, 4, 0)
+    const template = { ...plan, bricks: [floating], steps: [] }
+    const manual = serializeBuildManual(template, 'zh-CN')
+    expect(manual.steps[0].validation.checked).toBe(false)
+    expect(manual.steps[0].validation.summary).toContain('尚未校验')
+    expect(manual.validation.ok).toBe(false)
+    expect(formatBuildManualHtml(manual, 'zh-CN')).toContain('step-status pending')
+    expect(serializeBuildManual(template, 'en-US').steps[0].validation.summary).toContain('has not been checked')
+  })
+
+  it('marks generated cumulative validations as checked', () => {
+    const generated = serializeBuildManual({ ...plan, source: 'llm', bricks: [base] }, 'en-US')
+    expect(generated.steps[0].validation.checked).toBe(true)
+    expect(generated.steps[0].validation.ok).toBe(true)
+  })
+
   it('serializes delta-only steps with camera and assembly guidance', () => {
     const manual = serializeBuildManual(plan, 'en-US')
     expect(manual.schemaVersion).toBe(6)
@@ -103,4 +121,21 @@ describe('build manual 2.0', () => {
 
 it('reuses exact prepared issues without changing the manual or validation', () => {
   expect(serializeBuildManual(plan, 'en-US', validateBuildPlan(plan))).toEqual(serializeBuildManual(plan, 'en-US'))
+})
+
+
+it('formats only newly introduced construction poses when exporting Markdown', () => {
+  const bricks = [0, 3, 6].map(x => makeBrick('brick-1x1', 'gray', x, 0, 0))
+  const construction: BuildPlan = { ...plan, bricks,
+    constructionAssemblies: { all: { brickIds: bricks.map(brick => brick.id) } },
+    steps: bricks.map((brick, i) => ({ id: `stage-${i}`, title: `Stage ${i}`, description: '', brickIds: [brick.id], construction: { assemblyId: 'all' } })),
+  }
+  const manual = serializeBuildManual(construction)
+  const transform = vi.spyOn(rigidTransforms, 'brickPoseFromRigidMatrix')
+  try {
+    const markdown = formatBuildManualMarkdown(manual)
+    expect(transform).toHaveBeenCalledTimes(bricks.length)
+    expect(markdown).toContain('Stage 2')
+    expect(markdown).toContain('x6 y0 z0')
+  } finally { transform.mockRestore() }
 })

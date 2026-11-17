@@ -1,7 +1,8 @@
+import { createCumulativeManualView } from './lib/manualPresentation'
 import { createKeyboardMoveSession } from './lib/keyboardMoveSession'
 import { getEditorKeyboardMove } from './lib/editorAnalysisClient'
 import { getBrickSelectionReference } from './lib/brickEditorCoordinates'
-import { getEditorManual, getEditorTransform, setEditorAnalysisActive, backgroundAnalysisThreshold } from './lib/editorAnalysisClient'
+import { getEditorValidation, getEditorManual, getPreparedManualPlan, getEditorTransform, setEditorAnalysisActive, backgroundAnalysisThreshold } from './lib/editorAnalysisClient'
 import { rotateRigidBrickGroup, translateRigidBrickGroup } from './lib/rigidBrickGroup'
 import { createManualHtmlBlob, createLDrawBlob } from './lib/manualExportClient'
 import { useIntentState } from './hooks/useIntentState'
@@ -30,9 +31,9 @@ import { buildLlmUserPrompt, generateLlmBuildPlan, llmSystemPrompt, requestLlmJs
 import { clearLlmConnection, normalizeMaxRepairAttempts, saveLlmConnection } from './lib/llmConfig'
 import { defaultFinishedAssets, needsFinishedAssetsRecovery, isDefaultFinishedAsset, mergeRecoveredFinishedAssets, loadAllDefaultFinishedAssets, loadFinishedAssets, loadFinishedAssetsFromIndexedDb, mergeWithDefaultAssets, saveFinishedAssets } from './lib/finishedAssets'
 import { preparePlanGeometry } from './lib/planGeometry'
-import { formatBuildManualMarkdown, type BuildManual } from './lib/manualSerializer'
+import { formatBuildManualMarkdown, getAssemblyGuide, type BuildManual } from './lib/manualSerializer'
 import { getManualPageTabItems, getManualStepPage, manualStepPageSize } from './lib/manualPagination'
-import { countBricks, createBrickCollisionIndex, createPlanSpatialState, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickPlacementDiagnostics, getBrickRawOverlapScore, getConnectedBrickComponents, hasBrickCollision, isBrickAboveGround, makeBrick, repairBuildPlan, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
+import { createSingleBrickSteps, countBricks, createBrickCollisionIndex, createPlanSpatialState, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickPlacementDiagnostics, getBrickRawOverlapScore, getConnectedBrickComponents, hasBrickCollision, isBrickAboveGround, makeBrick, repairBuildPlan, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
 import { loadCatalogPreferences, type CatalogPackPreference } from './lib/catalogPreferences'
 import { getBrickWorldFrame, normalizeHorizontalStud, normalizeQuarterTurns, normalizeVerticalQuarterTurns, normalizeYStud, roundToGrid, STUD_PITCH_WORLD, translateBrickPose } from './lib/brickUnits'
 import { useI18n } from './lib/i18n'
@@ -258,11 +259,12 @@ function App() {
   const exportPending = useRef(false)
   const [isExportingPlan, setIsExportingPlan] = useState(false)
   const [isManualOpen, setIsManualOpen] = useState(false)
+  const [manualStepCheck, setManualStepCheck] = useState<{ bricks: PlacedBrick[]; issues: Awaited<ReturnType<typeof getEditorValidation>> }>()
   const [preparedManual, setPreparedManual] = useState<{ plan: BuildPlan; locale: typeof locale; manual: BuildManual }>()
   const [manualPlan, setManualPlan] = useState<BuildPlan>()
   const [manualStepIndex, setManualStepIndex] = useState(0)
   const [isManualPlaying, setIsManualPlaying] = useState(false)
-  const [isManualExploded, setIsManualExploded] = useState(true)
+  const [isManualExploded, setIsManualExploded] = useState(false)
   const [manualPlaybackIntervalMs, setManualPlaybackIntervalMs] = useState(1200)
   const [manualCopyStatus, setManualCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
   const [promptCopyStatus, setPromptCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
@@ -535,7 +537,8 @@ function App() {
     setEditorAnalysisActive(plan.bricks.length >= backgroundAnalysisThreshold || (manualSourcePlan?.bricks.length ?? 0) >= backgroundAnalysisThreshold || isManualPreparing)
   }, [plan.bricks.length, manualSourcePlan, isManualPreparing])
 
-  const buildManual = preparedManual && preparedManual.plan === manualSourcePlan && preparedManual.locale === locale ? preparedManual.manual : undefined
+  const buildManual = useMemo(() => preparedManual && preparedManual.plan === manualSourcePlan && preparedManual.locale === locale
+    ? createCumulativeManualView(preparedManual.manual, locale) : undefined, [preparedManual, manualSourcePlan, locale])
   useEffect(() => {
     if (!manualSourcePlan) return
     let active = true
@@ -544,7 +547,13 @@ function App() {
     }).catch(error => { if (active) setGenerationFailure(error instanceof Error ? error.message : t('error.generationFailed')) })
     return () => { active = false }
   }, [manualSourcePlan, locale, setGenerationFailure, t])
-  const manualMarkdown = useMemo(() => buildManual ? formatBuildManualMarkdown(buildManual, locale) : '', [buildManual, locale])
+  const getManualMarkdown = useMemo(() => {
+    let text: string | undefined
+    return () => {
+      if (text === undefined) text = buildManual ? formatBuildManualMarkdown(buildManual, locale) : ''
+      return text
+    }
+  }, [buildManual, locale])
   const manualIssueCount = buildManual?.validation.issueCount ?? 0
   const manualBlockingIssueCount = buildManual?.validation.blockingIssueCount ?? 0
   const manualIssueSummary = buildManual?.validation.summary ?? ''
@@ -552,6 +561,8 @@ function App() {
   const manualStepPage = getManualStepPage(buildManual?.steps.length ?? 0, manualStepIndex)
   const visibleManualSteps = buildManual?.steps.slice(manualStepPage.start, manualStepPage.end) ?? []
   const manualPageTabItems = getManualPageTabItems(buildManual?.steps.length ?? 0, manualStepIndex)
+  const manualHighlightedIds = useMemo(() => selectedManualStep?.constructionStep?.focusBrickIds
+    ?? selectedManualStep?.addPieces.map(piece => piece.instanceId) ?? [], [selectedManualStep])
   const manualPreviewBricks = useMemo(() => {
     if (!manualSourcePlan || !buildManual || !selectedManualStep) return []
     const cumulativeIds = new Set(
@@ -561,9 +572,29 @@ function App() {
     )
     return manualSourcePlan.bricks.filter((brick) => cumulativeIds.has(brick.id))
   }, [buildManual, manualSourcePlan, manualStepIndex, selectedManualStep])
+  useEffect(() => {
+    if (!manualSourcePlan || !selectedManualStep || selectedManualStep.constructionStep || selectedManualStep.validation.checked !== false || isManualPlaying) return
+    let active = true
+    const snapshot = { ...manualSourcePlan, bricks: manualPreviewBricks, steps: createSingleBrickSteps(manualPreviewBricks) }
+    void getEditorValidation(snapshot).then(issues => {
+      if (active) setManualStepCheck({ bricks: manualPreviewBricks, issues })
+    }).catch(() => { /* The existing unchecked status remains visible when analysis fails. */ })
+    return () => { active = false }
+  }, [manualSourcePlan, selectedManualStep, manualPreviewBricks, isManualPlaying])
+  const selectedManualValidation = manualStepCheck?.bricks === manualPreviewBricks && !selectedManualStep?.constructionStep && selectedManualStep?.validation.checked === false
+    ? { checked: true, ok: getBlockingBuildPlanIssues(manualStepCheck.issues).length === 0,
+        issueCount: manualStepCheck.issues.length, summary: summarizeBuildPlanIssues(manualStepCheck.issues, locale) }
+    : selectedManualStep?.validation
+  const manualCameraFocusIds = useMemo(() => {
+    const isLastStep = buildManual && manualStepIndex === buildManual.steps.length - 1
+    return isLastStep || !manualHighlightedIds.length ? manualPreviewBricks.map(brick => brick.id) : manualHighlightedIds
+  }, [buildManual, manualStepIndex, manualHighlightedIds, manualPreviewBricks])
   const manualDisplayBricks = useMemo(() => {
     if (!isManualExploded || !selectedManualStep) return manualPreviewBricks
-    const guideByBrickId = new Map(selectedManualStep.addPieces.map((piece) => [piece.instanceId, piece.assembly]))
+    const focus = new Set(manualHighlightedIds)
+    const targets = manualPreviewBricks.filter(brick => focus.has(brick.id))
+    const commonGuide = targets[0] ? getAssemblyGuide(targets[0], locale) : undefined
+    const guideByBrickId = new Map(targets.map(brick => [brick.id, selectedManualStep.addPieces.length ? getAssemblyGuide(brick, locale) : commonGuide]))
     return manualPreviewBricks.map((brick) => {
       const guide = guideByBrickId.get(brick.id)
       if (!guide) return brick
@@ -577,7 +608,7 @@ function App() {
         },
       }
     })
-  }, [isManualExploded, manualPreviewBricks, selectedManualStep])
+  }, [isManualExploded, manualPreviewBricks, selectedManualStep, manualHighlightedIds, locale])
   const localizedFinishedAssets = useMemo(
     () => finishedAssets.map((asset) => localizeFinishedAsset(asset, t)),
     [finishedAssets, t],
@@ -2447,7 +2478,7 @@ function App() {
           ...step,
           brickIds: step.brickIds.filter((brickId) => !selectionIdSet.has(brickId)),
         }))
-        .filter((step) => step.brickIds.length > 0),
+        .filter((step) => step.brickIds.length > 0 || step.construction),
     }))
     selectBrick('')
   }
@@ -2501,12 +2532,13 @@ function App() {
     const snapshot = plan
     const snapshotWorld = world
     try {
-      const manual = await getEditorManual(snapshot, locale)
+      const prepared = await getEditorManual(snapshot, locale)
+      const manual = createCumulativeManualView(prepared, locale)
       downloadJson(`${snapshot.title || 'brick-plan'}.json`, {
         schemaVersion: 6,
         worldSchemaVersion: 1,
         exportedAt: new Date().toISOString(),
-        plan: snapshot,
+        plan: getPreparedManualPlan(prepared, snapshot),
         world: snapshotWorld,
         manual,
       })
@@ -2533,7 +2565,7 @@ function App() {
 
   const exportManualMarkdown = () => {
     if (!buildManual) return
-    downloadText(`${buildManual.title || 'brick-manual'}-manual.md`, manualMarkdown)
+    downloadText(`${buildManual.title || 'brick-manual'}-manual.md`, getManualMarkdown())
   }
 
   const exportManualHtml = async () => {
@@ -2586,11 +2618,11 @@ function App() {
 
   const copyManualMarkdown = async () => {
     try {
-      await navigator.clipboard.writeText(manualMarkdown)
+      await navigator.clipboard.writeText(getManualMarkdown())
       setManualCopyStatus('copied')
     } catch {
       const textarea = document.createElement('textarea')
-      textarea.value = manualMarkdown
+      textarea.value = getManualMarkdown()
       textarea.setAttribute('readonly', 'true')
       textarea.style.position = 'fixed'
       textarea.style.left = '-9999px'
@@ -2778,7 +2810,6 @@ function App() {
     const nextManualPlan = sourcePlan ?? planRef.current
     setIsManualPreparing(true)
     try {
-      await preparePlanGeometry(nextManualPlan)
       const manual = await getEditorManual(nextManualPlan, locale)
       if (manualRequest.current !== requestId || workspaceSession.getEpoch() !== epoch) return
       if (!sourcePlan && planRef.current !== nextManualPlan) return
@@ -2787,11 +2818,13 @@ function App() {
         setIsAssetLibraryOpen(false)
         return
       }
-      setPreparedManual({ plan: nextManualPlan, locale, manual })
-      setManualPlan(sourcePlan)
+      const preparedPlan = getPreparedManualPlan(manual, nextManualPlan)
+      if (!sourcePlan && preparedPlan !== nextManualPlan) setPlan(preparedPlan)
+      setPreparedManual({ plan: preparedPlan, locale, manual })
+      setManualPlan(sourcePlan ? preparedPlan : undefined)
       setManualStepIndex(0)
       setIsManualPlaying(false)
-      setIsManualExploded(true)
+      setIsManualExploded(false)
       setManualCopyStatus('idle')
       setIsManualOpen(true)
     } catch (error) {
@@ -3274,6 +3307,7 @@ function App() {
       </section>
 
       <ControlPanel
+        debugMode={debugMode}
         analysisPaused={Boolean(keyboardTransforms)}
         engineStatusLabel={t('control.engineStatus', { status: llmEngineStatusLabel })}
         engineStatusTone={llmEngineStatusTone}
@@ -3747,8 +3781,8 @@ function App() {
                 <div>
                   <h3>{t('manual.pageTitle', { page: selectedManualStep.stepNumber, title: selectedManualStep.title })}</h3>
                   <p>{selectedManualStep.description}</p>
-                  <p className={`structure-status ${selectedManualStep.validation.ok ? (selectedManualStep.validation.issueCount > 0 ? 'notice' : 'ok') : 'warn'}`}>
-                    {selectedManualStep.validation.summary}
+                  <p className={`structure-status ${selectedManualValidation?.checked === false ? 'pending' : selectedManualValidation?.ok ? ((selectedManualValidation?.issueCount ?? 0) > 0 ? 'notice' : 'ok') : 'warn'}`}>
+                    {selectedManualValidation?.summary}
                   </p>
                 </div>
                 <div className="manual-timeline">
@@ -3788,14 +3822,17 @@ function App() {
                   <span>{t('manual.timelineProgress', { current: manualStepIndex + 1, total: buildManual.steps.length })}</span>
                 </div>
                 <div className="manual-assembly-guides">
-                  {[...new Set(selectedManualStep.addPieces.map((piece) => piece.assembly.label))].map((label) => <span key={label}>{label}</span>)}
+                  {(selectedManualStep.installationLabels ?? [...new Set(selectedManualStep.addPieces.map((piece) => piece.assembly.label))]).map((label) => <span key={label}>{label}</span>)}
                 </div>
                 <div className="manual-preview-viewer">
                   <Suspense fallback={<div className="scene-loading">{t('scene.loading')}</div>}>
                     <BrickScene
                       bricks={manualDisplayBricks}
+                      showSupportWarnings={Boolean(selectedManualStep.construction) && !isManualExploded}
                       selectedId=""
-                      highlightedIds={selectedManualStep.addPieces.map((piece) => piece.instanceId)}
+                      highlightedIds={manualHighlightedIds}
+                      hiddenPrintBrickIds={selectedManualStep.construction?.hiddenPrintBrickIds}
+                      cameraFocusBrickIds={manualCameraFocusIds}
                       cameraFrameKey={`manual:${manualPlan?.id ?? 'manual'}`}
                       cameraFollowStepKey={`${selectedManualStep.stepNumber}:${isManualExploded ? 'exploded' : 'assembled'}`}
                       initialCameraAzimuthDegrees={selectedManualStep.cameraAzimuthDegrees}
@@ -3906,7 +3943,7 @@ function App() {
                   <p className="manual-step-meta">
                     {t('manual.stepMeta', { added: step.addPieces.length, total: step.completedPieceCount })}
                   </p>
-                  <p className={`structure-status ${step.validation.ok ? (step.validation.issueCount > 0 ? 'notice' : 'ok') : 'warn'}`}>
+                  <p className={`structure-status ${step.validation.checked === false ? 'pending' : step.validation.ok ? (step.validation.issueCount > 0 ? 'notice' : 'ok') : 'warn'}`}>
                     {step.validation.summary}
                   </p>
                 </article>
@@ -3933,7 +3970,7 @@ function App() {
               </button>
             </div>
             {manualCopyStatus === 'failed' && (
-              <textarea className="manual-copy-output" readOnly value={manualMarkdown} aria-label={t('manual.markdownText')} />
+              <textarea className="manual-copy-output" readOnly value={getManualMarkdown()} aria-label={t('manual.markdownText')} />
             )}
           </section>
         </div>

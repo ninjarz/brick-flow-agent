@@ -2,6 +2,7 @@ import type { BrickDefinition, BrickPose } from '../types/bricks'
 import { getLoadedLDrawGeneratedVisualTriangles, getLoadedLDrawGeneratedVisualValues } from './ldrawVisualRegistry'
 import { normalizeLDrawPartNumber } from './ldrawPartNumbers'
 import { transformBrickLocalPoint } from './brickUnits'
+import { getRigidBrickMatrix } from './rigidBrickTransform'
 import type { MeshTriangle } from './structuralVoxelizer'
 
 export type BrickBounds = {
@@ -25,6 +26,13 @@ export type BrickBoundsFrame = {
 }
 
 const localBoundsCache = new Map<string, BrickBounds>()
+const contactHulls = new Map<string, readonly number[]>()
+const contactBoundsCache = new WeakMap<BrickDefinition, WeakMap<object, Map<string, BrickBounds>>>()
+
+export const seedLDrawContactHull = (partNumber: string, points: readonly number[]) => {
+  if (!points.length || points.length % 3 || !points.every(Number.isFinite)) throw new Error('INVALID_LDRAW_CONTACT_HULL')
+  contactHulls.set(normalizeLDrawPartNumber(partNumber), points)
+}
 
 export const getTriangleBounds = (triangles: MeshTriangle[]): BrickBounds | undefined => {
   if (triangles.length === 0) return undefined
@@ -69,7 +77,7 @@ export const getLoadedLDrawLocalBounds = (partNumber: string) => {
   const cached = localBoundsCache.get(normalizedPartNumber)
   if (cached) return cached
 
-  const values = getLoadedLDrawGeneratedVisualValues(normalizedPartNumber)
+  const values = contactHulls.get(normalizedPartNumber) ?? getLoadedLDrawGeneratedVisualValues(normalizedPartNumber)
   if (values?.length) {
     const bounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, minZ: Infinity, maxZ: -Infinity }
     for (let i = 0; i < values.length; i += 3) {
@@ -135,8 +143,37 @@ export const transformBrickLocalBounds = (
   }
 }
 
-export const getBrickWorldBounds = (definition: BrickDefinition, pose: BrickPose) =>
-  transformBrickLocalBounds(definition, pose, getBrickLocalBounds(definition))
+/** Support extrema use actual mould vertices; rotated AABB corners can be empty space. */
+export const getBrickWorldBounds = (definition: BrickDefinition, pose: BrickPose): BrickBounds => {
+  const part = normalizeLDrawPartNumber(definition.partNumber)
+  const points = contactHulls.get(part) ?? getLoadedLDrawGeneratedVisualValues(part)
+  if (!points?.length) return transformBrickLocalBounds(definition, pose, getBrickLocalBounds(definition))
+  let byPoints = contactBoundsCache.get(definition)
+  if (!byPoints) { byPoints = new WeakMap(); contactBoundsCache.set(definition, byPoints) }
+  let orientations = byPoints.get(points)
+  if (!orientations) { orientations = new Map(); byPoints.set(points, orientations) }
+  const key = `${definition.footprint.widthStuds},${definition.footprint.heightStuds},${definition.footprint.depthStuds}:${pose.rotationQuarterTurns},${pose.verticalQuarterTurns ?? 0},${pose.rollQuarterTurns ?? 0}:${pose.orientationMatrix?.join(',') ?? ''}`
+  let bounds = orientations.get(key)
+  if (!bounds) {
+    const matrix = getRigidBrickMatrix(definition, { ...pose, xStud: 0, yStud: 0, zStud: 0 }).elements
+    const { widthStuds, heightStuds, depthStuds } = definition.footprint
+    bounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, minZ: Infinity, maxZ: -Infinity }
+    for (let index = 0; index < points.length; index += 3) {
+      const x = points[index] - widthStuds / 2, y = points[index + 1] - heightStuds / 2, z = points[index + 2] - depthStuds / 2
+      const worldX = matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12]
+      const worldY = matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13]
+      const worldZ = matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14]
+      bounds.minX = Math.min(bounds.minX, worldX); bounds.maxX = Math.max(bounds.maxX, worldX)
+      bounds.minY = Math.min(bounds.minY, worldY); bounds.maxY = Math.max(bounds.maxY, worldY)
+      bounds.minZ = Math.min(bounds.minZ, worldZ); bounds.maxZ = Math.max(bounds.maxZ, worldZ)
+    }
+    if (orientations.size >= 512) orientations.clear()
+    orientations.set(key, bounds)
+  }
+  return { minX: pose.xStud + bounds.minX, maxX: pose.xStud + bounds.maxX,
+    minY: pose.yStud + bounds.minY, maxY: pose.yStud + bounds.maxY,
+    minZ: pose.zStud + bounds.minZ, maxZ: pose.zStud + bounds.maxZ }
+}
 
 export const getBrickFootprintWorldBounds = (definition: BrickDefinition, pose: BrickPose) =>
   transformBrickLocalBounds(definition, pose, getFootprintLocalBounds(definition))

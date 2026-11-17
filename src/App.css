@@ -5918,6 +5918,11 @@ button:disabled {
   color: #166534;
 }
 
+.structure-status.pending {
+  background: #e2e8f0;
+  color: #475569;
+}
+
 .structure-status.notice {
   background: #fef3c7;
   color: #92400e;

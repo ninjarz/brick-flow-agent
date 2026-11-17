@@ -11,12 +11,15 @@ export const prepareStructuralGeometry = async (
   onProgress?: (fraction: number) => void,
 ) => {
   const legoDefinitions = definitions.filter(definition => definition.pack === 'lego')
-  await loadLDrawGeneratedVisual(legoDefinitions.map(definition => definition.partNumber), fraction => onProgress?.(fraction * .75))
   const pending = legoDefinitions.filter(definition => !hasBrickStructuralCells(definition))
+  const cached = await Promise.all(pending.map(loadPrecomputedStructuralCells))
+  const missing = pending.filter((_, index) => !cached[index])
+  const visuals = prepareVisual ? legoDefinitions : missing
+  if (visuals.length) await loadLDrawGeneratedVisual(visuals.map(definition => definition.partNumber), fraction => onProgress?.(fraction * .75))
   let sliceStart = performance.now()
   for (let start = 0; start < pending.length; start += 4) {
     const definitions = pending.slice(start, start + 4)
-    const cells = await Promise.all(definitions.map(loadPrecomputedStructuralCells))
+    const cells = cached.slice(start, start + 4)
     for (let index = 0; index < definitions.length; index++) {
       const definition = definitions[index]
       if (cells[index]) seedBrickStructuralCells(definition, cells[index]!)

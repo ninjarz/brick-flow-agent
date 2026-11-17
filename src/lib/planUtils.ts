@@ -682,17 +682,15 @@ const computeConnectedComponentsFromEdges = (
 const computeGroundedIds = (
   bricks: PlacedBrick[],
   attachmentEdges: Map<string, Set<string>>,
-  boundsById: Map<string, NonNullable<ReturnType<typeof getBrickBounds>>>,
 ) => {
   const groundedIds = new Set<string>()
   const queue: PlacedBrick[] = []
   const brickByPlacedId = new Map(bricks.map((brick) => [brick.id, brick]))
 
   for (const brick of bricks) {
-    // Retain body support and also recognize exterior tips resting on the table,
-    // matching the direct contact accepted by isBrickSupported.
-    const candidates = [boundsById.get(brick.id), getBrickBounds(brick)]
-    if (!candidates.some(bounds => bounds && bounds.minY >= -boundsTolerance && bounds.minY <= boundsTolerance)) continue
+    // Share the exact mould contact surface used by isBrickSupported.
+    const bounds = getBrickBounds(brick)
+    if (!bounds || bounds.minY < -boundsTolerance || bounds.minY > boundsTolerance) continue
     groundedIds.add(brick.id)
     queue.push(brick)
   }
@@ -759,7 +757,7 @@ const computeBuildGraph = (
   }
 
   const components = computeConnectedComponentsFromEdges(bricks, attachmentEdges)
-  const groundedIds = computeGroundedIds(bricks, attachmentEdges, boundsById)
+  const groundedIds = computeGroundedIds(bricks, attachmentEdges)
 
   return {
     attachmentEdges,
@@ -1527,7 +1525,7 @@ export const moveBrick = (brick: PlacedBrick, delta: Partial<BrickPose>): Placed
     ...brick.pose,
     ...delta,
     xStud: brick.pose.orientationMatrix ? delta.xStud ?? brick.pose.xStud : normalizeHorizontalStud(delta.xStud ?? brick.pose.xStud),
-    yStud: brick.pose.orientationMatrix ? Math.max(0, delta.yStud ?? brick.pose.yStud) : normalizeYStud(delta.yStud ?? brick.pose.yStud),
+    yStud: brick.pose.orientationMatrix ? delta.yStud ?? brick.pose.yStud : normalizeYStud(delta.yStud ?? brick.pose.yStud),
     zStud: brick.pose.orientationMatrix ? delta.zStud ?? brick.pose.zStud : normalizeHorizontalStud(delta.zStud ?? brick.pose.zStud),
     rotationQuarterTurns: normalizeQuarterTurns(
       delta.rotationQuarterTurns ?? brick.pose.rotationQuarterTurns,
@@ -1669,7 +1667,6 @@ export const validateBuildPlanBasics = (plan: BuildPlan): BuildPlanIssue[] => {
       (!brick.pose.orientationMatrix && !isHorizontalStudOnGrid(brick.pose.xStud)) ||
       (!brick.pose.orientationMatrix && !isHorizontalStudOnGrid(brick.pose.zStud)) ||
       (!brick.pose.orientationMatrix && !isYStudOnGrid(brick.pose.yStud)) ||
-      brick.pose.yStud < 0 ||
       (definition ? !isBrickAboveGround(brick) : false) ||
       ![0, 1, 2, 3].includes(brick.pose.rotationQuarterTurns) ||
       ![0, 1, 2, 3].includes(brick.pose.verticalQuarterTurns ?? 0) ||

@@ -1,6 +1,8 @@
 import { defineConfig } from 'vitest/config'
+import { getConstructionPhysicsRevision } from './server/constructionPhysicsRevision'
 
 export default defineConfig({
+  define: { __CONSTRUCTION_PHYSICS_REVISION__: JSON.stringify(getConstructionPhysicsRevision(process.cwd())) },
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts', 'server/**/*.test.ts'],

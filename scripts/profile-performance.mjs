@@ -10,6 +10,8 @@ const entry = join(tempDir, 'entry.ts')
 const outfile = join(tempDir, 'entry.mjs')
 
 await writeFile(entry, `
+  import { getConstructionPhysicsRevision } from ${JSON.stringify(`${workspace}/server/constructionPhysicsRevision.ts`)};
+  globalThis.__CONSTRUCTION_PHYSICS_REVISION__ = getConstructionPhysicsRevision(${JSON.stringify(workspace)});
   const enforceBudgets = ${JSON.stringify(enforceBudgets)};
   const results: Array<{ name: string; ms: number; detail?: string }> = [];
   const measure = <T>(name: string, fn: () => T): T => {
@@ -55,6 +57,8 @@ await writeFile(entry, `
 
   const [{ brickById, brickDefinitions }, finishedAssets, { generateBuildPlan }, planUtils, structuralGrid, ldrawVisualGeometry, manualSerializer, stabilityAnalysis, disasterSimulation, worldEntityDefinitions, worldEntity, worldSimulation, voxelChunking, worldAi] = imports;
   const defaultFinishedAssets = await measureAsync('load all default finished assets', () => finishedAssets.loadAllDefaultFinishedAssets());
+  const constructionStageCount = defaultFinishedAssets.reduce((count, asset) => count + asset.plan.steps.filter(step => step.construction).length, 0);
+  console.log('construction validation stages: ' + constructionStageCount);
   const largestAsset = defaultFinishedAssets.reduce((largest, asset) =>
     asset.plan.bricks.length > largest.plan.bricks.length ? asset : largest
   );
@@ -74,19 +78,20 @@ await writeFile(entry, `
     getBrickWorldCollisionKeys,
   } = structuralGrid;
   const { loadLDrawPartGeometry } = ldrawVisualGeometry;
-  const { serializeBuildManual, formatBuildManualHtml } = manualSerializer;
+  const { formatBuildManualHtml } = manualSerializer;
+  const { getEditorManual } = await import(${JSON.stringify(`${workspace}/src/lib/editorAnalysisClient.ts`)});
 
   const initialPlan = measure('generate default plan', () => generateBuildPlan({ prompt: '一个蓝灰色机器人' }));
   measure('validate current default plan', () => validateBuildPlan(initialPlan));
   measure('validate all finished assets', () => {
     for (const asset of defaultFinishedAssets) validateBuildPlan(asset.plan);
   });
-  measure('serialize all finished asset manuals', () => {
-    for (const asset of defaultFinishedAssets) serializeBuildManual(asset.plan);
+  await measureAsync('serialize all finished asset manuals', async () => {
+    for (const asset of defaultFinishedAssets) await getEditorManual(asset.plan, 'zh-CN');
   });
   // Guard the HTML manual export: it used to grow as O(steps x pieces) and
   // crashed with "Invalid string length" on the 6,025-piece castle.
-  const largestManual = measure('serialize largest asset manual', () => serializeBuildManual(largestAsset.plan));
+  const largestManual = await measureAsync('serialize largest asset manual', () => getEditorManual(largestAsset.plan, 'zh-CN'));
   const largestManualHtml = measure('format largest asset manual HTML', () => formatBuildManualHtml(largestManual));
   console.log('largest asset manual HTML: ' + (largestManualHtml.length / 1024 / 1024).toFixed(2) + ' MB');
   measure('build collision index for largest finished asset', () =>
@@ -273,7 +278,9 @@ await writeFile(entry, `
       // Monitoring ceilings for the other expensive stages (generous enough
       // for slower CI hosts, tight enough to catch an order-of-magnitude hit).
       ['validate all finished assets', 3200],
-      ['serialize all finished asset manuals', 2800],
+      // Official construction frames now receive per-stage pose validation.
+      // Keep the legacy budget and allow 3 ms for each additional checked frame.
+      ['serialize all finished asset manuals', 2800 + constructionStageCount * 3],
       ['serialize largest asset manual', 600],
       ['format largest asset manual HTML', 4000],
       ['analyze stability for largest finished asset', 2600],

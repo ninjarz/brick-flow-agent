@@ -4,7 +4,7 @@ import type { BuildPlan } from '../types/bricks'
 import { getBrickAssemblyPosition, getBrickSelectionReference } from './brickEditorCoordinates'
 import { rotateRigidBrickGroup, translateRigidBrickGroup } from './rigidBrickGroup'
 
-const plan = raw as BuildPlan
+const plan = raw as unknown as BuildPlan
 const structure = plan.structures!.find(item => item.name.includes('海格小屋'))!
 const ids = new Set(structure.brickIds)
 const bricks = plan.bricks.filter(brick => ids.has(brick.id))

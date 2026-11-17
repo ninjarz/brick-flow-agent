@@ -27,6 +27,24 @@ describe('plan file import', () => {
     expect(imported?.steps[0].brickIds).toEqual([plan.bricks[0].id])
   })
 
+  it('round-trips official construction recipes and installation-only stages in schema 7', () => {
+    const id = plan.bricks[0].id
+    const construction = { assemblyId: 'assembly', baseBrickId: id, sourceStepId: 'official-build' }
+    const source: BuildPlan = { ...plan, constructionAssemblies: { assembly: { brickIds: [id] } }, steps: [
+      { id: 'build', title: 'Build', description: '', brickIds: [id], construction },
+      { id: 'install', title: 'Install', description: '', brickIds: [], construction },
+    ] }
+    const manual = serializeBuildManual(source)
+    expect(manual.schemaVersion).toBe(7)
+    const restored = parseImportedPlan(manual)!
+    expect(restored.constructionAssemblies).toEqual(source.constructionAssemblies)
+    expect(restored.steps.map(step => step.construction)).toEqual([construction, construction])
+    expect(restored.steps.map(step => step.brickIds)).toEqual([[id], []])
+    const missingRecipe = { ...manual, steps: manual.steps.map(step => ({ ...step, constructionStep: undefined })) }
+    expect(parseImportedPlan(missingRecipe)).toBeUndefined()
+    expect(parseImportedPlan({ ...manual, totalPieces: 2 })).toBeUndefined()
+  })
+
   it('rejects unrelated data', () => {
     expect(parseImportedPlan({ schemaVersion: 5, steps: [] })).toBeUndefined()
   })

@@ -1,4 +1,5 @@
-import { serializeBuildManual } from '../lib/manualSerializer'
+import { prepareBuildManual } from '../lib/prepareBuildManual'
+import { upgradeLegacyHogwartsConstruction } from '../lib/legacyConstructionMigration'
 /// <reference lib="webworker" />
 import { analyzeBuildStability, type StabilityAnalysis } from '../lib/stabilityAnalysis'
 import { moveBrickGroupAlongSteps, findNearestOpenBrickGroupAround, dropBrickGroupAtPoint } from '../lib/brickGroupPlacement'
@@ -57,8 +58,11 @@ scope.onmessage = async ({ data }: MessageEvent<EditorAnalysisRequest>) => {
     }
     await snapshot.ready
     if (data.manualLocale && data.plan) {
-      const manual = serializeBuildManual({ ...data.plan, bricks: snapshot.bricks }, data.manualLocale, getSnapshotValidation(snapshot, data.plan))
-      scope.postMessage({ requestId: data.requestId, type: 'result', result: { supported: new Map(), manual } } satisfies EditorAnalysisResponse)
+      const original = { ...data.plan, bricks: snapshot.bricks }
+      const source = await upgradeLegacyHogwartsConstruction(original)
+      const issues = source === original ? getSnapshotValidation(snapshot, data.plan) : validateBuildPlan(source)
+      const manual = await prepareBuildManual(source, data.manualLocale, issues)
+      scope.postMessage({ requestId: data.requestId, type: 'result', result: { supported: new Map(), manual, ...(source !== original ? { manualPlan: source } : {}) } } satisfies EditorAnalysisResponse)
       return
     }
     if (data.transform) {

@@ -7,6 +7,8 @@ export const getStructuralSourceRevision = async (workspace) => {
   const sources = [
     'src/lib/structuralGrid.ts', 'src/lib/structuralVoxelizer.ts',
     'src/lib/brickUnits.ts', 'src/lib/ldrawPartNumbers.ts', 'src/lib/ldrawBounds.ts',
+    'src/lib/rigidBrickTransform.ts', 'src/lib/lddInterfacePoints.ts',
+    'src/lib/structuralDefinitionSignature.ts', 'scripts/generate-ldraw-structural-cache.mjs',
     ...chunks.map(name => `src/lib/ldrawGeneratedVisualChunks/${name}`),
   ]
   const hash = createHash('sha256')

@@ -1,4 +1,6 @@
-import { serializeBuildManual, type BuildManual, type ManualLocale } from './manualSerializer'
+import type { BuildManual, ManualLocale } from './manualSerializer'
+import { prepareBuildManual } from './prepareBuildManual'
+import { upgradeLegacyHogwartsConstruction } from './legacyConstructionMigration'
 import { loadPrecomputedStructuralCells } from './ldrawStructuralCache'
 import { getBrickStructuralCells } from './structuralGrid'
 import type { HorizontalDropPoint } from './brickGroupPlacement'
@@ -9,12 +11,16 @@ import type { EditorAnalysisRequest } from './editorAnalysisProtocol'
 import { analyzeBuildStability, type StabilityAnalysis } from './stabilityAnalysis'
 import { createBuildGraph, validateBuildPlan, type BuildPlanIssue } from './planUtils'
 import { preparePlanGeometry } from './planGeometry'
+import { prepareStructuralGeometry } from './prepareStructuralGeometry'
 import { isVoxelPlantSupported } from './voxelBlockState'
 import type { BrickDefinition, BuildPlan, PlacedBrick } from '../types/bricks'
 import type { EditorAnalysisResponse, EditorAnalysisResult } from './editorAnalysisProtocol'
 
 export const backgroundAnalysisThreshold = 800
 const manualCache = new WeakMap<BuildPlan, Map<ManualLocale, Promise<BuildManual>>>()
+const manualSourcePlans = new WeakMap<BuildManual, BuildPlan>()
+
+export const getPreparedManualPlan = (manual: BuildManual, original: BuildPlan) => manualSourcePlans.get(manual) ?? original
 const supportCache = new WeakMap<PlacedBrick[], Promise<Map<string, boolean>>>()
 const validationCache = new WeakMap<BuildPlan, Promise<BuildPlanIssue[]>>()
 const stabilityCache = new WeakMap<PlacedBrick[], Promise<StabilityAnalysis>>()
@@ -53,9 +59,11 @@ const getAnalysisGeometry = (bricks: PlacedBrick[]) => {
   const definitions = [...new Set(bricks.map(brick => brick.brickId))]
     .map(id => brickById.get(id)).filter((definition): definition is BrickDefinition => definition?.pack === 'lego')
   const loading = (async () => {
-    await loadLDrawGeneratedVisual(definitions.map(definition => definition.partNumber))
-    return Promise.all(definitions.map(async definition => {
-      const cached = await loadPrecomputedStructuralCells(definition)
+    const cells = await Promise.all(definitions.map(loadPrecomputedStructuralCells))
+    const missing = definitions.filter((_, index) => !cells[index])
+    if (missing.length) await loadLDrawGeneratedVisual(missing.map(definition => definition.partNumber))
+    return definitions.map((definition, index) => {
+      const cached = cells[index]
       return {
         brickId: definition.id,
         partNumber: definition.partNumber,
@@ -64,7 +72,7 @@ const getAnalysisGeometry = (bricks: PlacedBrick[]) => {
         // moulds use the compact cache independently in each thread.
         cells: cached ? undefined : getBrickStructuralCells(definition),
       }
-    }))
+    })
   })()
   geometryInputs.set(bricks, loading)
   void loading.catch(() => geometryInputs.delete(bricks))
@@ -204,8 +212,17 @@ export const getEditorManual = (plan: BuildPlan, locale: ManualLocale): Promise<
   const cached = locales.get(locale)
   if (cached) return cached
   const result = plan.bricks.length >= backgroundAnalysisThreshold && typeof Worker !== 'undefined'
-    ? request(plan.bricks, plan, false, undefined, undefined, locale).then(result => result.manual!)
-    : preparePlanGeometry(plan).then(() => serializeBuildManual(plan, locale))
+    ? request(plan.bricks, plan, false, undefined, undefined, locale).then(result => {
+      manualSourcePlans.set(result.manual!, result.manualPlan ?? plan)
+      return result.manual!
+    })
+    : prepareStructuralGeometry([...new Set(plan.bricks.map(brick => brick.brickId))]
+      .map(id => brickById.get(id)).filter((definition): definition is BrickDefinition => Boolean(definition))).then(async () => {
+      const source = await upgradeLegacyHogwartsConstruction(plan)
+      const manual = await prepareBuildManual(source, locale)
+      manualSourcePlans.set(manual, source)
+      return manual
+    })
   locales.set(locale, result)
   void result.catch(() => locales.delete(locale))
   return result

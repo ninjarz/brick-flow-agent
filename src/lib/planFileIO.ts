@@ -36,18 +36,21 @@ const buildPlanFromManualJson = (
   value: unknown,
   text: ImportText,
 ): BuildPlan | undefined => {
-  if (!isRecord(value) || ![1, 2, 3, 4, 5, 6].includes(Number(value.schemaVersion)) || !Array.isArray(value.steps)) return undefined
+  if (!isRecord(value) || ![1, 2, 3, 4, 5, 6, 7].includes(Number(value.schemaVersion)) || !Array.isArray(value.steps)) return undefined
 
   const bricks: PlacedBrick[] = []
   const steps: BuildPlan['steps'] = []
+  const constructionVersion = Number(value.schemaVersion) === 7
+  let invalid = false
 
   value.steps.forEach((rawStep, stepIndex) => {
-    if (!isRecord(rawStep) || !Array.isArray(rawStep.addPieces)) return
+    if (!isRecord(rawStep) || !Array.isArray(rawStep.addPieces)) { invalid = true; return }
+    if (constructionVersion && rawStep.construction !== undefined && rawStep.constructionStep === undefined) invalid = true
 
     const brickIds: string[] = []
     rawStep.addPieces.forEach((rawPiece) => {
-      if (!isRecord(rawPiece) || typeof rawPiece.instanceId !== 'string' || typeof rawPiece.brickId !== 'string') return
-      if (typeof rawPiece.color !== 'string' || !isValidImportedPose(rawPiece.pose)) return
+      if (!isRecord(rawPiece) || typeof rawPiece.instanceId !== 'string' || typeof rawPiece.brickId !== 'string') { invalid = true; return }
+      if (typeof rawPiece.color !== 'string' || !isValidImportedPose(rawPiece.pose)) { invalid = true; return }
 
       bricks.push({
         id: rawPiece.instanceId,
@@ -64,10 +67,15 @@ const buildPlanFromManualJson = (
       title: typeof rawStep.title === 'string' ? rawStep.title : text.importedStepTitle(stepIndex + 1),
       description: typeof rawStep.description === 'string' ? rawStep.description : '',
       brickIds,
+      ...(constructionVersion ? { instructionStep: stepIndex + 1,
+        ...(rawStep.constructionStep !== undefined ? { construction: rawStep.constructionStep as BuildPlan['steps'][number]['construction'] } : {}),
+      } : {}),
     })
   })
 
   if (bricks.length === 0 || steps.length === 0) return undefined
+  if (constructionVersion && (invalid || new Set(bricks.map(brick => brick.id)).size !== bricks.length
+    || typeof value.totalPieces === 'number' && value.totalPieces !== bricks.length)) return undefined
 
   return {
     id: typeof value.planId === 'string' ? value.planId : `imported-manual-${Date.now().toString(36)}`,
@@ -76,6 +84,7 @@ const buildPlanFromManualJson = (
     source: isValidSource(value.source) ? value.source : 'template-local',
     bricks,
     steps,
+    ...(constructionVersion && value.constructionAssemblies !== undefined ? { constructionAssemblies: value.constructionAssemblies as BuildPlan['constructionAssemblies'] } : {}),
   }
 }
 

@@ -71,6 +71,7 @@ type Options = {
   supportedByBrickId: Map<string, boolean>
   displayColorByBrickId?: Map<string, string>
   excludedIds: Set<string>
+  hiddenPrintIds?: Set<string>
   showEdges: boolean
 }
 
@@ -78,6 +79,7 @@ let visualVersion = 0
 onLDrawGeneratedVisualLoaded(() => { visualVersion++ })
 const snapshots = new WeakMap<LDrawSceneBatches, { bricks: PlacedBrick[]; options: Options; version: number }>()
 const sameSet = (a: Set<string>, b: Set<string>) => a === b || (a.size === b.size && [...a].every(id => b.has(id)))
+const emptyPrintIds = new Set<string>()
 
 const preparedScenes = new Map<PlacedBrick[], LDrawSceneBatches>()
 export const clearPreparedLDrawScenes = () => preparedScenes.clear()
@@ -95,6 +97,7 @@ function* generateLDrawSceneBatches(bricks: PlacedBrick[], options: Options, pre
     && snapshot.options.supportedByBrickId === options.supportedByBrickId
     && snapshot.options.displayColorByBrickId === options.displayColorByBrickId
     && sameSet(snapshot.options.highlightedIds, options.highlightedIds)
+    && sameSet(snapshot.options.hiddenPrintIds ?? emptyPrintIds, options.hiddenPrintIds ?? emptyPrintIds)
     && sameSet(snapshot.options.excludedIds, options.excludedIds)) return previous!
   const groups = new Map<string, LDrawMeshBatch>()
   const lines = new Map<string, LDrawLineGroup>()
@@ -130,7 +133,7 @@ function* generateLDrawSceneBatches(bricks: PlacedBrick[], options: Options, pre
       geometryCache.set(definition.id, resources)
     }
     const body = resources?.body
-    const prints = resources?.prints ?? []
+    const prints = options.hiddenPrintIds?.has(brick.id) ? [] : resources?.prints ?? []
     const displayColor = options.displayColorByBrickId?.get(brick.id)
     // Printed faces keep their own colours and still need the independent
     // renderer. Plain coloured bricks can stay instanced with an overridden

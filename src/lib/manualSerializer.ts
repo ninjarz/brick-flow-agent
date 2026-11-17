@@ -1,5 +1,6 @@
 import { brickById, colorHex } from '../data/basicBricks'
-import type { BrickColor, BrickPose, BuildPlan, PlacedBrick } from '../types/bricks'
+import type { BrickColor, BrickPose, BuildConstructionStep, BuildPlan, BuildStep, ConstructionAssembly, PlacedBrick } from '../types/bricks'
+import { createConstructionSceneBuilder, createConstructionReplay, type CompiledConstructionScene } from './constructionScene'
 import { footprintToWorld, transformBrickLocalPoint } from './brickUnits'
 import {
   createSingleBrickSteps,
@@ -18,6 +19,7 @@ const manualText: Record<ManualLocale, {
   prompt: string
   none: string
   structureCheck: string
+  stepNotChecked: string
   totalPieces: string
   totalPages: string
   inventory: string
@@ -45,6 +47,7 @@ const manualText: Record<ManualLocale, {
     prompt: '提示词',
     none: '无',
     structureCheck: '结构校验',
+    stepNotChecked: '按最终装配姿态展示，本步施工支撑尚未校验',
     totalPieces: '总零件',
     totalPages: '总页数',
     inventory: '总零件清单',
@@ -79,6 +82,7 @@ const manualText: Record<ManualLocale, {
     prompt: 'Prompt',
     none: 'none',
     structureCheck: 'Structure check',
+    stepNotChecked: 'Final assembly poses shown; construction support for this step has not been checked',
     totalPieces: 'Total parts',
     totalPages: 'Total pages',
     inventory: 'Inventory',
@@ -155,16 +159,20 @@ export type ManualStepPage = {
   completedPieceCount: number
   cameraAzimuthDegrees: number
   validation: {
+    checked?: boolean
     ok: boolean
     issueCount: number
     blockingIssueCount: number
     warningIssueCount: number
     summary: string
   }
+  construction?: CompiledConstructionScene
+  constructionStep?: BuildConstructionStep
+  installationLabels?: string[]
 }
 
 export type BuildManual = {
-  schemaVersion: 6
+  schemaVersion: 6 | 7
   planId: string
   title: string
   prompt: string
@@ -180,6 +188,7 @@ export type BuildManual = {
   totalSteps: number
   inventory: ManualPartCount[]
   steps: ManualStepPage[]
+  constructionAssemblies?: Record<string, ConstructionAssembly>
 }
 
 const countPieces = (pieces: ManualPiece[]): ManualPartCount[] => {
@@ -206,7 +215,7 @@ const countPieces = (pieces: ManualPiece[]): ManualPartCount[] => {
   )
 }
 
-const getAssemblyGuide = (
+export const getAssemblyGuide = (
   brick: BuildPlan['bricks'][number],
   locale: ManualLocale,
 ): ManualAssemblyGuide => {
@@ -272,6 +281,7 @@ const validateCumulativePlan = (plan: BuildPlan, bricks: PlacedBrick[], locale: 
   const blockingIssues = getBlockingBuildPlanIssues(issues)
 
   return {
+    checked: true,
     ok: blockingIssues.length === 0,
     issueCount: issues.length,
     blockingIssueCount: blockingIssues.length,
@@ -287,6 +297,7 @@ const sortBuildCandidates = (source: PlacedBrick, target: PlacedBrick) =>
   source.id.localeCompare(target.id)
 
 const emptyManualValidation = (locale: ManualLocale): ManualStepPage['validation'] => ({
+  checked: true,
   ok: true,
   issueCount: 0,
   blockingIssueCount: 0,
@@ -301,7 +312,7 @@ const maxPiecesPerManualStep = 6
 
 const sequenceBricksForManual = (plan: BuildPlan, locale: ManualLocale) => {
   if (shouldTrustManualPlanOrder(plan)) {
-    const validation = emptyManualValidation(locale)
+    const validation = { ...emptyManualValidation(locale), checked: false, summary: manualText[locale].stepNotChecked }
     return plan.bricks.map((brick) => ({ brick, validation }))
   }
 
@@ -377,14 +388,14 @@ const groupManualSequence = (sequence: ReturnType<typeof sequenceBricksForManual
   return groups
 }
 
-export const serializeBuildManual = (plan: BuildPlan, locale: ManualLocale = 'zh-CN', preparedIssues?: BuildPlanIssue[]): BuildManual => {
+const serializeLegacySteps = (plan: BuildPlan, locale: ManualLocale): ManualStepPage[] => {
   const labels = manualText[locale]
   let completedPieceCount = 0
   const planCenterX = plan.bricks.reduce((total, brick) => total + brick.pose.xStud, 0) / Math.max(1, plan.bricks.length)
   const planCenterZ = plan.bricks.reduce((total, brick) => total + brick.pose.zStud, 0) / Math.max(1, plan.bricks.length)
 
   const instructionSteps = new Map(plan.steps.filter((step) => Number.isInteger(step.instructionStep) && step.instructionStep! > 0).flatMap((step) => step.brickIds.map((id) => [id, step] as const)))
-  const steps: ManualStepPage[] = groupManualSequence(sequenceBricksForManual(plan, locale), instructionSteps).map((group, index) => {
+  return groupManualSequence(sequenceBricksForManual(plan, locale), instructionSteps).map((group, index) => {
     const authored = instructionSteps.get(group[0].brick.id)
     const addPieces = group.map(({ brick }) => toManualPiece(brick, locale))
     const layer = Math.max(0, Math.round(Math.min(...group.map(({ brick }) => brick.pose.yStud)) / 0.4))
@@ -408,13 +419,70 @@ export const serializeBuildManual = (plan: BuildPlan, locale: ManualLocale = 'zh
       validation: group.at(-1)?.validation ?? emptyManualValidation(locale),
     }
   })
+}
+
+export type ConstructionValidator = (step: BuildStep, bricks: PlacedBrick[]) => BuildPlanIssue[] | undefined
+
+const summarizeManualValidation = (issues: BuildPlanIssue[], locale: ManualLocale): ManualStepPage['validation'] => {
+  const blocking = getBlockingBuildPlanIssues(issues)
+  return { checked: true, ok: blocking.length === 0, issueCount: issues.length,
+    blockingIssueCount: blocking.length, warningIssueCount: issues.length - blocking.length,
+    summary: summarizeBuildPlanIssues(issues, locale) }
+}
+
+const serializeConstructionSteps = (plan: BuildPlan, locale: ManualLocale, preparedValidation?: ConstructionValidator) => {
+  const byId = new Map(plan.bricks.map(brick => [brick.id, brick]))
+  const completed = new Set<string>()
+  const buildScene = createConstructionSceneBuilder(plan)
+  const pages: ManualStepPage[] = []
+  let pending: BuildStep[] = []
+  const append = (page: ManualStepPage) => {
+    for (const piece of page.addPieces) completed.add(piece.instanceId)
+    pages.push({ ...page, stepNumber: pages.length + 1, completedPieceCount: completed.size })
+  }
+  const flush = () => {
+    if (!pending.length) return
+    const ids = new Set(pending.flatMap(step => step.brickIds).filter(id => !completed.has(id)))
+    const legacy = { ...plan, bricks: plan.bricks.filter(brick => ids.has(brick.id)), steps: pending, constructionAssemblies: undefined }
+    for (const page of serializeLegacySteps(legacy, locale)) append(page)
+    pending = []
+  }
+  for (const step of plan.steps) {
+    if (!step.construction) { pending.push(step); continue }
+    flush()
+    const added = step.brickIds.filter(id => !completed.has(id) && byId.has(id)).map(id => byId.get(id)!)
+    for (const brick of added) completed.add(brick.id)
+    const view = buildScene(step, completed)
+    const focus = new Set(view?.scene.focusBrickIds ?? step.brickIds)
+    const validation = view
+      ? summarizeManualValidation(preparedValidation?.(step, view.bricks)
+        ?? validateBuildPlan({ ...plan, bricks: view.bricks, steps: createSingleBrickSteps(view.bricks) }), locale)
+      : { ...emptyManualValidation(locale), checked: false, summary: manualText[locale].stepNotChecked }
+    append({
+      stepNumber: 0, title: step.title, description: step.description,
+      addPieces: added.map(brick => toManualPiece(brick, locale)),
+      stepInventory: countPieces(added.map(brick => toManualPiece(brick, locale))),
+      completedPieceCount: 0, cameraAzimuthDegrees: 225, validation,
+      ...(view ? { construction: view.scene, constructionStep: step.construction, installationLabels: [...new Set(view.bricks.filter(brick => focus.has(brick.id)).map(brick => getAssemblyGuide(brick, locale).label))] } : {}),
+    })
+  }
+  flush()
+  const unassigned = plan.bricks.filter(brick => !completed.has(brick.id))
+  if (unassigned.length) for (const page of serializeLegacySteps({ ...plan, bricks: unassigned, steps: [], constructionAssemblies: undefined }, locale)) append(page)
+  return pages
+}
+
+export const serializeBuildManual = (plan: BuildPlan, locale: ManualLocale = 'zh-CN', preparedIssues?: BuildPlanIssue[], preparedConstruction?: ConstructionValidator): BuildManual => {
+  const steps = plan.constructionAssemblies
+    ? serializeConstructionSteps(plan, locale, preparedConstruction)
+    : serializeLegacySteps(plan, locale)
 
   const allPieces = plan.bricks.map((brick) => toManualPiece(brick, locale))
   const issues = preparedIssues ?? validateBuildPlan(plan)
   const blockingIssues = getBlockingBuildPlanIssues(issues)
 
   return {
-    schemaVersion: 6,
+    schemaVersion: plan.constructionAssemblies ? 7 : 6,
     planId: plan.id,
     title: plan.title,
     prompt: plan.prompt,
@@ -430,7 +498,17 @@ export const serializeBuildManual = (plan: BuildPlan, locale: ManualLocale = 'zh
     totalSteps: steps.length,
     inventory: countPieces(allPieces),
     steps,
+    ...(plan.constructionAssemblies ? { constructionAssemblies: plan.constructionAssemblies } : {}),
   }
+}
+
+const createManualSceneReplay = (manual: BuildManual, locale: ManualLocale) => {
+  const pieces = manual.steps.flatMap(step => step.addPieces)
+  const bricks: PlacedBrick[] = pieces.map(piece => ({ id: piece.instanceId, brickId: piece.brickId, color: piece.color, pose: piece.pose }))
+  const replay = createConstructionReplay(bricks, manual.constructionAssemblies ?? {})
+  return (step: ManualStepPage, completed: ReadonlySet<string>) => step.construction && manual.constructionAssemblies
+    ? replay(step.construction, completed).map(brick => toManualPiece(brick, locale))
+    : undefined
 }
 
 export const formatBuildManualMarkdown = (manual: BuildManual, locale: ManualLocale = 'zh-CN') => {
@@ -449,7 +527,10 @@ export const formatBuildManualMarkdown = (manual: BuildManual, locale: ManualLoc
     '',
   ]
 
+  const replay = createManualSceneReplay(manual, locale)
   for (const step of manual.steps) {
+    const addedIds = new Set(step.addPieces.map(piece => piece.instanceId))
+    const displayed = new Map((replay(step, addedIds) ?? step.addPieces).map(piece => [piece.instanceId, piece]))
     lines.push(`## ${labels.pageTitle(step.stepNumber, step.title)}`)
     lines.push(step.description)
     lines.push('')
@@ -458,7 +539,8 @@ export const formatBuildManualMarkdown = (manual: BuildManual, locale: ManualLoc
     lines.push(labels.stepCount(step.addPieces.length, step.completedPieceCount))
     lines.push('')
     lines.push(`### ${labels.addedParts}`)
-    for (const piece of step.addPieces) {
+    for (const original of step.addPieces) {
+      const piece = displayed.get(original.instanceId) ?? original
       lines.push(
         `- ${piece.name} (${piece.brickId}) · ${piece.color} · x${piece.pose.xStud} y${piece.pose.yStud} z${piece.pose.zStud} · ${piece.orientationLabel ?? `${labels.horizontal} ${piece.rotationDegrees}° · ${labels.vertical} ${piece.verticalRotationDegrees}°${piece.rollRotationDegrees ? ` · ${labels.roll} ${piece.rollRotationDegrees}°` : ''}`} · ${piece.assembly.label}`,
       )
@@ -535,7 +617,7 @@ const getDiagramPieceBounds = (piece: ManualPiece) => {
   }
 }
 
-type DiagramBoundsCache = Map<ManualPiece, ReturnType<typeof getDiagramPieceBounds>>
+type DiagramBoundsCache = WeakMap<ManualPiece, ReturnType<typeof getDiagramPieceBounds>>
 
 const selectDiagramPieces = (cumulativePieces: ManualPiece[], newPieceIds: Set<string>, limit: number, boundsCache: DiagramBoundsCache) => {
   if (cumulativePieces.length <= limit) return { pieces: cumulativePieces, omitted: 0 }
@@ -544,6 +626,11 @@ const selectDiagramPieces = (cumulativePieces: ManualPiece[], newPieceIds: Set<s
   // omit its immediate support, leaving an assembly arrow pointing into space.
   const newPieces = cumulativePieces.filter((piece) => newPieceIds.has(piece.instanceId))
   const history = cumulativePieces.filter((piece) => !newPieceIds.has(piece.instanceId))
+  if (!newPieces.length) {
+    const count = Math.max(1, Math.floor(limit))
+    const pieces = Array.from({ length: count }, (_, index) => history[Math.round(index * (history.length - 1) / Math.max(1, count - 1))])
+    return { pieces, omitted: history.length - pieces.length }
+  }
   const bounds = (piece: ManualPiece) => {
     let value = boundsCache.get(piece)
     if (!value) {
@@ -682,7 +769,9 @@ const renderStepDiagram = (step: ManualStepPage, cumulativePieces: ManualPiece[]
 export const formatBuildManualHtml = (manual: BuildManual, locale: ManualLocale = 'zh-CN') => {
   const labels = manualText[locale]
   const cumulativePieces: ManualPiece[] = []
-  const boundsCache: DiagramBoundsCache = new Map()
+  const boundsCache: DiagramBoundsCache = new WeakMap()
+  const replay = createManualSceneReplay(manual, locale)
+  const completed = new Set<string>()
   const diagramLimit = manual.totalPieces > DIAGRAM_FULL_DETAIL_MAX_PIECES
     ? Math.max(
       DIAGRAM_MIN_PIECE_LIMIT,
@@ -691,14 +780,19 @@ export const formatBuildManualHtml = (manual: BuildManual, locale: ManualLocale 
     : Number.POSITIVE_INFINITY
   const manualStepsHtml = manual.steps.map((step) => {
     cumulativePieces.push(...step.addPieces)
+    for (const piece of step.addPieces) completed.add(piece.instanceId)
+    const scene = replay(step, completed)
+    const displayed = new Map((scene ?? step.addPieces).map(piece => [piece.instanceId, piece]))
+    const focus = new Set(step.construction?.focusBrickIds ?? step.addPieces.map(piece => piece.instanceId))
+    const diagramStep = scene ? { ...step, addPieces: scene.filter(piece => focus.has(piece.instanceId)) } : step
     return `<section class="step">
       <h2>${escapeHtml(labels.pageTitle(step.stepNumber, step.title))}</h2>
       <p>${escapeHtml(step.description)}</p>
-      <p class="step-status${step.validation.ok ? (step.validation.issueCount > 0 ? ' notice' : '') : ' warn'}">${escapeHtml(step.validation.summary)}</p>
+      <p class="step-status${step.validation.checked === false ? ' pending' : step.validation.ok ? (step.validation.issueCount > 0 ? ' notice' : '') : ' warn'}">${escapeHtml(step.validation.summary)}</p>
       <p class="count">${escapeHtml(labels.stepCount(step.addPieces.length, step.completedPieceCount))}</p>
-      ${renderStepDiagram(step, cumulativePieces, locale, diagramLimit, boundsCache)}
+      ${renderStepDiagram(diagramStep, scene ?? cumulativePieces, locale, diagramLimit, boundsCache)}
       <ul>
-        ${step.addPieces.map((piece) => `<li><strong>${escapeHtml(piece.name)}</strong><br /><small>${escapeHtml(piece.brickId)} · ${escapeHtml(piece.color)} · x${piece.pose.xStud} y${piece.pose.yStud} z${piece.pose.zStud} · ${piece.orientationLabel ? escapeHtml(piece.orientationLabel) : `${escapeHtml(labels.horizontal)} ${piece.rotationDegrees}° · ${escapeHtml(labels.vertical)} ${piece.verticalRotationDegrees}°${piece.rollRotationDegrees ? ` · ${escapeHtml(labels.roll)} ${piece.rollRotationDegrees}°` : ''}`} · ${escapeHtml(piece.assembly.label)}</small></li>`).join('\n        ')}
+        ${step.addPieces.map(original => displayed.get(original.instanceId) ?? original).map((piece) => `<li><strong>${escapeHtml(piece.name)}</strong><br /><small>${escapeHtml(piece.brickId)} · ${escapeHtml(piece.color)} · x${piece.pose.xStud} y${piece.pose.yStud} z${piece.pose.zStud} · ${piece.orientationLabel ? escapeHtml(piece.orientationLabel) : `${escapeHtml(labels.horizontal)} ${piece.rotationDegrees}° · ${escapeHtml(labels.vertical)} ${piece.verticalRotationDegrees}°${piece.rollRotationDegrees ? ` · ${escapeHtml(labels.roll)} ${piece.rollRotationDegrees}°` : ''}`} · ${escapeHtml(piece.assembly.label)}</small></li>`).join('\n        ')}
       </ul>
     </section>`
   }).join('\n    ')
@@ -719,6 +813,7 @@ export const formatBuildManualHtml = (manual: BuildManual, locale: ManualLocale 
     .status { display: inline-block; margin-top: 10px; padding: 7px 10px; border-radius: 8px; background: ${manual.validation.ok ? (manual.validation.issueCount > 0 ? '#fef3c7' : '#dcfce7') : '#fee2e2'}; color: ${manual.validation.ok ? (manual.validation.issueCount > 0 ? '#92400e' : '#166534') : '#991b1b'}; font-weight: 750; }
     .step-status { display: inline-block; margin-top: 8px; padding: 5px 8px; border-radius: 7px; background: #dcfce7; color: #166534; font-size: 12px; font-weight: 750; }
     .step-status.notice { background: #fef3c7; color: #92400e; }
+    .step-status.pending { background: #e2e8f0; color: #475569; }
     .step-status.warn { background: #fee2e2; color: #991b1b; }
     ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; padding: 0; list-style: none; }
     li { padding: 10px; border: 1px solid #d8e0ea; border-radius: 7px; background: #f8fafc; }

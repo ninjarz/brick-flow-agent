@@ -9,6 +9,9 @@ import {
   plateHeightToWorldStud,
 } from './brickUnits'
 import { pruneBrickStructures } from './brickStructures'
+import { brickById } from '../data/basicBricks'
+import { getBrickSourceAnchor, normalizeRigidBrickPose } from './rigidBrickTransform'
+import { isValidConstructionData } from './constructionPlan'
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
@@ -34,7 +37,7 @@ export const normalizeImportedPose = (pose: Record<string, unknown>): PlacedBric
   return {
     xStud: matrix ? Number(pose.xStud) : normalizeHorizontalStud(Number(pose.xStud)),
     yStud: Number.isFinite(pose.yStud)
-      ? matrix ? Math.max(0, Number(pose.yStud)) : normalizeYStud(Number(pose.yStud))
+      ? matrix ? Number(pose.yStud) : normalizeYStud(Number(pose.yStud))
       : plateHeightToWorldStud(Number(pose.yPlate ?? 0)),
     zStud: matrix ? Number(pose.zStud) : normalizeHorizontalStud(Number(pose.zStud)),
     rotationQuarterTurns: normalizeQuarterTurns(Number(pose.rotationQuarterTurns)),
@@ -99,12 +102,16 @@ export const normalizeImportedPlan = (plan: BuildPlan): BuildPlan => pruneBrickS
         Array.isArray(structure?.brickIds)
       ))
     : [],
-  bricks: plan.bricks.map((brick) => ({
-    ...brick,
-    color: migrateLegacyBrickColor(brick),
-    pose: normalizeImportedPose(brick.pose as unknown as Record<string, unknown>),
-    ...(brick.voxelState ? { voxelState: normalizeImportedVoxelState(brick.voxelState) } : {}),
-  })),
+  bricks: plan.bricks.map((brick) => {
+    const pose = normalizeImportedPose(brick.pose as unknown as Record<string, unknown>)
+    const definition = brickById.get(brick.brickId)
+    return {
+      ...brick,
+      color: migrateLegacyBrickColor(brick),
+      pose: pose.orientationMatrix && definition ? normalizeRigidBrickPose(definition, pose, getBrickSourceAnchor(definition)) : pose,
+      ...(brick.voxelState ? { voxelState: normalizeImportedVoxelState(brick.voxelState) } : {}),
+    }
+  }),
 })
 
 export const tryNormalizeImportedPlan = (plan: BuildPlan) => {
@@ -112,6 +119,7 @@ export const tryNormalizeImportedPlan = (plan: BuildPlan) => {
   const hasInvalidBrick = plan.bricks.some((brick) => !isRecord(brick) || typeof brick.id !== 'string' || typeof brick.brickId !== 'string' || typeof brick.color !== 'string' || !isValidImportedPose(brick.pose))
   if (hasInvalidBrick) return undefined
   if (plan.steps.some((step) => !isRecord(step) || typeof step.id !== 'string' || typeof step.title !== 'string' || typeof step.description !== 'string' || !Array.isArray(step.brickIds) || step.brickIds.some((id) => typeof id !== 'string'))) return undefined
+  if (!isValidConstructionData(plan)) return undefined
 
   return normalizeImportedPlan(plan)
 }

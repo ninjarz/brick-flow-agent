@@ -207,6 +207,30 @@ export type PlacedBrick = {
   voxelState?: VoxelBlockState
 }
 
+export type ConstructionAssembly = { brickIds: string[] }
+
+export type ConstructionGroup = {
+  assemblyId: string
+  baseBrickId?: string
+  flip?: boolean
+}
+
+export type ConstructionAdjustment = {
+  brickId: string
+  anchorBrickId: string
+  /** Column-major rigid delta in the anchor mould's centred local frame. */
+  matrix: number[]
+}
+
+export type BuildConstructionStep = ConstructionGroup & {
+  sourceStepId?: string
+  groups?: ConstructionGroup[]
+  adjustments?: ConstructionAdjustment[]
+  hiddenPrintBrickIds?: string[]
+  focusBrickIds?: string[]
+  official?: { set: string; book: number; page: number; numberedStep?: number; inset?: number }
+}
+
 export type BuildStep = {
   id: string
   title: string
@@ -214,6 +238,7 @@ export type BuildStep = {
   brickIds: string[]
   /** Keep this group aligned with an official instruction step in the standard manual. */
   instructionStep?: number
+  construction?: BuildConstructionStep
 }
 
 export type BrickStructure = {
@@ -232,6 +257,7 @@ export type BuildPlan = {
   bricks: PlacedBrick[]
   steps: BuildStep[]
   structures?: BrickStructure[]
+  constructionAssemblies?: Record<string, ConstructionAssembly>
 }
 
 export type LlmConfig = {

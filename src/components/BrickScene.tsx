@@ -71,6 +71,7 @@ export type BrickSceneProps = {
   bricks: PlacedBrick[]
   selectedId?: string
   highlightedIds?: string[]
+  hiddenPrintBrickIds?: string[]
   cameraFollowStepKey?: string
   cameraFrameKey?: string
   cameraFocusBrickIds?: string[]
@@ -78,6 +79,7 @@ export type BrickSceneProps = {
   initialCameraAzimuthDegrees?: number
   viewMode?: BrickSceneViewMode
   stabilityAnalysis?: StabilityAnalysis
+  showSupportWarnings?: boolean
   displayColorByBrickId?: Map<string, string>
   transformsByBrickId?: Map<string, BrickSceneTransform>
   worldEntities?: WorldEntity[]
@@ -1985,6 +1987,7 @@ const VoxelOptimizedScene = memo(function VoxelOptimizedSceneLayer({
   displayColorByBrickId,
   transformsByBrickId,
   hiddenBrickIdSet,
+  hiddenPrintIdSet,
   placementActive,
   onSelect,
   onSelectConnected,
@@ -2002,6 +2005,7 @@ const VoxelOptimizedScene = memo(function VoxelOptimizedSceneLayer({
   displayColorByBrickId?: Map<string, string>
   transformsByBrickId?: Map<string, BrickSceneTransform>
   hiddenBrickIdSet: Set<string>
+  hiddenPrintIdSet: Set<string>
   placementActive: boolean
   onSelect: (id: string, options?: BrickSelectionOptions) => void
   onSelectConnected?: (id: string) => void
@@ -2029,12 +2033,12 @@ const VoxelOptimizedScene = memo(function VoxelOptimizedSceneLayer({
   const ldrawBatches = useMemo(() => {
     const result = buildLDrawSceneBatches(preferDetailedGeometry ? bricks : [], {
       selectedId, highlightedIds: highlightedIdSet, supportedByBrickId, displayColorByBrickId, showEdges,
-      excludedIds: batchExcludedIds,
+      excludedIds: batchExcludedIds, hiddenPrintIds: hiddenPrintIdSet,
     }, transientBatches ? placementBatchCache.current ?? ldrawBatchCache.current : preparedResources?.scene ?? ldrawBatchCache.current)
     if (transientBatches) placementBatchCache.current = result
     else { ldrawBatchCache.current = result; placementBatchCache.current = undefined }
     return result
-  }, [bricks, preferDetailedGeometry, selectedId, highlightedIdSet, supportedByBrickId, displayColorByBrickId, showEdges, batchExcludedIds, transientBatches, preparedResources])
+  }, [bricks, preferDetailedGeometry, selectedId, highlightedIdSet, supportedByBrickId, displayColorByBrickId, showEdges, batchExcludedIds, hiddenPrintIdSet, transientBatches, preparedResources])
   const batchedPrintIds = useMemo(() => new Set(ldrawBatches.printSources.flatMap(batch => batch.instances.map(instance => instance.brick.id))), [ldrawBatches])
   const batchResources = useLDrawBatchResources(ldrawBatches, ldrawBatchCache.current, placementBatchCache.current, preparedResources)
   const remainingBricks = preferDetailedGeometry ? ldrawBatches.individualBricks : bricks.filter(brick => brickById.get(brick.brickId)?.pack !== 'lego')
@@ -2108,6 +2112,7 @@ const VoxelOptimizedScene = memo(function VoxelOptimizedSceneLayer({
       {sharedTransform && <TransformedBrick transform={sharedTransform}>
         <VoxelOptimizedScene
           bricks={sharedTransformBricks}
+          hiddenPrintIdSet={hiddenPrintIdSet}
           selectedId={selectedId}
           highlightedIdSet={highlightedIdSet}
           supportedByBrickId={supportedByBrickId}
@@ -2151,7 +2156,7 @@ const VoxelOptimizedScene = memo(function VoxelOptimizedSceneLayer({
             preferDetailedGeometry={preferDetailedGeometry}
             showEdges={showEdges}
             displayColor={displayColorByBrickId?.get(brick.id)}
-            batchedPrints={batchedPrintIds.has(brick.id)}
+            batchedPrints={batchedPrintIds.has(brick.id) || hiddenPrintIdSet.has(brick.id)}
             ghost={hiddenBrickIdSet.has(brick.id)}
             placementActive={placementActive}
             onSelect={onSelect}
@@ -2727,6 +2732,7 @@ export const BrickScene = ({
   framingBricks,
   selectedId,
   highlightedIds = emptySceneIds,
+  hiddenPrintBrickIds = emptySceneIds,
   cameraFrameKey,
   analysisPaused = false,
   cameraFollowStepKey,
@@ -2735,6 +2741,7 @@ export const BrickScene = ({
   initialCameraAzimuthDegrees,
   viewMode = 'border',
   stabilityAnalysis,
+  showSupportWarnings = true,
   displayColorByBrickId,
   transformsByBrickId,
   worldEntities = emptySceneEntities,
@@ -2779,6 +2786,8 @@ export const BrickScene = ({
   const xrayDebug = viewMode === 'xray'
   const showBrickEdges = viewMode === 'border' || xrayDebug
   const highlightedIdSet = useMemo(() => new Set(highlightedIds), [highlightedIds])
+  const hiddenPrintIdSet = useMemo(() => new Set(hiddenPrintBrickIds), [hiddenPrintBrickIds])
+  const cameraFollowIdSet = useMemo(() => new Set(cameraFocusBrickIds ?? highlightedIds), [cameraFocusBrickIds, highlightedIds])
   const hiddenBrickIdSet = useMemo(() => new Set(hiddenBrickIds), [hiddenBrickIds])
   const hiddenWorldEntityIdSet = useMemo(() => new Set(hiddenWorldEntityIds), [hiddenWorldEntityIds])
   const settledVisibleBricks = useMemo(
@@ -2891,12 +2900,12 @@ export const BrickScene = ({
     void ldrawBoundsVersion
     const bounds = new Box3()
     if (cameraFollowStepKey) for (const brick of bricks) {
-      if (!highlightedIdSet.has(brick.id)) continue
+      if (!cameraFollowIdSet.has(brick.id)) continue
       const box = getBrickBounds(brick)
       if (box) { bounds.expandByPoint(new Vector3(box.minX, box.minY, box.minZ)); bounds.expandByPoint(new Vector3(box.maxX, box.maxY, box.maxZ)) }
     }
     return bounds
-  }, [bricks, cameraFollowStepKey, highlightedIdSet, ldrawBoundsVersion])
+  }, [bricks, cameraFollowStepKey, cameraFollowIdSet, ldrawBoundsVersion])
   const sceneGridFade = useMemo(() => {
     void ldrawBoundsVersion
     let minX = -defaultGridExtent, maxX = defaultGridExtent, minZ = -defaultGridExtent, maxZ = defaultGridExtent
@@ -2968,15 +2977,16 @@ export const BrickScene = ({
   const resolvedDisplayColorByBrickId = xrayColorByBrickId ?? displayColorByBrickId
   const [backgroundSupport, setBackgroundSupport] = useState<{ bricks: PlacedBrick[]; supported: Map<string, boolean> }>()
   useEffect(() => {
-    if (analysisPaused || deferredSupportBricks.length < backgroundAnalysisThreshold || resolvedStabilityAnalysis) return
+    if (!showSupportWarnings || analysisPaused || deferredSupportBricks.length < backgroundAnalysisThreshold || resolvedStabilityAnalysis) return
     let canceled = false
     const timer = window.setTimeout(() => { void getEditorSupport(deferredSupportBricks).then(supported => {
       if (!canceled) setBackgroundSupport({ bricks: deferredSupportBricks, supported })
     }).catch(() => { /* Validation UI reports analysis failures; keep pending colours neutral. */ }) }, 300)
     return () => { canceled = true; window.clearTimeout(timer) }
-  }, [deferredSupportBricks, resolvedStabilityAnalysis, analysisPaused])
+  }, [deferredSupportBricks, resolvedStabilityAnalysis, analysisPaused, showSupportWarnings])
   const supportedByBrickId = useMemo(() => {
     void ldrawBoundsVersion
+    if (!showSupportWarnings) return new Map<string, boolean>()
 
     if (resolvedStabilityAnalysis) {
       return new Map([...resolvedStabilityAnalysis.riskByBrickId].map(([brickId, item]) => [brickId, item.grounded]))
@@ -2990,7 +3000,7 @@ export const BrickScene = ({
       brick.id,
       buildGraph.groundedIds.has(brick.id) && isVoxelPlantSupported(brick, deferredSupportBricks),
     ]))
-  }, [backgroundSupport, deferredSupportBricks, ldrawBoundsVersion, resolvedStabilityAnalysis])
+  }, [backgroundSupport, deferredSupportBricks, ldrawBoundsVersion, resolvedStabilityAnalysis, showSupportWarnings])
 
   if (orbitTargetKeyRef.current !== cameraFrameRequestKey) {
     orbitTargetKeyRef.current = cameraFrameRequestKey
@@ -2999,6 +3009,7 @@ export const BrickScene = ({
 
   preparationOptionsRef.current = {
     selectedId, highlightedIds: highlightedIdSet, supportedByBrickId,
+    hiddenPrintIds: hiddenPrintIdSet,
     displayColorByBrickId: resolvedDisplayColorByBrickId, showEdges: showBrickEdges,
     excludedIds: new Set([...hiddenBrickIdSet, ...(transformsByBrickId?.keys() ?? [])]),
   }
@@ -3086,6 +3097,7 @@ export const BrickScene = ({
             displayColorByBrickId={resolvedDisplayColorByBrickId}
             transformsByBrickId={transformsByBrickId}
             hiddenBrickIdSet={hiddenBrickIdSet}
+            hiddenPrintIdSet={hiddenPrintIdSet}
             placementActive={placementActive}
             onSelect={sceneCallbacks.onSelect}
             onSelectConnected={sceneCallbacks.onSelectConnected}

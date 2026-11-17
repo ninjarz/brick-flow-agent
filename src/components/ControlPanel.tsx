@@ -13,6 +13,7 @@ import { LazyBrickGlyph } from './LazyBrickGlyph'
 import type { BuildPlan } from '../types/bricks'
 
 type ControlPanelProps = {
+  debugMode?: boolean
   analysisPaused?: boolean
   engineStatusLabel?: string
   engineStatusTone?: 'neutral' | 'warning' | 'pending' | 'success' | 'error'
@@ -57,6 +58,7 @@ const validationDebounceMs = 120
 const initialVisiblePartCount = 12
 
 export const ControlPanel = ({
+  debugMode = false,
   analysisPaused = false,
   engineStatusLabel,
   engineStatusTone = 'neutral',
@@ -259,7 +261,7 @@ export const ControlPanel = ({
             <Sparkles size={17} />
             {isGenerating ? t('control.generating') : t('control.generatePlan')}
           </button>
-          {!isGenerating && (
+          {debugMode && !isGenerating && (
             <button className="secondary" type="button" onClick={onOpenPromptPreview}>
               {t('control.previewPrompt')}
             </button>

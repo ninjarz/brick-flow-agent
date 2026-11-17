@@ -17,6 +17,8 @@ const port = Number(process.env.BRICK_PROFILE_PORT ?? 4181)
 const base = `http://127.0.0.1:${port}/brick-flow-agent/`
 const engine = process.env.BRICK_PROFILE_BROWSER ?? 'chromium'
 assert.ok(['chromium', 'webkit'].includes(engine), 'BRICK_PROFILE_BROWSER must be chromium or webkit')
+const hogwartsStepCount = JSON.parse(await readFile(join(root, 'src/data/legoHogwartsPlan.json'), 'utf8')).steps.length
+let manualStepCount = hogwartsStepCount
 const samples = [], memory = [], errors = [], rss = []
 const stressEdits = Number(process.env.BRICK_PROFILE_STRESS_EDITS ?? 20)
 const stressBlock = Number(process.env.BRICK_PROFILE_STRESS_BLOCK ?? 10)
@@ -331,7 +333,7 @@ try {
   await measure('duplicate part', async () => { await page.getByRole('button', { name: 'Duplicate', exact: true }).click(); await page.getByText('6026 parts', { exact: true }).waitFor() })
   await measure('delete duplicate', async () => { await page.locator('.brick-editor-window').getByRole('button', { name: 'Delete', exact: true }).click(); await page.getByText('6025 parts', { exact: true }).waitFor() })
   await load()
-  await measure('cold manual open', async () => { await page.getByRole('button', { name: 'Build Manual', exact: true }).click(); await page.locator('.manual-preview').waitFor({ timeout: 60_000 }) })
+  await measure('cold manual open', async () => { await page.getByRole('button', { name: 'Build Manual', exact: true }).click(); await page.locator('.manual-preview').waitFor({ timeout: 60_000 }); manualStepCount = Number(await page.locator('.manual-timeline input[type=range]').getAttribute('max')) + 1; assert.ok(manualStepCount >= hogwartsStepCount) })
   await measure('manual assembled view', async () => { await page.locator('.manual-timeline-actions input[type=checkbox]').uncheck() })
   await measure('manual exploded view', async () => { await page.locator('.manual-timeline-actions input[type=checkbox]').check() })
   await measure('manual autoplay and pause', async () => {
@@ -344,9 +346,9 @@ try {
     return { playbackIntervalMs: 650 }
   })
   for (const key of ['ArrowRight', 'ArrowLeft']) await measure(`manual ${key}`, async () => { const slider = page.locator('.manual-timeline input[type=range]'); const before = Number(await slider.inputValue()); await page.keyboard.press(key); await page.waitForFunction(expected => Number(document.querySelector('.manual-timeline input[type=range]')?.value) === expected, before + (key === 'ArrowRight' ? 1 : -1)) })
-  await measure('manual last step', async () => { await page.locator('.manual-timeline input[type=range]').fill('818'); await page.locator('.manual-preview [data-geometry-ready="true"]').waitFor({ timeout: 60_000 }) })
+  await measure('manual last step', async () => { await page.locator('.manual-timeline input[type=range]').fill(String(manualStepCount - 1)); await page.locator('.manual-preview [data-geometry-ready="true"]').waitFor({ timeout: 60_000 }) })
   for (let cycle = 0; cycle < manualCycles; cycle++) {
-    for (const step of [400, 818]) await measure(`manual repeat ${cycle + 1} step ${step}`, async () => {
+    for (const step of [Math.floor(manualStepCount / 2), manualStepCount - 1]) await measure(`manual repeat ${cycle + 1} step ${step}`, async () => {
       await page.locator('.manual-timeline input[type=range]').fill(String(step))
       await page.locator('.manual-preview [data-geometry-ready="true"]').waitFor({ timeout: 60_000 })
     })
@@ -354,8 +356,8 @@ try {
   await page.screenshot({ path: join(output, 'manual-final.png') })
   let markdown
   await measure('manual Markdown export', async () => { markdown = await exported('Export Markdown'); assert.match(markdown, /6025/) })
-  await measure('manual JSON export', async () => { const manual = JSON.parse(await exported('Export manual JSON')); assert.equal(manual.totalPieces, 6025); assert.equal(manual.steps.length, 819) })
-  await measure('manual HTML export', async () => { const html = await exported('Export HTML'); assert.match(html, /<html/i); assert.match(html, /6025/); assert.match(html, /819/) })
+  await measure('manual JSON export', async () => { const manual = JSON.parse(await exported('Export manual JSON')); assert.equal(manual.totalPieces, 6025); assert.equal(manual.steps.length, manualStepCount) })
+  await measure('manual HTML export', async () => { const html = await exported('Export HTML'); assert.match(html, /<html/i); assert.match(html, /6025/); assert.ok(html.includes(String(manualStepCount))) })
   await measure('copy manual Markdown', async () => {
     await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async text => { window.brickCopiedText = text } } }))
     await page.getByRole('button', { name: 'Copy Markdown', exact: true }).click()
@@ -364,14 +366,14 @@ try {
   })
 
   await page.keyboard.press('Escape')
-  await measure('warm JSON export', async () => { const data = JSON.parse(await exported()); assert.equal(data.plan.bricks.length, 6025); assert.equal(data.manual.totalPieces, 6025); assert.equal(data.manual.steps.length, 819); assert.equal(data.manual.steps.at(-1).completedPieceCount, 6025) })
+  await measure('warm JSON export', async () => { const data = JSON.parse(await exported()); assert.equal(data.plan.bricks.length, 6025); assert.equal(data.manual.totalPieces, 6025); assert.equal(data.manual.steps.length, manualStepCount); assert.equal(data.manual.steps.at(-1).completedPieceCount, 6025) })
   await measure('LDraw export', async () => {
     const text = await exported('Export LDraw')
     assert.equal(text.split('\n').filter(line => line.startsWith('1 ')).length, 6025)
     const metadata = text.split('\n').filter(line => line.startsWith('0 !BRICK_FLOW_AGENT_PLAN ')).map(line => line.split(' ').at(-1)).join('')
     const embedded = JSON.parse(Buffer.from(metadata, 'base64').toString('utf8'))
     assert.equal(embedded.bricks.length, 6025)
-    assert.equal(embedded.steps.length, 819)
+    assert.equal(embedded.steps.length, hogwartsStepCount)
     return { referenceCount: 6025, embeddedPieces: embedded.bricks.length }
   })
   await measure('reload persisted scene', async () => { await page.reload(); await ready() })

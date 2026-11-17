@@ -16,9 +16,33 @@ export const generateStructuralCache = async () => {
     import {loadLDrawGeneratedVisual} from ${JSON.stringify(workspace + '/src/lib/ldrawGeneratedVisualLoader.ts')};
     import {getBrickStructuralCells} from ${JSON.stringify(workspace + '/src/lib/structuralGrid.ts')};
     import {getStructuralDefinitionSignature} from ${JSON.stringify(workspace + '/src/lib/structuralDefinitionSignature.ts')};
+    import {getLoadedLDrawGeneratedVisualValues} from ${JSON.stringify(workspace + '/src/lib/ldrawVisualRegistry.ts')};
+    import {ConvexHull} from ${JSON.stringify(workspace + '/node_modules/three/examples/jsm/math/ConvexHull.js')};
+    import {Vector3} from ${JSON.stringify(workspace + '/node_modules/three/build/three.module.js')};
     import {gzipSync} from 'node:zlib';
     await loadLDrawGeneratedVisual();
-    export const snapshots = brickDefinitions.filter(d=>d.pack==='lego').map(d=>({id:d.id,signature:getStructuralDefinitionSignature(d),gzip:gzipSync(JSON.stringify(getBrickStructuralCells(d))).toString('base64')}));
+    const hulls = new Map();
+    const contactHull = (part) => {
+      if (hulls.has(part)) return hulls.get(part);
+      const values = getLoadedLDrawGeneratedVisualValues(part);
+      if (!values?.length) return undefined;
+      const unique = new Map();
+      for (let i = 0; i < values.length; i += 3) unique.set([values[i], values[i+1], values[i+2]].join(','), new Vector3(values[i], values[i+1], values[i+2]));
+      let vertices = [...unique.values()];
+      try {
+        const hull = new ConvexHull().setFromPoints(vertices);
+        const surface = new Set();
+        for (const face of hull.faces) {
+          let edge = face.edge;
+          do { surface.add(edge.head().point); edge = edge.next; } while (edge !== face.edge);
+        }
+        if (surface.size) vertices = [...surface];
+      } catch { /* Degenerate moulds retain all source vertices. */ }
+      const result = vertices.flatMap(p => [p.x,p.y,p.z]);
+      hulls.set(part, result);
+      return result;
+    };
+    export const snapshots = brickDefinitions.filter(d=>d.pack==='lego').map(d=>({id:d.id,signature:getStructuralDefinitionSignature(d),gzip:gzipSync(JSON.stringify(getBrickStructuralCells(d))).toString('base64'),contactHull:contactHull(d.partNumber)}));
     `)
     await esbuild.build({ entryPoints: [entry], outfile: output, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' })
     const { snapshots } = await import(output)
@@ -33,7 +57,7 @@ export const generateStructuralCache = async () => {
       manifest += `const load${chunk} = () => import('./ldrawStructuralCacheChunks/chunk-${chunk}')\n`
       entries.push(...group.map(snapshot => `  ${JSON.stringify(snapshot.id)}: load${chunk},`))
     }
-    manifest += `export const structuralCacheLoaders: Record<string, () => Promise<{ snapshots: Record<string, {signature: string; gzip: string}> }>> = {\n${entries.join('\n')}\n}\n`
+    manifest += `export const structuralCacheLoaders: Record<string, () => Promise<{ snapshots: Record<string, {signature: string; gzip: string; contactHull?: number[]}> }>> = {\n${entries.join('\n')}\n}\n`
     await writeFile(join(workspace, 'src/lib/ldrawStructuralCacheManifest.ts'), manifest)
     return { definitions: snapshots.length, compressedBytes: snapshots.reduce((n,s)=>n+Buffer.from(s.gzip,'base64').length,0), revision }
   } finally {

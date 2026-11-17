@@ -120,3 +120,24 @@ test('LDraw compatibility details remain available in debug mode after import', 
   await expect(page.getByText('99999 ×2')).toBeVisible()
   await expect(page.getByText('Unknown colors')).toBeVisible()
 })
+
+test('legacy manual checks the selected stage without treating a valid final model as stage proof', async ({ page }) => {
+  await page.evaluate(() => {
+    const pose = { xStud: 0, yStud: 0, zStud: 0, rotationQuarterTurns: 0 }
+    const plan = { id: 'manual-stage-review', title: 'Stage review', prompt: '', source: 'template-local',
+      bricks: [{ id: 'top', brickId: 'brick-1x1', color: 'gray', pose: { ...pose, yStud: 1.2 } },
+        { id: 'base', brickId: 'brick-1x1', color: 'gray', pose }], steps: [
+        { id: 'top-step', title: 'Top', description: '', brickIds: ['top'] },
+        { id: 'base-step', title: 'Base', description: '', brickIds: ['base'] },
+      ] }
+    const transfer = new DataTransfer()
+    transfer.items.add(new File([JSON.stringify(plan)], 'stage.json', { type: 'application/json' }))
+    window.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }))
+  })
+  await expect(page.getByText('2 parts', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Build Manual', exact: true }).click()
+  const status = page.locator('.manual-preview .structure-status')
+  await expect(status).toHaveClass(/warn/)
+  await page.locator('.manual-page-controls').getByRole('button', { name: 'Next', exact: true }).click()
+  await expect(status).toHaveClass(/ok/)
+})

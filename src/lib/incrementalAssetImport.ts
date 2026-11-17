@@ -1,6 +1,7 @@
 import type { BuildPlan, PlacedBrick } from '../types/bricks'
 import { dropBrickGroupAtPoint } from './brickGroupPlacement'
 import { createId, createPlanSpatialState, createSingleBrickSteps, getBrickBounds } from './planUtils'
+import { remapConstructionStep } from './constructionPlan'
 
 export type IncrementalAssetImportResult = {
   plan: BuildPlan
@@ -62,13 +63,19 @@ const remapAssetPlan = (
   }))
 
   const usedStepIds = new Set(currentPlan.steps.map((step) => step.id))
+  const usedAssemblyIds = new Set(Object.keys(currentPlan.constructionAssemblies ?? {}))
+  const assemblyIdMap = new Map(Object.keys(assetPlan.constructionAssemblies ?? {}).map(id => [id, makeUniqueId('assembly', usedAssemblyIds, idFactory)]))
+  const constructionAssemblies = Object.fromEntries(Object.entries(assetPlan.constructionAssemblies ?? {}).map(([id, assembly]) => [assemblyIdMap.get(id)!, {
+    brickIds: assembly.brickIds.map(brickId => brickIdMap.get(brickId)!),
+  }]))
   const steps = assetPlan.steps.map((step) => ({
     ...step,
     id: makeUniqueId('step', usedStepIds, idFactory),
+    ...(step.construction ? { construction: remapConstructionStep(step.construction, brickIdMap, assemblyIdMap) } : {}),
     brickIds: step.brickIds
       .map((brickId) => brickIdMap.get(brickId))
       .filter((brickId): brickId is string => Boolean(brickId)),
-  })).filter((step) => step.brickIds.length > 0)
+  })).filter((step) => step.brickIds.length > 0 || step.construction)
 
   const usedStructureIds = new Set((currentPlan.structures ?? []).map((structure) => structure.id))
   const structureIdMap = new Map((assetPlan.structures ?? []).map((structure) => [
@@ -89,6 +96,7 @@ const remapAssetPlan = (
     structures,
     brickIdMap: Object.fromEntries(brickIdMap),
     structureIdMap: Object.fromEntries(structureIdMap),
+    constructionAssemblies,
   }
 }
 
@@ -190,6 +198,7 @@ export const importAssetPlanIncrementally = (
       bricks: [...currentPlan.bricks, ...placedBricks],
       steps: [...currentPlan.steps, ...importedSteps],
       ...(structures.length > 0 ? { structures } : {}),
+      ...(Object.keys(remapped.constructionAssemblies).length ? { constructionAssemblies: { ...currentPlan.constructionAssemblies, ...remapped.constructionAssemblies } } : {}),
     },
   }
 }

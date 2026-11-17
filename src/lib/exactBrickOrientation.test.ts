@@ -1,12 +1,34 @@
 import { describe, expect, it } from 'vitest'
 import { Euler, Matrix4, Vector3 } from 'three'
 import { brickById } from '../data/basicBricks'
-import { footprintToWorld, getBrickConnectors, isValidOrientationMatrix, transformBrickLocalPoint } from './brickUnits'
+import { footprintToWorld, getBrickConnectors, isValidOrientationMatrix, transformBrickLocalPoint, translateBrickPose } from './brickUnits'
 import { isValidImportedPose, normalizeImportedPose } from './planImport'
 import type { BrickPose } from '../types/bricks'
 import { formatLDrawPlan, parseLDrawPlan } from './ldrawPlan'
 
 describe('exact hinged assembly orientation', () => {
+  it('retains imported reference origins below the table without clamping or decimal quantization', () => {
+    const pose: BrickPose = { xStud: .123456789123, yStud: -.037500001234, zStud: -4.250000008765,
+      rotationQuarterTurns: 0, orientationMatrix: [1,0,0, 0,1,0, 0,0,1] }
+    expect(normalizeImportedPose(pose)).toMatchObject(pose)
+    const moved = translateBrickPose(pose, { xStud: .2, yStud: -.4, zStud: .2 })
+    expect(moved.xStud).toBe(pose.xStud + .2)
+    expect(moved.yStud).toBe(pose.yStud - .4)
+    expect(moved.zStud).toBe(pose.zStud + .2)
+  })
+
+  it('exports source rotation without cancellation from a large world translation', () => {
+    const c = Math.cos(.735), s = Math.sin(.735)
+    const pose: BrickPose = { xStud: 9000.123456789, yStud: .037500001234, zStud: -8000.250000008,
+      rotationQuarterTurns: 0, orientationMatrix: [c,0,s, 0,1,0, -s,0,c] }
+    const text = formatLDrawPlan({ id: 'precision', title: 'precision', prompt: '', source: 'template-local', steps: [],
+      bricks: [{ id: 'exact', brickId: 'plate-1x2', color: 'gray', pose }] })
+    const line = text.split('\n').find(line => line.startsWith('1 '))!.split(' ')
+    const values = line.slice(5,14).map(Number)
+    expect(values).toEqual([c,0,s, 0,1,0, s,0,-c])
+    expect(text).toContain(String(c))
+  })
+
   it('preserves handedness when importing an asymmetric LDraw arrangement', () => {
     const references = [[0,0,0],[100,0,0],[0,100,0],[0,0,100]].map(([x,y,z]) =>
       `1 15 ${x} ${y} ${z} 1 0 0 0 1 0 0 0 1 3023.dat`)

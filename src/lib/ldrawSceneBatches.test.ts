@@ -356,3 +356,18 @@ it('keeps translucent diagnostic instances in their original group and source or
   expect(result.meshBatches[0].scope).toBeUndefined()
   expect(result.meshBatches[0].instances.map(instance => instance.brick.id)).toEqual(pieces.map(brick => brick.id))
 })
+
+it('defers pending official artwork while retaining its mould and restores it on installation', async () => {
+  await loadLDrawGeneratedVisual(['3068bpbf71043s60'])
+  const definition = [...brickById.values()].find(brick => brick.partNumber === '3068bpbf71043s60')!
+  expect(definition).toBeDefined()
+  const brick = makeBrick(definition.id, 'tan', 0, 0, 0)
+  const options = { excludedIds: new Set<string>(), highlightedIds: new Set<string>(), supportedByBrickId: new Map<string, boolean>(), showEdges: true }
+  const complete = buildLDrawSceneBatches([brick], options)
+  expect(complete.printSources.some(batch => batch.print)).toBe(true)
+  const pending = buildLDrawSceneBatches([brick], { ...options, hiddenPrintIds: new Set([brick.id]) })
+  expect(pending.printSources.some(batch => batch.print)).toBe(false)
+  expect(pending.meshBatches.filter(batch => !batch.print)).toEqual(complete.meshBatches.filter(batch => !batch.print))
+  const restored = buildLDrawSceneBatches([brick], options)
+  expect(restored.printSources.some(batch => batch.print)).toBe(true)
+})

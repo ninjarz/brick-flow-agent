@@ -1,5 +1,6 @@
-import { beforeAll, describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { brickById } from '../data/basicBricks'
+import { getLDDInterfaceConnectors } from './lddInterfacePoints'
 import type { PlacedBrick, BrickPose } from '../types/bricks'
 import { transformBrickLocalPoint } from './brickUnits'
 import { loadLDrawGeneratedVisual } from './ldrawGeneratedVisualLoader'
@@ -331,4 +332,16 @@ describe('wing underside center tube', () => {
     const lifted=structuredClone(wingDishFixture); lifted[1].pose.yStud-=2
     expect(createBuildGraph(lifted).components).toHaveLength(2)
   })
+})
+
+
+it('keeps source connector identities stable across engine-specific hypot rounding', () => {
+  const definition = brickById.get('hogwarts-ldraw-973pbf71043e6240433')!
+  const expected = getLDDInterfaceConnectors(definition)
+  expect(expected.length).toBeGreaterThan(0)
+  const hypot = vi.spyOn(Math, 'hypot').mockReturnValue(1.000000000000001)
+  try {
+    expect(getLDDInterfaceConnectors(definition)).toEqual(expected)
+    expect(hypot).not.toHaveBeenCalled()
+  } finally { hypot.mockRestore() }
 })

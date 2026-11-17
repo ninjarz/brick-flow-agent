@@ -1,4 +1,5 @@
 import type { BrickStructure, BuildPlan } from '../types/bricks'
+import { pruneConstructionData } from './constructionPlan'
 
 const normalizeText = (value: string) => value.trim().replace(/\s+/g, ' ')
 
@@ -72,6 +73,6 @@ export const pruneBrickStructures = (plan: BuildPlan): BuildPlan => {
       brickIds: structure.brickIds.filter((brickId) => liveIds.has(brickId)),
     }))
     .filter((structure) => structure.brickIds.length > 0)
-  return { ...plan, structures }
+  return pruneConstructionData({ ...plan, structures })
 }
 

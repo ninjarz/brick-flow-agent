@@ -93,7 +93,13 @@ export const poseToWorld = (pose: BrickPose) => ({
 
 /** Rigid imported assemblies retain their insertion depths when moved together. */
 export const translateBrickPose = (pose: BrickPose, delta: { xStud?: number; yStud?: number; zStud?: number }): BrickPose => {
-  const step = pose.orientationMatrix ? 0.000001 : WORLD_SNAP_STEP_STUDS
+  if (pose.orientationMatrix) return {
+    ...pose,
+    xStud: pose.xStud + (delta.xStud ?? 0),
+    yStud: pose.yStud + (delta.yStud ?? 0),
+    zStud: pose.zStud + (delta.zStud ?? 0),
+  }
+  const step = WORLD_SNAP_STEP_STUDS
   return { ...pose,
     xStud: roundToGrid(pose.xStud + (delta.xStud ?? 0), step),
     yStud: Math.max(0, roundToGrid(pose.yStud + (delta.yStud ?? 0), step)),

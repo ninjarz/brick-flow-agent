@@ -2,6 +2,7 @@ import type { BrickDefinition } from '../types/bricks'
 import type { StructuralCell } from './structuralGrid'
 import { getStructuralDefinitionSignature } from './structuralDefinitionSignature'
 import { structuralCacheLoaders } from './ldrawStructuralCacheManifest'
+import { seedLDrawContactHull } from './ldrawBounds'
 
 type ChunkLoader = (typeof structuralCacheLoaders)[string]
 const chunks = new Map<ChunkLoader, ReturnType<ChunkLoader>>()
@@ -18,6 +19,7 @@ export const loadPrecomputedStructuralCells = (definition: BrickDefinition) => {
     if (!chunk) { chunk = loader(); chunks.set(loader, chunk) }
     const snapshot = (await chunk).snapshots[definition.id]
     if (!snapshot || snapshot.signature !== signature) return undefined
+    if (snapshot.contactHull) seedLDrawContactHull(definition.partNumber, snapshot.contactHull)
     const compressed = Uint8Array.from(atob(snapshot.gzip), char => char.charCodeAt(0))
     const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream('gzip'))
     return JSON.parse(await new Response(stream).text()) as StructuralCell[]
