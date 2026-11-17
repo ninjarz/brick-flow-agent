@@ -1,4 +1,5 @@
 import { CameraKeyboardNavigation } from './scene/CameraKeyboardNavigation'
+import { LocalOrbitTarget } from './scene/LocalOrbitTarget'
 import { ManualCameraFollow } from './scene/ManualCameraFollow'
 import { getSceneGridFade } from '../lib/sceneGridFade'
 import { useLDrawBatchResources } from './scene/useLDrawBatchResources'
@@ -2896,6 +2897,13 @@ export const BrickScene = ({
     }
   }, [renderLDrawDefinitionIdsKey, preparedDefinitionIds, scenePreparationBricks])
 
+  const localOrbitBounds = useMemo(() => {
+    void ldrawBoundsVersion
+    return displayedBricks.flatMap(brick => {
+      const bounds = getBrickBounds(brick)
+      return bounds ? [new Box3(new Vector3(bounds.minX, bounds.minY, bounds.minZ), new Vector3(bounds.maxX, bounds.maxY, bounds.maxZ))] : []
+    })
+  }, [displayedBricks, ldrawBoundsVersion])
   const followBounds = useMemo(() => {
     void ldrawBoundsVersion
     const bounds = new Box3()
@@ -3152,6 +3160,7 @@ export const BrickScene = ({
         azimuthDegrees={initialCameraAzimuthDegrees}
       />
       <ManualCameraFollow bounds={followBounds} stepKey={cameraFollowStepKey} frameKey={cameraFrameRequestKey} />
+      <LocalOrbitTarget bounds={localOrbitBounds} enabled={!placementActive} />
       <CameraAzimuthObserver onChange={sceneCallbacks.onCameraAzimuthChange} />
       <SceneAnimationDriver
         active={worldEntities.length > 0 && !worldPaused}
