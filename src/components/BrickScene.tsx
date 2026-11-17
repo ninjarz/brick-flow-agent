@@ -2921,12 +2921,13 @@ export const BrickScene = ({
     void ldrawBoundsVersion
 
     const brickBounds = frameBricks.map(getBrickBounds).filter((bounds) => Boolean(bounds))
-    const modelMinX = Math.min(0, ...brickBounds.map((bounds) => bounds.minX))
-    const modelMaxX = Math.max(0, ...brickBounds.map((bounds) => bounds.maxX))
-    const modelMinY = Math.min(0, ...brickBounds.map((bounds) => bounds.minY))
-    const modelMaxY = Math.max(0, ...brickBounds.map((bounds) => bounds.maxY))
-    const modelMinZ = Math.min(0, ...brickBounds.map((bounds) => bounds.minZ))
-    const modelMaxZ = Math.max(0, ...brickBounds.map((bounds) => bounds.maxZ))
+    const origin = cameraFollowStepKey && brickBounds.length ? [] : [0]
+    const modelMinX = Math.min(...origin, ...brickBounds.map((bounds) => bounds.minX))
+    const modelMaxX = Math.max(...origin, ...brickBounds.map((bounds) => bounds.maxX))
+    const modelMinY = Math.min(...origin, ...brickBounds.map((bounds) => bounds.minY))
+    const modelMaxY = Math.max(...origin, ...brickBounds.map((bounds) => bounds.maxY))
+    const modelMinZ = Math.min(...origin, ...brickBounds.map((bounds) => bounds.minZ))
+    const modelMaxZ = Math.max(...origin, ...brickBounds.map((bounds) => bounds.maxZ))
     const minX = Math.min(defaultGridExtent * -1, modelMinX - gridPadding)
     const maxX = Math.max(defaultGridExtent, modelMaxX + gridPadding)
     const minZ = Math.min(defaultGridExtent * -1, modelMinZ - gridPadding)
@@ -2949,7 +2950,7 @@ export const BrickScene = ({
       centerZ: (minZ + maxZ) / 2,
       modelCenterZ: (modelMinZ + modelMaxZ) / 2,
     }
-  }, [frameBricks, ldrawBoundsVersion])
+  }, [frameBricks, ldrawBoundsVersion, cameraFollowStepKey])
   const deferredSupportBricks = useDeferredValue(bricks)
   const [backgroundStability, setBackgroundStability] = useState<{ bricks: PlacedBrick[]; analysis: StabilityAnalysis }>()
   useEffect(() => {

@@ -1,3 +1,5 @@
+import { BrickCountList } from './components/BrickCountList'
+import { LazyBrickGlyph } from './components/LazyBrickGlyph'
 import { createCumulativeManualView } from './lib/manualPresentation'
 import { createKeyboardMoveSession } from './lib/keyboardMoveSession'
 import { getEditorKeyboardMove } from './lib/editorAnalysisClient'
@@ -22,7 +24,7 @@ import type { BrickSceneTransform, BrickSceneViewMode } from './components/Brick
 import { ControlPanel } from './components/ControlPanel'
 import { useWorkspace } from './hooks/useWorkspace'
 import { useWorldSimulationLoop } from './hooks/useWorldSimulationLoop'
-import { brickById, getDefaultBrickColor } from './data/basicBricks'
+import { brickById, colorHex, getDefaultBrickColor } from './data/basicBricks'
 import { worldEntityDefinitionById } from './data/worldEntityDefinitions'
 import { createDefaultWorldScenarios } from './data/worldScenarios'
 import { dropBrickGroupAtPoint, findNearestOpenBrickGroupAround, getBrickGroupDragPointerOffset, offsetBrickGroupDragPoint, rotationRepositionSearchRadiusStuds, type HorizontalDropPoint, type StationaryPlanSpatialData } from './lib/brickGroupPlacement'
@@ -32,7 +34,7 @@ import { clearLlmConnection, normalizeMaxRepairAttempts, saveLlmConnection } fro
 import { defaultFinishedAssets, needsFinishedAssetsRecovery, isDefaultFinishedAsset, mergeRecoveredFinishedAssets, loadAllDefaultFinishedAssets, loadFinishedAssets, loadFinishedAssetsFromIndexedDb, mergeWithDefaultAssets, saveFinishedAssets } from './lib/finishedAssets'
 import { preparePlanGeometry } from './lib/planGeometry'
 import { formatBuildManualMarkdown, getAssemblyGuide, type BuildManual } from './lib/manualSerializer'
-import { getManualPageTabItems, getManualStepPage, manualStepPageSize } from './lib/manualPagination'
+import { getManualStepPage, manualStepPageSize } from './lib/manualPagination'
 import { createSingleBrickSteps, countBricks, createBrickCollisionIndex, createPlanSpatialState, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickPlacementDiagnostics, getBrickRawOverlapScore, getConnectedBrickComponents, hasBrickCollision, isBrickAboveGround, makeBrick, repairBuildPlan, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
 import { loadCatalogPreferences, type CatalogPackPreference } from './lib/catalogPreferences'
 import { getBrickWorldFrame, normalizeHorizontalStud, normalizeQuarterTurns, normalizeVerticalQuarterTurns, normalizeYStud, roundToGrid, STUD_PITCH_WORLD, translateBrickPose } from './lib/brickUnits'
@@ -560,7 +562,6 @@ function App() {
   const selectedManualStep = buildManual?.steps[Math.min(manualStepIndex, Math.max(0, buildManual.steps.length - 1))]
   const manualStepPage = getManualStepPage(buildManual?.steps.length ?? 0, manualStepIndex)
   const visibleManualSteps = buildManual?.steps.slice(manualStepPage.start, manualStepPage.end) ?? []
-  const manualPageTabItems = getManualPageTabItems(buildManual?.steps.length ?? 0, manualStepIndex)
   const manualHighlightedIds = useMemo(() => selectedManualStep?.constructionStep?.focusBrickIds
     ?? selectedManualStep?.addPieces.map(piece => piece.instanceId) ?? [], [selectedManualStep])
   const manualPreviewBricks = useMemo(() => {
@@ -3762,19 +3763,7 @@ function App() {
               </button>
             </header>
 
-            <section className="manual-inventory">
-              <h3>{t('manual.inventory')}</h3>
-              <p className={`structure-status ${manualIssueCount > 0 ? (manualBlockingIssueCount > 0 ? 'warn' : 'notice') : 'ok'}`}>
-                {manualIssueCount > 0 ? manualIssueSummary : t('common.structureOk')}
-              </p>
-              <div>
-                {buildManual.inventory.map((item) => (
-                  <span key={item.key}>
-                    {item.name} · {item.color} × {item.quantity}
-                  </span>
-                ))}
-              </div>
-            </section>
+
 
             {selectedManualStep && (
               <section className="manual-preview">
@@ -3786,6 +3775,7 @@ function App() {
                   </p>
                 </div>
                 <div className="manual-timeline">
+                  <details className="manual-playback"><summary>{locale === 'zh-CN' ? '播放与显示' : 'Playback & display'}</summary>
                   <div className="manual-timeline-actions">
                     <button
                       type="button"
@@ -3811,6 +3801,7 @@ function App() {
                       <option value={650}>2×</option>
                     </select>
                   </div>
+                  </details>
                   <input
                     type="range"
                     min={0}
@@ -3824,6 +3815,19 @@ function App() {
                 <div className="manual-assembly-guides">
                   {(selectedManualStep.installationLabels ?? [...new Set(selectedManualStep.addPieces.map((piece) => piece.assembly.label))]).map((label) => <span key={label}>{label}</span>)}
                 </div>
+                <aside className="manual-current-parts">
+                  <h3>{locale === 'zh-CN' ? '本步零件' : 'Parts for this step'}</h3>
+                  {selectedManualStep.stepInventory.length ? selectedManualStep.stepInventory.map(item => {
+                    const definition = brickById.get(item.brickId)
+                    return (
+                    <div className="manual-part-item" key={item.key}>
+                      {definition ? <LazyBrickGlyph brickId={definition.id} kind={definition.kind} footprint={definition.footprint} color={item.color} className="manual-part-thumb" />
+                        : <span className="manual-part-color" style={{ backgroundColor: colorHex[item.color] ?? '#cbd5e1' }} />}
+                      <div><strong>{item.name}</strong><small>{brickById.get(item.brickId)?.partNumber ?? item.brickId}</small></div>
+                      <b>×{item.quantity}</b>
+                    </div>
+                  )}) : <p>{locale === 'zh-CN' ? '安装已完成的分总成' : 'Install the completed assembly'}</p>}
+                </aside>
                 <div className="manual-preview-viewer">
                   <Suspense fallback={<div className="scene-loading">{t('scene.loading')}</div>}>
                     <BrickScene
@@ -3859,23 +3863,27 @@ function App() {
                     {t('manual.next')}
                   </button>
                 </div>
-                <div className="manual-page-tabs" aria-label={t('manual.pageTabs')}>
-                  {manualPageTabItems.map((item) => item.kind === 'gap' ? (
-                    <span key={item.key} className="manual-page-gap" aria-hidden="true">…</span>
-                  ) : (
-                    <button
-                      key={`${buildManual.steps[item.index].stepNumber}-${buildManual.steps[item.index].title}`}
-                      type="button"
-                      className={item.index === manualStepIndex ? 'active' : ''}
-                      onClick={() => { setIsManualPlaying(false); setManualStepIndex(item.index) }}
-                    >
-                      {buildManual.steps[item.index].stepNumber}
-                    </button>
-                  ))}
-                </div>
+                <label className="manual-step-jump">
+                  {locale === 'zh-CN' ? '跳至' : 'Go to'}
+                  <input type="number" min={1} max={buildManual.steps.length} value={manualStepIndex + 1}
+                    aria-label={locale === 'zh-CN' ? '跳转步骤' : 'Go to step'}
+                    onChange={event => { if (event.target.value) { setIsManualPlaying(false); setManualStepIndex(Math.max(0, Math.min(buildManual.steps.length - 1, Number(event.target.value) - 1))) } }} />
+                  / {buildManual.steps.length}
+                </label>
               </section>
             )}
 
+            <div className="manual-secondary-tools">
+              <details className="manual-drawer"><summary>{locale === 'zh-CN' ? '总零件清单' : 'All parts'}</summary>
+            <section className="manual-inventory">
+              <h3>{t('manual.inventory')}</h3>
+              <p className={`structure-status ${manualIssueCount > 0 ? (manualBlockingIssueCount > 0 ? 'warn' : 'notice') : 'ok'}`}>
+                {manualIssueCount > 0 ? manualIssueSummary : t('common.structureOk')}
+              </p>
+              <BrickCountList items={buildManual.inventory} />
+            </section>
+              </details>
+              <details className="manual-drawer"><summary>{locale === 'zh-CN' ? '步骤目录' : 'Step directory'}</summary>
             <div className="manual-step-list-header">
               <strong>{t('manual.stepRange', {
                 start: manualStepPage.total > 0 ? manualStepPage.start + 1 : 0,
@@ -3951,6 +3959,8 @@ function App() {
               })}
             </div>
 
+              </details>
+              <details className="manual-drawer"><summary>{locale === 'zh-CN' ? '导出与复制' : 'Export & copy'}</summary>
             <div className="manual-actions">
               <button className="secondary" type="button" onClick={copyManualMarkdown}>
                 <BookOpen size={16} />
@@ -3968,6 +3978,8 @@ function App() {
                 <Download size={16} />
                 {t('manual.exportJson')}
               </button>
+            </div>
+              </details>
             </div>
             {manualCopyStatus === 'failed' && (
               <textarea className="manual-copy-output" readOnly value={getManualMarkdown()} aria-label={t('manual.markdownText')} />

@@ -2,7 +2,7 @@ import { memo, useMemo } from 'react'
 import { brickDefinitions, getDefaultBrickColor } from '../data/basicBricks'
 import { useI18n } from '../lib/i18n'
 import type { BuildPlan } from '../types/bricks'
-import { LazyBrickGlyph } from './LazyBrickGlyph'
+import { BrickCountList } from './BrickCountList'
 
 type BrickCountsPanelProps = {
   plan: BuildPlan
@@ -29,23 +29,13 @@ export const BrickCountsPanel = memo(({ plan, brickCounts }: BrickCountsPanelPro
         <h2>{t('counts.title')}</h2>
         <p>{t('common.parts', { count: plan.bricks.length })}</p>
       </header>
-      <div className="brick-count-list">
-        {usedBricks.map((brick) => (
-          <article key={brick.id}>
-            <LazyBrickGlyph
-              brickId={brick.id}
-              kind={brick.kind}
-              footprint={brick.footprint}
-              color={firstColorByDefinitionId.get(brick.id) ?? getDefaultBrickColor(brick)}
-              className="count-glyph"
-            />
-            <div>
-              <h3>{brick.name}</h3>
-              <p>{t('counts.quantity', { count: brickCounts[brick.id] })}</p>
-            </div>
-          </article>
-        ))}
-      </div>
+      <BrickCountList items={usedBricks.map(brick => ({
+        key: brick.id,
+        brickId: brick.id,
+        name: brick.name,
+        color: firstColorByDefinitionId.get(brick.id) ?? getDefaultBrickColor(brick),
+        quantity: brickCounts[brick.id],
+      }))} />
       {usedBricks.length === 0 && <p className="muted">{t('counts.empty')}</p>}
     </section>
   )

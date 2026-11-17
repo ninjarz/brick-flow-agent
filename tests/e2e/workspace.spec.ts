@@ -136,8 +136,42 @@ test('legacy manual checks the selected stage without treating a valid final mod
   })
   await expect(page.getByText('2 parts', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Build Manual', exact: true }).click()
+  await expect(page.locator('.manual-current-parts')).toBeVisible()
+  await expect(page.locator('.manual-inventory')).not.toBeVisible()
+  await expect(page.locator('.manual-step-list')).not.toBeVisible()
   const status = page.locator('.manual-preview .structure-status')
   await expect(status).toHaveClass(/warn/)
   await page.locator('.manual-page-controls').getByRole('button', { name: 'Next', exact: true }).click()
   await expect(status).toHaveClass(/ok/)
+  await page.setViewportSize({ width: 390, height: 844 })
+  const reader = await page.locator('.manual-modal').boundingBox()
+  expect(reader!.x).toBeGreaterThanOrEqual(0)
+  expect(reader!.x + reader!.width).toBeLessThanOrEqual(390)
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 1000 })
+    const positions = await page.evaluate(() => {
+      const guides = document.querySelector('.manual-assembly-guides')!
+      const measurements = []
+      for (const labels of [[], ['从右向左安装'], ['从右向左安装', '从左向右安装', '从上向下安装', '从下向上安装', '从前向后安装', '从后向前安装']]) {
+        guides.replaceChildren(...labels.map(label => {
+          const span = document.createElement('span')
+          span.textContent = label
+          return span
+        }))
+        measurements.push({
+          guideHeight: guides.getBoundingClientRect().height,
+          viewerTop: document.querySelector('.manual-preview-viewer')!.getBoundingClientRect().top,
+          controlsTop: document.querySelector('.manual-page-controls')!.getBoundingClientRect().top,
+        })
+      }
+      return measurements
+    })
+    expect(positions[1]).toEqual(positions[0])
+    expect(positions[2]).toEqual(positions[0])
+  }
+  await page.locator('.manual-secondary-tools > details').first().locator('summary').click()
+  const inventory = page.locator('.manual-inventory .brick-count-list')
+  await expect(inventory.locator('article')).toHaveCount(1)
+  await expect(inventory.locator('article p')).toHaveText('Qty 2')
+  await expect(inventory.locator('.count-glyph')).toBeVisible()
 })
