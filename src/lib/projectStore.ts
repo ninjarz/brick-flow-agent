@@ -1,3 +1,4 @@
+import { selectCheckpointEvictions } from './projectCheckpointRetention'
 import { openDatabase } from './browserStorage'
 import { normalizeProjectSnapshot } from './projectSnapshot'
 import { coordinateStorageWrite } from './storageCoordinator'
@@ -65,14 +66,7 @@ const checkpoint = async (tx: IDBTransaction, project: Project, name: string) =>
   const value: ProjectCheckpoint = { id: crypto.randomUUID(), projectId: project.id, savedAt: Date.now(), name, snapshot: project.snapshot }
   await request(store.put(value, value.id))
   const all = (await request(store.getAll()) as ProjectCheckpoint[]).sort((a, b) => b.savedAt - a.savedAt)
-  let total = 0
-  const counts = new Map<string, number>()
-  for (const item of all) {
-    const count = (counts.get(item.projectId) ?? 0) + 1
-    counts.set(item.projectId, count)
-    total += JSON.stringify(item).length * 2
-    if (count > 5 || total > 50 * 1024 * 1024) await request(store.delete(item.id))
-  }
+  for (const item of selectCheckpointEvictions(all)) await request(store.delete(item.id))
 }
 export const projectStore = {
   list: () => transact(false, async tx => (await request(tx.objectStore('projects').getAll()) as ProjectIndex[]).sort((a, b) => b.savedAt - a.savedAt)),

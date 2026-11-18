@@ -46,7 +46,7 @@ describe('world scenario import', () => {
       entityId: result.importedEntityIds[1],
       clueId: 'gray-raven-broken-arrow',
     })
-    expect(result.world.scenarios[0].stages.map((stage) => stage.status)).toEqual(['active', 'locked', 'locked'])
+    expect(result.world.scenarios[0].stages.map((stage) => stage.status)).toEqual(['active', 'locked', 'locked', 'locked', 'locked'])
     expect(result.world.scenarios[0].stages[0].trigger.actorId).toBe(result.importedEntityIds[1])
     expect(result.world.scenarios[0].stages[0].trigger.targetId).toBe(result.importedEntityIds[2])
     expect(result.world.entities[1].controller).toBe('player')
@@ -109,16 +109,16 @@ describe('world scenario import', () => {
     expect(result.world.narrative.stories.map((story) => story.id)).toContain('existing-story')
     expect(result.world.narrative.stories.at(-1)?.chapterNumber).toBeUndefined()
     expect(result.world.scenarios).toHaveLength(2)
-    expect(result.world.scenarios[0].stages[1].actions).toContainEqual({
+    expect(result.world.scenarios[0].stages.find(stage => stage.id.endsWith('stand-off'))?.actions).toContainEqual({
       type: 'issue-command',
       entityId: result.importedEntityIds[3],
       command: { type: 'attack', target: { kind: 'entity', id: result.importedEntityIds[1] } },
     })
-    expect(result.world.scenarios[0].stages[2].branches?.[0]).toMatchObject({
+    expect(result.world.scenarios[0].stages.find(stage => stage.id.endsWith('defend'))?.branches?.[0]).toMatchObject({
       id: 'gray-raven-retreat',
       trigger: { eventType: 'defeated', targetId: result.importedEntityIds[1] },
     })
-    expect(result.world.scenarios[0].stages[2].branches?.[0].actions).toContainEqual({
+    expect(result.world.scenarios[0].stages.find(stage => stage.id.endsWith('defend'))?.branches?.[0].actions).toContainEqual({
       type: 'set-visibility',
       target: { kind: 'entity', id: result.importedEntityIds[3] },
       visible: false,
@@ -137,18 +137,30 @@ describe('world scenario import', () => {
     })
     expect(world.scenarios[0].activeDialogue?.lineIndex).toBe(0)
     world = finishDialogue(world)
-    expect(world.scenarios[0].stages.map((stage) => stage.status)).toEqual(['completed', 'active', 'locked'])
+    expect(world.scenarios[0].stages.map((stage) => stage.status)).toEqual(['completed', 'active', 'locked', 'locked', 'locked'])
     expect(world.narrative.stories.at(-1)?.title).toContain('断箭')
     expect(world.hiddenTargets).toHaveLength(1)
+
+    const quarry = result.plan.structures!.find(structure => structure.name === '旧采石场密门')!
+    world = advanceWorldScenarios({
+      ...world,
+      events: [...world.events, { id: 'quarry', timeSeconds: 3, type: 'command-complete', commandType: 'move', actorId: rolandId, targetId: quarry.id }],
+    })
+    expect(world.narrative.cluesByEntityId[rolandId]).toContainEqual(expect.objectContaining({ id: 'gray-raven-cargo-seal' }))
 
     world = advanceWorldScenarios({
       ...world,
       events: [...world.events, { id: 'confronted', timeSeconds: 4, type: 'interaction', actorId: rolandId, targetId: envoyId }],
     })
     expect(world.entities.find((entity) => entity.id === envoyId)?.factionId).toBe('neutral')
-    expect(world.entities.find((entity) => entity.id === rolandId)?.speech?.text).toContain('商队')
+    expect(world.entities.find((entity) => entity.id === rolandId)?.speech?.text).toContain('货封')
     world = finishDialogue(world)
-    expect(world.scenarios[0].stages.map((stage) => stage.status)).toEqual(['completed', 'completed', 'active'])
+    expect(world.scenarios[0].stages.map((stage) => stage.status)).toEqual(['completed', 'completed', 'completed', 'active', 'locked'])
+    expect(world.entities.find(entity => entity.id === envoyId)?.factionId).toBe('neutral')
+    world = advanceWorldScenarios({
+      ...world,
+      events: [...world.events, { id: 'fight', timeSeconds: 8, type: 'command-issued', commandType: 'attack', actorId: rolandId, targetId: envoyId }],
+    })
     expect(world.entities.find((entity) => entity.id === envoyId)?.factionId).toBe('red')
     expect(world.entities.find((entity) => entity.id === envoyId)?.commandQueue[0]).toEqual({
       type: 'attack', target: { kind: 'entity', id: rolandId },

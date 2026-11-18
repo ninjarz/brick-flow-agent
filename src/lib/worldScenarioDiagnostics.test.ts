@@ -18,10 +18,13 @@ describe('world scenario diagnostics', () => {
   it('runs the authored Gray Raven main flow without a browser or manual timing', () => {
     const loaded = startWorldScenario(createDefaultWorldScenarios('zh-CN')[0], deterministicIds())!
     const [, rolandId, eileenId, envoyId] = loaded.importedEntityIds
+    const quarry = loaded.world.scenarios[0].stages.find(stage => stage.id.endsWith('search-quarry'))!
     const result = runWorldScenarioScript(loaded.world, [
       { id: 'investigate', timeSeconds: 1, type: 'interaction', actorId: rolandId, targetId: eileenId },
-      { id: 'confront', timeSeconds: 20, type: 'interaction', actorId: rolandId, targetId: envoyId },
-      { id: 'victory', timeSeconds: 50, type: 'defeated', actorId: rolandId, targetId: envoyId },
+      { id: 'search-quarry', timeSeconds: 20, type: 'command-complete', commandType: 'move', actorId: rolandId, targetId: quarry.trigger.targetId },
+      { id: 'confront', timeSeconds: 21, type: 'interaction', actorId: rolandId, targetId: envoyId },
+      { id: 'fight', timeSeconds: 50, type: 'command-issued', commandType: 'attack', actorId: rolandId, targetId: envoyId },
+      { id: 'victory', timeSeconds: 90, type: 'defeated', actorId: rolandId, targetId: envoyId },
     ])
 
     expect(result.stalled).toBe(false)

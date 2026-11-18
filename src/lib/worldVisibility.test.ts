@@ -11,6 +11,20 @@ const bricks: PlacedBrick[] = [
 const structures: BrickStructure[] = [{ id: 'room', name: 'Room', description: '', brickIds: ['secret'] }]
 
 describe('world visibility index', () => {
+  it('reuses static scene arrays across cloned world snapshots and invalidates on edits', () => {
+    const world = { ...createEmptyWorldState('plan'), hiddenTargets: [{ kind: 'structure' as const, id: 'room' }] }
+    const first = createWorldVisibilityIndex(world, bricks, structures)
+    const cloned = createWorldVisibilityIndex(structuredClone(world), bricks, structures)
+    expect(cloned.visibleBricks).toBe(first.visibleBricks)
+    expect(cloned.visibleStructures).toBe(first.visibleStructures)
+    const revealed = createWorldVisibilityIndex({ ...world, hiddenTargets: [] }, bricks, structures)
+    expect(revealed.visibleBricks).toBe(bricks)
+    const edited = createWorldVisibilityIndex(world, bricks, [{ ...structures[0], brickIds: ['public'] }])
+    expect(edited.visibleBricks.map(brick => brick.id)).toEqual(['secret'])
+    const changedBricks = [bricks[0], { ...bricks[1], pose: { ...bricks[1].pose, xStud: 12 } }]
+    expect(createWorldVisibilityIndex(world, changedBricks, []).visibleBricks).toBe(changedBricks)
+  })
+
   it('preserves collection identity when nothing is hidden', () => {
     const world = createEmptyWorldState('plan')
     const index = createWorldVisibilityIndex(world, bricks, structures)

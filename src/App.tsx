@@ -3279,7 +3279,7 @@ function App() {
                   ? () => applyWorldScenario('start', world.scenarios[0].assetId)
                   : undefined}
                 onStoryAction={(actionId) => {
-                  const action = getWorldStoryActions(worldRef.current).find(candidate => candidate.id === actionId)
+                  const action = getWorldStoryActions(worldRef.current, planRef.current.structures).find(candidate => candidate.id === actionId)
                   if (!action || action.running || !issuePlayerWorldCommand(action.actorId, action.command)) return false
                   setWorld(current => ({ ...current, paused: false }))
                   return true

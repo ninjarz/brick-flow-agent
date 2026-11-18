@@ -144,7 +144,7 @@ export const useWorkspacePersistence = (session: ReturnType<typeof createWorkspa
     let previous = session.getPersistentSnapshot()
     const unsubscribe = session.subscribe(() => {
       const next = session.getPersistentSnapshot()
-      if (next.plan === previous.plan && next.prompt === previous.prompt) return
+      if (next === previous) return
       previous = next
       window.clearTimeout(timeoutId)
       timeoutId = window.setTimeout(() => void save(), 120)

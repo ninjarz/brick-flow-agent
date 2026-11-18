@@ -8,9 +8,9 @@ import { startWorldScenario } from './worldScenarioImport'
 import { advanceWorldScenarioDialogue, advanceWorldScenarios } from './worldScenarioRuntime'
 import { getWorldStoryActions } from './worldStoryActions'
 
-const setup = () => startWorldScenario(createDefaultWorldScenarios('zh-CN')[0])!.world
-const beginDialogue = () => {
-  const world = setup()
+const setupScenario = () => startWorldScenario(createDefaultWorldScenarios('zh-CN')[0])!
+const setup = () => setupScenario().world
+const beginDialogue = (world = setup()) => {
   const action = getWorldStoryActions(world)[0]
   const targetId = 'target' in action.command ? action.command.target.id : ''
   return advanceWorldScenarios({ ...world, events: [{ id: 'investigate', type: 'interaction', actorId: action.actorId, targetId, timeSeconds: world.elapsedSeconds }] })
@@ -38,10 +38,11 @@ describe('player-facing story actions', () => {
     expect((next.narrative.cluesByEntityId[next.entities.find(entity => entity.controller === 'player')!.id] ?? []).filter(clue => clue.id === 'gray-raven-broken-arrow')).toHaveLength(0)
   })
   it('completes through the runtime, unlocks a meaningful optional companion, and applies effects once', () => {
-    let world = beginDialogue()
+    const setup = setupScenario()
+    let world = beginDialogue(setup.world)
     const scenarioId = world.scenarios.find(candidate => candidate.activeDialogue)!.id
     for (let i = 0; i < 3; i++) world = advanceWorldScenarioDialogue(world, scenarioId)
-    expect(getWorldStoryActions(world).map(action => action.label)).toEqual(['对质黑岩使者', '邀请艾琳同行'])
+    expect(getWorldStoryActions(world, setup.plan.structures).map(action => action.label)).toEqual(['前往采石场查证', '邀请艾琳同行'])
     expect((world.narrative.cluesByEntityId[world.entities.find(entity => entity.controller === 'player')!.id] ?? []).filter(clue => clue.id === 'gray-raven-broken-arrow')).toHaveLength(1)
     expect(advanceWorldScenarioDialogue(world, scenarioId)).toBe(world)
   })

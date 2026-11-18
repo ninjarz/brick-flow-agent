@@ -5,6 +5,7 @@ import type { Project } from '../lib/projectStore'
 import { useWorkspacePersistence } from './useWorkspacePersistence'
 
 const mocks = vi.hoisted(() => ({
+  hydrated: false,
   effects: [] as Array<() => void | (() => void)>,
   store: { list: vi.fn(), initialize: vi.fn(), create: vi.fn(), activate: vi.fn(), checkpoints: vi.fn(), checkpoint: vi.fn(), read: vi.fn(), restore: vi.fn(), removeAndActivate: vi.fn(), save: vi.fn() },
   backup: vi.fn(), draft: vi.fn(),
@@ -12,7 +13,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('react', () => ({
   useCallback: (fn: unknown) => fn,
   useRef: (current: unknown) => ({ current }),
-  useState: () => [false, vi.fn()],
+  useState: () => [mocks.hydrated, vi.fn()],
   useEffect: (fn: () => void | (() => void)) => mocks.effects.push(fn),
 }))
 vi.mock('../lib/projectStore', () => ({ projectStore: mocks.store, ProjectConflict: class extends Error {} }))
@@ -34,6 +35,7 @@ const tick = () => new Promise(resolve => setTimeout(resolve, 0))
 describe('workspace persistence across asynchronous storage', () => {
   beforeEach(() => {
     vi.resetAllMocks()
+    mocks.hydrated = false
     mocks.effects.length = 0
     mocks.store.list.mockResolvedValue([project('Authoritative')])
     mocks.store.initialize.mockResolvedValue(project('Authoritative'))
@@ -41,6 +43,31 @@ describe('workspace persistence across asynchronous storage', () => {
     mocks.backup.mockResolvedValue(true)
     mocks.store.create.mockImplementation(async (value: WorkspaceSnapshot, name: string) => ({ ...project(name), id: 'copy', snapshot: value }))
     mocks.store.save.mockImplementation(async (id: string, revision: number, value: WorkspaceSnapshot) => ({ ...project(value.plan.title), id, revision: revision + 1, snapshot: value }))
+  })
+
+  it('debounces world-only progress while the simulation is paused', async () => {
+    mocks.hydrated = true
+    const session = createWorkspaceSession(snapshot('Initial'))
+    const persistence = useWorkspacePersistence(session)
+    mocks.effects[0]()
+    await persistence.retry()
+    vi.useFakeTimers()
+    vi.stubGlobal('window', { setTimeout, clearTimeout, setInterval, clearInterval })
+    vi.stubGlobal('document', { addEventListener: vi.fn(), removeEventListener: vi.fn() })
+    let cleanup: void | (() => void)
+    try {
+      cleanup = mocks.effects[1]()
+      await persistence.retry()
+      mocks.store.save.mockClear()
+      session.setWorld(world => ({ ...world, paused: true, elapsedSeconds: 5 }))
+      await vi.advanceTimersByTimeAsync(120)
+      await persistence.retry()
+      expect(mocks.store.save.mock.calls.at(-1)?.[2].world).toMatchObject({ paused: true, elapsedSeconds: 5 })
+    } finally {
+      cleanup?.()
+      vi.useRealTimers()
+      vi.unstubAllGlobals()
+    }
   })
 
   it('restores the authoritative project despite a simulation update during hydration', async () => {

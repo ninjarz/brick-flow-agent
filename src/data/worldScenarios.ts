@@ -2,7 +2,7 @@ import { generateBuildPlan } from '../lib/localGenerator'
 import { createSingleBrickSteps, makeBrick } from '../lib/planUtils'
 import { createEmptyWorldState, createWorldEntity } from '../lib/worldEntity'
 import type { Locale } from '../lib/i18n'
-import type { WorldRelationship, WorldState } from '../types/world'
+import type { WorldRelationship, WorldScenarioAction, WorldState } from '../types/world'
 import type { WorldScenarioAsset } from '../types/worldScenario'
 import { worldEntityDefinitionById } from './worldEntityDefinitions'
 
@@ -40,7 +40,9 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
     makeBrick('brick-1x1', 'black', 17, 0.4, 8),
     makeBrick('brick-1x1', 'black', 20, 0.4, 8),
     makeBrick('tile-1x2', 'black', 18, 0.4, 8, 1),
-    makeBrick('round-1x1-plate', 'yellow', 20, 1.6, 8),
+    makeBrick('brick-1x4', 'gray', 17, 1.6, 8),
+    makeBrick('tile-1x2', 'gray', 18, 2.8, 8),
+    makeBrick('round-1x1-plate', 'yellow', 20, 2.8, 8),
   ]
   const blackrockOutpostSource = generateBuildPlan({
     prompt: zh ? '一座废弃的灰色小房子' : 'an abandoned small gray house',
@@ -62,7 +64,13 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
   const courtyardStructureId = 'scenario-border-tavern-courtyard'
   const quarryEntranceStructureId = 'scenario-border-tavern-quarry-entrance'
   const blackrockOutpostStructureId = 'scenario-border-tavern-blackrock-outpost'
-  const bricks = [...house.bricks, ...courtyard, ...quarryEntrance, ...blackrockOutpost]
+  const defendStageId = 'scenario-border-tavern-defend'
+  const path = [
+    makeBrick('tile-1x2', 'tan', 14, 0, 2),
+    makeBrick('tile-1x2', 'tan', 15, 0, 3),
+    makeBrick('tile-1x2', 'gray', 16, 0, 4),
+  ]
+  const bricks = [...house.bricks, ...courtyard, ...path, ...quarryEntrance, ...blackrockOutpost]
   const plan = {
     ...house,
     id: 'scenario-border-tavern-plan',
@@ -127,6 +135,10 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
     factionId: 'neutral',
     transform: { x: 19, z: -3, rotationRadians: Math.PI },
   })
+  const startFight: WorldScenarioAction[] = [
+    { type: 'set-faction', entityId: stranger.id, factionId: 'red' },
+    { type: 'issue-command', entityId: stranger.id, command: { type: 'attack', target: { kind: 'entity', id: knight.id } } },
+  ]
   stranger.health = 180
   stranger.maxHealth = 180
   innkeeper.mind.spark = {
@@ -252,7 +264,7 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
       processedEventIds: [],
       priority: 100,
       mutexGroup: 'gray-raven-story',
-      authoringVersion: 6,
+      authoringVersion: 7,
       stages: [
         {
           id: 'scenario-border-tavern-investigate',
@@ -273,7 +285,7 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
             },
             {
               id: 'investigate-roland-answer', speakerId: knight.id, durationSeconds: 3.8,
-              text: zh ? '明白了。我去问问他，失踪的商队究竟去了哪里。' : 'Understood. I will ask him where the missing caravan really went.',
+              text: zh ? '先去密门看看。有证据在手，再回来问他。' : 'Let’s check the hidden entrance first. We can confront him once we have proof.',
             },
           ],
           actions: [
@@ -300,21 +312,47 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
           ],
         },
         {
+          id: 'scenario-border-tavern-search-quarry',
+          title: zh ? '前往采石场查证' : 'Search the quarry entrance',
+          description: zh ? '沿庭院外的小路去密门，查看商队留下的痕迹。' : 'Take the path beyond the yard and look for traces of the caravan.',
+          status: 'locked',
+          trigger: { eventType: 'command-complete', commandType: 'move', actorId: knight.id, targetId: quarryEntranceStructureId },
+          actions: [
+            {
+              type: 'grant-clue',
+              entityId: knight.id,
+              clue: {
+                id: 'gray-raven-cargo-seal',
+                text: zh ? '密门外找到商队的破损货封。货封缠着与使者腰间相同的黑岩封绳。' : 'A broken caravan seal at the hidden entrance is tied with the same Blackrock cord the envoy wears.',
+                kind: 'fact',
+                confidence: 1,
+                tags: zh ? ['货封', '旧采石场', '黑岩使者'] : ['cargo seal', 'quarry', 'envoy'],
+              },
+            },
+            {
+              type: 'add-story',
+              title: zh ? '证据 · 商队货封' : 'Evidence · The caravan seal',
+              body: zh ? '罗兰在密门外捡到一枚断裂的商队货封。系货封的黑岩封绳，和使者腰间露出的那截一模一样。' : 'Roland finds a broken caravan seal outside the hidden entrance. The Blackrock cord matches the one hanging from the envoy’s belt.',
+              characterIds: [knight.id],
+            },
+          ],
+        },
+        {
           id: 'scenario-border-tavern-confront',
           title: zh ? '对质黑岩使者' : 'Confront the Blackrock Envoy',
           description: zh
-            ? '让罗兰与黑岩使者交谈。完整对话后使者才会转为敌对，同时暴露远处伪装成废墟的黑岩前哨。'
-            : 'Have Roland talk with the envoy. Only after the full dialogue does he turn hostile and expose the disguised Blackrock outpost.',
+            ? '拿商队货封与使者对质，查清前哨的位置。'
+            : 'Confront the envoy with the caravan seal and uncover the outpost.',
           status: 'locked',
           trigger: { eventType: 'interaction', actorId: knight.id, targetId: stranger.id },
           dialogue: [
             {
               id: 'confront-roland', speakerId: knight.id, durationSeconds: 5,
-              text: zh ? '北路商队在哪里？你靴上的石粉来自旧采石场。' : 'Where is the northern caravan? The dust on your boots came from the old quarry.',
+              text: zh ? '这枚货封是在密门外找到的，上面缠着你们的封绳。商队在哪儿？' : 'This seal was outside the hidden door. It’s tied with your cord. Where is the caravan?',
             },
             {
               id: 'confront-envoy-denial', speakerId: stranger.id, durationSeconds: 4.5,
-              text: zh ? '一支断箭和一点尘土，也敢当作证据？' : 'A broken arrow and a little dust—you call that evidence?',
+              text: zh ? '一枚货封能说明什么？也许是他们自己扔下的。' : 'What does one seal prove? Maybe they dropped it themselves.',
             },
             {
               id: 'confront-eileen', speakerId: archer.id, durationSeconds: 5.2,
@@ -330,17 +368,38 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
               type: 'add-story',
               title: zh ? '第 3 章 · 酒杯落地' : 'Chapter 3 · The Fallen Cup',
               body: zh
-                ? '罗兰刚说出“采石场”，黑岩使者便将酒杯摔碎，拔剑承认商队被扣作诱饵。酒馆后方林线里，伪装成废墟的前哨亮起暗红信号，玛拉推上门闩——灰鸦酒馆必须撑到巡逻队抵达。'
-                : 'At the word “quarry,” the envoy shatters his cup and draws steel. Behind the tavern tree line, a dark red signal lights in an outpost disguised as a ruin, and Mara bars the door.',
+                ? '黑岩使者摔碎酒杯，拔剑承认商队被扣作诱饵。林线里的黑岩前哨亮起暗红信号。玛拉指向庭院：那边有空地，可以拉开距离。'
+                : 'The envoy shatters his cup, draws steel, and admits the caravan was taken as bait. A red signal appears at the outpost. Mara points to the open yard, where there is room to move.',
               characterIds: [innkeeper.id, knight.id, archer.id, stranger.id],
             },
             { type: 'set-visibility', target: { kind: 'structure', id: blackrockOutpostStructureId }, visible: true },
-            { type: 'set-faction', entityId: stranger.id, factionId: 'red' },
-            { type: 'issue-command', entityId: stranger.id, command: { type: 'attack', target: { kind: 'entity', id: knight.id } } },
           ],
         },
         {
-          id: 'scenario-border-tavern-defend',
+          id: 'scenario-border-tavern-stand-off',
+          title: zh ? '原地迎战' : 'Fight here',
+          description: zh ? '在这里迎战，或先退到庭院拉开距离。' : 'Fight here or fall back to the yard for more room.',
+          status: 'locked',
+          trigger: { eventType: 'command-issued', commandType: 'attack', actorId: knight.id, targetId: stranger.id },
+          actions: startFight,
+          branches: [{
+            id: 'gray-raven-fall-back',
+            title: zh ? '退到庭院' : 'Fall back to the yard',
+            nextStageId: defendStageId,
+            trigger: { eventType: 'command-complete', commandType: 'move', actorId: knight.id, targetId: courtyardStructureId },
+            actions: [
+              {
+                type: 'add-story',
+                title: zh ? '庭院 · 拉开距离' : 'The yard · Room to move',
+                body: zh ? '罗兰退到庭院，黑岩使者提剑追来。桌边的空地让双方拉开了距离。' : 'Roland falls back to the yard, and the envoy gives chase. The open ground puts some distance between them.',
+                characterIds: [knight.id, stranger.id],
+              },
+              ...startFight,
+            ],
+          }],
+        },
+        {
+          id: defendStageId,
           title: zh ? '守住灰鸦酒馆' : 'Defend the Gray Raven Tavern',
           description: zh
             ? '击败黑岩使者。罗兰可直接攻击；若此前邀请艾琳入队，她会以弓箭支援，玛拉则负责救治。'

@@ -58,6 +58,14 @@ export const isWorldStoryVisible = (
   return true
 }
 
+const sceneVisibilityCache = new WeakMap<PlacedBrick[], {
+  structures: BrickStructure[]
+  hiddenKey: string
+  hidden: WorldHiddenTargetIndex
+  visibleBricks: PlacedBrick[]
+  visibleStructures: BrickStructure[]
+}>()
+
 /**
  * Resolves authoring-only hidden targets once for all runtime consumers.
  * Collection identity is preserved when a target kind has nothing hidden so
@@ -68,8 +76,20 @@ export const createWorldVisibilityIndex = (
   bricks: PlacedBrick[],
   structures: BrickStructure[],
 ): WorldVisibilityIndex => {
-  const hidden = createWorldHiddenTargetIndex(world.hiddenTargets, structures)
-  const { hiddenEntityIds, hiddenStructureIds, hiddenBrickIds } = hidden
+  // Worker snapshots clone hiddenTargets each pulse, so compare their content.
+  const hiddenKey = JSON.stringify(world.hiddenTargets)
+  let scene = sceneVisibilityCache.get(bricks)
+  if (!scene || scene.structures !== structures || scene.hiddenKey !== hiddenKey) {
+    const hidden = createWorldHiddenTargetIndex(world.hiddenTargets, structures)
+    scene = {
+      structures, hiddenKey, hidden,
+      visibleBricks: hidden.hiddenBrickIds.size === 0 ? bricks : bricks.filter(brick => !hidden.hiddenBrickIds.has(brick.id)),
+      visibleStructures: hidden.hiddenStructureIds.size === 0 ? structures : structures.filter(structure => !hidden.hiddenStructureIds.has(structure.id)),
+    }
+    sceneVisibilityCache.set(bricks, scene)
+  }
+  const hidden = scene.hidden
+  const { hiddenEntityIds } = hidden
 
   const visibleEntities = hiddenEntityIds.size === 0
     ? world.entities
@@ -85,12 +105,8 @@ export const createWorldVisibilityIndex = (
   return {
     ...hidden,
     visibleEntities,
-    visibleBricks: hiddenBrickIds.size === 0
-      ? bricks
-      : bricks.filter((brick) => !hiddenBrickIds.has(brick.id)),
-    visibleStructures: hiddenStructureIds.size === 0
-      ? structures
-      : structures.filter((structure) => !hiddenStructureIds.has(structure.id)),
+    visibleBricks: scene.visibleBricks,
+    visibleStructures: scene.visibleStructures,
     visibleEvents,
     visibleStories,
   }

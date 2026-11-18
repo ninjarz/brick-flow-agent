@@ -1,12 +1,41 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { createEmptyWorldState, createWorldEntity, issueWorldEntityCommand, joinWorldParty } from './worldEntity'
 import { findWorldPath, hasWorldLineOfSight, isWorldEntityGroundPointBlockedByBricks, stepWorldSimulation } from './worldSimulation'
+import * as collision from './worldEntityCollision'
 import { getWorldEntityCollisionRadius } from './worldEntityCollision'
 import { makeBrick } from './planUtils'
 import { advanceWorldScenarios } from './worldScenarioRuntime'
 
 describe('WorldEntity simulation', () => {
+  it('matches full-scan targeting through movement, attacks and revival', () => {
+    const definitions = ['knight', 'archer', 'priest']
+    const initial = {
+      ...createEmptyWorldState('equivalence'),
+      entities: Array.from({ length: 90 }, (_, index) => {
+        const entity = createWorldEntity(worldEntityDefinitionById.get(definitions[index % 3])!, {
+          id: `npc-${index}`, factionId: index % 2 ? 'red' : 'blue',
+          transform: { x: index % 15 * 3 - 20, z: Math.floor(index / 15) * 3 - 8 },
+        })
+        return index % 17 === 0 ? { ...entity, health: 0 } : entity
+      }),
+    }
+    const run = () => {
+      let seed = 123
+      const random = vi.spyOn(Math, 'random').mockImplementation(() => {
+        seed = Math.imul(seed, 1664525) + 1013904223 | 0
+        return (seed >>> 0) / 4294967296
+      })
+      let world = structuredClone(initial)
+      for (let step = 0; step < 40; step++) world = stepWorldSimulation(world, [])
+      random.mockRestore()
+      return world
+    }
+    const indexed = run()
+    const spy = vi.spyOn(collision, 'queryWorldEntityOccupantIds').mockImplementation(index => [...index.entitiesById.keys()])
+    try { expect(run()).toEqual(indexed) } finally { spy.mockRestore() }
+  })
+
   it('does not create autonomous orders while directed playback owns the scene', () => {
     const actor = createWorldEntity(worldEntityDefinitionById.get('knight')!, { id: 'actor', controller: 'rule' })
     actor.autonomy.nextDecisionAtSeconds = 0

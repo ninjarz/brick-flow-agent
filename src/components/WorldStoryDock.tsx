@@ -418,7 +418,7 @@ export const WorldStoryDock = ({
   const outcomeTitle = recoveredActor && outcomeBranch?.id === 'gray-raven-retreat'
     ? (locale === 'zh-CN' ? '本章结局 · 停战撤退' : 'Chapter outcome · Retreat')
     : outcomeBranch?.title
-  const storyActions = getWorldStoryActions(world)
+  const storyActions = getWorldStoryActions(world, structures)
   const dialogueScenario = world.scenarios.find(scenario => scenario.enabled !== false && scenario.activeDialogue)
   const dialogueStage = dialogueScenario?.stages.find(stage => stage.id === dialogueScenario.activeDialogue?.stageId)
   const dialogueLines = dialogueScenario?.activeDialogue && dialogueStage ? visibleScenarioDialogue(world, dialogueStage, dialogueScenario.activeDialogue) : []
@@ -1122,7 +1122,9 @@ export const WorldStoryDock = ({
               onClick={() => {
                 shouldAutoScrollRef.current = true
                 setActionError(onStoryAction(action.id) ? '' : (locale === 'zh-CN' ? '现场情况已变化，请重新选择行动。' : 'The scene changed. Choose an action again.'))
-              }}>{action.running ? (locale === 'zh-CN' ? `${action.actorName}正在行动…` : `${action.actorName} is acting…`) : action.label}</button>)}
+              }}>{!action.running ? action.label : action.command.type === 'move'
+                ? (locale === 'zh-CN' ? `${action.actorName}正前往${action.targetName}…` : `${action.actorName} is heading to ${action.targetName}…`)
+                : (locale === 'zh-CN' ? `${action.actorName}正在行动…` : `${action.actorName} is acting…`)}</button>)}
             {world.paused && storyActions.some(action => action.running) && <button type="button" onClick={onResumeWorld}>{locale === 'zh-CN' ? '继续行动' : 'Resume action'}</button>}
             {actionError && <span role="status">{actionError}</span>}
           </section>}

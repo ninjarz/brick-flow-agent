@@ -879,7 +879,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
     }
   }
   scenarios = scenarios.map((scenario) => scenario.assetId === 'scenario-border-tavern'
-    ? { ...scenario, authoringVersion: 6 }
+    ? { ...scenario, authoringVersion: Math.max(6, scenario.authoringVersion ?? 0) }
     : scenario)
 
   const completedJoinActions = scenarios.flatMap((scenario) => scenario.stages.flatMap((stage) => (
@@ -1002,7 +1002,9 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
       .filter((stage) => stage.status === 'completed')
       .map((stage) => stage.completedAtSeconds ?? 0))
     const matchingTurn = [...directorTurns].reverse().find((turn) => (
-      turn.createdAtSeconds >= stageOpenedAtSeconds
+      turn.origin !== 'autonomous'
+      && turn.status !== 'failed'
+      && turn.createdAtSeconds >= stageOpenedAtSeconds
       && [...turn.entries].reverse().some((entry) => (
         entry.type === 'dialogue'
         && (

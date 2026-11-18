@@ -63,6 +63,21 @@ export const updateWorldEntityOccupancy = (index: WorldEntityOccupancyIndex, ent
   }
 }
 
+/** Broad-phase candidates; callers apply their exact distance and health rules. */
+export const queryWorldEntityOccupantIds = (
+  index: WorldEntityOccupancyIndex,
+  point: WorldEntityGroundPoint,
+  radius: number,
+) => {
+  const ids = new Set<string>()
+  for (const x of gridCellIndices(point.x - radius, point.x + radius, occupancyCellSizeStuds)) {
+    for (const z of gridCellIndices(point.z - radius, point.z + radius, occupancyCellSizeStuds)) {
+      for (const id of index.entityIdsByCell.get(cellKey(x, z)) ?? []) ids.add(id)
+    }
+  }
+  return [...ids]
+}
+
 const queryNearbyEntities = (
   index: WorldEntityOccupancyIndex,
   entity: WorldEntity,

@@ -11,6 +11,7 @@ import { createWorldObstacleIndex, queryWorldObstacleBounds, type WorldObstacleB
 import { createWorldVisibilityIndex } from './worldVisibility'
 import {
   createWorldEntityOccupancyIndex,
+  queryWorldEntityOccupantIds,
   getWorldEntityCollisionRadius,
   isWorldEntityPositionOccupied,
   resolveOverlappingWorldEntities,
@@ -1017,6 +1018,12 @@ export const stepWorldSimulation = (
   }
   const hasLineOfSight = createWorldLineOfSightTest(bricks)
   const entityOccupancy = createWorldEntityOccupancyIndex(entities)
+  const nearbyEntities = (point: Point, radius: number) => queryWorldEntityOccupantIds(entityOccupancy, point, radius)
+    .map(id => targetLookup.entityIndexById.get(id)!)
+    .sort((left, right) => left - right)
+    // Read live state: earlier actors may have moved, attacked or revived others.
+    .map(index => entities[index])
+
   const events: WorldEvent[] = []
   const impactIsVisible = (impact: WorldPendingImpact) => !hiddenEntityIds.has(impact.actorId)
     && !(impact.target.kind === 'entity' && hiddenEntityIds.has(impact.target.id))
@@ -1157,7 +1164,7 @@ export const stepWorldSimulation = (
       const definition = worldEntityDefinitionById.get(entity.definitionId)
       const reviveTarget = definition?.support ? findNearestReviveTarget(entity, entities) : undefined
       const partyTarget = reviveTarget ? undefined : findPartyCombatTarget(entity, entities, world.parties, timeSeconds)
-      const enemy = reviveTarget ? undefined : partyTarget ?? findBestEnemy(entity, entities, targetLookup.entityById, timeSeconds)
+      const enemy = reviveTarget ? undefined : partyTarget ?? findBestEnemy(entity, nearbyEntities(entity.transform, (definition?.perception.detectionRangeStuds ?? 0) * 1.5), targetLookup.entityById, timeSeconds)
       if (reviveTarget) {
         activeCommand = { type: 'revive', target: { kind: 'entity', id: reviveTarget.id } }
         commandStarted = true
@@ -1405,7 +1412,7 @@ export const stepWorldSimulation = (
       continue
     }
     const guardEnemy = activeCommand.type === 'guard'
-      ? findNearestGuardEnemy(entity, entities, assignedTargetPoint)
+      ? findNearestGuardEnemy(entity, nearbyEntities(assignedTargetPoint, guardDetectionRadiusStuds), assignedTargetPoint)
       : undefined
     const target: WorldTargetRef = guardEnemy
       ? { kind: 'entity', id: guardEnemy.id }
@@ -1628,12 +1635,11 @@ export const stepWorldSimulation = (
           }
         }
       } else {
-        events.push(makeEvent(
-          timeSeconds,
-          'command-complete',
-          entity.id,
-          target.id,
-        ))
+        events.push({
+          ...makeEvent(timeSeconds, 'command-complete', entity.id, target.id),
+          commandType: activeCommand.type,
+          commandSource: entity.controller,
+        })
         entity = { ...entity, activeCommand: undefined }
       }
     }

@@ -26,10 +26,20 @@ const investigate = async (page: Page) => {
   await expect(page.locator('.world-story-actions').getByRole('button', { name: '邀请艾琳同行', exact: true })).toBeVisible()
 }
 
-const confront = async (page: Page) => {
+const confront = async (page: Page, fallBack = false) => {
+  await act(page, '前往采石场查证')
+  await expect(page.locator('.world-story-feed')).toContainText('断裂的商队货封', { timeout: 25000 })
   await act(page, '对质黑岩使者')
   await readDialogue(page, 4)
-  await act(page, '守住灰鸦酒馆')
+  const actions = page.locator('.world-story-actions')
+  await expect(actions.getByRole('button', { name: '退到庭院', exact: true })).toBeVisible()
+  if (fallBack) {
+    await act(page, '退到庭院')
+    await expect(page.locator('.world-story-feed')).toContainText('罗兰退到庭院', { timeout: 25000 })
+    await act(page, '守住灰鸦酒馆')
+  } else {
+    await act(page, '原地迎战')
+  }
 }
 
 test('a shared clue unlocks an optional companion, survives reload, and changes the fight', async ({ page }, testInfo) => {
@@ -43,20 +53,19 @@ test('a shared clue unlocks an optional companion, survives reload, and changes 
   await act(page, '邀请艾琳同行')
   await readDialogue(page, 4)
   await expect(page.locator('.world-story-feed')).toContainText('正式加入调查')
-  await confront(page)
+  await confront(page, true)
+  await expect(page.locator('.world-story-feed')).toContainText('桌边的空地')
   await expect(page.locator('.world-story-feed')).toContainText('商队仍有生还者', { timeout: 35000 })
   await expect(page.locator('.world-story-outcome')).toContainText('本章完成')
   await page.screenshot({ path: testInfo.outputPath('companion-victory.png') })
 })
 
-test('rushing in alone has a different ending, keeps the player identity, and can be replayed', async ({ page }, testInfo) => {
+test('fighting immediately reaches a simulated ending that can be replayed', async ({ page }, testInfo) => {
   await investigate(page)
   await confront(page)
-  await expect(page.locator('.world-story-feed')).toContainText('玛拉举起白布', { timeout: 35000 })
+  await expect(page.locator('.world-story-outcome')).toContainText(/本章完成|停战撤退/, { timeout: 35000 })
   await expect(page.locator('.world-story-identity')).toContainText('罗兰')
-  await expect(page.locator('.world-story-identity')).toContainText('已倒下')
-  await expect(page.locator('.world-story-outcome')).toContainText('停战撤退')
-  await page.screenshot({ path: testInfo.outputPath('solo-retreat.png') })
+  await page.screenshot({ path: testInfo.outputPath('solo-ending.png') })
   await page.getByRole('button', { name: '重新挑战', exact: true }).click()
   await expect(page.locator('.world-story-actions').getByRole('button', { name: '询问北路斥候', exact: true })).toBeVisible()
   await expect(page.locator('.world-story-outcome')).toHaveCount(0)
