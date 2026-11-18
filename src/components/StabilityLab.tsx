@@ -1,3 +1,4 @@
+import { getAnalysisGeometry } from '../lib/editorAnalysisClient'
 import { Activity, ArrowLeft, ArrowRight, CloudRain, Download, FileJson, Gauge, Image, LoaderCircle, Pause, Play, RotateCcw, Wind, X, Zap } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { BrickScene, type BrickSceneTransform } from './BrickScene'
@@ -5,6 +6,7 @@ import { brickById } from '../data/basicBricks'
 import {
   getDisasterFrame,
   type DisasterFailureMode,
+  type DisasterGroundCondition,
   type DisasterPhysicsProfile,
   type DisasterScenario,
   type DisasterSimulationOptions,
@@ -101,6 +103,7 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
   const [intensity, setIntensity] = useState(70)
   const [directionDegrees, setDirectionDegrees] = useState(25)
   const [physicsProfile, setPhysicsProfile] = useState<DisasterPhysicsProfile>('challenge')
+  const [groundCondition, setGroundCondition] = useState<DisasterGroundCondition>('surface')
   const [result, setResult] = useState<DisasterSimulationResult>()
   const [isSimulating, setIsSimulating] = useState(true)
   const [simulationError, setSimulationError] = useState('')
@@ -114,6 +117,8 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
   const [reportTheme, setReportTheme] = useState<'light' | 'dark'>('light')
   const [reinforcementPreviewBricks, setReinforcementPreviewBricks] = useState<BuildPlan['bricks']>([])
   const workerRef = useRef<Worker>()
+  const workerBricksRef = useRef<BuildPlan['bricks']>()
+  const workerBusyRef = useRef(false)
   const simulatorRef = useRef<HTMLElement>(null)
   const simulationRunRef = useRef(0)
   const simulationPlaybackIntervalMs = 1000 / getSimulationPlaybackFps(plan.bricks.length)
@@ -121,11 +126,13 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
   const stopWorker = useCallback(() => {
     workerRef.current?.terminate()
     workerRef.current = undefined
+    workerBricksRef.current = undefined
+    workerBusyRef.current = false
   }, [])
 
-  const runSimulation = useCallback((options: DisasterSimulationOptions) => {
+  const runSimulation = useCallback(async (options: DisasterSimulationOptions) => {
     const requestId = ++simulationRunRef.current
-    stopWorker()
+    if (workerBusyRef.current || workerBricksRef.current !== plan.bricks) stopWorker()
     setResult(undefined)
     setIsSimulating(true)
     setSimulationError('')
@@ -133,13 +140,23 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
     setIsPlaying(false)
 
     try {
+      if (workerRef.current) {
+        workerBusyRef.current = true
+        workerRef.current.postMessage({ type: 'simulate', requestId, options } satisfies DisasterSimulationWorkerRequest)
+        return
+      }
+      const geometry = await getAnalysisGeometry(plan.bricks)
+      if (requestId !== simulationRunRef.current) return
       const worker = new Worker(new URL('../workers/stabilityWorker.ts', import.meta.url), { type: 'module' })
       workerRef.current = worker
+      workerBricksRef.current = plan.bricks
+      workerBusyRef.current = true
       worker.onmessage = (event: MessageEvent<DisasterSimulationWorkerResponse>) => {
         if (event.data.requestId !== simulationRunRef.current) return
-        stopWorker()
+        workerBusyRef.current = false
         setIsSimulating(false)
         if (event.data.type === 'error') {
+          stopWorker()
           setSimulationError(event.data.message)
           return
         }
@@ -147,7 +164,7 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
         setIsPlaying(true)
       }
       worker.onerror = () => {
-        if (requestId !== simulationRunRef.current) return
+        if (workerRef.current !== worker) return
         stopWorker()
         setIsSimulating(false)
         setSimulationError('STABILITY_SIMULATION_WORKER_FAILED')
@@ -155,10 +172,12 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
       worker.postMessage({
         type: 'simulate',
         requestId,
+        geometry,
         bricks: plan.bricks,
         options,
       } satisfies DisasterSimulationWorkerRequest)
     } catch (error) {
+      if (requestId !== simulationRunRef.current) return
       stopWorker()
       setIsSimulating(false)
       setSimulationError(error instanceof Error ? error.message : 'STABILITY_SIMULATION_WORKER_FAILED')
@@ -166,22 +185,24 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
   }, [plan.bricks, stopWorker])
 
   useEffect(() => {
-    runSimulation({ scenario, intensity, directionDegrees, physicsProfile })
-    return () => {
-      simulationRunRef.current += 1
-      stopWorker()
-    }
-  }, [runSimulation, stopWorker, scenario, intensity, directionDegrees, physicsProfile])
+    runSimulation({ scenario, intensity, directionDegrees, physicsProfile, groundCondition })
+  }, [runSimulation, scenario, intensity, directionDegrees, physicsProfile, groundCondition])
+
+  useEffect(() => () => {
+    simulationRunRef.current += 1
+    stopWorker()
+  }, [stopWorker])
 
   const restartSimulation = useCallback(() => {
-    runSimulation({ scenario, intensity, directionDegrees, physicsProfile })
-  }, [directionDegrees, intensity, physicsProfile, runSimulation, scenario])
+    runSimulation({ scenario, intensity, directionDegrees, physicsProfile, groundCondition })
+  }, [directionDegrees, groundCondition, intensity, physicsProfile, runSimulation, scenario])
 
   const inspectSuiteCase = useCallback((options: DisasterSimulationOptions) => {
     setScenario(options.scenario)
     setIntensity(options.intensity)
     setDirectionDegrees(options.directionDegrees ?? 0)
     setPhysicsProfile(options.physicsProfile ?? 'challenge')
+    setGroundCondition(options.groundCondition ?? 'surface')
   }, [])
 
   const applyReinforcementProposal = useCallback((proposal: { addedBricks: BuildPlan['bricks'] }) => {
@@ -219,6 +240,7 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
   }, [])
 
   const frame = useMemo(() => result ? getDisasterFrame(result, timeSeconds) : undefined, [result, timeSeconds])
+  const unresolved = useMemo(() => new Set(result?.unresolvedConnectionBrickIds), [result])
   const sceneDisplayColorByBrickId = useMemo(() => {
     if (!frame) return undefined
     const colors = new Map<string, string>()
@@ -226,11 +248,11 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
       if (frame.failedIds.has(brick.id)) {
         colors.set(brick.id, failedConnectionColor)
       } else if (showConnectionHeatmap) {
-        colors.set(brick.id, connectionHeatColor(frame.connectionUtilizationByBrickId.get(brick.id) ?? 0))
+        colors.set(brick.id, unresolved.has(brick.id) ? '#8b5cf6' : connectionHeatColor(frame.connectionUtilizationByBrickId.get(brick.id) ?? 0))
       }
     }
     return colors
-  }, [frame, plan.bricks, showConnectionHeatmap])
+  }, [frame, plan.bricks, showConnectionHeatmap, unresolved])
   const sceneTransformsByBrickId = useMemo(() => {
     if (!frame) return undefined
     const brickIds = new Set([
@@ -453,7 +475,7 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
             </div>
             <label>
               <span>{t('stabilityLab.intensity')} <strong>{intensity}%</strong></span>
-              <input type="range" min={10} max={100} step={5} value={intensity} onChange={(event) => setIntensity(Number(event.target.value))} />
+              <input type="range" min={0} max={100} step={5} value={intensity} onChange={(event) => setIntensity(Number(event.target.value))} />
             </label>
             <div className="rain-physics-control">
               <span>{t('stabilityLab.physicsProfile')}</span>
@@ -473,6 +495,21 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
                 ))}
               </div>
               <small>{t(`stabilityLab.physicsProfile.${physicsProfile}.hint`)}</small>
+            </div>
+            <div className="rain-physics-control">
+              <span>{t('stabilityLab.groundCondition')}</span>
+              <div className="rain-physics-profiles">
+                {(['surface', 'anchored'] as const).map(condition => (
+                  <button
+                    type="button"
+                    key={condition}
+                    className={groundCondition === condition ? 'active' : ''}
+                    aria-pressed={groundCondition === condition}
+                    onClick={() => setGroundCondition(condition)}
+                  >{t(`stabilityLab.groundCondition.${condition}`)}</button>
+                ))}
+              </div>
+              <small>{t(`stabilityLab.groundCondition.${groundCondition}.hint`)}</small>
             </div>
             {scenario !== 'rain' && (
               <div className="wind-direction-control">
@@ -611,6 +648,7 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
                     <span><i className="safe" />{t('stabilityLab.heatmap.medium')}</span>
                     <span><i className="warning" />{t('stabilityLab.heatmap.high')}</span>
                     <span><i className="failed" />{t('stabilityLab.heatmap.failed')}</span>
+                    {unresolved.size > 0 && <span><i style={{ background: '#8b5cf6' }} />{t('stabilityLab.heatmap.unresolved')}</span>}
                   </div>
                 )}
                 {criticalConnections.length > 0 ? (
@@ -650,6 +688,7 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
                       <strong>{locale === 'zh-CN' ? `所选零件诊断 · 支撑 ${relatedSupportIds.length}` : `Selected part diagnosis · ${relatedSupportIds.length} supports`}</strong>
                       <button type="button" onClick={() => navigateRisk(1)} aria-label={locale === 'zh-CN' ? '下一个风险' : 'Next risk'}><ArrowRight size={13} /></button>
                     </div>
+                    {unresolved.has(inspectedBrickId) && <p>{t('stabilityLab.unresolvedPart')}</p>}
                     {inspectedInsights.length > 0 ? inspectedInsights.map((insight) => (
                       <p key={insight.reason}>
                         <span>{insight.reason}</span>
@@ -683,6 +722,7 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
                     {t('stabilityLab.connectionUtilization', { percent: peakConnectionUtilization })}
                   </span>
                 )}
+                <span>{t('stabilityLab.modelMass', { mass: result.modelMassKilograms.toFixed(3) })}</span>
                 <span>{t('stabilityLab.gravityActive')}</span>
                 <span className={result.initialStaticFailureCount > 0 ? 'failed' : ''}>
                   {t(result.initialStaticFailureCount > 0
@@ -691,6 +731,10 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
                     count: result.initialStaticFailureCount,
                   })}
                 </span>
+                <span>{t('stabilityLab.additionalHazardFailures', { count: result.failedBrickCount - result.initialStaticFailureCount })}</span>
+                <span>{t('stabilityLab.brokenConnections', { baseline: result.initialBrokenConnectionCount, total: result.brokenConnectionCount })}</span>
+                {unresolved.size > 0 && <span>{t('stabilityLab.unresolvedConnections', { count: unresolved.size })}</span>}
+                {result.slidingRiskBrickCount > 0 && <span>{t('stabilityLab.slidingRisk', { count: result.slidingRiskBrickCount })}</span>}
                 <span>{t('stabilityLab.load', { load: Math.round(frame.loadFactor * result.options.intensity) })}</span>
                 <span className={currentFailedCount > 0 ? 'failed' : ''}>{t('stabilityLab.failedNow', { count: currentFailedCount })}</span>
                 {primaryFailureMode && (

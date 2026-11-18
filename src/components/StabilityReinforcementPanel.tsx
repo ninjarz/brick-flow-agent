@@ -1,3 +1,4 @@
+import { getAnalysisGeometry } from '../lib/editorAnalysisClient'
 import { AlertTriangle, Check, Eye, Hammer, LoaderCircle, RotateCcw, Sparkles } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { DisasterSimulationOptions } from '../lib/disasterSimulation'
@@ -21,6 +22,7 @@ const optionsKey = (options: DisasterSimulationOptions) => [
   options.intensity,
   options.directionDegrees ?? 0,
   options.physicsProfile ?? 'challenge',
+  options.groundCondition ?? 'surface',
 ].join(':')
 
 export const StabilityReinforcementPanel = ({ plan, options, inventoryOverrides, onPreview, onApply }: Props) => {
@@ -41,16 +43,21 @@ export const StabilityReinforcementPanel = ({ plan, options, inventoryOverrides,
   )
 
   useEffect(() => () => {
+    requestIdRef.current += 1
     workerRef.current?.terminate()
     onPreview([])
   }, [onPreview])
 
   useEffect(() => {
+    requestIdRef.current += 1
+    workerRef.current?.terminate()
+    workerRef.current = undefined
+    setIsAnalyzing(false)
     setPreviewId('')
     onPreview([])
   }, [currentKey, onPreview])
 
-  const analyze = () => {
+  const analyze = async () => {
     workerRef.current?.terminate()
     const requestId = ++requestIdRef.current
     setIsAnalyzing(true)
@@ -58,6 +65,8 @@ export const StabilityReinforcementPanel = ({ plan, options, inventoryOverrides,
     setPreviewId('')
     onPreview([])
     try {
+      const geometry = await getAnalysisGeometry(plan.bricks)
+      if (requestId !== requestIdRef.current) return
       const worker = new Worker(new URL('../workers/stabilityReinforcementWorker.ts', import.meta.url), { type: 'module' })
       workerRef.current = worker
       worker.onmessage = (event: MessageEvent<StabilityReinforcementWorkerResponse>) => {
@@ -79,8 +88,9 @@ export const StabilityReinforcementPanel = ({ plan, options, inventoryOverrides,
         setIsAnalyzing(false)
         setError('REINFORCEMENT_WORKER_FAILED')
       }
-      worker.postMessage({ type: 'analyze-reinforcement', requestId, plan, inventoryOverrides, options })
+      worker.postMessage({ type: 'analyze-reinforcement', requestId, plan, geometry, inventoryOverrides, options })
     } catch (cause) {
+      if (requestId !== requestIdRef.current) return
       setIsAnalyzing(false)
       setError(cause instanceof Error ? cause.message : 'REINFORCEMENT_WORKER_FAILED')
     }

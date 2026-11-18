@@ -1,6 +1,6 @@
 import { safeStorage } from './safeStorage'
 import { claimLegacyAnalysis } from './projectAnalysisStorage'
-import type { DisasterFailureMode, DisasterPhysicsProfile, DisasterScenario, DisasterSimulationOptions, DisasterSimulationResult } from './disasterSimulation'
+import { disasterSolverRevision, type DisasterFailureMode, type DisasterPhysicsProfile, type DisasterScenario, type DisasterSimulationOptions, type DisasterSimulationResult } from './disasterSimulation'
 
 export type StabilitySuitePreset = 'quick' | 'standard' | 'stress'
 
@@ -22,6 +22,7 @@ export type StabilitySuiteCaseResult = StabilitySuiteCase & {
 
 export type StabilitySuiteResult = {
   schemaVersion: 1
+  solverRevision?: number
   generatedAt: string
   plan: { id: string; title: string; brickCount: number; fingerprint: string }
   preset: StabilitySuitePreset
@@ -113,6 +114,7 @@ export const createStabilitySuiteResult = (
   const weakest = [...cases].sort((left, right) => left.score - right.score || right.failedBrickCount - left.failedBrickCount)[0]
   return {
     schemaVersion: 1,
+    solverRevision: disasterSolverRevision,
     generatedAt,
     plan,
     preset,

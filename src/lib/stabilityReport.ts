@@ -1,4 +1,4 @@
-import type { DisasterFailureMode, DisasterSimulationResult } from './disasterSimulation'
+import { disasterSolverRevision, type DisasterFailureMode, type DisasterGroundCondition, type DisasterSimulationResult } from './disasterSimulation'
 import type { Locale } from './i18n'
 import type { StabilityAnalysis, BrickStability } from './stabilityAnalysis'
 import type { BuildPlan } from '../types/bricks'
@@ -33,6 +33,15 @@ export type StabilityReport = {
     score: number
     survivedBrickCount: number
     failedBrickCount: number
+    solverRevision?: number
+    groundCondition?: DisasterGroundCondition
+    initialStaticFailureCount?: number
+    unresolvedConnectionCount?: number
+    slidingRiskBrickCount?: number
+    modelMassKilograms?: number
+    brokenConnectionCount?: number
+    initialBrokenConnectionCount?: number
+    loadCalibration?: DisasterSimulationResult['loadCalibration']
     primaryFailureMode?: DisasterFailureMode
   }
   insights: StabilityInsight[]
@@ -137,6 +146,15 @@ export const createStabilityReport = (
     score: simulation.score,
     survivedBrickCount: simulation.survivedBrickCount,
     failedBrickCount: simulation.failedBrickCount,
+    solverRevision: disasterSolverRevision,
+    groundCondition: simulation.options.groundCondition,
+    initialStaticFailureCount: simulation.initialStaticFailureCount,
+    unresolvedConnectionCount: simulation.unresolvedConnectionBrickIds.length,
+    slidingRiskBrickCount: simulation.slidingRiskBrickCount,
+    modelMassKilograms: simulation.modelMassKilograms,
+    brokenConnectionCount: simulation.brokenConnectionCount,
+    initialBrokenConnectionCount: simulation.initialBrokenConnectionCount,
+    loadCalibration: simulation.loadCalibration,
     primaryFailureMode: getPrimaryFailureMode(simulation),
   } : undefined,
   insights: createStabilityInsights(analysis, locale).map((insight) => {
@@ -163,6 +181,18 @@ export const formatStabilityReportMarkdown = (report: StabilityReport, locale: L
     ...(report.simulation ? [
       `- ${zh ? '灾害模拟' : 'Hazard simulation'}: ${report.simulation.scenario} ${report.simulation.intensity}% · ${report.simulation.grade} (${report.simulation.score}/100)`,
       `- ${zh ? '最终存活' : 'Final survival'}: ${report.simulation.survivedBrickCount}/${report.plan.brickCount}`,
+      ...(report.simulation.modelMassKilograms === undefined ? [] : [
+        `- ${zh ? '模型估计质量' : 'Estimated model mass'}: ${report.simulation.modelMassKilograms.toFixed(3)} kg`,
+        `- ${zh ? '底面条件' : 'Base condition'}: ${report.simulation.groundCondition === 'anchored' ? (zh ? '固定于底面' : 'Anchored') : (zh ? '自由放置' : 'Free-standing')}`,
+        `- ${zh ? '自重阶段失效' : 'Self-weight failures'}: ${report.simulation.initialStaticFailureCount}`,
+        `- ${zh ? '外载新增失效' : 'Additional hazard failures'}: ${report.simulation.failedBrickCount - (report.simulation.initialStaticFailureCount ?? 0)}`,
+        `- ${zh ? '需复核受力路径' : 'Unresolved load paths'}: ${report.simulation.unresolvedConnectionCount}`,
+        `- ${zh ? '出现滑动风险' : 'Parts at risk of sliding'}: ${report.simulation.slidingRiskBrickCount}`,
+        `- ${zh ? '断开连接' : 'Broken connections'}: ${report.simulation.brokenConnectionCount} (${zh ? '自重' : 'self-weight'} ${report.simulation.initialBrokenConnectionCount})`,
+        ...(report.simulation.loadCalibration ? [
+          `- ${zh ? '载荷输入' : 'Load input'}: ${report.simulation.loadCalibration.baseValue.toFixed(2)} ${report.simulation.loadCalibration.unit} · ${report.simulation.loadCalibration.loadMultiplier}×`,
+        ] : []),
+      ]),
     ] : []),
     '',
     `## ${zh ? '主要发现与建议' : 'Findings and recommendations'}`,
@@ -195,10 +225,17 @@ export const formatStabilityReportSvg = (
   const muted = dark ? '#a8b3c7' : '#526078'
   const findings = report.insights.slice(0, 3)
   const thumbnailHeight = options.thumbnailDataUrl ? 250 : 0
-  const height = 420 + thumbnailHeight + findings.length * 76
+  const simulation = report.simulation
+  const simulationDetail = simulation?.initialStaticFailureCount === undefined ? undefined : [
+    zh ? `自重失效 ${simulation.initialStaticFailureCount}` : `Self-weight failures ${simulation.initialStaticFailureCount}`,
+    zh ? `外载新增 ${simulation.failedBrickCount - simulation.initialStaticFailureCount}` : `Additional failures ${simulation.failedBrickCount - simulation.initialStaticFailureCount}`,
+    zh ? `需复核 ${simulation.unresolvedConnectionCount}` : `Unresolved paths ${simulation.unresolvedConnectionCount}`,
+  ].join(' · ')
+  const detailHeight = simulationDetail ? 32 : 0
+  const height = 420 + detailHeight + thumbnailHeight + findings.length * 76
   const scoreColor = report.summary.score >= 80 ? '#16a34a' : report.summary.score >= 55 ? '#d97706' : '#dc2626'
   const findingRows = findings.map((insight, index) => {
-    const y = 390 + thumbnailHeight + index * 76
+    const y = 390 + detailHeight + thumbnailHeight + index * 76
     return `<g transform="translate(64 ${y})"><circle cx="7" cy="-5" r="7" fill="${insight.severity === 'critical' ? '#dc2626' : insight.severity === 'warning' ? '#d97706' : '#2563eb'}"/><text x="28" y="0" font-size="18" font-weight="600" fill="${ink}">${escapeXml(insight.reason)}</text><text x="28" y="30" font-size="15" fill="${muted}">${escapeXml(insight.suggestion)}</text></g>`
   }).join('')
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="${height}" viewBox="0 0 1000 ${height}">
@@ -211,8 +248,9 @@ export const formatStabilityReportSvg = (
   <text x="150" y="248" text-anchor="middle" font-family="system-ui,sans-serif" font-size="42" font-weight="800" fill="${scoreColor}">${report.summary.score}</text>
   <text x="150" y="278" text-anchor="middle" font-family="system-ui,sans-serif" font-size="14" fill="#657089">${zh ? '静态稳定性' : 'STATIC STABILITY'}</text>
   <g font-family="system-ui,sans-serif" fill="${ink}"><text x="290" y="225" font-size="16">${zh ? '接地质量' : 'Grounded mass'}</text><text x="560" y="225" font-size="22" font-weight="700">${report.summary.groundedPercent}%</text><text x="290" y="268" font-size="16">${zh ? '支撑覆盖' : 'Support coverage'}</text><text x="560" y="268" font-size="22" font-weight="700">${report.summary.supportCoveragePercent}%</text><text x="290" y="311" font-size="16">${zh ? '连接冗余' : 'Connection redundancy'}</text><text x="560" y="311" font-size="22" font-weight="700">${report.summary.connectionRedundancyPercent}%</text><text x="710" y="225" font-size="16">${zh ? '风险零件' : 'Critical parts'}</text><text x="880" y="225" font-size="22" font-weight="700">${report.summary.criticalBrickCount}</text><text x="710" y="268" font-size="16">${zh ? '倾覆裕度' : 'Tipping margin'}</text><text x="880" y="268" font-size="22" font-weight="700">${report.summary.tippingMargin.toFixed(2)}</text>${report.simulation ? `<text x="710" y="311" font-size="16">${zh ? '模拟得分' : 'Simulation'}</text><text x="880" y="311" font-size="22" font-weight="700">${report.simulation.grade} · ${report.simulation.score}</text>` : ''}</g>
-  ${options.thumbnailDataUrl ? `<image x="64" y="338" width="872" height="220" href="${escapeXml(options.thumbnailDataUrl)}" preserveAspectRatio="xMidYMid slice"/><rect x="64" y="338" width="872" height="220" rx="12" fill="none" stroke="${dark ? '#475569' : '#dfe3ec'}"/>` : ''}
-  <text x="64" y="${354 + thumbnailHeight}" font-family="system-ui,sans-serif" font-size="19" font-weight="700" fill="${ink}">${zh ? '主要发现与建议' : 'Findings and recommendations'}</text>
+  ${simulationDetail ? `<text x="64" y="349" font-family="system-ui,sans-serif" font-size="16" fill="${muted}">${escapeXml(simulationDetail)}</text>` : ''}
+  ${options.thumbnailDataUrl ? `<image x="64" y="${338 + detailHeight}" width="872" height="220" href="${escapeXml(options.thumbnailDataUrl)}" preserveAspectRatio="xMidYMid slice"/><rect x="64" y="${338 + detailHeight}" width="872" height="220" rx="12" fill="none" stroke="${dark ? '#475569' : '#dfe3ec'}"/>` : ''}
+  <text x="64" y="${354 + detailHeight + thumbnailHeight}" font-family="system-ui,sans-serif" font-size="19" font-weight="700" fill="${ink}">${zh ? '主要发现与建议' : 'Findings and recommendations'}</text>
   <g font-family="system-ui,sans-serif">${findingRows}</g>
   <text x="64" y="${height - 58}" font-family="system-ui,sans-serif" font-size="13" fill="${muted}">${zh ? '确定性近似模型，不替代工程认证' : 'Deterministic approximation · not an engineering certification'}</text>
 </svg>`

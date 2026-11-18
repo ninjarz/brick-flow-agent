@@ -53,7 +53,7 @@ export const setEditorAnalysisActive = (active: boolean) => {
   }
 }
 
-const getAnalysisGeometry = (bricks: PlacedBrick[]) => {
+export const getAnalysisGeometry = (bricks: PlacedBrick[]) => {
   const cached = geometryInputs.get(bricks)
   if (cached) return cached
   const definitions = [...new Set(bricks.map(brick => brick.brickId))]

@@ -64,7 +64,7 @@ describe('workspace persistence across asynchronous storage', () => {
       await persistence.retry()
       expect(mocks.store.save.mock.calls.at(-1)?.[2].world).toMatchObject({ paused: true, elapsedSeconds: 5 })
     } finally {
-      cleanup?.()
+      if (typeof cleanup === 'function') cleanup()
       vi.useRealTimers()
       vi.unstubAllGlobals()
     }

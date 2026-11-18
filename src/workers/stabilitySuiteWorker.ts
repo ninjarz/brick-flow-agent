@@ -1,5 +1,10 @@
 /// <reference lib="webworker" />
 
+import { brickById } from '../data/basicBricks'
+import { prepareAnalysisGeometry } from '../lib/prepareAnalysisGeometry'
+import type { EditorAnalysisRequest } from '../lib/editorAnalysisProtocol'
+
+
 import { runDisasterSimulation } from '../lib/disasterSimulation'
 import { createStabilitySuiteResult, getStabilitySuiteCases, summarizeStabilitySuiteCase, type StabilitySuitePreset, type StabilitySuiteResult } from '../lib/stabilitySuite'
 import type { DisasterPhysicsProfile } from '../lib/disasterSimulation'
@@ -9,6 +14,7 @@ type Request = {
   type: 'run-suite'
   requestId: number
   bricks: PlacedBrick[]
+  geometry: EditorAnalysisRequest['geometry']
   plan: StabilitySuiteResult['plan']
   preset: StabilitySuitePreset
   physicsProfile: DisasterPhysicsProfile
@@ -21,10 +27,13 @@ export type StabilitySuiteWorkerResponse =
 
 const workerScope = self as unknown as DedicatedWorkerGlobalScope
 
-workerScope.onmessage = (event: MessageEvent<Request>) => {
+workerScope.onmessage = async (event: MessageEvent<Request>) => {
   if (event.data.type !== 'run-suite') return
   const { requestId, bricks, plan, preset, physicsProfile } = event.data
   try {
+    const definitions = [...new Set(bricks.map(brick => brick.brickId))]
+      .flatMap(id => brickById.get(id) ?? [])
+    await prepareAnalysisGeometry(definitions, event.data.geometry)
     const cases = getStabilitySuiteCases(preset, physicsProfile)
     const summaries = cases.map((testCase, index) => {
       const summary = summarizeStabilitySuiteCase(testCase, runDisasterSimulation(bricks, testCase))

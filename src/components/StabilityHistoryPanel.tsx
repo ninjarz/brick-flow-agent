@@ -54,6 +54,10 @@ export const StabilityHistoryPanel = ({ history, currentReport, baselineId, onBa
           </div>
         )}
       </header>
+      {baseline?.report.simulation && currentReport.simulation &&
+        baseline.report.simulation.solverRevision !== currentReport.simulation.solverRevision && (
+          <p>{zh ? '基线使用旧版灾害算法。重新运行该工况可比较灾害结果。' : 'The baseline uses an earlier disaster solver. Re-run its load case to compare hazard results.'}</p>
+      )}
       {baseline && (
         <div className="stability-comparison-grid">
           {comparison.filter((item) => item.outcome !== 'unavailable').map((item) => {

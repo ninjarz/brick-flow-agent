@@ -81,7 +81,9 @@ export const saveStabilitySnapshot = (snapshot: StabilitySnapshot, projectId?: s
     item.report.simulation?.scenario === snapshot.report.simulation?.scenario &&
     item.report.simulation?.intensity === snapshot.report.simulation?.intensity &&
     item.report.simulation?.directionDegrees === snapshot.report.simulation?.directionDegrees &&
-    item.report.simulation?.physicsProfile === snapshot.report.simulation?.physicsProfile)
+    item.report.simulation?.physicsProfile === snapshot.report.simulation?.physicsProfile &&
+    item.report.simulation?.groundCondition === snapshot.report.simulation?.groundCondition &&
+    item.report.simulation?.solverRevision === snapshot.report.simulation?.solverRevision)
   if (duplicate) return { snapshot: duplicate, history: current, created: false }
   return {
     snapshot,
@@ -115,16 +117,19 @@ const metric = (
   return { key, before, after, delta, outcome }
 }
 
-export const compareStabilityReports = (before: StabilityReport, after: StabilityReport): StabilityComparisonMetric[] => [
-  metric('score', before.summary.score, after.summary.score),
-  metric('tippingMargin', before.summary.tippingMargin, after.summary.tippingMargin),
-  metric('groundedPercent', before.summary.groundedPercent, after.summary.groundedPercent),
-  metric('supportCoveragePercent', before.summary.supportCoveragePercent, after.summary.supportCoveragePercent),
-  metric('connectionRedundancyPercent', before.summary.connectionRedundancyPercent, after.summary.connectionRedundancyPercent),
-  metric('criticalBrickCount', before.summary.criticalBrickCount, after.summary.criticalBrickCount, false),
-  metric('simulationScore', before.simulation?.score, after.simulation?.score),
-  metric('survivedBrickCount', before.simulation?.survivedBrickCount, after.simulation?.survivedBrickCount),
-]
+export const compareStabilityReports = (before: StabilityReport, after: StabilityReport): StabilityComparisonMetric[] => {
+  const sameSolver = before.simulation?.solverRevision === after.simulation?.solverRevision
+  return [
+    metric('score', before.summary.score, after.summary.score),
+    metric('tippingMargin', before.summary.tippingMargin, after.summary.tippingMargin),
+    metric('groundedPercent', before.summary.groundedPercent, after.summary.groundedPercent),
+    metric('supportCoveragePercent', before.summary.supportCoveragePercent, after.summary.supportCoveragePercent),
+    metric('connectionRedundancyPercent', before.summary.connectionRedundancyPercent, after.summary.connectionRedundancyPercent),
+    metric('criticalBrickCount', before.summary.criticalBrickCount, after.summary.criticalBrickCount, false),
+    metric('simulationScore', sameSolver ? before.simulation?.score : undefined, after.simulation?.score),
+    metric('survivedBrickCount', sameSolver ? before.simulation?.survivedBrickCount : undefined, after.simulation?.survivedBrickCount),
+  ]
+}
 
 export const formatStabilityComparisonMarkdown = (
   before: StabilitySnapshot,

@@ -1,5 +1,9 @@
 /// <reference lib="webworker" />
 
+import { brickById } from '../data/basicBricks'
+import { prepareAnalysisGeometry } from '../lib/prepareAnalysisGeometry'
+
+
 import {
   runDisasterSimulation,
   type DisasterSimulationWorkerRequest,
@@ -7,15 +11,23 @@ import {
 } from '../lib/disasterSimulation'
 
 const workerScope = self as unknown as DedicatedWorkerGlobalScope
+let preparedBricks: DisasterSimulationWorkerRequest['bricks']
 
-workerScope.onmessage = (event: MessageEvent<DisasterSimulationWorkerRequest>) => {
+workerScope.onmessage = async (event: MessageEvent<DisasterSimulationWorkerRequest>) => {
   if (event.data.type !== 'simulate') return
 
   try {
+    if (event.data.bricks) {
+      const definitions = [...new Set(event.data.bricks.map(brick => brick.brickId))]
+        .flatMap(id => brickById.get(id) ?? [])
+      await prepareAnalysisGeometry(definitions, event.data.geometry)
+      preparedBricks = event.data.bricks
+    }
+    if (!preparedBricks) throw new Error('STABILITY_SIMULATION_GEOMETRY_MISSING')
     workerScope.postMessage({
       type: 'result',
       requestId: event.data.requestId,
-      result: runDisasterSimulation(event.data.bricks, event.data.options),
+      result: runDisasterSimulation(preparedBricks, event.data.options),
     } satisfies DisasterSimulationWorkerResponse)
   } catch (error) {
     workerScope.postMessage({

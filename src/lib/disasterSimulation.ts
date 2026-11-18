@@ -1,16 +1,20 @@
 import { createBuildGraph } from './planUtils'
+import { getDisasterMassProperties, gravity, prepareDisasterContacts, studPulloutNewtons } from './disasterContacts'
+import { addDisasterWrench, createDisasterLoadPaths, createDisasterWrench, resolveDisasterSupports } from './disasterLoadPaths'
 import { createProjectedSpatialIndex } from './projectedSpatialIndex'
 import {
   analyzeBuildStability,
-  createConvexHull,
   getSignedDistanceToSupportHull,
   type StabilityAnalysis,
   type StabilityPoint2,
 } from './stabilityAnalysis'
 import type { PlacedBrick } from '../types/bricks'
+import type { EditorAnalysisRequest } from './editorAnalysisProtocol'
 
 export type DisasterScenario = 'wind' | 'rain' | 'earthquake'
 export type DisasterPhysicsProfile = 'realistic' | 'challenge'
+export type DisasterGroundCondition = 'surface' | 'anchored'
+export const disasterSolverRevision = 2
 
 export type DisasterFailureMode =
   | 'shear'
@@ -21,6 +25,7 @@ export type DisasterFailureMode =
   | 'seismic-shear'
   | 'seismic-overturn'
   | 'ground-overturn'
+  | 'gravity-connection'
   | 'detached'
 
 export type DisasterSimulationOptions = {
@@ -29,6 +34,7 @@ export type DisasterSimulationOptions = {
   durationSeconds?: number
   directionDegrees?: number
   physicsProfile?: DisasterPhysicsProfile
+  groundCondition?: DisasterGroundCondition
 }
 
 export type StudContactPoint = {
@@ -126,6 +132,11 @@ export type DisasterSimulationResult = {
   }>
   simulationStepCount: number
   initialStaticFailureCount: number
+  initialBrokenConnectionCount: number
+  brokenConnectionCount: number
+  modelMassKilograms: number
+  unresolvedConnectionBrickIds: string[]
+  slidingRiskBrickCount: number
   survivedBrickCount: number
   failedBrickCount: number
   score: number
@@ -136,9 +147,8 @@ export type DisasterSimulationResult = {
 export type DisasterSimulationWorkerRequest = {
   type: 'simulate'
   requestId: number
-  bricks: PlacedBrick[]
   options: DisasterSimulationOptions
-}
+} & ({ bricks: PlacedBrick[]; geometry: EditorAnalysisRequest['geometry'] } | { bricks?: never; geometry?: never })
 
 export type DisasterSimulationWorkerResponse =
   | { type: 'result'; requestId: number; result: DisasterSimulationResult }
@@ -157,19 +167,15 @@ export type DisasterFrame = {
 }
 
 const defaultSimulationFrameCount = 90
-const contactTolerance = 0.14
 const disasterOcclusionSampleSize = 0.5
 const epsilon = 0.000001
 const studPitchMeters = 0.008
 const waterDensityKilogramsPerCubicMeter = 1000
-const gravityMetersPerSecondSquared = 9.80665
-const estimatedMassKilogramsPerStudVolume = 0.00025
-const studSeparationCapacityNewtons = 0.7
-const studCompressionCapacityNewtons = 35
-const studContactRadius = 0.22
+const studSeparationCapacityNewtons = studPulloutNewtons
 const challengeWaterLoadMultiplier = 20
 const airDensityKilogramsPerCubicMeter = 1.225
 const windDragCoefficient = 1.2
+const estimatedSurfaceFriction = 0.45
 const challengeWindLoadMultiplier = 2
 const challengeEarthquakeLoadMultiplier = 5
 const emptyContactReactions: number[] = []
@@ -201,8 +207,10 @@ const getClosestPointOnSupportHull = (
   return closest
 }
 
-const getSimulationFrameCount = (brickCount: number) => {
-  if (brickCount > 1000) return 48
+const getSimulationFrameCount = (brickCount: number, options: DisasterSimulationOptions) => {
+  if (brickCount > 1000) {
+    return options.scenario === 'wind' && options.physicsProfile === 'realistic' && options.intensity > 0 ? 96 : 48
+  }
   if (brickCount > 500) return 72
   return defaultSimulationFrameCount
 }
@@ -517,8 +525,8 @@ const getDynamicLoadFactor = (
   const progress = clamp(timeSeconds / durationSeconds)
   const ramp = Math.min(1, progress * 3)
   if (scenario === 'wind') return ramp * (0.62 + Math.sin(progress * Math.PI * 8) * 0.16 + Math.sin(progress * Math.PI * 23) * 0.11)
-  if (scenario === 'rain') return ramp * (0.74 + progress * 0.2 + Math.sin(progress * Math.PI * 11) * 0.06)
-  return ramp * (0.38 + Math.abs(Math.sin(progress * Math.PI * 13)) * 0.54 + Math.abs(Math.sin(progress * Math.PI * 29)) * 0.08)
+  if (scenario === 'rain') return progress
+  return ramp * (0.82 * Math.sin(progress * Math.PI * 12) + 0.18 * Math.sin(progress * Math.PI * 26))
 }
 
 const getGrade = (score: number): DisasterSimulationResult['grade'] => {
@@ -840,16 +848,16 @@ const getWaterAccumulation = (
   timeSeconds: number,
   durationSeconds: number,
   intensity: number,
-) => clamp(timeSeconds / durationSeconds) * (0.3 + intensity * 0.7)
+) => intensity === 0 ? 0 : clamp(timeSeconds / durationSeconds) * (0.3 + intensity * 0.7)
 
 const getRainPondingDepthMeters = (
   intensity: number,
   waterAccumulation: number,
-) => waterAccumulation * (0.002 + 0.028 * Math.pow(intensity, 1.5))
+) => waterAccumulation * 0.03 * Math.pow(intensity, 1.5)
 
-const getWindSpeedMetersPerSecond = (intensity: number) => 3 + 27 * intensity
+const getWindSpeedMetersPerSecond = (intensity: number) => 30 * intensity
 
-const getPeakGroundAccelerationG = (intensity: number) => 0.05 + 1.95 * intensity
+const getPeakGroundAccelerationG = (intensity: number) => 2 * intensity
 
 const getLoadMultiplier = (
   scenario: DisasterScenario,
@@ -880,39 +888,38 @@ const getLoadCalibration = (
   }
 }
 
-const createStudContactPoints = (
-  minX: number,
-  maxX: number,
-  minZ: number,
-  maxZ: number,
-  supportId: string,
-) => {
-  const width = Math.max(epsilon, maxX - minX)
-  const depth = Math.max(epsilon, maxZ - minZ)
-  const xStudCount = Math.max(1, Math.round(width))
-  const zStudCount = Math.max(1, Math.round(depth))
-  const contactOffsetX = Math.min(studContactRadius, width / xStudCount * 0.28)
-  const contactOffsetZ = Math.min(studContactRadius, depth / zStudCount * 0.28)
-  const points: StudContactPoint[] = []
-  for (let xIndex = 0; xIndex < xStudCount; xIndex += 1) {
-    const x = minX + width * (xIndex + 0.5) / xStudCount
-    for (let zIndex = 0; zIndex < zStudCount; zIndex += 1) {
-      const z = minZ + depth * (zIndex + 0.5) / zStudCount
-      const studId = `${supportId}:${xIndex}:${zIndex}`
-      points.push(
-        { x: x - contactOffsetX, z: z - contactOffsetZ, studId },
-        { x: x + contactOffsetX, z: z - contactOffsetZ, studId },
-        { x: x + contactOffsetX, z: z + contactOffsetZ, studId },
-        { x: x - contactOffsetX, z: z + contactOffsetZ, studId },
-      )
-    }
-  }
-  return points
+const createFailureHinge = (
+  pivot: DisasterFailureHinge['pivot'],
+  outward: StabilityPoint2,
+): DisasterFailureHinge | undefined => {
+  const length = Math.hypot(outward.x, outward.z)
+  if (length <= epsilon) return undefined
+  return { pivot, axis: { x: outward.z / length, z: -outward.x / length } }
 }
+
+const buildDisasterScene = (bricks: PlacedBrick[], graph: ReturnType<typeof createBuildGraph>) => {
+  const analysis = analyzeBuildStability(bricks, graph)
+  const prepared = bricks.filter(({ id }) => graph.boundsById.has(id))
+  const contacts = prepareDisasterContacts(prepared, graph)
+  const items = prepared.map(brick => {
+    const bounds = graph.boundsById.get(brick.id)!
+    const stability = analysis.riskByBrickId.get(brick.id)!
+    const massProperties = getDisasterMassProperties(brick, stability.mass, stability.center)
+    return { brick, bounds, exposureCenter: stability.center, ...massProperties }
+  })
+  return {
+    analysis, items, ...contacts,
+    heights: items.map(({ bounds }) => (bounds.minY + bounds.maxY) / 2),
+    totalMassKg: items.reduce((sum, { mass }) => sum + mass, 0),
+  }
+}
+
+const disasterSceneByGraph = new WeakMap<ReturnType<typeof createBuildGraph>, ReturnType<typeof buildDisasterScene>>()
 
 export const runDisasterSimulation = (
   bricks: PlacedBrick[],
   options: DisasterSimulationOptions,
+  simulationFrameCount = getSimulationFrameCount(bricks.length, options),
 ): DisasterSimulationResult => {
   const resolvedOptions: Required<DisasterSimulationOptions> = {
     scenario: options.scenario,
@@ -920,562 +927,236 @@ export const runDisasterSimulation = (
     durationSeconds: Math.min(30, Math.max(3, options.durationSeconds ?? 9)),
     directionDegrees: options.directionDegrees ?? 25,
     physicsProfile: options.physicsProfile ?? 'challenge',
+    groundCondition: options.groundCondition ?? 'surface',
   }
+  const { scenario, durationSeconds, physicsProfile } = resolvedOptions
   const intensity = resolvedOptions.intensity / 100
-  const windRadians = resolvedOptions.directionDegrees * Math.PI / 180
-  const windDirection = { x: Math.cos(windRadians), z: Math.sin(windRadians) }
+  const radians = resolvedOptions.directionDegrees * Math.PI / 180
+  const direction = { x: Math.cos(radians), z: Math.sin(radians) }
   const graph = createBuildGraph(bricks)
-  const analysis = analyzeBuildStability(bricks, graph)
-  const windOcclusionField = resolvedOptions.scenario === 'wind'
-    ? createWindOcclusionField(graph.boundsById, windDirection)
-    : undefined
+  let scene = disasterSceneByGraph.get(graph)
+  if (!scene) {
+    scene = buildDisasterScene(bricks, graph)
+    disasterSceneByGraph.set(graph, scene)
+  }
+  const { analysis, ground, bonds, neighbors, items, heights, totalMassKg } = scene
+  const windOcclusionField = scenario === 'wind' ? createWindOcclusionField(graph.boundsById, direction) : undefined
+  const rainOcclusionField = scenario === 'rain' ? createRainOcclusionField(graph.boundsById) : undefined
+  const windTracker = windOcclusionField && createDynamicExposureTracker(windOcclusionField)
+  const rainTracker = rainOcclusionField && createDynamicExposureTracker(rainOcclusionField)
   const windExposureByBrickId = windOcclusionField
     ? getExposureFromField(windOcclusionField, new Set())
     : new Map<string, WindExposure>()
-  const rainOcclusionField = resolvedOptions.scenario === 'rain'
-    ? createRainOcclusionField(graph.boundsById)
-    : undefined
   const rainExposureByBrickId = rainOcclusionField
     ? getExposureFromField(rainOcclusionField, new Set())
     : new Map<string, RainExposure>()
-  const windExposureTracker = windOcclusionField
-    ? createDynamicExposureTracker(windOcclusionField)
-    : undefined
-  const rainExposureTracker = rainOcclusionField
-    ? createDynamicExposureTracker(rainOcclusionField)
-    : undefined
-  const rootIds = new Set([...graph.boundsById]
-    .filter(([, bounds]) => Math.abs(bounds.minY) <= contactTolerance)
-    .map(([brickId]) => brickId))
-  const prepared = bricks.flatMap((brick) => {
-    const bounds = graph.boundsById.get(brick.id)
-    const stability = analysis.riskByBrickId.get(brick.id)
-    if (!bounds || !stability) return []
-    const width = Math.max(epsilon, bounds.maxX - bounds.minX)
-    const height = Math.max(epsilon, bounds.maxY - bounds.minY)
-    const depth = Math.max(epsilon, bounds.maxZ - bounds.minZ)
-    const topArea = width * depth
-    const centerX = (bounds.minX + bounds.maxX) / 2
-    const centerY = (bounds.minY + bounds.maxY) / 2
-    const centerZ = (bounds.minZ + bounds.maxZ) / 2
-    const rootBoost = rootIds.has(brick.id) ? 2 : 0
-    const connectionCapacity = (
-      0.9 + stability.connectionCount * 0.7 + stability.supportCoverage * 1.8 + rootBoost
-    ) * (0.7 + Math.pow(stability.mass, 0.35))
-    const massKilograms = stability.mass * estimatedMassKilogramsPerStudVolume
-    const weightNewtons = massKilograms * gravityMetersPerSecondSquared
-    return [{ brick, bounds, stability, width, height, depth, topArea, centerX, centerY, centerZ, connectionCapacity, massKilograms, weightNewtons }]
-  })
-  const preparedById = new Map(prepared.map((item) => [item.brick.id, item]))
-  const seismicLoadOrder = [...prepared].sort((source, target) => target.centerY - source.centerY)
-  const verticalSupportsByBrickId = new Map(prepared.map((item) => [
-    item.brick.id,
-    [...(graph.attachmentEdges.get(item.brick.id) ?? [])].flatMap((supportId) => {
-      const support = preparedById.get(supportId)
-      if (!support || support.centerY >= item.centerY) return []
-      if (Math.abs(support.bounds.maxY - item.bounds.minY) > contactTolerance) return []
-      const minX = Math.max(item.bounds.minX, support.bounds.minX)
-      const maxX = Math.min(item.bounds.maxX, support.bounds.maxX)
-      const minZ = Math.max(item.bounds.minZ, support.bounds.minZ)
-      const maxZ = Math.min(item.bounds.maxZ, support.bounds.maxZ)
-      const overlapArea = Math.max(0, maxX - minX) * Math.max(0, maxZ - minZ)
-      return overlapArea > epsilon ? [{
-        support,
-        overlapArea,
-        minX,
-        maxX,
-        minZ,
-        maxZ,
-        contactPoints: createStudContactPoints(minX, maxX, minZ, maxZ, support.brick.id),
-      }] : []
-    }),
-  ]))
-  const defaultContactGeometryByBrickId = new Map([...verticalSupportsByBrickId].map(([brickId, supports]) => [
-    brickId,
-    prepareAffineContactGeometry(supports.flatMap(({ contactPoints }) => contactPoints)),
-  ]))
-  const contactGeometryCache = new Map<string, PreparedAffineContactGeometry | undefined>()
-  const getLiveContactGeometry = (
-    brickId: string,
-    failedIds: Set<string>,
-  ) => {
-    const allSupports = verticalSupportsByBrickId.get(brickId) ?? []
-    if (allSupports.length === 0) return undefined
-    if (failedIds.size === 0 || !allSupports.some(({ support }) => failedIds.has(support.brick.id))) {
-      return defaultContactGeometryByBrickId.get(brickId)
-    }
-    const supports = allSupports.filter(({ support }) => !failedIds.has(support.brick.id))
-    const cacheKey = `${brickId}:${supports.map(({ support }) => support.brick.id).join(',')}`
-    if (contactGeometryCache.has(cacheKey)) {
-      return contactGeometryCache.get(cacheKey)
-    }
-    const geometry = prepareAffineContactGeometry(supports.flatMap(({ contactPoints }) => contactPoints))
-    contactGeometryCache.set(cacheKey, geometry)
-    return geometry
-  }
-  const createTransferredLoadByBrickId = (
-    failedIds: Set<string>,
-    directLoadByBrickId: Map<string, number>,
-  ) => {
-    const loads = new Map(prepared
-      .filter(({ brick }) => !failedIds.has(brick.id))
-      .map((item) => [item.brick.id, {
-        amount: directLoadByBrickId.get(item.brick.id) ?? 0,
-        momentX: item.centerX * (directLoadByBrickId.get(item.brick.id) ?? 0),
-        momentY: item.centerY * (directLoadByBrickId.get(item.brick.id) ?? 0),
-        momentZ: item.centerZ * (directLoadByBrickId.get(item.brick.id) ?? 0),
-      }]))
-
-    for (const item of seismicLoadOrder) {
-      if (failedIds.has(item.brick.id)) continue
-      const load = loads.get(item.brick.id)
-      if (!load || load.amount <= epsilon) continue
-      const supports = (verticalSupportsByBrickId.get(item.brick.id) ?? [])
-        .filter(({ support }) => !failedIds.has(support.brick.id))
-      const totalOverlapArea = supports.reduce((sum, support) => sum + support.overlapArea, 0)
-      if (totalOverlapArea <= epsilon) continue
-
-      for (const { support, overlapArea } of supports) {
-        const share = overlapArea / totalOverlapArea
-        const supportLoad = loads.get(support.brick.id)
-        if (!supportLoad) continue
-        supportLoad.amount += load.amount * share
-        supportLoad.momentX += load.momentX * share
-        supportLoad.momentY += load.momentY * share
-        supportLoad.momentZ += load.momentZ * share
-      }
-    }
-
-    return loads
-  }
-  let groundComponentFailureCount = -1
-  let cachedGroundComponents: Array<{ brickIds: string[]; supportHull: StabilityPoint2[] }> = []
-  const getGroundOverturnFailures = (
-    failedIds: Set<string>,
-    verticalLoadByBrickId: Map<string, number>,
-  ) => {
-    if (groundComponentFailureCount !== failedIds.size) {
-      const visited = new Set<string>()
-      const components: typeof cachedGroundComponents = []
-      for (const start of prepared) {
-        if (failedIds.has(start.brick.id) || visited.has(start.brick.id)) continue
-        const brickIds: string[] = []
-        const queue = [start.brick.id]
-        visited.add(start.brick.id)
-        for (let index = 0; index < queue.length; index += 1) {
-          const brickId = queue[index]
-          brickIds.push(brickId)
-          for (const targetId of graph.attachmentEdges.get(brickId) ?? []) {
-            if (failedIds.has(targetId) || visited.has(targetId)) continue
-            visited.add(targetId)
-            queue.push(targetId)
-          }
-        }
-
-        const groundedItems = brickIds
-          .filter((brickId) => rootIds.has(brickId))
-          .map((brickId) => preparedById.get(brickId))
-          .filter((item): item is NonNullable<typeof item> => Boolean(item))
-        if (groundedItems.length === 0) continue
-        const supportHull = createConvexHull(groundedItems.flatMap(({ bounds }) => [
-          { x: bounds.minX, z: bounds.minZ },
-          { x: bounds.maxX, z: bounds.minZ },
-          { x: bounds.maxX, z: bounds.maxZ },
-          { x: bounds.minX, z: bounds.maxZ },
-        ]))
-        if (supportHull.length > 0) components.push({ brickIds, supportHull })
-      }
-      cachedGroundComponents = components
-      groundComponentFailureCount = failedIds.size
-    }
-
-    const failures: Array<{
-      brickIds: string[]
-      hinge: DisasterFailureHinge
-    }> = []
-    for (const { brickIds, supportHull } of cachedGroundComponents) {
-      let verticalLoad = 0
-      let verticalMomentX = 0
-      let verticalMomentZ = 0
-      for (const brickId of brickIds) {
-        const item = preparedById.get(brickId)
-        if (!item) continue
-        const itemVerticalLoad = verticalLoadByBrickId.get(brickId) ?? item.weightNewtons
-        verticalLoad += itemVerticalLoad
-        verticalMomentX += itemVerticalLoad * item.centerX
-        verticalMomentZ += itemVerticalLoad * item.centerZ
-      }
-      if (verticalLoad <= epsilon) continue
-
-      const effectiveLoadPoint = {
-        x: verticalMomentX / verticalLoad,
-        z: verticalMomentZ / verticalLoad,
-      }
-      if (getSignedDistanceToSupportHull(effectiveLoadPoint, supportHull) >= -0.02) continue
-
-      const pivot = getClosestPointOnSupportHull(effectiveLoadPoint, supportHull)
-      const outwardX = effectiveLoadPoint.x - pivot.x
-      const outwardZ = effectiveLoadPoint.z - pivot.z
-      const outwardLength = Math.max(epsilon, Math.hypot(outwardX, outwardZ))
-      failures.push({
-        brickIds,
-        hinge: {
-          pivot: { ...pivot, y: 0 },
-          axis: {
-            x: outwardZ / outwardLength,
-            z: -outwardX / outwardLength,
-          },
-        },
-      })
-    }
-
-    return failures
-  }
+  const failed = new Uint8Array(items.length)
+  const broken = new Uint8Array(bonds.length)
+  const directLoads = items.map(createDisasterWrench)
+  const loads = items.map(createDisasterWrench)
+  let paths: ReturnType<typeof createDisasterLoadPaths> | undefined
+  let previousRoutes: NonNullable<typeof paths>['routes'] | undefined
   const failureTimeByBrickId = new Map<string, number>()
   const failureModeByBrickId = new Map<string, DisasterFailureMode>()
   const failureHingeByBrickId = new Map<string, DisasterFailureHinge>()
-  const peakStressByBrickId = new Map<string, number>()
   const peakConnectionUtilizationByBrickId = new Map<string, number>()
-  const maxFallByBrickId = new Map(prepared.map(({ brick, bounds }) => [brick.id, Math.max(0, bounds.minY)]))
-  const timeline: DisasterSimulationResult['timeline'] = []
-  const simulationFrameCount = getSimulationFrameCount(prepared.length)
-  const connectionUtilizationHistoryByBrickId = new Map(prepared.map(({ brick }) => [
-    brick.id,
-    new Float32Array(simulationFrameCount + 1),
-  ]))
   const governingFailureModeByBrickId = new Map<string, DisasterFailureMode>()
+  const unresolvedConnectionBrickIds = new Set<string>()
+  const connectionUtilizationHistoryByBrickId = new Map(items.map(({ brick }) => [
+    brick.id, new Float32Array(simulationFrameCount + 1),
+  ]))
+  const maxFallByBrickId = new Map(items.map(({ brick, bounds }) => [brick.id, Math.max(0, bounds.minY)]))
+  const timeline: DisasterSimulationResult['timeline'] = []
+  let failedMassKg = 0
+  let brokenConnectionCount = 0
+  let initialBrokenConnectionCount = 0
+  let slidingRiskBrickCount = 0
+  let appliedExposureFailureCount = 0
+  const multiplier = getLoadMultiplier(scenario, physicsProfile)
+  const windPressure = 0.5 * airDensityKilogramsPerCubicMeter * windDragCoefficient *
+    getWindSpeedMetersPerSecond(intensity) ** 2 * studPitchMeters ** 2 * multiplier
+  const peakAcceleration = getPeakGroundAccelerationG(intensity) * gravity * multiplier
 
-  const markDisconnectedBricks = (timeSeconds: number) => {
-    const reachable = new Set<string>()
-    const queue = [...rootIds].filter((brickId) => !failureTimeByBrickId.has(brickId))
-    queue.forEach((brickId) => reachable.add(brickId))
-    for (let index = 0; index < queue.length; index += 1) {
-      for (const targetId of graph.attachmentEdges.get(queue[index]) ?? []) {
-        if (failureTimeByBrickId.has(targetId) || reachable.has(targetId)) continue
-        reachable.add(targetId)
-        queue.push(targetId)
-      }
-    }
-    const detachedIds = new Set(prepared
-      .map(({ brick }) => brick.id)
-      .filter((brickId) => !reachable.has(brickId) && !failureTimeByBrickId.has(brickId)))
-    const visitedDetachedIds = new Set<string>()
-    for (const startId of detachedIds) {
-      if (visitedDetachedIds.has(startId)) continue
-      const component: string[] = []
-      const componentQueue = [startId]
-      visitedDetachedIds.add(startId)
-      for (let index = 0; index < componentQueue.length; index += 1) {
-        const brickId = componentQueue[index]
-        component.push(brickId)
-        for (const targetId of graph.attachmentEdges.get(brickId) ?? []) {
-          if (!detachedIds.has(targetId) || visitedDetachedIds.has(targetId)) continue
-          visitedDetachedIds.add(targetId)
-          componentQueue.push(targetId)
+  const markFailure = (index: number, time: number, mode: DisasterFailureMode, hinge?: DisasterFailureHinge) => {
+    const { brick, mass } = items[index]
+    failed[index] = 1
+    failedMassKg += mass
+    failureTimeByBrickId.set(brick.id, time)
+    failureModeByBrickId.set(brick.id, mode)
+    if (hinge) failureHingeByBrickId.set(brick.id, hinge)
+  }
+
+  const markDetached = (
+    rank: Int32Array,
+    time: number,
+    causes: Map<number, { mode: DisasterFailureMode; hinge?: DisasterFailureHinge }>,
+  ) => {
+    const visited = new Uint8Array(items.length)
+    for (let start = 0; start < items.length; start += 1) {
+      if (failed[start] || visited[start] || rank[start] >= 0) continue
+      const component = [start]
+      visited[start] = 1
+      for (let i = 0; i < component.length; i += 1) {
+        const index = component[i]
+        for (const bond of neighbors[index]) {
+          const next = bond.a === index ? bond.b : bond.a
+          if (broken[bond.index] || failed[next] || visited[next] || rank[next] >= 0) continue
+          visited[next] = 1
+          component.push(next)
         }
       }
-      const hingeSource = component.flatMap((brickId) => (
-        [...(graph.attachmentEdges.get(brickId) ?? [])]
-          .filter((targetId) => failureHingeByBrickId.has(targetId))
-      )).sort((source, target) => (
-        (failureTimeByBrickId.get(source) ?? Infinity) - (failureTimeByBrickId.get(target) ?? Infinity)
-      ))[0]
-      const inheritedHinge = hingeSource ? failureHingeByBrickId.get(hingeSource) : undefined
-      for (const brickId of component) {
-        failureTimeByBrickId.set(brickId, timeSeconds)
-        failureModeByBrickId.set(brickId, 'detached')
-        if (inheritedHinge) failureHingeByBrickId.set(brickId, inheritedHinge)
+      const hinge = component.find(index => causes.get(index)?.hinge)
+      for (const index of component) {
+        const cause = causes.get(index)
+        markFailure(index, time, cause?.mode ?? 'detached', cause?.hinge ?? (hinge === undefined ? undefined : causes.get(hinge)?.hinge))
       }
     }
   }
 
-  let exposureFailureCount = 0
-  let cachedFrameWindExposure = windExposureTracker?.exposureByBrickId ?? windExposureByBrickId
-  let cachedFrameRainExposure = rainExposureTracker?.exposureByBrickId ?? rainExposureByBrickId
-  const directWeightByBrickId = new Map(prepared.map((item) => [item.brick.id, item.weightNewtons]))
-  const directMassByBrickId = new Map(prepared.map((item) => [item.brick.id, item.massKilograms]))
-  let transferredLoadFailureCount = -1
-  let cachedFrameGravityLoads: ReturnType<typeof createTransferredLoadByBrickId> | undefined
-  let cachedFrameWindDirectLoads: Map<string, number> | undefined
-  let cachedFrameWindLoads: ReturnType<typeof createTransferredLoadByBrickId> | undefined
-  let cachedFrameSeismicLoads: ReturnType<typeof createTransferredLoadByBrickId> | undefined
+  const updateLoads = (order: number[], time: number, factor: number, gravityOnly: boolean) => {
+    if (failureTimeByBrickId.size !== appliedExposureFailureCount) {
+      const failedIds = new Set(failureTimeByBrickId.keys())
+      windTracker?.update(failedIds)
+      rainTracker?.update(failedIds)
+      appliedExposureFailureCount = failedIds.size
+    }
+    const rainPressure = gravityOnly ? 0 : waterDensityKilogramsPerCubicMeter * gravity * studPitchMeters ** 2 *
+      getRainPondingDepthMeters(intensity, getWaterAccumulation(time, durationSeconds, intensity)) * multiplier
+    for (const index of order) {
+      const { brick, center, exposureCenter, mass } = items[index]
+      const load = directLoads[index]
+      const water = (rainTracker?.exposureByBrickId.get(brick.id)?.exposedArea ?? 0) * rainPressure
+      load.weight = mass * gravity + water
+      load.weightX = mass * gravity * center.x + water * exposureCenter.x
+      load.weightZ = mass * gravity * center.z + water * exposureCenter.z
+      load.lateral = gravityOnly ? 0 : scenario === 'earthquake'
+        ? mass * peakAcceleration * factor
+        : (windTracker?.exposureByBrickId.get(brick.id)?.exposedArea ?? 0) * windPressure * factor
+      const applicationPoint = scenario === 'earthquake' ? center : exposureCenter
+      load.lateralX = load.lateral * applicationPoint.x
+      load.lateralY = load.lateral * applicationPoint.y
+      load.lateralZ = load.lateral * applicationPoint.z
+      load.unresolved = false
+      Object.assign(loads[index], load)
+    }
+  }
+
+  const evaluateGround = (
+    components: ReturnType<typeof createDisasterLoadPaths>['components'],
+    time: number,
+  ) => {
+    if (resolvedOptions.groundCondition === 'anchored') return false
+    let anyFailed = false
+    let slidingCount = 0
+    for (const { members, hull } of components) {
+      const load = createDisasterWrench()
+      for (const index of members) addDisasterWrench(load, directLoads[index])
+      if (load.weight <= epsilon) continue
+      const frictionLimit = estimatedSurfaceFriction * load.weight
+      if (Math.abs(load.lateral) > frictionLimit) {
+        const mass = members.reduce((sum, index) => sum + items[index].mass, 0)
+        const acceleration = (load.lateral - Math.sign(load.lateral) * frictionLimit) / mass
+        slidingCount += members.length
+        // Solve in the accelerating frame of the component. Floor friction
+        // can transmit at most μN. Excess horizontal force drives sliding.
+        for (const index of members) {
+          const { center, mass: brickMass } = items[index]
+          const inertialForce = brickMass * acceleration
+          const direct = loads[index]
+          direct.lateral -= inertialForce
+          direct.lateralX -= inertialForce * center.x
+          direct.lateralY -= inertialForce * center.y
+          direct.lateralZ -= inertialForce * center.z
+          load.lateralY -= inertialForce * center.y
+        }
+      }
+      const point = {
+        x: (load.weightX + direction.x * load.lateralY) / load.weight,
+        z: (load.weightZ + direction.z * load.lateralY) / load.weight,
+      }
+      if (getSignedDistanceToSupportHull(point, hull) >= -0.02) continue
+      const pivot = getClosestPointOnSupportHull(point, hull)
+      const hinge = createFailureHinge({ ...pivot, y: 0 }, { x: point.x - pivot.x, z: point.z - pivot.z })
+      for (const index of members) markFailure(index, time, 'ground-overturn', hinge)
+      anyFailed = true
+    }
+    slidingRiskBrickCount = Math.max(slidingRiskBrickCount, slidingCount)
+    return anyFailed
+  }
+
+  const causes = new Map<number, { mode: DisasterFailureMode; hinge?: DisasterFailureHinge }>()
+  const blocked = new Uint8Array(items.length)
   for (let frameIndex = 0; frameIndex <= simulationFrameCount; frameIndex += 1) {
+    const time = durationSeconds * frameIndex / simulationFrameCount
+    const factor = intensity === 0 ? 0 : getDynamicLoadFactor(scenario, time, durationSeconds)
+    const gravityOnly = frameIndex === 0 || intensity === 0
     if (frameIndex > 0) {
-      for (const history of connectionUtilizationHistoryByBrickId.values()) {
-        history[frameIndex] = history[frameIndex - 1]
-      }
-    }
-    const connectionFailureCandidates: Array<{
-      brickId: string
-      failureMode: DisasterFailureMode
-      stress: number
-      threshold: number
-      hinge?: DisasterFailureHinge
-    }> = []
-    const timeSeconds = resolvedOptions.durationSeconds * frameIndex / simulationFrameCount
-    const loadFactor = getDynamicLoadFactor(resolvedOptions.scenario, timeSeconds, resolvedOptions.durationSeconds)
-    const failedIds = new Set(failureTimeByBrickId.keys())
-    if (failedIds.size !== exposureFailureCount) {
-      if (windExposureTracker) cachedFrameWindExposure = windExposureTracker.update(failedIds)
-      if (rainExposureTracker) cachedFrameRainExposure = rainExposureTracker.update(failedIds)
-      exposureFailureCount = failedIds.size
-    }
-    const frameWindExposure = cachedFrameWindExposure
-    const frameRainExposure = cachedFrameRainExposure
-    const waterAccumulation = getWaterAccumulation(
-      timeSeconds,
-      resolvedOptions.durationSeconds,
-      intensity,
-    )
-    if (failedIds.size !== transferredLoadFailureCount) {
-      cachedFrameGravityLoads = resolvedOptions.scenario !== 'rain'
-        ? createTransferredLoadByBrickId(failedIds, directWeightByBrickId)
-        : undefined
-      cachedFrameWindDirectLoads = resolvedOptions.scenario === 'wind'
-        ? new Map(prepared.map((item) => {
-          const exposedArea = frameWindExposure.get(item.brick.id)?.exposedArea ?? 0
-          const windSpeed = getWindSpeedMetersPerSecond(intensity)
-          const forceNewtons = 0.5 * airDensityKilogramsPerCubicMeter * windDragCoefficient *
-            exposedArea * studPitchMeters ** 2 * windSpeed ** 2 *
-            getLoadMultiplier('wind', resolvedOptions.physicsProfile)
-          return [item.brick.id, forceNewtons]
-        }))
-        : undefined
-      cachedFrameWindLoads = cachedFrameWindDirectLoads
-        ? createTransferredLoadByBrickId(failedIds, cachedFrameWindDirectLoads)
-        : undefined
-      cachedFrameSeismicLoads = resolvedOptions.scenario === 'earthquake'
-        ? createTransferredLoadByBrickId(failedIds, directMassByBrickId)
-        : undefined
-      transferredLoadFailureCount = failedIds.size
-    }
-    const frameGravityLoads = cachedFrameGravityLoads
-    const frameWindDirectLoads = cachedFrameWindDirectLoads
-    const frameWindLoads = cachedFrameWindLoads
-    const frameRainDirectLoads = resolvedOptions.scenario === 'rain'
-      ? new Map(prepared.map((item) => {
-        const exposure = frameRainExposure.get(item.brick.id)
-        const exposedArea = exposure?.exposedArea ?? item.topArea
-        const pondingDepthMeters = getRainPondingDepthMeters(intensity, waterAccumulation)
-        const waterLoadMultiplier = getLoadMultiplier('rain', resolvedOptions.physicsProfile)
-        const waterLoadNewtons = waterDensityKilogramsPerCubicMeter * gravityMetersPerSecondSquared *
-          pondingDepthMeters * exposedArea * studPitchMeters ** 2 * waterLoadMultiplier
-        const directLoad = item.weightNewtons + waterLoadNewtons * loadFactor
-        return [item.brick.id, directLoad]
-      }))
-      : undefined
-    const frameRainLoads = frameRainDirectLoads
-      ? createTransferredLoadByBrickId(failedIds, frameRainDirectLoads)
-      : undefined
-    const frameSeismicLoads = cachedFrameSeismicLoads
-
-    for (const item of prepared) {
-      if (failureTimeByBrickId.has(item.brick.id)) continue
-      const riskBias = item.stability.risk * (0.28 + intensity * 0.72)
-      let appliedRiskBias = riskBias
-      let loadStress = 0
-      let failureMode: DisasterFailureMode
-      let failureHinge: DisasterFailureHinge | undefined
-      if (resolvedOptions.scenario === 'wind') {
-        appliedRiskBias = 0
-        const exposedArea = frameWindExposure.get(item.brick.id)?.exposedArea ?? 0
-        const windLoad = frameWindLoads?.get(item.brick.id)
-        const gravityLoad = frameGravityLoads?.get(item.brick.id)
-        const force = (windLoad?.amount ?? frameWindDirectLoads?.get(item.brick.id) ?? 0) * loadFactor
-        const verticalLoad = gravityLoad?.amount ?? item.weightNewtons
-        const geometry = getLiveContactGeometry(item.brick.id, failedIds)
-        const windLoadCenter = windLoad && windLoad.amount > epsilon
-          ? {
-            x: windLoad.momentX / windLoad.amount,
-            y: windLoad.momentY / windLoad.amount,
-            z: windLoad.momentZ / windLoad.amount,
-          }
-          : { x: item.centerX, y: item.centerY, z: item.centerZ }
-        const verticalLoadCenter = gravityLoad && verticalLoad > epsilon
-          ? { x: gravityLoad.momentX / verticalLoad, z: gravityLoad.momentZ / verticalLoad }
-          : { x: item.centerX, z: item.centerZ }
-        const connectionSolution = geometry
-          ? solvePreparedStudConnection(geometry, {
-            verticalLoad,
-            verticalLoadCenter,
-            horizontalForce: { x: windDirection.x * force, z: windDirection.z * force },
-            horizontalLoadCenter: windLoadCenter,
-            applicationHeight: Math.max(item.height / 2, windLoadCenter.y - item.bounds.minY),
-          })
-          : undefined
-        if (connectionSolution) {
-          loadStress = connectionSolution.utilization
-          failureMode = connectionSolution.tensionUtilization > connectionSolution.shearUtilization
-            ? 'overturn'
-            : 'shear'
-          if (failureMode === 'overturn') {
-            failureHinge = {
-              pivot: { ...connectionSolution.compressionCenter, y: item.bounds.minY },
-              axis: { x: windDirection.z, z: -windDirection.x },
-            }
-          }
-        } else if (!rootIds.has(item.brick.id)) {
-          const legacyForce = exposedArea * (0.2 + 2.15 * intensity ** 2)
-          const shearResistance = item.connectionCapacity * (0.78 + item.stability.supportCoverage * 0.62)
-          const shearStress = legacyForce * loadFactor / Math.max(epsilon, shearResistance)
-          const baseSpanAlongWind = Math.abs(windDirection.x) * item.width + Math.abs(windDirection.z) * item.depth
-          const overturnResistance = item.connectionCapacity * Math.max(0.2, baseSpanAlongWind / 2) *
-            (0.48 + item.stability.supportCoverage * 0.92)
-          const pressureCenterHeight = Math.max(item.height / 2, item.centerY)
-          const overturnStress = legacyForce * loadFactor * pressureCenterHeight / Math.max(epsilon, overturnResistance)
-          loadStress = Math.max(shearStress, overturnStress)
-          failureMode = overturnStress > shearStress ? 'overturn' : 'shear'
-          appliedRiskBias = riskBias
-        } else {
-          failureMode = 'shear'
-        }
-      } else if (resolvedOptions.scenario === 'rain') {
-        appliedRiskBias = 0
-        const rainLoad = frameRainLoads?.get(item.brick.id)
-        const demand = rainLoad?.amount ?? frameRainDirectLoads?.get(item.brick.id) ?? 0
-        const loadCenterX = rainLoad && demand > epsilon ? rainLoad.momentX / demand : item.centerX
-        const loadCenterZ = rainLoad && demand > epsilon ? rainLoad.momentZ / demand : item.centerZ
-        const geometry = getLiveContactGeometry(item.brick.id, failedIds)
-        const contactSolution = geometry
-          ? solvePreparedStudConnection(geometry, {
-            verticalLoad: demand,
-            verticalLoadCenter: { x: loadCenterX, z: loadCenterZ },
-            horizontalForce: { x: 0, z: 0 },
-            horizontalLoadCenter: { x: loadCenterX, z: loadCenterZ },
-            applicationHeight: 0,
-          })
-          : undefined
-        const peelUtilization = contactSolution?.tensionUtilization ?? 0
-        const compressionUtilization = (contactSolution?.maxStudCompression ?? 0) /
-          studCompressionCapacityNewtons
-        loadStress = Math.max(peelUtilization, compressionUtilization)
-        failureMode = peelUtilization >= compressionUtilization
-          ? 'rain-peel'
-          : 'water-load'
-        const supportCenterX = geometry?.center.x ?? item.centerX
-        const supportCenterZ = geometry?.center.z ?? item.centerZ
-        const leverX = loadCenterX - supportCenterX
-        const leverZ = loadCenterZ - supportCenterZ
-        if (loadStress >= 0.94 + hashUnit(item.brick.id) * 0.18 && failureMode === 'rain-peel') {
-          const axisLength = Math.max(epsilon, Math.hypot(leverZ, -leverX))
-          failureHinge = {
-            pivot: {
-              x: contactSolution?.compressionCenter.x ?? supportCenterX,
-              y: item.bounds.minY,
-              z: contactSolution?.compressionCenter.z ?? supportCenterZ,
-            },
-            axis: { x: leverZ / axisLength, z: -leverX / axisLength },
-          }
-        }
-      } else {
-        appliedRiskBias = 0
-        const seismicLoad = frameSeismicLoads?.get(item.brick.id)
-        const gravityLoad = frameGravityLoads?.get(item.brick.id)
-        const transmittedMass = seismicLoad?.amount ?? item.massKilograms
-        const force = transmittedMass * gravityMetersPerSecondSquared *
-          getPeakGroundAccelerationG(intensity) *
-          getLoadMultiplier('earthquake', resolvedOptions.physicsProfile) * loadFactor
-        const tributaryCenter = seismicLoad && transmittedMass > epsilon
-          ? {
-            x: seismicLoad.momentX / transmittedMass,
-            y: seismicLoad.momentY / transmittedMass,
-            z: seismicLoad.momentZ / transmittedMass,
-          }
-          : { x: item.centerX, y: item.centerY, z: item.centerZ }
-        const verticalLoad = gravityLoad?.amount ?? item.weightNewtons
-        const verticalLoadCenter = gravityLoad && verticalLoad > epsilon
-          ? { x: gravityLoad.momentX / verticalLoad, z: gravityLoad.momentZ / verticalLoad }
-          : { x: item.centerX, z: item.centerZ }
-        const geometry = getLiveContactGeometry(item.brick.id, failedIds)
-        const connectionSolution = geometry
-          ? solvePreparedStudConnection(geometry, {
-            verticalLoad,
-            verticalLoadCenter,
-            horizontalForce: { x: windDirection.x * force, z: windDirection.z * force },
-            horizontalLoadCenter: tributaryCenter,
-            applicationHeight: Math.max(item.height / 2, tributaryCenter.y - item.bounds.minY),
-          })
-          : undefined
-        if (connectionSolution) {
-          loadStress = connectionSolution.utilization
-          failureMode = connectionSolution.tensionUtilization > connectionSolution.shearUtilization
-            ? 'seismic-overturn'
-            : 'seismic-shear'
-          if (failureMode === 'seismic-overturn') {
-            failureHinge = {
-              pivot: { ...connectionSolution.compressionCenter, y: item.bounds.minY },
-              axis: { x: windDirection.z, z: -windDirection.x },
-            }
-          }
-        } else if (!rootIds.has(item.brick.id)) {
-          const legacyForce = (seismicLoad?.amount ?? item.stability.mass) * (0.12 + 1.35 * intensity)
-          const shearResistance = item.connectionCapacity * (0.82 + item.stability.supportCoverage * 0.58)
-          const shearStress = legacyForce * loadFactor / Math.max(epsilon, shearResistance)
-          const heightLever = Math.max(item.height / 2, tributaryCenter.y - item.bounds.minY)
-          const baseSpanAlongShake = Math.abs(windDirection.x) * item.width + Math.abs(windDirection.z) * item.depth
-          const overturnResistance = item.connectionCapacity * Math.max(0.2, baseSpanAlongShake / 2) *
-            (0.52 + item.stability.supportCoverage * 0.9)
-          const overturnStress = legacyForce * loadFactor * heightLever / Math.max(epsilon, overturnResistance)
-          loadStress = Math.max(shearStress, overturnStress)
-          failureMode = overturnStress > shearStress ? 'seismic-overturn' : 'seismic-shear'
-          appliedRiskBias = riskBias
-        } else {
-          failureMode = 'seismic-shear'
+      for (const [index, { brick }] of items.entries()) {
+        if (failed[index] || intensity === 0) {
+          const history = connectionUtilizationHistoryByBrickId.get(brick.id)!
+          history[frameIndex] = history[frameIndex - 1]
         }
       }
-      const stress = loadStress + appliedRiskBias
-      connectionUtilizationHistoryByBrickId.get(item.brick.id)![frameIndex] = loadStress
-      if (loadStress > (peakConnectionUtilizationByBrickId.get(item.brick.id) ?? 0)) {
-        peakConnectionUtilizationByBrickId.set(item.brick.id, loadStress)
-        governingFailureModeByBrickId.set(item.brick.id, failureMode)
-      }
-      peakStressByBrickId.set(item.brick.id, Math.max(peakStressByBrickId.get(item.brick.id) ?? 0, stress))
-      const deterministicTolerance = 0.94 + hashUnit(item.brick.id) * 0.18
-      if (stress >= deterministicTolerance) {
-        connectionFailureCandidates.push({
-          brickId: item.brick.id,
-          failureMode,
-          stress,
-          threshold: deterministicTolerance,
-          hinge: failureHinge,
-        })
-      }
     }
-
-    const groundOverturnFailures = getGroundOverturnFailures(
-      failedIds,
-      frameRainDirectLoads ?? directWeightByBrickId,
-    )
-    for (const failure of groundOverturnFailures) {
-      for (const brickId of failure.brickIds) {
-        if (failureTimeByBrickId.has(brickId)) continue
-        failureTimeByBrickId.set(brickId, timeSeconds)
-        failureModeByBrickId.set(brickId, 'ground-overturn')
-        failureHingeByBrickId.set(brickId, failure.hinge)
+    if (frameIndex > 0 && intensity === 0) {
+      timeline.push({ timeSeconds: time, failedCount: failureTimeByBrickId.size, loadFactor: 0 })
+      continue
+    }
+    // Resolve the changing topology at this instant. Loaded descendants
+    // release before supports that may be relieved by their release.
+    for (;;) {
+      if (!paths) {
+        paths = createDisasterLoadPaths(neighbors, ground, heights, failed, broken, previousRoutes)
+        previousRoutes = paths.routes
+        markDetached(paths.rank, time, causes)
+        causes.clear()
       }
+      updateLoads(paths.order, time, factor, gravityOnly)
+      if (evaluateGround(paths.components, time)) {
+        paths = undefined
+        continue
+      }
+      blocked.fill(0)
+      let changed = false
+      for (const index of paths.order) {
+        const route = paths.routes[index]
+        const demand = resolveDisasterSupports(route, loads[index], direction, loads)
+        if (!demand) continue
+        const mode: DisasterFailureMode = gravityOnly ? 'gravity-connection'
+          : scenario === 'rain' ? (demand.compressionLimited ? 'water-load' : 'rain-peel')
+          : scenario === 'earthquake' ? (demand.overturning ? 'seismic-overturn' : 'seismic-shear')
+          : demand.overturning ? 'overturn' : 'shear'
+        const id = items[index].brick.id
+        const history = connectionUtilizationHistoryByBrickId.get(id)!
+        history[frameIndex] = Math.max(history[frameIndex], demand.utilization)
+        if (demand.utilization > (peakConnectionUtilizationByBrickId.get(id) ?? 0)) {
+          peakConnectionUtilizationByBrickId.set(id, demand.utilization)
+          governingFailureModeByBrickId.set(id, mode)
+        }
+        if (demand.unverified) unresolvedConnectionBrickIds.add(id)
+        const releases = !blocked[index] && !demand.unverified && demand.utilization >= 1
+        if (releases) {
+          broken[demand.support.bond.index] = 1
+          brokenConnectionCount += 1
+          causes.set(index, {
+            mode,
+            hinge: demand.overturning ? createFailureHinge(demand.pivot, demand.outward) : undefined,
+          })
+          changed = true
+        }
+        if (releases || blocked[index]) {
+          for (const { target } of route.supports) blocked[target] = 1
+          for (const { target } of route.joints) blocked[target] = 1
+        }
+      }
+      if (!changed) break
+      paths = undefined
     }
-
-    const liveConnectionFailureCandidates = connectionFailureCandidates
-      .filter((candidate) => !failureTimeByBrickId.has(candidate.brickId))
-    if (liveConnectionFailureCandidates.length > 0) {
-      const failure = liveConnectionFailureCandidates.reduce((mostOverloaded, candidate) => (
-        candidate.stress / candidate.threshold > mostOverloaded.stress / mostOverloaded.threshold
-          ? candidate
-          : mostOverloaded
-      ))
-      failureTimeByBrickId.set(failure.brickId, timeSeconds)
-      failureModeByBrickId.set(failure.brickId, failure.failureMode)
-      if (failure.hinge) failureHingeByBrickId.set(failure.brickId, failure.hinge)
-    }
-
-    markDisconnectedBricks(timeSeconds)
-    timeline.push({ timeSeconds, failedCount: failureTimeByBrickId.size, loadFactor })
+    if (frameIndex === 0) initialBrokenConnectionCount = brokenConnectionCount
+    timeline.push({ timeSeconds: time, failedCount: failureTimeByBrickId.size, loadFactor: Math.abs(factor) })
   }
 
-  const failedMass = [...failureTimeByBrickId].reduce((sum, [brickId]) => (
-    sum + (analysis.riskByBrickId.get(brickId)?.mass ?? 0)
-  ), 0)
-  const survivalRatio = analysis.totalMass <= epsilon ? 0 : clamp(1 - failedMass / analysis.totalMass)
+  const survivalRatio = totalMassKg <= epsilon ? 0 : clamp(1 - failedMassKg / totalMassKg)
   const survival = Math.round(survivalRatio * 100)
   const staticStability = analysis.stabilityScore
   const span = Math.round(clamp(analysis.modelSpan / 16) * 100)
@@ -1500,7 +1181,7 @@ export const runDisasterSimulation = (
     failureTimeByBrickId,
     failureModeByBrickId,
     failureHingeByBrickId,
-    peakStressByBrickId,
+    peakStressByBrickId: peakConnectionUtilizationByBrickId,
     peakConnectionUtilizationByBrickId,
     connectionUtilizationHistoryByBrickId,
     governingFailureModeByBrickId,
@@ -1512,7 +1193,12 @@ export const runDisasterSimulation = (
     timeline,
     simulationStepCount: simulationFrameCount,
     initialStaticFailureCount,
-    survivedBrickCount: Math.max(0, prepared.length - failureTimeByBrickId.size),
+    initialBrokenConnectionCount,
+    brokenConnectionCount,
+    modelMassKilograms: totalMassKg,
+    unresolvedConnectionBrickIds: [...unresolvedConnectionBrickIds],
+    slidingRiskBrickCount,
+    survivedBrickCount: Math.max(0, items.length - failureTimeByBrickId.size),
     failedBrickCount: failureTimeByBrickId.size,
     score,
     grade: getGrade(score),
@@ -1525,7 +1211,9 @@ export const getDisasterFrame = (
   timeSeconds: number,
 ): DisasterFrame => {
   const resolvedTime = Math.min(result.options.durationSeconds, Math.max(0, timeSeconds))
-  const loadFactor = getDynamicLoadFactor(result.options.scenario, resolvedTime, result.options.durationSeconds)
+  const signedLoadFactor = result.options.intensity === 0 ? 0
+    : getDynamicLoadFactor(result.options.scenario, resolvedTime, result.options.durationSeconds)
+  const loadFactor = Math.abs(signedLoadFactor)
   const radians = result.options.directionDegrees * Math.PI / 180
   const direction = { x: Math.cos(radians), z: Math.sin(radians) }
   const intensity = result.options.intensity / 100
@@ -1582,7 +1270,7 @@ export const getDisasterFrame = (
         continue
       }
       const fall = Math.min(result.maxFallByBrickId.get(brickId) ?? 0, 4.9 * age * age)
-      const drift = Math.min(6, age * age * (0.18 + intensity * 0.65))
+      const drift = failureTime > epsilon ? Math.min(6, age * age * intensity * 0.83) : 0
       const earthquakeSign = hashUnit(brickId) > 0.5 ? 1 : -1
       offsetsByBrickId.set(brickId, {
         x: result.options.scenario === 'earthquake' ? drift * earthquakeSign : direction.x * drift,
@@ -1599,8 +1287,8 @@ export const getDisasterFrame = (
     if (result.options.scenario === 'wind') {
       offsetsByBrickId.set(brickId, { x: direction.x * elasticAmount * 0.055, y: 0, z: direction.z * elasticAmount * 0.055 })
     } else if (result.options.scenario === 'earthquake') {
-      const shake = Math.sin(resolvedTime * 13 + hashUnit(brickId) * 2) * elasticAmount * 0.065
-      offsetsByBrickId.set(brickId, { x: shake, y: 0, z: shake * 0.55 })
+      const shake = Math.sign(signedLoadFactor) * elasticAmount * 0.065
+      offsetsByBrickId.set(brickId, { x: direction.x * shake, y: 0, z: direction.z * shake })
     }
   }
 

@@ -1,6 +1,7 @@
+import { getAnalysisGeometry } from '../lib/editorAnalysisClient'
 import { AlertTriangle, Download, FlaskConical, LoaderCircle, Play, RotateCcw } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { DisasterPhysicsProfile, DisasterSimulationOptions } from '../lib/disasterSimulation'
+import { disasterSolverRevision, type DisasterPhysicsProfile, type DisasterSimulationOptions } from '../lib/disasterSimulation'
 import { useI18n } from '../lib/i18n'
 import { createPlanFingerprint } from '../lib/stabilityHistory'
 import {
@@ -54,14 +55,18 @@ export const StabilitySuitePanel = ({ plan, projectId, onInspect }: Props) => {
   const requestIdRef = useRef(0)
   const cases = getStabilitySuiteCases(preset, physicsProfile)
   const fingerprint = createPlanFingerprint(plan)
-  const stale = Boolean(result && result.plan.fingerprint !== fingerprint)
+  const earlierSolver = result && result.solverRevision !== disasterSolverRevision
+  const stale = result && (earlierSolver || result.plan.fingerprint !== fingerprint)
   const weakest = result?.cases.find((item) => item.id === result.weakestCaseId)
 
   useEffect(() => {
     saveStabilitySuiteConfig({ preset, physicsProfile })
   }, [physicsProfile, preset])
 
-  useEffect(() => () => workerRef.current?.terminate(), [])
+  useEffect(() => () => {
+    requestIdRef.current += 1
+    workerRef.current?.terminate()
+  }, [])
 
   useEffect(() => {
     workerRef.current?.terminate()
@@ -72,12 +77,14 @@ export const StabilitySuitePanel = ({ plan, projectId, onInspect }: Props) => {
     setError('')
   }, [plan.id, projectId])
 
-  const runSuite = () => {
+  const runSuite = async () => {
     workerRef.current?.terminate()
     const requestId = ++requestIdRef.current
     setProgress({ completed: 0, total: cases.length })
     setError('')
     try {
+      const geometry = await getAnalysisGeometry(plan.bricks)
+      if (requestId !== requestIdRef.current) return
       const worker = new Worker(new URL('../workers/stabilitySuiteWorker.ts', import.meta.url), { type: 'module' })
       workerRef.current = worker
       worker.onmessage = (event: MessageEvent<StabilitySuiteWorkerResponse>) => {
@@ -105,12 +112,14 @@ export const StabilitySuitePanel = ({ plan, projectId, onInspect }: Props) => {
       worker.postMessage({
         type: 'run-suite',
         requestId,
+        geometry,
         bricks: plan.bricks,
         plan: { id: plan.id, title: plan.title, brickCount: plan.bricks.length, fingerprint },
         preset,
         physicsProfile,
       })
     } catch (cause) {
+      if (requestId !== requestIdRef.current) return
       setProgress(undefined)
       setError(cause instanceof Error ? cause.message : 'STABILITY_SUITE_WORKER_FAILED')
     }
@@ -123,7 +132,12 @@ export const StabilitySuitePanel = ({ plan, projectId, onInspect }: Props) => {
           <h3><FlaskConical size={16} />{zh ? '结构测试套件' : 'Structural test suite'}</h3>
           <p>{zh ? '批量验证多种灾害、强度和方向，自动找出最弱工况。' : 'Batch-test hazards, intensities, and directions to find the weakest case.'}</p>
         </div>
-        {stale && <span className="suite-stale"><AlertTriangle size={13} />{zh ? '模型已变化' : 'Model changed'}</span>}
+        {stale && (
+          <span className="suite-stale">
+            <AlertTriangle size={13} />
+            {earlierSolver ? (zh ? '旧版算法结果，请重跑' : 'Earlier solver. Re-run suite.') : (zh ? '模型已变化' : 'Model changed')}
+          </span>
+        )}
       </header>
       <div className="stability-suite-config">
         <label>

@@ -49,19 +49,19 @@ const clamp = (value: number, min = 0, max = 1) => Math.min(max, Math.max(min, v
 const cross = (origin: StabilityPoint2, source: StabilityPoint2, target: StabilityPoint2) =>
   (source.x - origin.x) * (target.z - origin.z) - (source.z - origin.z) * (target.x - origin.x)
 
-export const createConvexHull = (points: StabilityPoint2[]): StabilityPoint2[] => {
+export const createConvexHull = <Point extends StabilityPoint2>(points: Point[]): Point[] => {
   const sorted = [...new Map(points.map((point) => [`${point.x}:${point.z}`, point])).values()]
     .sort((source, target) => source.x - target.x || source.z - target.z)
 
   if (sorted.length <= 2) return sorted
 
-  const lower: StabilityPoint2[] = []
+  const lower: Point[] = []
   for (const point of sorted) {
     while (lower.length >= 2 && cross(lower.at(-2)!, lower.at(-1)!, point) <= 0) lower.pop()
     lower.push(point)
   }
 
-  const upper: StabilityPoint2[] = []
+  const upper: Point[] = []
   for (const point of [...sorted].reverse()) {
     while (upper.length >= 2 && cross(upper.at(-2)!, upper.at(-1)!, point) <= 0) upper.pop()
     upper.push(point)
@@ -223,6 +223,19 @@ export const analyzeBuildStability = (
   const redundantCount = elevated.filter(({ brick }) => (graph.attachmentEdges.get(brick.id)?.size ?? 0) >= 2).length
   const connectionRedundancy = elevated.length === 0 ? 1 : redundantCount / elevated.length
 
+  const massAboveById = new Map<string, number>()
+  const byLeftEdge = [...measured].sort((a, b) => a.bounds.minX - b.bounds.minX)
+  for (const [index, left] of byLeftEdge.entries()) {
+    for (let next = index + 1; next < byLeftEdge.length; next += 1) {
+      const right = byLeftEdge[next]
+      if (right.bounds.minX >= left.bounds.maxX) break
+      if (overlapLength(left.bounds.minZ, left.bounds.maxZ, right.bounds.minZ, right.bounds.maxZ) <= 0) continue
+      if (Math.abs(left.center.y - right.center.y) <= epsilon) continue
+      const [lower, upper] = left.center.y < right.center.y ? [left, right] : [right, left]
+      massAboveById.set(lower.brick.id, (massAboveById.get(lower.brick.id) ?? 0) + upper.mass)
+    }
+  }
+
   const riskByBrickId = new Map<string, BrickStability>()
   let weightedCoverage = 0
   for (const item of measured) {
@@ -230,12 +243,7 @@ export const analyzeBuildStability = (
     const connectionCount = graph.attachmentEdges.get(item.brick.id)?.size ?? 0
     const supportCoverage = getSupportCoverage(item.brick.id, graph)
     const heightRatio = clamp(item.center.y / modelHeight)
-    const massAbove = measured.reduce((sum, candidate) => {
-      if (candidate.center.y <= item.center.y + epsilon) return sum
-      const overlapX = overlapLength(item.bounds.minX, item.bounds.maxX, candidate.bounds.minX, candidate.bounds.maxX)
-      const overlapZ = overlapLength(item.bounds.minZ, item.bounds.maxZ, candidate.bounds.minZ, candidate.bounds.maxZ)
-      return sum + (overlapX > 0 && overlapZ > 0 ? candidate.mass : 0)
-    }, 0)
+    const massAbove = massAboveById.get(item.brick.id) ?? 0
     const loadRatio = clamp(massAbove / Math.max(item.mass * 5, epsilon))
     const cantileverRisk = 1 - supportCoverage
     const connectionRisk = item.bounds.minY > contactTolerance && connectionCount <= 1 ? 1 : 0

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { makeBrick } from './planUtils'
+import { solveBearingReactions, type DisasterBearingGeometry } from './disasterContacts'
 import {
   getDisasterFrame,
   runDisasterSimulation,
@@ -68,6 +69,70 @@ describe('disaster simulation', () => {
     expect(tallLoad?.utilization ?? 0).toBeGreaterThan(
       Math.max(tallLoad?.tensionUtilization ?? 0, tallLoad?.shearUtilization ?? 0),
     )
+  })
+
+  it('balances an eccentric compression load across two bearings without inventing tension', () => {
+    const left = [{ x: 0, z: 0 }, { x: 1, z: 0 }, { x: 1, z: 1 }, { x: 0, z: 1 }]
+    const right = left.map(point => ({ x: point.x + 3, z: point.z }))
+    const geometry: DisasterBearingGeometry = {
+      area: 2, height: 1, center: { x: 2, z: 0.5 }, studs: [],
+      patches: [
+        { area: 1, height: 1, center: { x: 0.5, z: 0.5 }, hull: left },
+        { area: 1, height: 1, center: { x: 3.5, z: 0.5 }, hull: right },
+      ],
+      hull: [
+        { x: 0, z: 0, support: 0 }, { x: 4, z: 0, support: 1 },
+        { x: 4, z: 1, support: 1 }, { x: 0, z: 1, support: 0 },
+      ],
+    }
+    const [near, far] = solveBearingReactions(geometry, 10, 35, 5)
+    expect(near.pressure).toBeLessThan(far.pressure)
+    expect(near.normal + far.normal).toBeCloseTo(10, 10)
+    expect(near.xMoment + far.xMoment).toBeCloseTo(35, 10)
+    expect(near.zMoment + far.zMoment).toBeCloseTo(5, 10)
+    expect(near.maxStudTension + far.maxStudTension).toBe(0)
+    expect(near.requiresTie || far.requiresTie).toBe(false)
+
+    const unresolved = solveBearingReactions(geometry, 10, 44, 5)
+    expect(unresolved.some(reaction => reaction.requiresTie)).toBe(true)
+    expect(unresolved.reduce((sum, reaction) => sum + reaction.normal, 0)).toBeCloseTo(10, 10)
+    expect(unresolved.reduce((sum, reaction) => sum + reaction.xMoment, 0)).toBeCloseTo(40, 10)
+
+    geometry.studs = [{ x: 0.5, y: 1, z: 0.5, support: 0 }]
+    const tied = solveBearingReactions(geometry, 10, 44, 5)
+    expect(tied[0].maxStudTension).toBeGreaterThan(0)
+    expect(tied.reduce((sum, reaction) => sum + reaction.normal, 0)).toBeCloseTo(10, 10)
+    expect(tied.reduce((sum, reaction) => sum + reaction.xMoment, 0)).toBeCloseTo(44, 10)
+    expect(tied.reduce((sum, reaction) => sum + reaction.zMoment, 0)).toBeCloseTo(5, 10)
+  })
+
+  it('uses the same gravity baseline for every zero-input hazard and uses measured standard brick masses', () => {
+    const [base, top] = createStableStack()
+    const unsupported = { ...top, pose: { ...top.pose, yStud: 10 } }
+    const options = { intensity: 0, physicsProfile: 'realistic' as const }
+    const results = (['wind', 'rain', 'earthquake'] as const).map(scenario =>
+      runDisasterSimulation([base, unsupported], { ...options, scenario }),
+    )
+    for (const result of results) {
+      expect(result.initialStaticFailureCount).toBe(1)
+      expect(result.failedBrickCount).toBe(1)
+      expect(result.failureTimeByBrickId.get(unsupported.id)).toBe(0)
+      expect(result.loadCalibration.baseValue).toBe(0)
+      expect(result.timeline.every(frame => frame.failedCount === 1 && frame.loadFactor === 0)).toBe(true)
+      expect(result.modelMassKilograms).toBeCloseTo(0.00338, 10)
+    }
+  })
+
+  it('reports sliding on a free base without classifying it as disconnection', () => {
+    const bricks = createStableStack()
+    const options = { scenario: 'earthquake' as const, intensity: 100, physicsProfile: 'realistic' as const }
+    const free = runDisasterSimulation(bricks, options)
+    const anchored = runDisasterSimulation(bricks, { ...options, groundCondition: 'anchored' })
+    expect(free.slidingRiskBrickCount).toBe(bricks.length)
+    expect(anchored.slidingRiskBrickCount).toBe(0)
+    expect(free.failedBrickCount).toBe(0)
+    expect(free.peakConnectionUtilizationByBrickId.get(bricks[1].id)!)
+      .toBeLessThan(anchored.peakConnectionUtilizationByBrickId.get(bricks[1].id)!)
   })
 
   it('is deterministic and produces a weighted bridge-game score', () => {
@@ -187,25 +252,24 @@ describe('disaster simulation', () => {
       ...makeBrick(brickId, 'gray', x, y, z),
       id,
     })
-    const footing = place('cantilever-footing', 'brick-2x8', 0, 0, 0)
+    const footing = place('cantilever-footing', 'brick-2x8', 1, 0, 0)
     const base = place('cantilever-base', 'brick-2x2', 3, 1.2, 0)
     const deck = place('cantilever-deck', 'plate-2x6', 0, 2.4, 0)
-    const leftLoad = place('cantilever-left-load', 'brick-2x2', 0, 2.8, 0)
-    const middleLoad = place('cantilever-middle-load', 'brick-2x2', 2, 2.8, 0)
-    const result = runDisasterSimulation([footing, base, deck, leftLoad, middleLoad], {
+    const leftLoad = place('cantilever-left-load', 'brick-2x4', 0, 2.8, 0)
+    const result = runDisasterSimulation([footing, base, deck, leftLoad], {
       scenario: 'rain',
-      intensity: 80,
+      intensity: 100,
     })
     const centeredFooting = place('centered-footing', 'brick-2x8', 0, 0, 0)
     const centeredBase = place('centered-base', 'brick-2x2', 2, 1.2, 0)
     const centeredDeck = place('centered-deck', 'plate-2x6', 0, 2.4, 0)
-    const centeredLeftLoad = place('centered-left-load', 'brick-2x2', 1, 2.8, 0)
-    const centeredRightLoad = place('centered-right-load', 'brick-2x2', 3, 2.8, 0)
+    const centeredLeftLoad = place('centered-left-load', 'brick-2x2', 0, 2.8, 0)
+    const centeredRightLoad = place('centered-right-load', 'brick-2x2', 4, 2.8, 0)
     const centeredResult = runDisasterSimulation(
       [centeredFooting, centeredBase, centeredDeck, centeredLeftLoad, centeredRightLoad],
       { scenario: 'rain', intensity: 80 },
     )
-    const realisticResult = runDisasterSimulation([footing, base, deck, leftLoad, middleLoad], {
+    const realisticResult = runDisasterSimulation([footing, base, deck, leftLoad], {
       scenario: 'rain',
       intensity: 100,
       physicsProfile: 'realistic',
@@ -220,7 +284,7 @@ describe('disaster simulation', () => {
     expect(realisticResult.failureModeByBrickId.get(deck.id)).not.toBe('rain-peel')
     expect(result.peakConnectionUtilizationByBrickId.get(deck.id) ?? 0)
       .toBeGreaterThan((realisticResult.peakConnectionUtilizationByBrickId.get(deck.id) ?? 0) * 5)
-    expect(result.failureHingeByBrickId.get(deck.id)?.pivot.x).toBeGreaterThan(3)
+    expect(result.failureHingeByBrickId.get(deck.id)?.pivot.x).toBeCloseTo(3)
     expect(result.failureHingeByBrickId.get(deck.id)?.axis.z).toBeGreaterThan(0)
     expect(failureTime).toBeDefined()
     const rotatingFrame = getDisasterFrame(result, (failureTime ?? 0) + 0.5)
@@ -228,7 +292,7 @@ describe('disaster simulation', () => {
     expect(rotatingFrame.rotationsByBrickId.get(leftLoad.id)?.angle ?? 0).toBeGreaterThan(0)
   })
 
-  it('releases at most one overloaded rain connection per load increment', () => {
+  it('releases equally loaded independent spans together and keeps the result under step refinement', () => {
     const place = (id: string, brickId: string, x: number, y: number, z: number) => ({
       ...makeBrick(brickId, 'gray', x, y, z),
       id,
@@ -245,7 +309,7 @@ describe('disaster simulation', () => {
     ]
     const result = runDisasterSimulation(bricks, {
       scenario: 'rain',
-      intensity: 80,
+      intensity: 100,
       physicsProfile: 'challenge',
     })
     const directFailureCountByTime = new Map<number, number>()
@@ -254,27 +318,31 @@ describe('disaster simulation', () => {
       directFailureCountByTime.set(time, (directFailureCountByTime.get(time) ?? 0) + 1)
     }
 
-    expect(directFailureCountByTime.size).toBeGreaterThan(1)
-    expect(Math.max(...directFailureCountByTime.values())).toBe(1)
+    expect(result.initialStaticFailureCount).toBe(0)
+    expect([...directFailureCountByTime.values()]).toEqual([2])
+    const refined = runDisasterSimulation(bricks, result.options, result.simulationStepCount * 2)
+    expect([...refined.failureModeByBrickId].sort()).toEqual([...result.failureModeByBrickId].sort())
+    expect(refined.brokenConnectionCount).toBe(result.brokenConnectionCount)
+    expect(refined.failureTimeByBrickId.get('progressive-deck-a') ?? Infinity)
+      .toBeCloseTo(result.failureTimeByBrickId.get('progressive-deck-a')!, 1)
   })
 
   it('classifies wind failures from overturning moment separately from shear', () => {
     const tower = [
       makeBrick('brick-2x8', 'gray', -3, 0, 0),
-      makeBrick('brick-2x2', 'gray', 0, 1.2, 0),
-      makeBrick('brick-1x1', 'gray', 0.5, 2.4, 0.5),
-      makeBrick('brick-1x1', 'gray', 0.5, 3.6, 0.5),
-      makeBrick('brick-1x1', 'gray', 0.5, 4.8, 0.5),
+      ...[1.2, 2.4, 3.6].map(height => makeBrick('brick-1x1', 'gray', 0, height, 0)),
     ]
     const result = runDisasterSimulation(tower, {
       scenario: 'wind',
       intensity: 100,
       directionDegrees: 0,
+      groundCondition: 'anchored',
     })
     const realistic = runDisasterSimulation(tower, {
       scenario: 'wind',
       intensity: 100,
       directionDegrees: 0,
+      groundCondition: 'anchored',
       physicsProfile: 'realistic',
     })
 
@@ -295,11 +363,13 @@ describe('disaster simulation', () => {
       scenario: 'earthquake',
       intensity: 100,
       directionDegrees: 0,
+      groundCondition: 'anchored',
     })
     const realistic = runDisasterSimulation(tower, {
       scenario: 'earthquake',
       intensity: 100,
       directionDegrees: 0,
+      groundCondition: 'anchored',
       physicsProfile: 'realistic',
     })
 

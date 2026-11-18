@@ -458,6 +458,32 @@ const hasConnectorConnection = (
   )
 }
 
+/** Actual engagement sites, including side studs and Technic connectors. */
+export const getMatchedBrickConnectorSites = (brick: PlacedBrick, other: PlacedBrick) => {
+  const targets = getPlacedBrickConnectors(other)
+  const matched = new Set<string>()
+  return getPlacedBrickConnectors(brick).flatMap((source) => {
+    let target: (typeof targets)[number] | undefined
+    let nearest = Infinity
+    for (const candidate of targets) {
+      if (matched.has(candidate.id) || !areConnectorsCompatible(source, candidate)) continue
+      const distance = connectorDistance(source, candidate)
+      if (distance > getConnectorConnectionTolerance(source, candidate) || distance >= nearest) continue
+      nearest = distance
+      target = candidate
+    }
+    if (!target) return []
+    matched.add(target.id)
+    return [{
+      x: (source.pose.xStud + target.pose.xStud) / 2,
+      y: (source.pose.yStud + target.pose.yStud) / 2,
+      z: (source.pose.zStud + target.pose.zStud) / 2,
+      vertical: Math.abs(source.direction?.y ?? Number(source.axis === 'y')) > 0.995,
+      stud: source.kind === 'stud' || source.kind === 'tube' || source.kind === 'studsocket',
+    }]
+  })
+}
+
 const isMechanicalConnector = (
   connector: ReturnType<typeof getBrickConnectors>[number],
 ) =>
