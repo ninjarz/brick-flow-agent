@@ -888,6 +888,7 @@ const makeScenarioAwareInteractionEvent = (
   timeSeconds: number,
   actorId: string,
   targetId: string,
+  directedReply: boolean,
 ) => {
   const activeTriggers = world.scenarios.flatMap((scenario) => {
     if (scenario.enabled === false || scenario.activeDialogue || scenario.pendingAi) return []
@@ -903,6 +904,7 @@ const makeScenarioAwareInteractionEvent = (
     candidate.actorId === actorId && candidate.targetId === targetId
   )) ?? activeTriggers.find((candidate) => (
     candidate.actorId === targetId && candidate.targetId === actorId
+    && (directedReply || world.entities.find(entity => entity.id === candidate.actorId)?.controller !== 'player')
   ))
   return makeEvent(
     timeSeconds,
@@ -1435,7 +1437,7 @@ export const stepWorldSimulation = (
       const listener = listenerIndex === undefined ? undefined : entities[listenerIndex]
       const scriptedSpeech = activeCommand.type === 'interact' ? activeCommand.speechText?.trim() : undefined
       events.push({
-        ...makeScenarioAwareInteractionEvent(world, timeSeconds, entity.id, target.id),
+        ...makeScenarioAwareInteractionEvent(world, timeSeconds, entity.id, target.id, Boolean(scriptedSpeech)),
         ...(scriptedSpeech ? {
           dialogueText: scriptedSpeech,
           dialogueSpeakerId: entity.id,
@@ -1592,7 +1594,7 @@ export const stepWorldSimulation = (
         const listener = listenerIndex === undefined ? undefined : entities[listenerIndex]
         const scriptedSpeech = activeCommand.speechText?.trim()
         events.push({
-          ...makeScenarioAwareInteractionEvent(world, timeSeconds, entity.id, target.id),
+          ...makeScenarioAwareInteractionEvent(world, timeSeconds, entity.id, target.id, Boolean(scriptedSpeech)),
           ...(scriptedSpeech ? {
             dialogueText: scriptedSpeech,
             dialogueSpeakerId: entity.id,

@@ -743,3 +743,19 @@ export const getActiveWorldScenarioStages = (world: WorldState) => world.scenari
   const stage = scenario.stages.find((candidate) => candidate.status === 'active')
   return stage ? [{ scenario, stage }] : []
 })
+
+/** A read-ahead click advances one line through the same completion/action path as playback. */
+export const advanceWorldScenarioDialogue = (
+  world: WorldState,
+  scenarioId: string,
+  options: { enableAi?: boolean; plan?: ScenarioPlan } = {},
+): WorldState => {
+  const scenario = world.scenarios.find(candidate => candidate.id === scenarioId)
+  if (!scenario?.activeDialogue || scenario.enabled === false) return world
+  return advanceWorldScenarios({
+    ...world,
+    scenarios: world.scenarios.map(candidate => candidate.id === scenarioId
+      ? { ...candidate, activeDialogue: { ...scenario.activeDialogue!, lineEndsAtSeconds: world.elapsedSeconds } }
+      : candidate),
+  }, { ...options, allowNewStages: false })
+}

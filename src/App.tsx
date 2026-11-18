@@ -1,3 +1,4 @@
+import { getWorldStoryActions } from './lib/worldStoryActions'
 import { BrickCountList } from './components/BrickCountList'
 import { LazyBrickGlyph } from './components/LazyBrickGlyph'
 import { createCumulativeManualView } from './lib/manualPresentation'
@@ -63,7 +64,7 @@ import { getEffectiveInventory, loadInventoryOverrides, saveInventoryOverrides }
 import { importAssetPlanIncrementally } from './lib/incrementalAssetImport'
 import { addWorldScenario, startWorldScenario } from './lib/worldScenarioImport'
 import { buildWorldScenarioAiPrompt, parseWorldScenarioAiResolution, worldScenarioAiSystemPrompt } from './lib/worldScenarioAi'
-import { advanceWorldScenarios, getActiveWorldScenarioStages, resolveWorldScenarioAi } from './lib/worldScenarioRuntime'
+import { advanceWorldScenarioDialogue, advanceWorldScenarios, getActiveWorldScenarioStages, resolveWorldScenarioAi } from './lib/worldScenarioRuntime'
 import { beginWorldScenarioPlaytest } from './lib/worldScenarioPlaytest'
 import { clearWorkspaceDraft, loadWorkspaceDraft } from './lib/workspaceDraft'
 import { applyVoxelPlacementSurface, isVoxelDoorStateClear, isVoxelPlantSupported, synchronizePlanVoxelBlockStates, synchronizeVoxelBlockStates, type VoxelPlacementSurface } from './lib/voxelBlockState'
@@ -243,6 +244,7 @@ function App() {
   const [isStabilityLabOpen, setIsStabilityLabOpen] = useState(false)
   const [isTavernOpen, setIsTavernOpen] = useState(false)
   const [isWorldStoryDockOpen, setIsWorldStoryDockOpen] = useState(true)
+  const [storyDockOpenRequest, setStoryDockOpenRequest] = useState(0)
   const [isWorldRosterOpen, setIsWorldRosterOpen] = useState(false)
   const [isTavernAiThinking, setIsTavernAiThinking] = useState(false)
   const [isTavernDirectorThinking, setIsTavernDirectorThinking] = useState(false)
@@ -2681,13 +2683,17 @@ function App() {
 
     workspaceSession.replace({ plan: result.plan, world: result.world, prompt: mode === 'start' ? result.plan.prompt : promptRef.current })
     setScenarioPlaytest(undefined)
-    setSelectedId(result.importedBrickIds.at(-1) ?? '')
-    setSelectedGroupIds(result.importedBrickIds.length > 1 ? result.importedBrickIds : [])
+    setSelectedId(mode === 'start' ? '' : result.importedBrickIds.at(-1) ?? '')
+    setSelectedGroupIds(mode === 'add' && result.importedBrickIds.length > 1 ? result.importedBrickIds : [])
     setSelectedWorldEntityId('')
     setPlacementSession(undefined)
     setWorldEntityPlacement(undefined)
     setAssetImportFrameVersion((version) => version + 1)
     setIsAssetLibraryOpen(false)
+    if (mode === 'start') {
+      setIsWorldStoryDockOpen(true)
+      setStoryDockOpenRequest(request => request + 1)
+    }
     clearGenerationFeedback()
   }
 
@@ -3250,6 +3256,7 @@ function App() {
           {isWorldStoryDockOpen && visibleWorldEntities.length > 0 && !placementSession && !worldEntityPlacement && (
             <Suspense fallback={null}>
               <WorldStoryDock
+                openRequest={storyDockOpenRequest}
                 world={world}
                 bricks={plan.bricks}
                 structures={plan.structures ?? []}
@@ -3268,6 +3275,18 @@ function App() {
                 onReplayDirectorTurn={replayTavernDirectorTurn}
                 onReplayDirectorEntry={replayTavernDirectorTurn}
                 onSelectEntity={selectWorldEntity}
+                onRestartStory={worldScenarios.some(asset => asset.id === world.scenarios[0]?.assetId)
+                  ? () => applyWorldScenario('start', world.scenarios[0].assetId)
+                  : undefined}
+                onStoryAction={(actionId) => {
+                  const action = getWorldStoryActions(worldRef.current).find(candidate => candidate.id === actionId)
+                  if (!action || action.running || !issuePlayerWorldCommand(action.actorId, action.command)) return false
+                  setWorld(current => ({ ...current, paused: false }))
+                  return true
+                }}
+                onAdvanceDialogue={(scenarioId) => setWorld(current => advanceWorldScenarioDialogue(current, scenarioId, { enableAi: llmConfigComplete, plan: planRef.current }))}
+                onResumeWorld={() => setWorld(current => ({ ...current, paused: false }))}
+                onOpenTavern={() => setIsTavernOpen(true)}
                 onClose={() => {
                   setIsContinuousAiDirectorEnabled(false)
                   stopTavernDirector()
@@ -3460,6 +3479,11 @@ function App() {
           <WorldTavern
             world={world}
             llmConfigured={llmConfigComplete}
+            onContinueStory={() => {
+              setStoryDockOpenRequest(request => request + 1)
+              setIsTavernOpen(false)
+              setIsWorldStoryDockOpen(true)
+            }}
             onClearHistory={clearTavernHistory}
             onUpdateScenario={updateWorldScenario}
             onAddScenario={addAuthoredWorldScenario}

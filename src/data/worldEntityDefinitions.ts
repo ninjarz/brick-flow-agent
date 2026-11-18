@@ -6,7 +6,7 @@ export const worldEntityDefinitions: WorldEntityDefinition[] = [
   {
     id: 'knight',
     displayName: '骑士',
-    description: '装备剑盾的近战单位，会接近并攻击附近的敌对单位。',
+    description: '身着酒红纹章战袍与披风、手持剑盾的乐高人仔，会接近并攻击附近敌人。',
     kind: 'actor',
     role: 'melee',
     nameCandidates: ['亚瑟', '罗兰', '莱昂', '加文', '伊文', '布兰'],
@@ -42,7 +42,7 @@ export const worldEntityDefinitions: WorldEntityDefinition[] = [
   {
     id: 'archer',
     displayName: '弓箭手',
-    description: '保持距离进行射击的远程单位，箭矢会受到视线遮挡。',
+    description: '身着森林绿猎装、留辫发并装备弓与箭筒的乐高人仔，保持距离射击，箭矢受视线遮挡。',
     kind: 'actor',
     role: 'ranged',
     nameCandidates: ['艾琳', '罗宾', '希尔', '芬恩', '梅芙', '凯拉'],
@@ -119,7 +119,7 @@ export const worldEntityDefinitions: WorldEntityDefinition[] = [
   {
     id: 'priest',
     displayName: '牧师',
-    description: '支援型单位，会接近倒下的友方并通过祈祷将其复活。',
+    description: '银发、象牙白祭服与深蓝披风的乐高人仔，手持法杖，会接近并复活倒下的友方。',
     kind: 'actor',
     role: 'utility',
     nameCandidates: ['艾登', '塞拉', '米迦勒', '伊莱', '露西亚', '诺亚'],

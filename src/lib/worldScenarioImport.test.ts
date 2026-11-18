@@ -42,10 +42,9 @@ describe('world scenario import', () => {
     })
     expect(result.world.scenarios[1].stages[0].trigger.conditions?.mode).toBe('all')
     expect(result.world.scenarios[1].stages[0].trigger.conditions?.conditions[0]).toMatchObject({
-      type: 'affinity',
-      actorId: result.importedEntityIds[1],
-      targetId: result.importedEntityIds[2],
-      value: 45,
+      type: 'clue',
+      entityId: result.importedEntityIds[1],
+      clueId: 'gray-raven-broken-arrow',
     })
     expect(result.world.scenarios[0].stages.map((stage) => stage.status)).toEqual(['active', 'locked', 'locked'])
     expect(result.world.scenarios[0].stages[0].trigger.actorId).toBe(result.importedEntityIds[1])
@@ -199,17 +198,17 @@ describe('world scenario import', () => {
     expect(envoy.commandQueue).toEqual([])
   })
 
-  it('keeps Eileen optional until enough trust is earned, then lets her support the fight', () => {
+  it('keeps Eileen optional until the shared investigation, then lets her support the fight', () => {
     const result = startWorldScenario(createDefaultWorldScenarios('zh-CN')[0], deterministicIds())!
     const [, rolandId, eileenId, envoyId] = result.importedEntityIds
     const companion = result.world.scenarios.find((scenario) => (
       scenario.assetId === 'scenario-border-tavern-eileen-companion'
     ))!
-    const withAffinity = (affinity: number) => ({
+    const withClue = (hasClue: boolean) => ({
       ...result.world,
       scenarios: [companion],
       events: [{
-        id: `talk-${affinity}`,
+        id: `talk-${hasClue}`,
         timeSeconds: 2,
         type: 'interaction' as const,
         actorId: rolandId,
@@ -217,28 +216,19 @@ describe('world scenario import', () => {
       }],
       narrative: {
         ...result.world.narrative,
-        relationshipsByEntityId: {
-          ...result.world.narrative.relationshipsByEntityId,
-          [rolandId]: {
-            ...result.world.narrative.relationshipsByEntityId[rolandId],
-            [eileenId]: {
-              targetEntityId: eileenId,
-              affinity,
-              encounters: 2,
-              lastEventType: 'interaction' as const,
-              updatedAtSeconds: 2,
-            },
-          },
-        },
+        cluesByEntityId: hasClue ? { [rolandId]: [{
+          id: 'gray-raven-broken-arrow', holderId: rolandId, text: 'Broken arrow', kind: 'fact' as const,
+          confidence: .94, tags: [], learnedAtSeconds: 1,
+        }] } : {},
       },
     })
 
-    const notReady = advanceWorldScenarios(withAffinity(44))
+    const notReady = advanceWorldScenarios(withClue(false))
     expect(notReady.scenarios[0].activeDialogue).toBeUndefined()
     expect(notReady.scenarios[0].stages[0].status).toBe('active')
     expect(notReady.entities.find((entity) => entity.id === eileenId)?.factionId).toBe('neutral')
 
-    let recruited = advanceWorldScenarios(withAffinity(45))
+    let recruited = advanceWorldScenarios(withClue(true))
     expect(recruited.scenarios[0].activeDialogue?.stageId).toBe('scenario-border-tavern-recruit-eileen')
     recruited = finishDialogue(recruited)
     const eileen = recruited.entities.find((entity) => entity.id === eileenId)!

@@ -1,3 +1,6 @@
+import { orderWorldScenariosForEvaluation } from '../lib/worldScenarioScheduler'
+import { getWorldStoryActions } from '../lib/worldStoryActions'
+import { visibleScenarioDialogue } from '../lib/worldScenarioDialogue'
 import { BookOpen, Bot, Bug, ChevronDown, Database, Dice5, Gauge, GlassWater, MessageCircle, RefreshCw, Send, Sparkles, Square, TrendingUp, X } from 'lucide-react'
 import { type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { resizeBottomDockHeight, resizeBottomDockWidth } from '../lib/bottomDockResize'
@@ -29,6 +32,7 @@ import type { BrickStructure, PlacedBrick } from '../types/bricks'
 import type { WorldDirectorTurn, WorldState } from '../types/world'
 
 type WorldStoryDockProps = {
+  openRequest: number
   world: WorldState
   bricks: PlacedBrick[]
   structures: BrickStructure[]
@@ -57,6 +61,11 @@ type WorldStoryDockProps = {
   onReplayDirectorTurn: (turn: WorldDirectorTurn) => Promise<void>
   onReplayDirectorEntry: (turn: WorldDirectorTurn, entryId: string) => Promise<void>
   onSelectEntity: (entityId: string) => void
+  onRestartStory?: () => void
+  onStoryAction: (actionId: string) => boolean
+  onAdvanceDialogue: (scenarioId: string) => void
+  onResumeWorld: () => void
+  onOpenTavern: () => void
   onClose: () => void
 }
 
@@ -73,7 +82,7 @@ const storyActivityOptions: Array<{
 
 const minimumStoryPanelHeight = 220
 const minimumStoryPanelWidth = 420
-const initialStoryPanelHeight = () => Math.min(520, Math.max(minimumStoryPanelHeight, window.innerHeight - 24))
+const initialStoryPanelHeight = () => Math.min(360, Math.max(minimumStoryPanelHeight, window.innerHeight * .34))
 const initialStoryPanelWidth = () => Math.min(760, Math.max(0, window.innerWidth - 24))
 
 type NarrativeReference = {
@@ -286,6 +295,7 @@ const DirectorDebugPanel = ({
 )
 
 export const WorldStoryDock = ({
+  openRequest,
   world,
   bricks,
   structures,
@@ -304,11 +314,17 @@ export const WorldStoryDock = ({
   onReplayDirectorTurn,
   onReplayDirectorEntry,
   onSelectEntity,
+  onRestartStory,
+  onStoryAction,
+  onAdvanceDialogue,
+  onResumeWorld,
+  onOpenTavern,
   onClose,
 }: WorldStoryDockProps) => {
   const { locale, t } = useI18n()
   const debugMode = isDebugModeEnabled(window.location.search)
   const [collapsed, setCollapsed] = useState(false)
+  useEffect(() => { setCollapsed(false) }, [openRequest])
   const [showStoryTools, setShowStoryTools] = useState(false)
   const [activityHost, setActivityHost] = useState<'local' | 'ai'>('local')
   const [focusEntityId, setFocusEntityId] = useState(world.entities.find((entity) => entity.health > 0)?.id ?? '')
@@ -355,7 +371,8 @@ export const WorldStoryDock = ({
   }
   const feed = useMemo(() => buildWorldNarrativeFeed(world, activeTurn).slice(-40), [activeTurn, world])
   const protagonist = useMemo(() => (
-    world.scenarios
+    world.entities.find(entity => entity.controller === 'player')
+    ?? world.scenarios
       .flatMap((scenario) => scenario.stages)
       .map((stage) => stage.trigger.actorId)
       .map((actorId) => world.entities.find((entity) => entity.id === actorId && entity.health > 0))
@@ -390,7 +407,24 @@ export const WorldStoryDock = ({
   ), [world.narrative.directorTurns])
   const scenarioRuntimeIssues = useMemo(() => inspectWorldScenarioRuntime(world), [world])
   const displayedInputTokens = latestContextStats?.inputTokens ?? latestContextStats?.estimatedInputTokens
-  const isScenarioDialoguePlaying = world.scenarios.some((scenario) => Boolean(scenario.activeDialogue || scenario.pendingAi))
+  const isScenarioPlaying = world.scenarios.some(scenario => scenario.enabled !== false && Boolean(scenario.activeDialogue || scenario.pendingAi || scenario.activeTimeline))
+  const primaryStory = orderWorldScenariosForEvaluation(world.scenarios)[0]?.scenario
+  const storyFinished = primaryStory?.enabled !== false && primaryStory?.stages.length && primaryStory.stages.every(stage => stage.status === 'completed')
+  const outcomeBranch = primaryStory?.stages.flatMap(stage => stage.branches ?? []).find(branch => branch.id === primaryStory.outcomeId)
+  const defeatedActor = outcomeBranch?.trigger.eventType === 'defeated'
+    ? world.entities.find(entity => entity.id === outcomeBranch.trigger.targetId)
+    : undefined
+  const recoveredActor = defeatedActor && defeatedActor.health > 0 ? defeatedActor : undefined
+  const outcomeTitle = recoveredActor && outcomeBranch?.id === 'gray-raven-retreat'
+    ? (locale === 'zh-CN' ? '本章结局 · 停战撤退' : 'Chapter outcome · Retreat')
+    : outcomeBranch?.title
+  const storyActions = getWorldStoryActions(world)
+  const dialogueScenario = world.scenarios.find(scenario => scenario.enabled !== false && scenario.activeDialogue)
+  const dialogueStage = dialogueScenario?.stages.find(stage => stage.id === dialogueScenario.activeDialogue?.stageId)
+  const dialogueLines = dialogueScenario?.activeDialogue && dialogueStage ? visibleScenarioDialogue(world, dialogueStage, dialogueScenario.activeDialogue) : []
+  const pendingScenario = world.scenarios.find(scenario => scenario.enabled !== false && (scenario.pendingAi || scenario.activeTimeline))
+  const dialogueIndex = dialogueScenario?.activeDialogue?.lineIndex ?? 0
+  const [actionError, setActionError] = useState('')
   const feedVersion = feed.reduce((total, item) => total + item.blocks.length, 0)
   const streamVersion = activeTurn
     ? (activeTurn.reasoning?.length ?? 0) + (activeTurn.streamPreview?.text.length ?? 0)
@@ -499,7 +533,7 @@ export const WorldStoryDock = ({
 
   const submit = async (retryTurn?: WorldDirectorTurn) => {
     const playerText = (retryTurn?.playerText ?? input).trim()
-    if (!playerText || isDirectorThinking || isScenarioDialoguePlaying || isLlmTesting || !llmConfigured) return
+    if (!playerText || isDirectorThinking || isScenarioPlaying || isLlmTesting || !llmConfigured) return
     const id = retryTurn?.id ?? `director-turn-${Date.now().toString(36)}`
     const createdAtSeconds = retryTurn?.createdAtSeconds ?? world.elapsedSeconds
     const checkpoint = createWorldDirectorCheckpoint(world)
@@ -596,6 +630,8 @@ export const WorldStoryDock = ({
       ))
       if (
         continuousPulseInFlightRef.current
+        || runtime.world.entities.some(entity => entity.controller === 'player'
+          && [entity.activeCommand, ...entity.commandQueue].some(command => command && ['move', 'interact', 'attack', 'revive'].includes(command.type)))
         || !shouldRunContinuousDirectorPulse({
           enabled: runtime.continuousAiDirectorEnabled,
           llmConfigured: runtime.llmConfigured,
@@ -726,7 +762,7 @@ export const WorldStoryDock = ({
       ref={panelRef}
       className={`world-story-dock${collapsed ? ' collapsed' : ''}${isResizing ? ' resizing' : ''}`}
       aria-label={locale === 'zh-CN' ? '剧情对话' : 'Story dialogue'}
-      style={collapsed ? undefined : { width: panelWidth, height: panelHeight, maxWidth: 'none', maxHeight: 'none' }}
+      style={collapsed ? undefined : { width: panelWidth, height: panelHeight, maxWidth: 'calc(100% - 24px)', maxHeight: 'calc(100% - 64px)' }}
     >
       {!collapsed && (
         <div
@@ -753,7 +789,7 @@ export const WorldStoryDock = ({
         <div>
           <BookOpen size={14} />
           <strong>{locale === 'zh-CN' ? '剧情对话' : 'Story dialogue'}</strong>
-          <small>{locale === 'zh-CN' ? `${feed.length} 段` : `${feed.length} passages`}</small>
+          <small>{collapsed && feed.at(-1)?.title ? feed.at(-1)?.title : (locale === 'zh-CN' ? `${feed.length} 段` : `${feed.length} passages`)}</small>
           {debugMode && <em className="world-story-debug-badge"><Bug size={10} />DEBUG</em>}
         </div>
         <span>
@@ -779,6 +815,7 @@ export const WorldStoryDock = ({
                 : (locale === 'zh-CN' ? '关闭' : 'Off')}
             </i>
           </button>
+          <button className="icon-button" type="button" aria-label={t('top.tavern')} title={t('top.tavern')} onClick={onOpenTavern}><BookOpen size={14} /></button>
           <button className="icon-button" type="button" aria-label={collapsed ? (locale === 'zh-CN' ? '展开' : 'Expand') : (locale === 'zh-CN' ? '折叠' : 'Collapse')} onClick={() => setCollapsed((current) => !current)}>
             <ChevronDown size={14} />
           </button>
@@ -800,6 +837,7 @@ export const WorldStoryDock = ({
               <aside className="world-story-identity">
                 {locale === 'zh-CN' ? '你将扮演 ' : 'You are '}
                 <AnnotatedText text={protagonist.name} references={references} onSelectEntity={onSelectEntity} />
+                {protagonist.health <= 0 && <strong>{locale === 'zh-CN' ? '（已倒下）' : ' (fallen)'}</strong>}
                 {locale === 'zh-CN' ? `。${protagonist.description}` : `. ${protagonist.description}`}
               </aside>
             )}
@@ -948,7 +986,7 @@ export const WorldStoryDock = ({
                   <button
                     type="button"
                     className="world-story-replay"
-                    disabled={isDirectorThinking || isScenarioDialoguePlaying || isLlmTesting}
+                    disabled={isDirectorThinking || isScenarioPlaying || isLlmTesting}
                     title={locale === 'zh-CN' ? '恢复到此节点开始前的场景并重新演绎；之后的节点将被撤回' : 'Restore the scene before this node and replay it; later nodes will be rewound'}
                     onClick={() => {
                       const turn = world.narrative.directorTurns.find((candidate) => candidate.id === item.id)
@@ -982,12 +1020,12 @@ export const WorldStoryDock = ({
                 )}
                 {item.blocks.map((block) => (
                   <div className={`world-story-block-row${'execution' in block && block.execution ? ` execution-${block.execution.phase}` : ''}`} key={block.id}>
-                    <FeedBlock block={block} world={world} structures={structures} references={references} locale={locale} disabled={isDirectorThinking || isScenarioDialoguePlaying} onChoose={chooseInput} onSelectEntity={onSelectEntity} />
+                    <FeedBlock block={block} world={world} structures={structures} references={references} locale={locale} disabled={false} onChoose={chooseInput} onSelectEntity={onSelectEntity} />
                     {item.kind === 'director-turn' && world.narrative.directorTurns.some((turn) => turn.id === item.id && turn.checkpoint) && (
                       <button
                         type="button"
                         className="world-story-entry-replay"
-                        disabled={isDirectorThinking || isScenarioDialoguePlaying || isLlmTesting}
+                        disabled={isDirectorThinking || isScenarioPlaying || isLlmTesting}
                         aria-label={'execution' in block && block.execution?.retryable ? (locale === 'zh-CN' ? '重试此事件' : 'Retry this event') : (locale === 'zh-CN' ? '重播到此事件' : 'Replay through this event')}
                         title={`${'execution' in block && block.execution?.retryable ? (locale === 'zh-CN' ? '从检查点恢复并重试' : 'Restore the checkpoint and retry') : (locale === 'zh-CN' ? '恢复场景并重播到此事件' : 'Restore the scene and replay through this event')}${'execution' in block && block.execution?.phase === 'failed' ? ` · ${getWorldDirectorExecutionFailureReason(block) ?? ''}` : ''}`}
                         onClick={() => {
@@ -1024,7 +1062,7 @@ export const WorldStoryDock = ({
                     {item.kind === 'director-turn' && item.status === 'failed' && (
                       <button
                         type="button"
-                        disabled={isDirectorThinking || isScenarioDialoguePlaying || isLlmTesting || !llmConfigured}
+                        disabled={isDirectorThinking || isScenarioPlaying || isLlmTesting || !llmConfigured}
                         onClick={() => {
                           const retryTurn = world.narrative.directorTurns.find((turn) => turn.id === item.id)
                           if (retryTurn) void submit(retryTurn)
@@ -1062,6 +1100,32 @@ export const WorldStoryDock = ({
             </div>
           )}
 
+          {Boolean(storyFinished) && <section className="world-story-outcome" role="status">
+            <div className="world-story-outcome-summary">
+              <strong>{outcomeTitle ?? (locale === 'zh-CN' ? '本章完成' : 'Chapter complete')}</strong>
+              {recoveredActor && <span>{locale === 'zh-CN' ? `${recoveredActor.name}已复活` : `${recoveredActor.name} has been revived`}</span>}
+            </div>
+            {onRestartStory && <button type="button" disabled={isDirectorThinking || isScenarioPlaying} onClick={onRestartStory}><RefreshCw size={12} />{locale === 'zh-CN' ? '重新挑战' : 'Play again'}</button>}
+          </section>}
+          {(storyActions.length > 0 || dialogueScenario || pendingScenario) && <section className="world-story-actions" aria-label={locale === 'zh-CN' ? '当前可做' : 'Available actions'}>
+            {pendingScenario && <span role="status">{pendingScenario.pendingAi
+              ? (locale === 'zh-CN' ? '正在构思回应…' : 'Preparing a response…')
+              : (locale === 'zh-CN' ? '剧情行动执行中…' : 'Story actions are playing…')}</span>}
+            {dialogueScenario && <>
+              <span>{locale === 'zh-CN' ? `对话 ${dialogueIndex + 1}/${dialogueLines.length}` : `Dialogue ${dialogueIndex + 1}/${dialogueLines.length}`}</span>
+              <button type="button" onClick={() => { shouldAutoScrollRef.current = true; onAdvanceDialogue(dialogueScenario.id) }}>
+                {locale === 'zh-CN' ? (dialogueIndex + 1 < dialogueLines.length ? '下一句' : '继续') : (dialogueIndex + 1 < dialogueLines.length ? 'Next line' : 'Continue')}
+              </button>
+            </>}
+            {storyActions.map(action => <button key={action.id} type="button" disabled={isDirectorThinking || action.running}
+              title={`${action.actorName} → ${action.targetName}`}
+              onClick={() => {
+                shouldAutoScrollRef.current = true
+                setActionError(onStoryAction(action.id) ? '' : (locale === 'zh-CN' ? '现场情况已变化，请重新选择行动。' : 'The scene changed. Choose an action again.'))
+              }}>{action.running ? (locale === 'zh-CN' ? `${action.actorName}正在行动…` : `${action.actorName} is acting…`) : action.label}</button>)}
+            {world.paused && storyActions.some(action => action.running) && <button type="button" onClick={onResumeWorld}>{locale === 'zh-CN' ? '继续行动' : 'Resume action'}</button>}
+            {actionError && <span role="status">{actionError}</span>}
+          </section>}
           <div className="world-story-composer">
             <button type="button" className={showStoryTools ? 'active' : ''} aria-expanded={showStoryTools} onClick={() => setShowStoryTools((current) => !current)}>
               <Sparkles size={14} />{locale === 'zh-CN' ? '剧情灵感' : 'Story prompts'}
@@ -1070,12 +1134,12 @@ export const WorldStoryDock = ({
               <form onSubmit={(event) => { event.preventDefault(); void submit() }}>
                 <textarea
                   ref={inputRef}
+                  aria-label={locale === 'zh-CN' ? '你的下一步行动' : 'Your next action'}
                   rows={2}
                   maxLength={800}
                   value={input}
-                  disabled={isDirectorThinking || isScenarioDialoguePlaying || isLlmTesting}
-                  placeholder={isScenarioDialoguePlaying
-                    ? (locale === 'zh-CN' ? '预设剧情正在演绎，结束后可继续……' : 'An authored scene is playing. Continue when it finishes…')
+                  placeholder={isScenarioPlaying
+                    ? (locale === 'zh-CN' ? '可以先写下一步，当前演出结束后发送……' : 'Draft your next action while the dialogue plays…')
                     : (locale === 'zh-CN' ? '让角色行动、交谈，或改变故事走向……' : 'Let characters act, speak, or change the story…')}
                   onChange={(event) => setInput(event.target.value)}
                   onKeyDown={(event) => {
@@ -1086,14 +1150,14 @@ export const WorldStoryDock = ({
                 />
                 {isDirectorThinking
                   ? <button type="button" className="stop" onClick={onStopDirector}><Square size={14} />{locale === 'zh-CN' ? '停止' : 'Stop'}</button>
-                  : <button type="submit" disabled={!input.trim() || isScenarioDialoguePlaying || isLlmTesting}><Send size={14} />{isLlmTesting
+                  : <button type="submit" disabled={!input.trim() || isScenarioPlaying || isLlmTesting}><Send size={14} />{isLlmTesting
                       ? (locale === 'zh-CN' ? '测试中' : 'Testing')
-                      : isScenarioDialoguePlaying
+                      : isScenarioPlaying
                         ? (locale === 'zh-CN' ? '演绎中' : 'Playing')
                         : (locale === 'zh-CN' ? '发送' : 'Send')}</button>}
               </form>
             ) : (
-              <p className="world-story-config-hint">{locale === 'zh-CN' ? '配置 LLM 后可用自然语言推进剧情；剧情灵感仍可使用本地规则。' : 'Configure an LLM for freeform direction; local story prompts remain available.'}</p>
+              <p className="world-story-config-hint">{locale === 'zh-CN' ? '上方行动可直接推进剧情。配置 LLM 后，还可以自由描述行动。' : 'Configure an LLM for freeform direction; local story prompts remain available.'}</p>
             )}
           </div>
         </div>

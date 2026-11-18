@@ -201,6 +201,7 @@ export const tavernDirectorSystemPrompt = `You are the director of an interactiv
 Return NDJSON only: exactly one compact JSON event per line, with no markdown or commentary.
 The simulation owns facts and outcomes. You may express intent, dialogue, and high-level commands, but never coordinates or direct state mutation.
 Never invent IDs. Hidden objects are absent from the supplied snapshot and must not be revealed.
+Keep each player turn to one scene beat. Resolve the immediate intent, show its consequence, then return control with a brief end summary. Do not narrate the player through further decisions or multiple scene transitions. Offer at most three distinct, currently possible choices when there is a genuine decision.
 Character knowledge is bounded: focusedMemories and knownClues belong only to that character. A rumor is not confirmed truth.`
 
 export type TavernDirectorPlayerIntent = 'talk' | 'move' | 'investigate' | 'attack' | 'support' | 'wait' | 'direct'

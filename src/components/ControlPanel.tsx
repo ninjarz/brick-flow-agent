@@ -1,3 +1,4 @@
+import { WorldEntityGlyph } from './WorldEntityGlyph'
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { BookOpen, Box, Download, ImageUp, Plus, RotateCcw, Sparkles, Upload, X } from 'lucide-react'
 import { brickDefinitions, getDefaultBrickColor } from '../data/basicBricks'
@@ -338,9 +339,7 @@ export const ControlPanel = ({
                 title={t('control.addNpc', { name: definition.displayName })}
                 onClick={() => onAddWorldEntity(definition.id)}
               >
-                <span className={`npc-catalog-glyph ${definition.role}`} aria-hidden="true">
-                  {definition.id === 'knight' ? '♞' : definition.id === 'archer' ? '➶' : definition.id === 'priest' ? '✚' : '⚙'}
-                </span>
+                <WorldEntityGlyph definitionId={definition.id} />
                 <span className="part-copy">
                   <strong>{definition.displayName}</strong>
                   <small>{definition.description}</small>

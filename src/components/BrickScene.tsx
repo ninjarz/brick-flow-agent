@@ -1,3 +1,4 @@
+import { WorldEntityModel } from './scene/WorldEntityModel'
 import { CameraKeyboardNavigation } from './scene/CameraKeyboardNavigation'
 import { LocalOrbitTarget } from './scene/LocalOrbitTarget'
 import { ManualCameraFollow } from './scene/ManualCameraFollow'
@@ -16,7 +17,7 @@ import { buildLDrawSceneBatches, clearPreparedLDrawScenes, prepareLDrawSceneBatc
 import { Billboard, Edges, Html, Line, OrbitControls, Text } from '@react-three/drei'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
-import { memo, type CSSProperties, type ReactNode, type RefCallback, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, memo, type CSSProperties, type ReactNode, type RefCallback, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Box3, BufferGeometry, DoubleSide, Float32BufferAttribute, Matrix4, Object3D, Vector3, type DirectionalLight, type Group, type InstancedMesh } from 'three'
 import { brickById, colorHex, colorOpacity } from '../data/basicBricks'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
@@ -2172,117 +2173,6 @@ const VoxelOptimizedScene = memo(function VoxelOptimizedSceneLayer({
   )
 })
 
-const WorldEntityMaterial = ({ color, ghost }: { color: string; ghost: boolean }) => (
-  <meshStandardMaterial
-    color={ghost ? '#22d3ee' : color}
-    roughness={0.48}
-    metalness={0.03}
-    transparent={ghost}
-    opacity={ghost ? 0.38 : 1}
-    depthWrite={!ghost}
-  />
-)
-
-const HumanWorldEntityMesh = ({ entity, ghost }: { entity: WorldEntity; ghost: boolean }) => {
-  const isArcher = entity.definitionId === 'archer'
-  const isPriest = entity.definitionId === 'priest'
-  const factionColor = entity.factionId === 'red'
-    ? '#dc2626'
-    : entity.factionId === 'blue' ? '#2563eb' : '#64748b'
-  const tunicColor = isPriest
-    ? entity.factionId === 'red' ? '#fca5a5' : entity.factionId === 'blue' ? '#bfdbfe' : '#f8fafc'
-    : entity.factionId === 'neutral' && isArcher ? '#15803d' : factionColor
-  return (
-    <group>
-      {[-0.32, 0.32].map((x) => (
-        <mesh key={x} position={[x, 0.7, 0]} castShadow={!ghost}>
-          <boxGeometry args={[0.48, 1.4, 0.68]} />
-          <WorldEntityMaterial color="#334155" ghost={ghost} />
-        </mesh>
-      ))}
-      <mesh position={[0, 2.1, 0]} castShadow={!ghost}>
-        <boxGeometry args={[1.55, 1.45, 0.82]} />
-        <WorldEntityMaterial color={tunicColor} ghost={ghost} />
-      </mesh>
-      <mesh position={[0, 3.35, 0]} castShadow={!ghost}>
-        <cylinderGeometry args={[0.53, 0.53, 0.9, 16]} />
-        <WorldEntityMaterial color="#f1c27d" ghost={ghost} />
-      </mesh>
-      <mesh position={[0, 3.92, 0]} castShadow={!ghost}>
-        <cylinderGeometry args={[0.62, 0.52, 0.34, 16]} />
-        <WorldEntityMaterial color={isArcher ? '#166534' : isPriest ? '#7e22ce' : '#94a3b8'} ghost={ghost} />
-      </mesh>
-      {isArcher ? (
-        <group position={[0.95, 2.35, 0]} rotation={[Math.PI / 2, 0, 0]}>
-          <mesh>
-            <torusGeometry args={[0.72, 0.055, 8, 20, Math.PI * 1.5]} />
-            <WorldEntityMaterial color="#92400e" ghost={ghost} />
-          </mesh>
-          <mesh position={[-0.18, 0, 0]} rotation={[0, 0, -0.55]}>
-            <cylinderGeometry args={[0.025, 0.025, 1.25, 6]} />
-            <WorldEntityMaterial color="#e2e8f0" ghost={ghost} />
-          </mesh>
-        </group>
-      ) : isPriest ? (
-        <>
-          <group position={[0.95, 2.25, 0]}>
-            <mesh>
-              <cylinderGeometry args={[0.065, 0.065, 2.8, 8]} />
-              <WorldEntityMaterial color="#92400e" ghost={ghost} />
-            </mesh>
-            <mesh position={[0, 1.18, 0]}>
-              <boxGeometry args={[0.72, 0.12, 0.12]} />
-              <WorldEntityMaterial color="#fbbf24" ghost={ghost} />
-            </mesh>
-            <mesh position={[0, 1.18, 0]}>
-              <boxGeometry args={[0.12, 0.72, 0.12]} />
-              <WorldEntityMaterial color="#fbbf24" ghost={ghost} />
-            </mesh>
-          </group>
-          <mesh position={[0, 4.2, 0]} rotation={[Math.PI / 2, 0, 0]}>
-            <torusGeometry args={[0.62, 0.055, 8, 24]} />
-            <WorldEntityMaterial color="#fde68a" ghost={ghost} />
-          </mesh>
-        </>
-      ) : (
-        <>
-          <mesh position={[1.02, 2.15, 0]} rotation={[0, 0, -0.18]}>
-            <boxGeometry args={[0.12, 1.75, 0.18]} />
-            <WorldEntityMaterial color="#cbd5e1" ghost={ghost} />
-          </mesh>
-          <mesh position={[-0.98, 2.05, 0]} rotation={[Math.PI / 2, 0, 0]}>
-            <cylinderGeometry args={[0.58, 0.58, 0.14, 20]} />
-            <WorldEntityMaterial color="#64748b" ghost={ghost} />
-          </mesh>
-        </>
-      )}
-    </group>
-  )
-}
-
-const CatapultWorldEntityMesh = ({ entity, ghost }: { entity: WorldEntity; ghost: boolean }) => (
-  <group>
-    {[-1.45, 1.45].flatMap((x) => [-1.7, 1.7].map((z) => (
-      <mesh key={`${x}:${z}`} position={[x, 0.82, z]} rotation={[0, 0, Math.PI / 2]} castShadow={!ghost}>
-        <cylinderGeometry args={[0.72, 0.72, 0.42, 16]} />
-        <WorldEntityMaterial color="#334155" ghost={ghost} />
-      </mesh>
-    )))}
-    <mesh position={[0, 1.15, 0]} castShadow={!ghost}>
-      <boxGeometry args={[3.2, 0.72, 4.7]} />
-      <WorldEntityMaterial color={entity.factionId === 'red' ? '#b91c1c' : entity.factionId === 'blue' ? '#1d4ed8' : '#92400e'} ghost={ghost} />
-    </mesh>
-    <mesh position={[0, 2.25, -0.2]} rotation={[-0.7, 0, 0]} castShadow={!ghost}>
-      <boxGeometry args={[0.42, 0.42, 4.3]} />
-      <WorldEntityMaterial color="#78350f" ghost={ghost} />
-    </mesh>
-    <mesh position={[0, 3.5, 1.25]} castShadow={!ghost}>
-      <sphereGeometry args={[0.58, 14, 14]} />
-      <WorldEntityMaterial color="#64748b" ghost={ghost} />
-    </mesh>
-  </group>
-)
-
 const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementActive = false, paused = false, elapsedSeconds = 0, onSelect }: {
   entity: WorldEntity
   ghost?: boolean
@@ -2344,14 +2234,14 @@ const WorldEntityMesh = ({ entity, ghost = false, selected = false, placementAct
         onSelect(entity.id)
       }}
     >
-      {entity.definitionId === 'catapult'
-        ? <CatapultWorldEntityMesh entity={entity} ghost={ghost} />
-        : <HumanWorldEntityMesh entity={entity} ghost={ghost} />}
+      <WorldEntityModel entity={entity} ghost={ghost} paused={paused} />
       {!ghost && (
         <Billboard position={[0, definition.visual.heightStuds + 0.65, 0]} follow>
+          <Suspense fallback={null}>
           <Text position={[0, 0.25, 0]} fontSize={0.3} color="#0f172a" anchorY="bottom">
             {entity.name}
           </Text>
+          </Suspense>
           <mesh position={[0, 0, 0]} renderOrder={10}>
             <planeGeometry args={[1.65, 0.16]} />
             <meshBasicMaterial color="#020617" transparent opacity={0.92} depthTest={false} depthWrite={false} />
@@ -2708,6 +2598,7 @@ const StabilityOverlay = ({ analysis }: { analysis: StabilityAnalysis }) => {
           <meshBasicMaterial color={markerColor} transparent opacity={0.68} depthTest={false} />
         </mesh>
       )}
+      <Suspense fallback={null}>
       <Text
         position={[center.x, center.y + 0.34, center.z]}
         fontSize={0.2}
@@ -2717,6 +2608,7 @@ const StabilityOverlay = ({ analysis }: { analysis: StabilityAnalysis }) => {
       >
         COM
       </Text>
+      </Suspense>
     </group>
   )
 }
@@ -3136,9 +3028,11 @@ export const BrickScene = ({
         />
         {xrayDebug && resolvedStabilityAnalysis && <StabilityOverlay analysis={resolvedStabilityAnalysis} />}
         {bricks.length === 0 && (
+          <Suspense fallback={null}>
           <Text position={[0, 1.2, 0]} fontSize={0.35} color="#475569">
             {t('scene.empty')}
           </Text>
+          </Suspense>
         )}
       </group>
       {!placementActive && keyboardEnabled && (

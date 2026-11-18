@@ -20,6 +20,7 @@ type WorldTavernProps = {
   bricks: PlacedBrick[]
   onSetTargetVisibility: (target: WorldState['hiddenTargets'][number], visible: boolean) => void
   onPlaytestStage: (scenario: WorldScenarioRuntime, stageId: string) => void
+  onContinueStory: () => void
   onClose: () => void
 }
 
@@ -42,10 +43,12 @@ export const WorldTavern = ({
   bricks,
   onSetTargetVisibility,
   onPlaytestStage,
+  onContinueStory,
   onClose,
 }: WorldTavernProps) => {
   const { locale, t } = useI18n()
   const [selectedEntityId, setSelectedEntityId] = useState(world.entities[0]?.id ?? '')
+  const [view, setView] = useState<'story' | 'character' | 'history' | 'author'>('story')
   const [confirmClear, setConfirmClear] = useState(false)
   const [chronicleScope, setChronicleScope] = useState<'world' | 'character'>('world')
   const [scenarioEditSession, setScenarioEditSession] = useState<ScenarioEditSession | null>(null)
@@ -140,7 +143,7 @@ export const WorldTavern = ({
             <p>{t('tavern.description')}</p>
           </div>
           <div className="tavern-header-actions">
-            <button
+            {view === 'history' && <button
               type="button"
               disabled={world.events.length === 0 && world.narrative.stories.length === 0 && world.narrative.directorTurns.length === 0}
               onClick={() => {
@@ -154,7 +157,7 @@ export const WorldTavern = ({
             >
               <Trash2 size={14} />
               {confirmClear ? t('tavern.clearConfirmAction') : t('tavern.clearHistory')}
-            </button>
+            </button>}
             <button
               className={`icon-button tavern-close-button${confirmCloseEditor ? ' confirm' : ''}`}
               type="button"
@@ -186,7 +189,7 @@ export const WorldTavern = ({
                 key={entity.id}
                 type="button"
                 className={entity.id === selectedEntityId ? 'active' : ''}
-                onClick={() => setSelectedEntityId(entity.id)}
+                onClick={() => { setSelectedEntityId(entity.id); setView('character') }}
               >
                 <span>{entity.name.slice(0, 1)}</span>
                 <div>
@@ -198,8 +201,28 @@ export const WorldTavern = ({
             {world.entities.length === 0 && <p className="muted">{t('tavern.noCharacters')}</p>}
           </aside>
 
-          <div className={`tavern-content${editingScenarioId ? ' is-authoring' : ''}`}>
-            <section className="tavern-flow-toolbar">
+          <div className={`tavern-content tavern-view-${view}${editingScenarioId ? ' is-authoring' : ''}`}>
+            <nav className="tavern-navigation" aria-label={locale === 'zh-CN' ? '酒馆内容' : 'Tavern sections'}>
+              {([
+                ['story', '当前剧情', 'Story'],
+                ['character', '角色档案', 'Characters'],
+                ['history', '事件记录', 'History'],
+                ['author', '编辑剧情', 'Author'],
+              ] as const).map(([id, zh, en]) => (
+                <button key={id} type="button" aria-pressed={view === id}
+                  onClick={() => { setView(id); setConfirmClear(false) }}>{locale === 'zh-CN' ? zh : en}</button>
+              ))}
+            </nav>
+            {view === 'story' && <section className="tavern-story-intro">
+              <div>
+                <h3>{locale === 'zh-CN' ? '接下来做什么' : 'What happens next'}</h3>
+                <p>{locale === 'zh-CN' ? '查看当前目标，在剧情对话中与角色交谈或采取行动。' : 'Review your objective, then talk or act in the story dialogue.'}</p>
+              </div>
+              <button type="button" className="primary" disabled={livingCount === 0} onClick={onContinueStory}>
+                <Play size={14} />{locale === 'zh-CN' ? '进入剧情对话' : 'Open story dialogue'}
+              </button>
+            </section>}
+            {view === 'author' && <section className="tavern-flow-toolbar">
               <div>
                 <strong><BookOpen size={15} />{locale === 'zh-CN' ? `剧情流程 ${world.scenarios.length} 条` : `${world.scenarios.length} story flows`}</strong>
                 <small>{locale === 'zh-CN'
@@ -242,8 +265,8 @@ export const WorldTavern = ({
               >
                 <Plus size={14} />{locale === 'zh-CN' ? '新建流程' : 'New flow'}
               </button>
-            </section>
-            {world.scenarios.map((scenario) => {
+            </section>}
+            {(view === 'story' || view === 'author') && world.scenarios.map((scenario) => {
               const completedCount = scenario.stages.filter((stage) => stage.status === 'completed').length
               const hasActiveNode = scenario.stages.some((stage) => stage.status === 'active')
               const runtimeStatus = getWorldScenarioRuntimeStatus(scenario, editingScenarioId === scenario.id)
@@ -275,101 +298,103 @@ export const WorldTavern = ({
                     <div className="tavern-quest-actions">
                       <span className={`tavern-flow-status${scenario.enabled === false ? ' paused' : hasActiveNode ? ' active' : ' completed'}`}>{flowStatus}</span>
                       <strong>{t('tavern.questProgress', { completed: completedCount, total: scenario.stages.length })}</strong>
-                      <button
-                        type="button"
-                        disabled={performanceActive || !hasActiveNode || Boolean(scenarioEditSession)}
-                        title={performanceActive
-                          ? (locale === 'zh-CN' ? '演出结束后才能暂停' : 'Pause after the performance')
-                          : undefined}
-                        onClick={() => onUpdateScenario({
-                          ...scenario,
-                          enabled: scenario.enabled === false,
-                          ...(scenario.enabled === false
-                            ? { processedEventIds: world.events.map((event) => event.id).slice(-500) }
-                            : {}),
-                        })}
-                      >
-                        {scenario.enabled === false ? <Play size={13} /> : <Pause size={13} />}
-                        {scenario.enabled === false
-                          ? (locale === 'zh-CN' ? '启用' : 'Enable')
-                          : (locale === 'zh-CN' ? '暂停' : 'Pause')}
-                      </button>
-                      {!hasActiveNode && (
+                      {view === 'author' && <>
+                        <button
+                          type="button"
+                          disabled={performanceActive || !hasActiveNode || Boolean(scenarioEditSession)}
+                          title={performanceActive
+                            ? (locale === 'zh-CN' ? '演出结束后才能暂停' : 'Pause after the performance')
+                            : undefined}
+                          onClick={() => onUpdateScenario({
+                            ...scenario,
+                            enabled: scenario.enabled === false,
+                            ...(scenario.enabled === false
+                              ? { processedEventIds: world.events.map((event) => event.id).slice(-500) }
+                              : {}),
+                          })}
+                        >
+                          {scenario.enabled === false ? <Play size={13} /> : <Pause size={13} />}
+                          {scenario.enabled === false
+                            ? (locale === 'zh-CN' ? '启用' : 'Enable')
+                            : (locale === 'zh-CN' ? '暂停' : 'Pause')}
+                        </button>
+                        {!hasActiveNode && (
+                          <button
+                            type="button"
+                            disabled={Boolean(scenarioEditSession)}
+                            onClick={() => onUpdateScenario(resetWorldScenarioFlow(
+                              scenario,
+                              world.events.map((event) => event.id),
+                            ))}
+                          >
+                            <RotateCcw size={13} />{locale === 'zh-CN' ? '重新开始' : 'Restart'}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className={editingScenarioId === scenario.id ? 'active' : ''}
+                          disabled={performanceActive || (Boolean(scenarioEditSession) && editingScenarioId !== scenario.id)}
+                          title={performanceActive
+                            ? (locale === 'zh-CN' ? '对话演出结束后可编辑' : 'Editable after dialogue finishes')
+                            : scenarioEditSession && editingScenarioId !== scenario.id
+                              ? (locale === 'zh-CN' ? '请先保存或取消当前编辑' : 'Save or cancel the current edit first')
+                              : undefined}
+                          onClick={() => {
+                            if (editingScenarioId === scenario.id) return
+                            beginScenarioEditing(scenario)
+                          }}
+                        >
+                          <Pencil size={13} />{editingScenarioId === scenario.id
+                            ? (locale === 'zh-CN' ? '编辑中' : 'Editing')
+                            : (locale === 'zh-CN' ? '创作' : 'Author')}
+                        </button>
                         <button
                           type="button"
                           disabled={Boolean(scenarioEditSession)}
-                          onClick={() => onUpdateScenario(resetWorldScenarioFlow(
-                            scenario,
-                            world.events.map((event) => event.id),
-                          ))}
+                          title={locale === 'zh-CN' ? '复制为独立流程' : 'Duplicate as an independent flow'}
+                          onClick={() => {
+                            const copied = duplicateWorldScenarioFlow(
+                              scenario,
+                              world.scenarios,
+                              world.events.map((event) => event.id),
+                              locale,
+                            )
+                            onAddScenario(copied)
+                            setScenarioEditSession({
+                              baseline: copied,
+                              draft: copied,
+                              resumeAfterEditing: false,
+                              past: [],
+                              future: [],
+                            })
+                            setConfirmCloseEditor(false)
+                          }}
                         >
-                          <RotateCcw size={13} />{locale === 'zh-CN' ? '重新开始' : 'Restart'}
+                          <Copy size={13} />{locale === 'zh-CN' ? '复制' : 'Duplicate'}
                         </button>
-                      )}
-                      <button
-                        type="button"
-                        className={editingScenarioId === scenario.id ? 'active' : ''}
-                        disabled={performanceActive || (Boolean(scenarioEditSession) && editingScenarioId !== scenario.id)}
-                        title={performanceActive
-                          ? (locale === 'zh-CN' ? '对话演出结束后可编辑' : 'Editable after dialogue finishes')
-                          : scenarioEditSession && editingScenarioId !== scenario.id
-                            ? (locale === 'zh-CN' ? '请先保存或取消当前编辑' : 'Save or cancel the current edit first')
-                            : undefined}
-                        onClick={() => {
-                          if (editingScenarioId === scenario.id) return
-                          beginScenarioEditing(scenario)
-                        }}
-                      >
-                        <Pencil size={13} />{editingScenarioId === scenario.id
-                          ? (locale === 'zh-CN' ? '编辑中' : 'Editing')
-                          : (locale === 'zh-CN' ? '创作' : 'Author')}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={Boolean(scenarioEditSession)}
-                        title={locale === 'zh-CN' ? '复制为独立流程' : 'Duplicate as an independent flow'}
-                        onClick={() => {
-                          const copied = duplicateWorldScenarioFlow(
-                            scenario,
-                            world.scenarios,
-                            world.events.map((event) => event.id),
-                            locale,
-                          )
-                          onAddScenario(copied)
-                          setScenarioEditSession({
-                            baseline: copied,
-                            draft: copied,
-                            resumeAfterEditing: false,
-                            past: [],
-                            future: [],
-                          })
-                          setConfirmCloseEditor(false)
-                        }}
-                      >
-                        <Copy size={13} />{locale === 'zh-CN' ? '复制' : 'Duplicate'}
-                      </button>
-                      <button
-                        type="button"
-                        className={confirmDeleteScenarioId === scenario.id ? 'danger confirm' : 'danger'}
-                        disabled={performanceActive || Boolean(scenarioEditSession)}
-                        title={performanceActive ? (locale === 'zh-CN' ? '演出结束后才能删除' : 'Delete after the performance') : undefined}
-                        onClick={() => {
-                          if (confirmDeleteScenarioId !== scenario.id) {
-                            setConfirmDeleteScenarioId(scenario.id)
-                            return
-                          }
-                          onDeleteScenario(scenario.id)
-                          setConfirmDeleteScenarioId('')
-                        }}
-                      >
-                        <Trash2 size={13} />{confirmDeleteScenarioId === scenario.id
-                          ? (locale === 'zh-CN' ? '确认删除' : 'Confirm')
-                          : (locale === 'zh-CN' ? '删除' : 'Delete')}
-                      </button>
+                        <button
+                          type="button"
+                          className={confirmDeleteScenarioId === scenario.id ? 'danger confirm' : 'danger'}
+                          disabled={performanceActive || Boolean(scenarioEditSession)}
+                          title={performanceActive ? (locale === 'zh-CN' ? '演出结束后才能删除' : 'Delete after the performance') : undefined}
+                          onClick={() => {
+                            if (confirmDeleteScenarioId !== scenario.id) {
+                              setConfirmDeleteScenarioId(scenario.id)
+                              return
+                            }
+                            onDeleteScenario(scenario.id)
+                            setConfirmDeleteScenarioId('')
+                          }}
+                        >
+                          <Trash2 size={13} />{confirmDeleteScenarioId === scenario.id
+                            ? (locale === 'zh-CN' ? '确认删除' : 'Confirm')
+                            : (locale === 'zh-CN' ? '删除' : 'Delete')}
+                        </button>
+                      </>}
                     </div>
                   </header>
                   <ol>
-                    {scenario.stages.map((stage) => (
+                    {scenario.stages.filter(stage => view === 'author' || stage.status === 'active').map((stage) => (
                       <li key={stage.id} className={stage.status}>
                         {stage.status === 'completed'
                           ? <CheckCircle2 size={17} />
@@ -412,7 +437,7 @@ export const WorldTavern = ({
                     </div>
                   )}
                   {scenario.outcomeId && <div className="tavern-scenario-outcome">{locale === 'zh-CN' ? '流程结果' : 'Flow result'} · {scenario.stages.flatMap((stage) => stage.branches ?? []).find((branch) => branch.id === scenario.outcomeId)?.title ?? scenario.outcomeId}</div>}
-                  {editingScenarioId === scenario.id && !scenario.activeDialogue && (
+                  {view === 'author' && editingScenarioId === scenario.id && !scenario.activeDialogue && (
                     <>
                       <div className="scenario-edit-session-bar">
                         <div>
@@ -488,7 +513,8 @@ export const WorldTavern = ({
                 </section>
               )
             })}
-            <section className="tavern-memory-panel">
+            {view === 'story' && world.scenarios.length === 0 && <p className="tavern-empty-state">{locale === 'zh-CN' ? '还没有预设剧情。你可以在剧情对话中自由行动，或在“编辑剧情”中新建流程。' : 'No authored story yet. Act freely in the story dialogue or create a flow in Author.'}</p>}
+            {view === 'character' && <section className="tavern-memory-panel">
               <h3>{selectedEntity ? t('tavern.memoriesOf', { name: selectedEntity.name }) : t('tavern.memories')}</h3>
               {selectedEntity && (
                 <div className="tavern-character-summary">
@@ -533,9 +559,9 @@ export const WorldTavern = ({
                 })}
                 {selectedRelationships.length === 0 && <p className="muted">{t('tavern.noRelationships')}</p>}
               </div>
-            </section>
+            </section>}
 
-            <section className="tavern-chronicle">
+            {view === 'history' && <section className="tavern-chronicle">
               <header className="tavern-section-header">
                 <h3><BookOpen size={16} />{t('tavern.chronicle')}</h3>
                 <div className="tavern-scope-toggle">
@@ -549,7 +575,7 @@ export const WorldTavern = ({
                 ))}
               </ol>
               {visibleEvents.length === 0 && <p className="muted">{t('tavern.noEvents')}</p>}
-            </section>
+            </section>}
 
           </div>
         </div>

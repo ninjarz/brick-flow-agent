@@ -1,0 +1,31 @@
+import { expect, test } from '@playwright/test'
+
+test('NPC catalog previews use the same native figures as the scene', async ({ page }, testInfo) => {
+  await page.addInitScript(() => localStorage.setItem('brick-flow-agent:locale:v1', 'zh-CN'))
+  await page.goto('./')
+  await page.locator('select').filter({ has: page.locator('option[value="npc"]') }).selectOption('npc')
+  await expect(page.locator('.npc-catalog-glyph img')).toHaveCount(4)
+  await expect.poll(() => page.locator('.npc-catalog-glyph img').evaluateAll(images => images.every(image => (image as HTMLImageElement).naturalWidth > 0))).toBe(true)
+  await page.screenshot({ path: testInfo.outputPath('npc-catalog.png') })
+  await page.getByLabel('素材库', { exact: true }).click()
+  await page.locator('.asset-kind-tabs button').nth(1).click()
+  page.on('dialog', dialog => dialog.accept())
+  await page.locator('.scenario-card').first().getByRole('button', { name: '开始场景', exact: true }).click()
+  await page.locator('.world-story-dock').getByLabel('关闭', { exact: true }).click()
+  await expect(page.locator('canvas').first()).toBeVisible()
+  await page.waitForTimeout(1000)
+  await page.screenshot({ path: testInfo.outputPath('npc-scene.png') })
+})
+
+test('a missing remote NPC label font does not suspend the scene', async ({ page, context }) => {
+  await context.route(/https:\/\/.*(?:unicode-font-resolver|fonts\.gstatic\.com)/, route => route.abort())
+  await page.addInitScript(() => localStorage.setItem('brick-flow-agent:locale:v1', 'zh-CN'))
+  await page.goto('./')
+  page.on('dialog', dialog => dialog.accept())
+  await page.getByLabel('素材库', { exact: true }).click()
+  await page.locator('.asset-kind-tabs button').nth(1).click()
+  await page.locator('.scenario-card').first().getByRole('button', { name: '开始场景', exact: true }).click()
+  await expect(page.locator('.viewer canvas')).toBeVisible()
+  await expect(page.locator('.viewer .scene-loading')).toHaveCount(0)
+  await expect(page.locator('.world-story-actions').getByRole('button', { name: '询问北路斥候', exact: true })).toBeVisible()
+})

@@ -392,13 +392,13 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
       processedEventIds: [],
       priority: 60,
       mutexGroup: 'gray-raven-story',
-      authoringVersion: 3,
+      authoringVersion: 4,
       stages: [{
         id: 'scenario-border-tavern-recruit-eileen',
         title: zh ? '邀请艾琳同行' : 'Invite Eileen to Join',
         description: zh
-          ? '罗兰对艾琳的好感达到 45 后，再与她交谈。'
-          : 'Talk to Eileen again after Roland’s affinity toward her reaches 45.',
+          ? '一起查明断箭上的线索后，再邀请艾琳同行。'
+          : 'Invite Eileen after investigating the broken arrow together.',
         status: 'active',
         trigger: {
           eventType: 'interaction',
@@ -407,7 +407,7 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
           conditions: {
             mode: 'all',
             conditions: [
-              { type: 'affinity', actorId: knight.id, targetId: archer.id, comparison: 'gte', value: 45 },
+              { type: 'clue', entityId: knight.id, clueId: 'gray-raven-broken-arrow' },
               { type: 'entity-alive', entityId: knight.id, alive: true },
               { type: 'entity-alive', entityId: archer.id, alive: true },
             ],
@@ -458,8 +458,8 @@ const createBorderTavernScenario = (locale: Locale): WorldScenarioAsset => {
             type: 'add-story',
             title: zh ? '同伴 · 北路的约定' : 'Companion · A Promise on the Northern Road',
             body: zh
-              ? '几次交谈后，艾琳确认罗兰愿意倾听，也不会把同伴当作棋子。她系紧箭囊，正式加入调查；若战斗爆发，她会从后方以弓箭掩护罗兰。'
-              : 'After several conversations, Eileen sees that Roland listens and does not treat companions as pieces on a board. She tightens her quiver and joins the investigation, ready to cover Roland with her bow.',
+              ? '共同核对断箭的线索后，艾琳确认罗兰愿意倾听，也不会把同伴当作棋子。她系紧箭囊，正式加入调查；若战斗爆发，她会从后方以弓箭掩护罗兰。'
+              : 'After investigating the broken arrow together, Eileen sees that Roland listens and does not treat companions as pieces on a board. She tightens her quiver and joins the investigation, ready to cover Roland with her bow.',
             characterIds: [knight.id, archer.id],
           },
         ],

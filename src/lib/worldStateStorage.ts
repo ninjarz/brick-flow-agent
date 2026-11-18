@@ -852,7 +852,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
           ...(scenario.assetId === 'scenario-border-tavern'
             ? { authoringVersion: Math.max(4, authoringVersion) }
             : scenario.assetId === 'scenario-border-tavern-eileen-companion'
-              ? { authoringVersion: Math.max(3, authoringVersion) }
+              ? { authoringVersion: Math.max(4, authoringVersion) }
               : authoringVersion ? { authoringVersion } : {}),
         }]
       }).slice(-20)
@@ -1025,6 +1025,24 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
     })
   }
 
+  const cluesByEntityId = normalizeStoredClues(narrative.cluesByEntityId)
+  const upgradedCompanion = Array.isArray(value.scenarios) && value.scenarios.some(scenario => isRecord(scenario)
+    && scenario.assetId === 'scenario-border-tavern-eileen-companion'
+    && (!isFiniteNumber(scenario.authoringVersion) || scenario.authoringVersion < 4))
+  // Older saves recorded the investigation outcome before clues were persisted.
+  // Keep that earned knowledge when upgrading the optional recruitment condition.
+  if (legacyGrayRaven || upgradedCompanion) for (const scenario of scenarios) {
+    if (scenario.assetId !== 'scenario-border-tavern') continue
+    const investigation = scenario.stages.find(stage => stage.id.endsWith('investigate') && stage.status === 'completed')
+    const holderId = investigation?.trigger.actorId
+    if (!holderId || !entityById.has(holderId) || cluesByEntityId[holderId]?.some(clue => clue.id === 'gray-raven-broken-arrow')) continue
+    const donor = investigation.trigger.targetId ? cluesByEntityId[investigation.trigger.targetId]?.find(clue => clue.id === 'gray-raven-broken-arrow') : undefined
+    cluesByEntityId[holderId] = [...(cluesByEntityId[holderId] ?? []), {
+      ...(donor ?? { id: 'gray-raven-broken-arrow', text: /[\u3400-\u9fff]/.test(scenario.title) ? '断箭的黑岩纹章与灰白石粉指向旧采石场。' : 'The Blackrock crest and pale dust on the broken arrow point to the old quarry.', kind: 'fact' as const, confidence: .94, tags: [] }),
+      holderId, learnedAtSeconds: investigation.completedAtSeconds ?? 0,
+    }]
+  }
+
   return {
     id: typeof value.id === 'string' && value.id.trim() ? value.id.trim() : `world-${planId}`,
     planId,
@@ -1043,7 +1061,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
         ? narrative.processedEventIds.filter((id): id is string => typeof id === 'string').slice(-1_000)
         : [],
       memoriesByEntityId: normalizeArrayRecord(narrative.memoriesByEntityId, isStoredMemory),
-      cluesByEntityId: normalizeStoredClues(narrative.cluesByEntityId),
+      cluesByEntityId,
       relationshipsByEntityId: normalizeRelationships(narrative.relationshipsByEntityId),
       stories: Array.isArray(narrative.stories) ? narrative.stories.filter(isStoredStory).slice(-80) : [],
       directorTurns,

@@ -158,6 +158,26 @@ export const upgradeGrayRavenCompanionStages = (
       },
     }
   })
+  if (authoringVersion < 4) upgraded = upgraded.map(stage => {
+    const conditions = stage.trigger.conditions
+    if (!conditions) return stage
+    return {
+      ...stage,
+      description: stage.description.replace('罗兰对艾琳的好感达到 45 后，再与她交谈。', '一起查明断箭上的线索后，再邀请艾琳同行。')
+        .replace('Talk to Eileen again after Roland’s affinity toward her reaches 45.', 'Invite Eileen after investigating the broken arrow together.'),
+      trigger: {
+        ...stage.trigger,
+        conditions: {
+          ...conditions,
+          conditions: conditions.conditions.map(condition => condition.type === 'affinity'
+            && condition.actorId === stage.trigger.actorId && condition.targetId === stage.trigger.targetId
+            && condition.comparison === 'gte' && condition.value === 45
+            ? { type: 'clue' as const, entityId: condition.actorId, clueId: 'gray-raven-broken-arrow' }
+            : condition),
+        },
+      },
+    }
+  })
   return upgraded
 }
 
@@ -184,13 +204,13 @@ export const createGrayRavenEileenCompanionScenario = (
     claimedEventIds: [],
     priority: 60,
     mutexGroup: 'gray-raven-story',
-    authoringVersion: 3,
+    authoringVersion: 4,
     stages: [{
       id: 'scenario-border-tavern-recruit-eileen',
       title: zh ? '邀请艾琳同行' : 'Invite Eileen to Join',
       description: zh
-        ? '罗兰对艾琳的好感达到 45 后，再与她交谈。'
-        : 'Talk to Eileen again after Roland’s affinity toward her reaches 45.',
+        ? '一起查明断箭上的线索后，再邀请艾琳同行。'
+        : 'Invite Eileen after investigating the broken arrow together.',
       status: 'active',
       trigger: {
         eventType: 'interaction',
@@ -199,7 +219,7 @@ export const createGrayRavenEileenCompanionScenario = (
         conditions: {
           mode: 'all',
           conditions: [
-            { type: 'affinity', actorId: rolandId, targetId: eileenId, comparison: 'gte', value: 45 },
+            { type: 'clue', entityId: rolandId, clueId: 'gray-raven-broken-arrow' },
             { type: 'entity-alive', entityId: rolandId, alive: true },
             { type: 'entity-alive', entityId: eileenId, alive: true },
           ],
@@ -251,7 +271,7 @@ export const createGrayRavenEileenCompanionScenario = (
           title: zh ? '同伴 · 北路的约定' : 'Companion · A Promise on the Northern Road',
           body: zh
             ? '几次交谈后，艾琳确认罗兰愿意倾听，也不会把同伴当作棋子。她系紧箭囊，正式加入调查；若战斗爆发，她会从后方以弓箭掩护罗兰。'
-            : 'After several conversations, Eileen sees that Roland listens and does not treat companions as pieces on a board. She tightens her quiver and joins the investigation, ready to cover Roland with her bow.',
+            : 'After investigating the broken arrow together, Eileen sees that Roland listens and does not treat companions as pieces on a board. She tightens her quiver and joins the investigation, ready to cover Roland with her bow.',
           characterIds: [rolandId, eileenId],
         },
       ],

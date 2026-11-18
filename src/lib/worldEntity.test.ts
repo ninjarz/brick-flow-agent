@@ -311,10 +311,9 @@ describe('WorldEntity foundation', () => {
     })
     expect(restored.scenarios[1].stages[0].trigger.conditions?.mode).toBe('all')
     expect(restored.scenarios[1].stages[0].trigger.conditions?.conditions[0]).toMatchObject({
-      type: 'affinity',
-      actorId: 'roland',
-      targetId: 'eileen',
-      value: 45,
+      type: 'clue',
+      entityId: 'roland',
+      clueId: 'gray-raven-broken-arrow',
     })
   })
 
