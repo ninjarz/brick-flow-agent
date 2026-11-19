@@ -9,6 +9,7 @@ import { getEditorValidation, getEditorManual, getPreparedManualPlan, getEditorT
 import { rotateRigidBrickGroup, translateRigidBrickGroup } from './lib/rigidBrickGroup'
 import { createManualHtmlBlob, createLDrawBlob } from './lib/manualExportClient'
 import { useIntentState } from './hooks/useIntentState'
+import { yieldToBrowser } from './lib/yieldToBrowser'
 import { useModalFocus } from './hooks/useModalFocus'
 import { importLDrawInWorker } from './lib/ldrawImportWorkerClient'
 import { aiTasks } from './lib/aiTasks'
@@ -29,7 +30,7 @@ import { brickById, colorHex, getDefaultBrickColor } from './data/basicBricks'
 import { worldEntityDefinitionById } from './data/worldEntityDefinitions'
 import { createDefaultWorldScenarios } from './data/worldScenarios'
 import { dropBrickGroupAtPoint, findNearestOpenBrickGroupAround, getBrickGroupDragPointerOffset, offsetBrickGroupDragPoint, rotationRepositionSearchRadiusStuds, type HorizontalDropPoint, type StationaryPlanSpatialData } from './lib/brickGroupPlacement'
-import { createEmptyBuildPlan, generateBuildPlan } from './lib/localGenerator'
+import { createEmptyBuildPlan, generateBuildPlan, robotTemplateTitle } from './lib/localGenerator'
 import { buildLlmUserPrompt, generateLlmBuildPlan, llmSystemPrompt, requestLlmJsonContent, requestLlmTextStream, testLlmConnection } from './lib/llmGenerator'
 import { clearLlmConnection, normalizeMaxRepairAttempts, saveLlmConnection } from './lib/llmConfig'
 import { defaultFinishedAssets, needsFinishedAssetsRecovery, isDefaultFinishedAsset, mergeRecoveredFinishedAssets, loadAllDefaultFinishedAssets, loadFinishedAssets, loadFinishedAssetsFromIndexedDb, mergeWithDefaultAssets, saveFinishedAssets } from './lib/finishedAssets'
@@ -117,6 +118,8 @@ type AssetLibraryKind = 'models' | 'scenarios'
 const tavernDirectorPlaybackTimeoutMs = 15_000
 const tavernScenarioDialogueTimeoutMs = 60_000
 const sceneViewModeOrder: BrickSceneViewMode[] = ['border', 'borderless', 'xray', 'voxel']
+// The robot's eyes and grille are on its negative-Z side.
+const robotFrontCameraAzimuthDegrees = 198
 const ignoreSceneInteraction = () => {}
 
 const getNextSceneViewMode = (mode: BrickSceneViewMode) =>
@@ -234,6 +237,7 @@ function App() {
   const [isConfigOpen, setIsConfigOpen] = useState(false)
   const [isPromptPreviewOpen, setIsPromptPreviewOpen] = useState(false)
   const [isAssetLibraryOpen, setIsAssetLibraryOpen] = useState(false)
+  const [isLoadingAsset, setIsLoadingAsset, isLoadingAssetRef] = useIntentState(false)
   const [isObjImportOpen, setIsObjImportOpen] = useState(false)
   const debugMode = isDebugModeEnabled(window.location.search)
   const [isImportDiagnosticsOpen, setIsImportDiagnosticsOpen] = useState(false)
@@ -2638,33 +2642,40 @@ function App() {
   }
 
   const loadFinishedAsset = async (asset: LocalizedFinishedAsset) => {
-    try { await preparePlanGeometry(asset.displayPlan) } catch {
-      setGenerationFailure(t('error.geometryLoad'))
-      return
-    }
-    const issues = isDefaultFinishedAsset(asset.source) ? [] : validateBuildPlan(asset.displayPlan)
-    if (getBlockingBuildPlanIssues(issues).length > 0) {
-      setGenerationFailure(t('error.assetInvalid', { summary: summarizeBuildPlanIssues(issues, locale) }))
-      setIsAssetLibraryOpen(false)
-      return
-    }
-
-    const imported = importAssetPlanIncrementally(planRef.current, asset.displayPlan)
-    if (!imported) {
-      setGenerationFailure(t('error.assetNoSpace'))
-      setIsAssetLibraryOpen(false)
-      return
-    }
-
-    setPlan(imported.plan)
-    setSelectedId(imported.importedBrickIds.at(-1) ?? '')
-    setSelectedGroupIds(imported.importedBrickIds.length > 1 ? imported.importedBrickIds : [])
-    setSelectedWorldEntityId('')
-    setAssetImportFrameVersion((version) => version + 1)
+    if (isLoadingAssetRef.current) return
+    const epoch = workspaceSession.getEpoch()
+    setIsLoadingAsset(true)
     setIsAssetLibraryOpen(false)
-    clearGenerationFeedback()
-    if (issues.length > 0) {
-      setGenerationWarning(summarizeBuildPlanIssues(issues, locale))
+    try {
+      await yieldToBrowser()
+      try { await preparePlanGeometry(asset.displayPlan) } catch {
+        if (workspaceSession.getEpoch() === epoch) setGenerationFailure(t('error.geometryLoad'))
+        return
+      }
+      if (workspaceSession.getEpoch() !== epoch) return
+      const issues = isDefaultFinishedAsset(asset.source) ? [] : validateBuildPlan(asset.displayPlan)
+      if (getBlockingBuildPlanIssues(issues).length > 0) {
+        setGenerationFailure(t('error.assetInvalid', { summary: summarizeBuildPlanIssues(issues, locale) }))
+        return
+      }
+
+      const imported = importAssetPlanIncrementally(planRef.current, asset.displayPlan)
+      if (!imported) {
+        setGenerationFailure(t('error.assetNoSpace'))
+        return
+      }
+
+      setPlan(imported.plan)
+      setSelectedId(imported.importedBrickIds.at(-1) ?? '')
+      setSelectedGroupIds(imported.importedBrickIds.length > 1 ? imported.importedBrickIds : [])
+      setSelectedWorldEntityId('')
+      setAssetImportFrameVersion((version) => version + 1)
+      clearGenerationFeedback()
+      if (issues.length > 0) {
+        setGenerationWarning(summarizeBuildPlanIssues(issues, locale))
+      }
+    } finally {
+      setIsLoadingAsset(false)
     }
   }
 
@@ -3217,11 +3228,12 @@ function App() {
           <Suspense fallback={<div className="scene-loading">{t('scene.loading')}</div>}>
             <BrickScene
               bricks={generationPreview?.bricks ?? plan.bricks}
-              building={isGenerating || isManualPreparing || isExportingPlan}
-              buildingLabel={isGenerating ? t(`scene.${generationPhase}`) : isExportingPlan ? (locale === 'zh-CN' ? '正在导出' : 'Exporting') : (locale === 'zh-CN' ? '正在准备手册' : 'Preparing manual')}
+              building={isLoadingAsset || isGenerating || isManualPreparing || isExportingPlan}
+              buildingLabel={isLoadingAsset ? t('asset.loadingModel') : isGenerating ? t(`scene.${generationPhase}`) : isExportingPlan ? (locale === 'zh-CN' ? '正在导出' : 'Exporting') : (locale === 'zh-CN' ? '正在准备手册' : 'Preparing manual')}
               framingBricks={generationPreview?.frameBricks}
               selectedId={generationPreview ? undefined : selectedId}
               cameraFrameKey={`${generationPreview?.id ?? plan.id}:asset-import-${assetImportFrameVersion}${generationPreview ? `:module-${generationPreview.structures?.length ?? 0}` : ''}`}
+              initialCameraAzimuthDegrees={!generationPreview && plan.source === 'template-local' && plan.title === robotTemplateTitle ? robotFrontCameraAzimuthDegrees : undefined}
               viewMode={sceneViewMode}
               stabilityAnalysis={generationPreview ? undefined : sceneStabilityAnalysis}
               highlightedIds={highlightedSceneIds}
@@ -3694,7 +3706,7 @@ function App() {
                     <small>{t('common.parts', { count: asset.displayPlan.bricks.length })} · {t('common.steps', { count: asset.displayPlan.steps.length })} · {asset.displayPrompt}</small>
                   </div>
                   <div className="asset-actions">
-                    <button type="button" onClick={() => loadFinishedAsset(asset)}>
+                    <button type="button" disabled={isLoadingAsset} onClick={() => loadFinishedAsset(asset)}>
                       {t('common.load')}
                     </button>
                     <button type="button" onClick={() => openManual(asset.displayPlan)}>

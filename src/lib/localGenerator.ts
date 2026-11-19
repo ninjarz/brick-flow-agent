@@ -250,6 +250,8 @@ const treePlan = (prompt: string, imageName?: string) => {
   return assemblePlan('树', prompt, bricks, imageName)
 }
 
+export const robotTemplateTitle = '机器人'
+
 const robotPlan = (prompt: string, imageName?: string) => {
   const bricks = [
     makeBrick('plate-4x6', 'gray', 0, 0, 0),
@@ -273,7 +275,7 @@ const robotPlan = (prompt: string, imageName?: string) => {
     makeBrick('brick-round-1x1', 'cyan', 2, 7.6, 1),
     makeBrick('round-1x1-plate', 'red', 2, 8.8, 1),
   ]
-  return assemblePlan('机器人', prompt, bricks, imageName)
+  return assemblePlan(robotTemplateTitle, prompt, bricks, imageName)
 }
 
 const animalPlan = (prompt: string, imageName?: string) => {

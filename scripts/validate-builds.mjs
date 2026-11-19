@@ -154,6 +154,7 @@ await writeFile(entry, `
       planRoundTripBlockingIssues,
       manualSkipped: false,
       manualSchema: manual?.schemaVersion,
+      expectedManualSchema: plan.constructionAssemblies ? 7 : 6,
       manualRoundTripIssues,
       manualRoundTripBlockingIssues,
       invalidManualSteps,
@@ -1202,7 +1203,7 @@ await writeFile(entry, `
     result.planRoundTripBlockingIssues.length > 0 ||
     result.manualRoundTripBlockingIssues.length > 0 ||
     result.invalidManualSteps.length > 0 ||
-    (!result.manualSkipped && result.manualSchema !== 6),
+    (!result.manualSkipped && result.manualSchema !== result.expectedManualSchema),
   );
 
   console.log(JSON.stringify(results.map((result) => ({
@@ -1210,6 +1211,7 @@ await writeFile(entry, `
     title: result.title,
     pieces: result.pieces,
     manualSchema: result.manualSchema,
+    expectedManualSchema: result.expectedManualSchema,
     manualSkipped: result.manualSkipped,
     plan: result.summary.plan,
     planRoundTrip: result.summary.planRoundTrip,

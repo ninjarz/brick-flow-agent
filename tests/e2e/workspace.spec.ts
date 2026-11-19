@@ -14,6 +14,33 @@ test('clear canvas leaves a genuinely empty workspace', async ({ page }) => {
   await expect(page.getByLabel('Undo')).toBeDisabled()
 })
 
+test('loading a library model shows progress before the model is placed', async ({ page }) => {
+  test.setTimeout(60_000)
+  page.once('dialog', dialog => dialog.accept())
+  await page.getByLabel('Clear Canvas').click()
+  await expect(page.getByText('0 parts', { exact: true })).toBeVisible()
+  await expect(page.getByText('Saved in this browser', { exact: true })).toBeVisible()
+  await page.getByLabel('Asset Library', { exact: true }).click()
+  const library = page.getByRole('dialog', { name: 'Asset Library' })
+  const castle = library.getByRole('article').filter({ has: page.getByRole('heading', { name: /LEGO 71043/ }) })
+  let releaseGeometry!: () => void
+  const geometryReady = new Promise<void>(resolve => { releaseGeometry = resolve })
+  await page.route(/ldraw(?:GeneratedVisual|StructuralCache)Chunks\/|brick-flow-visuals\/.+\.bin\.gz/, async route => {
+    await geometryReady
+    await route.continue()
+  })
+  try {
+    await castle.getByRole('button', { name: 'Load', exact: true }).click()
+    await expect(library).toBeHidden()
+    await expect(page.getByRole('progressbar', { name: 'Loading model…' })).toBeVisible()
+    await expect(page.getByText('0 parts', { exact: true })).toBeVisible()
+  } finally {
+    releaseGeometry()
+  }
+  await expect(page.getByText('6025 parts', { exact: true })).toBeVisible({ timeout: 35_000 })
+  await expect(page.getByRole('progressbar', { name: 'Loading model…' })).toBeHidden()
+})
+
 test('a project file can be dropped anywhere in the workspace', async ({ page }) => {
   await page.evaluate(() => {
     const project = {
