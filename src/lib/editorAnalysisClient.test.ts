@@ -50,6 +50,39 @@ describe('shared editor analysis requests',()=>{
     expect(await first).toEqual(new Map([['old',false]]))
     expect(await second).toEqual(new Map([['new',true]]))
   })
+
+  it('shares support analysis across selections and uses a fresh snapshot after a brick edit', async () => {
+    const api = await import('./editorAnalysisClient')
+    const parts = bricks()
+    const first = api.getEditorConnectedSelection(parts, '0')
+    const second = api.getEditorConnectedSelection(parts, '1')
+    await flush()
+    const worker = FakeWorker.instances[0]
+    expect(worker.messages).toHaveLength(1)
+    worker.reply({
+      requestId: worker.messages[0].requestId,
+      type: 'result',
+      result: { supported: new Map(), connectedComponents: [['0', '1'], ['2']] },
+    })
+    const component = await first
+    expect(component).toEqual(['0', '1'])
+    expect(await second).toBe(component)
+    expect(api.getEditorConnectedSelection(parts, '1')).toBe(component)
+    expect(api.getEditorConnectedSelection(parts, '2')).toEqual(['2'])
+    expect(worker.messages).toHaveLength(1)
+
+    const edited = [{ ...parts[0], pose: { ...parts[0].pose, xStud: -1 } }, ...parts.slice(1)]
+    const updated = api.getEditorConnectedSelection(edited, '0')
+    await flush()
+    expect(worker.messages).toHaveLength(2)
+    worker.reply({
+      requestId: worker.messages[1].requestId,
+      type: 'result',
+      result: { supported: new Map(), connectedComponents: [['0'], ['1'], ['2']] },
+    })
+    expect(await updated).toEqual(['0'])
+  })
+
   it('rejects failed jobs and permits a fresh worker on retry',async()=>{
     const api=await import('./editorAnalysisClient'),parts=bricks()
     const first=api.getEditorSupport(parts);const failure=expect(first).rejects.toThrow('EDITOR_ANALYSIS_WORKER_FAILED')

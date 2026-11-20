@@ -101,7 +101,14 @@ scope.onmessage = async ({ data }: MessageEvent<EditorAnalysisRequest>) => {
     ]))
     if (data.stability) snapshot.stability ??= analyzeBuildStability(snapshot.bricks, snapshot.graph)
     const issues = data.plan ? getSnapshotValidation(snapshot, data.plan) : undefined
-    scope.postMessage({ requestId: data.requestId, type: 'result', result: { supported: snapshot.supported, issues, stability: data.stability ? snapshot.stability : undefined } } satisfies EditorAnalysisResponse)
+    scope.postMessage({ requestId: data.requestId, type: 'result', result: {
+      supported: snapshot.supported,
+      issues,
+      stability: data.stability ? snapshot.stability : undefined,
+      connectedComponents: !data.plan && !data.stability
+        ? graph.components.map(component => component.map(brick => brick.id))
+        : undefined,
+    } } satisfies EditorAnalysisResponse)
   } catch (error) {
     snapshots.delete(data.revision)
     scope.postMessage({ requestId: data.requestId, type: 'error', message: error instanceof Error ? error.message : 'EDITOR_ANALYSIS_FAILED' } satisfies EditorAnalysisResponse)

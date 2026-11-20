@@ -16,7 +16,7 @@ export type EditorAnalysisRequest = {
   transform?: { sourceIds: string[]; next: PlacedBrick[]; reposition: boolean; steps?: Array<{ xStud?: number; yStud?: number; zStud?: number }> }
   drop?: { sourceIds: string[]; anchorId: string; point: HorizontalDropPoint }
 }
-export type EditorAnalysisResult = { manual?: BuildManual; manualPlan?: BuildPlan; transformedBricks?: PlacedBrick[]; supported: Map<string, boolean>; issues?: BuildPlanIssue[]; stability?: StabilityAnalysis; dropBricks?: PlacedBrick[] }
+export type EditorAnalysisResult = { manual?: BuildManual; manualPlan?: BuildPlan; transformedBricks?: PlacedBrick[]; supported: Map<string, boolean>; issues?: BuildPlanIssue[]; stability?: StabilityAnalysis; dropBricks?: PlacedBrick[]; connectedComponents?: string[][] }
 export type EditorAnalysisResponse = { requestId: number } & (
   { type: 'result'; result: EditorAnalysisResult } | { type: 'error'; message: string }
 )

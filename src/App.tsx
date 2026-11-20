@@ -5,7 +5,7 @@ import { createCumulativeManualView } from './lib/manualPresentation'
 import { createKeyboardMoveSession } from './lib/keyboardMoveSession'
 import { getEditorKeyboardMove } from './lib/editorAnalysisClient'
 import { getBrickSelectionReference } from './lib/brickEditorCoordinates'
-import { getEditorValidation, getEditorManual, getPreparedManualPlan, getEditorTransform, setEditorAnalysisActive, backgroundAnalysisThreshold } from './lib/editorAnalysisClient'
+import { getEditorValidation, getEditorConnectedSelection, getEditorSupport, getEditorManual, getPreparedManualPlan, getEditorTransform, setEditorAnalysisActive, backgroundAnalysisThreshold } from './lib/editorAnalysisClient'
 import { rotateRigidBrickGroup, translateRigidBrickGroup } from './lib/rigidBrickGroup'
 import { createManualHtmlBlob, createLDrawBlob } from './lib/manualExportClient'
 import { useIntentState } from './hooks/useIntentState'
@@ -37,7 +37,7 @@ import { defaultFinishedAssets, needsFinishedAssetsRecovery, isDefaultFinishedAs
 import { preparePlanGeometry } from './lib/planGeometry'
 import { formatBuildManualMarkdown, getAssemblyGuide, type BuildManual } from './lib/manualSerializer'
 import { getManualStepPage, manualStepPageSize } from './lib/manualPagination'
-import { createSingleBrickSteps, countBricks, createBrickCollisionIndex, createPlanSpatialState, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickPlacementDiagnostics, getBrickRawOverlapScore, getConnectedBrickComponents, hasBrickCollision, isBrickAboveGround, makeBrick, repairBuildPlan, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
+import { createSingleBrickSteps, countBricks, createBrickCollisionIndex, createPlanSpatialState, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickPlacementDiagnostics, getBrickRawOverlapScore, hasBrickCollision, isBrickAboveGround, makeBrick, repairBuildPlan, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
 import { loadCatalogPreferences, type CatalogPackPreference } from './lib/catalogPreferences'
 import { getBrickWorldFrame, normalizeHorizontalStud, normalizeQuarterTurns, normalizeVerticalQuarterTurns, normalizeYStud, roundToGrid, STUD_PITCH_WORLD, translateBrickPose } from './lib/brickUnits'
 import { useI18n } from './lib/i18n'
@@ -214,6 +214,7 @@ function App() {
   const [scenarioPlaytest, setScenarioPlaytest] = useState<ScenarioPlaytestSession>()
   const stationarySpatialStateCacheRef = useRef<StationaryPlanSpatialData>()
   const placementPointerKeyRef = useRef('')
+  const connectedSelectionRequest = useRef(0)
   const [selectedId, setSelectedId] = useState('')
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([])
   const [selectedWorldEntityId, setSelectedWorldEntityId] = useState('')
@@ -420,6 +421,7 @@ function App() {
   }, [locale, setPlan])
 
   const clearWorkspaceSelection = useCallback(() => {
+    connectedSelectionRequest.current += 1
     placementPointerKeyRef.current = ''
     setPlacementSession(undefined)
     setWorldEntityPlacement(undefined)
@@ -434,6 +436,7 @@ function App() {
   const canRedo = workspaceSession.getHistory().future.length > 0
 
   const selectBrick = useCallback((id: string, options?: { toggle?: boolean }) => {
+    connectedSelectionRequest.current += 1
     setSelectedWorldEntityId('')
     if (!options?.toggle || !id) {
       const structure = id ? getBrickStructure(planRef.current, id) : undefined
@@ -448,6 +451,7 @@ function App() {
   }, [planRef, selectedGroupIds, selectedId])
 
   const selectWorldEntity = useCallback((id: string) => {
+    connectedSelectionRequest.current += 1
     setSelectedId('')
     setSelectedGroupIds([])
     setSelectedWorldEntityId(id)
@@ -459,12 +463,20 @@ function App() {
       return
     }
 
-    const component = getConnectedBrickComponents(planRef.current.bricks).find((bricks) =>
-      bricks.some((brick) => brick.id === id)
-    )
-    setSelectedId(id)
-    setSelectedGroupIds(component?.map((brick) => brick.id) ?? [id])
-  }, [planRef, selectBrick])
+    const bricks = planRef.current.bricks
+    const epoch = workspaceSession.getEpoch()
+    const request = ++connectedSelectionRequest.current
+    const result = getEditorConnectedSelection(bricks, id)
+    const applySelection = (ids: string[]) => {
+      if (connectedSelectionRequest.current !== request || planRef.current.bricks !== bricks || workspaceSession.getEpoch() !== epoch) return
+      setSelectedId(id)
+      setSelectedGroupIds(ids)
+    }
+    if (Array.isArray(result)) applySelection(result)
+    else void result.then(applySelection).catch(() => {
+      // Keep the single-click selection if background analysis is unavailable.
+    })
+  }, [planRef, selectBrick, workspaceSession])
 
   const selectedBrick = useMemo(
     () => plan.bricks.find((brick) => brick.id === selectedId),
@@ -2508,6 +2520,7 @@ function App() {
 
   const dissolveSelectedStructure = useCallback(() => {
     if (!selectedStructure) return
+    connectedSelectionRequest.current += 1
     setPlan((current) => dissolveBrickStructure(current, selectedStructure.id))
     setSelectedGroupIds([])
   }, [selectedStructure, setPlan])
@@ -2666,6 +2679,9 @@ function App() {
       }
 
       setPlan(imported.plan)
+      if (planRef.current.bricks.length >= backgroundAnalysisThreshold) {
+        void getEditorSupport(planRef.current.bricks).catch(() => { /* Normal background analysis can retry. */ })
+      }
       setSelectedId(imported.importedBrickIds.at(-1) ?? '')
       setSelectedGroupIds(imported.importedBrickIds.length > 1 ? imported.importedBrickIds : [])
       setSelectedWorldEntityId('')

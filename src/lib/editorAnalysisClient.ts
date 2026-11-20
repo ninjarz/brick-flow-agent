@@ -9,7 +9,7 @@ import { loadLDrawGeneratedVisual } from './ldrawGeneratedVisualLoader'
 import { getLoadedLDrawLocalBounds } from './ldrawBounds'
 import type { EditorAnalysisRequest } from './editorAnalysisProtocol'
 import { analyzeBuildStability, type StabilityAnalysis } from './stabilityAnalysis'
-import { createBuildGraph, validateBuildPlan, type BuildPlanIssue } from './planUtils'
+import { createBuildGraph, getConnectedBrickComponents, validateBuildPlan, type BuildPlanIssue } from './planUtils'
 import { preparePlanGeometry } from './planGeometry'
 import { prepareStructuralGeometry } from './prepareStructuralGeometry'
 import { isVoxelPlantSupported } from './voxelBlockState'
@@ -120,11 +120,33 @@ const request = async (bricks: PlacedBrick[], plan?: BuildPlan, stability = fals
   })
 }
 
+const connectedSelectionCache = new WeakMap<PlacedBrick[], Map<string, string[]>>()
+
+export const getEditorConnectedSelection = (bricks: PlacedBrick[], id: string): string[] | Promise<string[]> => {
+  const calculate = () => getConnectedBrickComponents(bricks)
+    .find(component => component.some(brick => brick.id === id))
+    ?.map(brick => brick.id) ?? [id]
+  if (bricks.length < backgroundAnalysisThreshold || typeof Worker === 'undefined') {
+    return calculate()
+  }
+
+  const index = connectedSelectionCache.get(bricks)
+  if (index) return index.get(id) ?? [id]
+  return getEditorSupport(bricks).then(() => connectedSelectionCache.get(bricks)?.get(id) ?? [id], calculate)
+}
+
 export const getEditorSupport = (bricks: PlacedBrick[]) => {
   const cached = supportCache.get(bricks)
   if (cached) return cached
   const result = bricks.length >= backgroundAnalysisThreshold && typeof Worker !== 'undefined'
-    ? request(bricks).then(result => result.supported)
+    ? request(bricks).then(result => {
+      const index = new Map<string, string[]>()
+      for (const component of result.connectedComponents ?? []) {
+        for (const id of component) index.set(id, component)
+      }
+      connectedSelectionCache.set(bricks, index)
+      return result.supported
+    })
     : Promise.resolve().then(() => {
       const graph = createBuildGraph(bricks)
       return new Map(bricks.map(brick => [brick.id, graph.groundedIds.has(brick.id) && isVoxelPlantSupported(brick, bricks)]))
