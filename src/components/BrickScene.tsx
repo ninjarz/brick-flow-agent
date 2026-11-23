@@ -1990,6 +1990,7 @@ const VoxelOptimizedScene = memo(function VoxelOptimizedSceneLayer({
   transformsByBrickId,
   hiddenBrickIdSet,
   hiddenPrintIdSet,
+  keepSelectionInBaseBatches,
   placementActive,
   onSelect,
   onSelectConnected,
@@ -2008,6 +2009,7 @@ const VoxelOptimizedScene = memo(function VoxelOptimizedSceneLayer({
   transformsByBrickId?: Map<string, BrickSceneTransform>
   hiddenBrickIdSet: Set<string>
   hiddenPrintIdSet: Set<string>
+  keepSelectionInBaseBatches?: boolean
   placementActive: boolean
   onSelect: (id: string, options?: BrickSelectionOptions) => void
   onSelectConnected?: (id: string) => void
@@ -2035,12 +2037,12 @@ const VoxelOptimizedScene = memo(function VoxelOptimizedSceneLayer({
   const ldrawBatches = useMemo(() => {
     const result = buildLDrawSceneBatches(preferDetailedGeometry ? bricks : [], {
       selectedId, highlightedIds: highlightedIdSet, supportedByBrickId, displayColorByBrickId, showEdges,
-      excludedIds: batchExcludedIds, hiddenPrintIds: hiddenPrintIdSet,
+      excludedIds: batchExcludedIds, hiddenPrintIds: hiddenPrintIdSet, keepSelectionInBaseBatches,
     }, transientBatches ? placementBatchCache.current ?? ldrawBatchCache.current : preparedResources?.scene ?? ldrawBatchCache.current)
     if (transientBatches) placementBatchCache.current = result
     else { ldrawBatchCache.current = result; placementBatchCache.current = undefined }
     return result
-  }, [bricks, preferDetailedGeometry, selectedId, highlightedIdSet, supportedByBrickId, displayColorByBrickId, showEdges, batchExcludedIds, hiddenPrintIdSet, transientBatches, preparedResources])
+  }, [bricks, preferDetailedGeometry, selectedId, highlightedIdSet, supportedByBrickId, displayColorByBrickId, showEdges, batchExcludedIds, hiddenPrintIdSet, keepSelectionInBaseBatches, transientBatches, preparedResources])
   const batchedPrintIds = useMemo(() => new Set(ldrawBatches.printSources.flatMap(batch => batch.instances.map(instance => instance.brick.id))), [ldrawBatches])
   const batchResources = useLDrawBatchResources(ldrawBatches, ldrawBatchCache.current, placementBatchCache.current, preparedResources)
   const remainingBricks = preferDetailedGeometry ? ldrawBatches.individualBricks : bricks.filter(brick => brickById.get(brick.brickId)?.pack !== 'lego')
@@ -2691,6 +2693,7 @@ export const BrickScene = ({
     () => getVisibleBricksDuringPlacement(settledVisibleBricks, placementSourceBrickIds),
     [settledVisibleBricks, placementSourceBrickIds],
   )
+  const keepSelectionInBaseBatches = Boolean(onSelectConnected) && bricks.length >= backgroundAnalysisThreshold
   const cameraFrameBricks = useMemo(
     () => {
       const focusIds = cameraFocusBrickIds?.length ? new Set(cameraFocusBrickIds) : undefined
@@ -2912,6 +2915,7 @@ export const BrickScene = ({
     selectedId, highlightedIds: highlightedIdSet, supportedByBrickId,
     hiddenPrintIds: hiddenPrintIdSet,
     displayColorByBrickId: resolvedDisplayColorByBrickId, showEdges: showBrickEdges,
+    keepSelectionInBaseBatches,
     excludedIds: new Set([...hiddenBrickIdSet, ...(transformsByBrickId?.keys() ?? [])]),
   }
 
@@ -2999,6 +3003,7 @@ export const BrickScene = ({
             transformsByBrickId={transformsByBrickId}
             hiddenBrickIdSet={hiddenBrickIdSet}
             hiddenPrintIdSet={hiddenPrintIdSet}
+            keepSelectionInBaseBatches={keepSelectionInBaseBatches}
             placementActive={placementActive}
             onSelect={sceneCallbacks.onSelect}
             onSelectConnected={sceneCallbacks.onSelectConnected}

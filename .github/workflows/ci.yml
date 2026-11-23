@@ -14,6 +14,7 @@ jobs:
   verify:
     name: Verify pull request
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,7 +29,7 @@ jobs:
         run: npm ci
 
       - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium webkit
+        run: npx playwright install --with-deps chromium
 
       - name: Verify quality, dependency audit and browser workflows
         run: npm run verify:quality

@@ -66,9 +66,18 @@ function* generatePrintBatches(batches: LDrawMeshBatch[], previous: LDrawPrintBa
       const vertexCount = source.index?.count ?? position.count
       for (let i = 0; i < vertexCount; i++) {
         const vertex = source.index?.getX(i) ?? i
-        point.fromBufferAttribute(position, vertex).applyMatrix4(instance.matrix).toArray(positions, offset * 3)
-        normal.fromBufferAttribute(sourceNormal, vertex).applyNormalMatrix(normalMatrix).toArray(normals, offset * 3)
-        color.toArray(colors, offset * 3)
+        const component = offset * 3
+        point.fromBufferAttribute(position, vertex).applyMatrix4(instance.matrix)
+        normal.fromBufferAttribute(sourceNormal, vertex).applyNormalMatrix(normalMatrix)
+        positions[component] = point.x
+        positions[component + 1] = point.y
+        positions[component + 2] = point.z
+        normals[component] = normal.x
+        normals[component + 1] = normal.y
+        normals[component + 2] = normal.z
+        colors[component] = color.r
+        colors[component + 1] = color.g
+        colors[component + 2] = color.b
         triangleBrickIndices[Math.floor(offset / 3)] = brickIndex
         offset++
         if (i % 4096 === 0 && performance.now() - sliceStart >= 8) {

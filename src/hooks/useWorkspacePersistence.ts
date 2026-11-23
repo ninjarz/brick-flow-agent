@@ -4,6 +4,7 @@ import { getWorkspaceRecovery, loadWorkspaceDraftFromIndexedDb, saveWorkspaceDra
 import { projectStore, ProjectConflict, type Project, type ProjectIndex, type ProjectCheckpoint } from '../lib/projectStore'
 import { createEmptyWorldState } from '../lib/worldEntity'
 import { claimLegacyProjectAnalysis, clearProjectAnalysis } from '../lib/projectAnalysisStorage'
+import type { BuildPlan } from '../types/bricks'
 
 type Status = 'loading' | 'saving' | 'saved' | 'unavailable' | 'recovery' | 'conflict'
 export const useWorkspacePersistence = (session: ReturnType<typeof createWorkspaceSession>) => {
@@ -180,11 +181,12 @@ export const useWorkspacePersistence = (session: ReturnType<typeof createWorkspa
       if (!await saveUntilStable()) return
       await installAfterSaving(await projectStore.activate(id)); await refresh()
     }),
-    create: (name: string, duplicate = false) => action(async () => {
+    create: (name: string, duplicate = false, initialPlan?: BuildPlan) => action(async () => {
       if (!await saveUntilStable()) return
       const snapshot = session.getPersistentSnapshot()
-      const id = crypto.randomUUID()
-      const next = duplicate ? snapshot : { plan: { ...snapshot.plan, id, title: name, bricks: [], steps: [], prompt: '' }, world: createEmptyWorldState(id), prompt: '' }
+      const id = initialPlan?.id ?? crypto.randomUUID()
+      const plan = initialPlan ?? { ...snapshot.plan, id, title: name, bricks: [], steps: [], prompt: '' }
+      const next = duplicate ? snapshot : { plan, world: createEmptyWorldState(id), prompt: plan.prompt }
       const created = await projectStore.create(next, name)
       await installAfterSaving(await projectStore.activate(created.id)); await refresh()
     }),

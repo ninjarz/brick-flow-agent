@@ -39,10 +39,11 @@ const matrixVector = (matrix: NonNullable<BrickPose['orientationMatrix']>, point
   z: matrix[6] * point.x + matrix[7] * point.y + matrix[8] * point.z,
 })
 
-const matrixFootprint = (footprint: BrickFootprint, matrix: NonNullable<BrickPose['orientationMatrix']>): BrickFootprint => {
-  const size = matrixVector(matrix.map(Math.abs) as typeof matrix, { x: footprint.widthStuds, y: footprint.heightStuds, z: footprint.depthStuds })
-  return { widthStuds: size.x, heightStuds: size.y, depthStuds: size.z }
-}
+const matrixFootprint = ({ widthStuds, heightStuds, depthStuds }: BrickFootprint, matrix: NonNullable<BrickPose['orientationMatrix']>): BrickFootprint => ({
+  widthStuds: Math.abs(matrix[0]) * widthStuds + Math.abs(matrix[1]) * heightStuds + Math.abs(matrix[2]) * depthStuds,
+  heightStuds: Math.abs(matrix[3]) * widthStuds + Math.abs(matrix[4]) * heightStuds + Math.abs(matrix[5]) * depthStuds,
+  depthStuds: Math.abs(matrix[6]) * widthStuds + Math.abs(matrix[7]) * heightStuds + Math.abs(matrix[8]) * depthStuds,
+})
 
 export const normalizeQuarterTurns = (
   turns: number,
@@ -262,17 +263,30 @@ export const transformBrickLocalPoint = (
   pose: BrickPose,
   point: WorldPoint,
 ): WorldPoint => {
+  const baseFootprint = definition.footprint
+  let footprint = baseFootprint
   if (pose.orientationMatrix) {
-    const footprint = matrixFootprint(definition.footprint, pose.orientationMatrix)
-    const centered = matrixVector(pose.orientationMatrix, { x: point.x - definition.footprint.widthStuds / 2, y: point.y - definition.footprint.heightStuds / 2, z: point.z - definition.footprint.depthStuds / 2 })
-    return transformBrickLocalPoint({ ...definition, footprint }, { ...pose, orientationMatrix: undefined }, { x: centered.x + footprint.widthStuds / 2, y: centered.y + footprint.heightStuds / 2, z: centered.z + footprint.depthStuds / 2 })
+    footprint = matrixFootprint(baseFootprint, pose.orientationMatrix)
+    const centered = matrixVector(pose.orientationMatrix, {
+      x: point.x - baseFootprint.widthStuds / 2,
+      y: point.y - baseFootprint.heightStuds / 2,
+      z: point.z - baseFootprint.depthStuds / 2,
+    })
+    point = {
+      x: centered.x + footprint.widthStuds / 2,
+      y: centered.y + footprint.heightStuds / 2,
+      z: centered.z + footprint.depthStuds / 2,
+    }
   }
   const verticalQuarterTurns = normalizeVerticalQuarterTurns(pose.verticalQuarterTurns ?? 0)
   const roll = normalizeQuarterTurns(pose.rollQuarterTurns ?? 0)
-  const rolled = rotateRollPoint(point, roll, definition.footprint)
-  const verticalPoint = rotateVerticalPoint(rolled, verticalQuarterTurns, getRolledFootprint(definition.footprint, roll))
-  const verticalFootprint = footprintToWorld(definition, 0, verticalQuarterTurns, pose.rollQuarterTurns ?? 0)
-  const rotated = rotateYawPoint(verticalPoint, pose.rotationQuarterTurns, verticalFootprint)
+  const rolled = rotateRollPoint(point, roll, footprint)
+  const verticalPoint = rotateVerticalPoint(rolled, verticalQuarterTurns, getRolledFootprint(footprint, roll))
+  const yawFootprint = getRolledFootprint(footprint, pose.rollQuarterTurns ?? 0)
+  const rotated = rotateYawPoint(verticalPoint, pose.rotationQuarterTurns, {
+    widthStuds: yawFootprint.widthStuds,
+    depthStuds: verticalQuarterTurns % 2 === 1 ? yawFootprint.heightStuds : yawFootprint.depthStuds,
+  })
 
   return {
     x: pose.xStud + rotated.x,

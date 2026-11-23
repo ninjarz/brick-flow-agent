@@ -19,6 +19,7 @@ jobs:
   build:
     name: Build static site
     runs-on: ubuntu-latest
+    timeout-minutes: 12
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,21 +32,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Test
-        run: npm test
-
-      - name: Validate builds
-        run: npm run validate:builds
-
-      - name: Audit LDraw coverage
-        run: npm run audit:ldraw
-
-      - name: Audit OBJ connectivity
-        run: npm run audit:obj-connectivity
 
       - name: Resolve Vite base path
         id: vite-base
@@ -73,6 +59,7 @@ jobs:
     name: Deploy
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

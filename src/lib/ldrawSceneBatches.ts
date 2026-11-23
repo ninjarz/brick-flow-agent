@@ -73,6 +73,7 @@ type Options = {
   excludedIds: Set<string>
   hiddenPrintIds?: Set<string>
   showEdges: boolean
+  keepSelectionInBaseBatches?: boolean
 }
 
 let visualVersion = 0
@@ -94,6 +95,7 @@ function* generateLDrawSceneBatches(bricks: PlacedBrick[], options: Options, pre
   const snapshot = previous && snapshots.get(previous)
   if (bricks.length >= 800 && snapshot?.version === visualVersion && snapshot.bricks === bricks && snapshot.options.selectedId === options.selectedId
     && snapshot.options.showEdges === options.showEdges
+    && snapshot.options.keepSelectionInBaseBatches === options.keepSelectionInBaseBatches
     && snapshot.options.supportedByBrickId === options.supportedByBrickId
     && snapshot.options.displayColorByBrickId === options.displayColorByBrickId
     && sameSet(snapshot.options.highlightedIds, options.highlightedIds)
@@ -102,6 +104,9 @@ function* generateLDrawSceneBatches(bricks: PlacedBrick[], options: Options, pre
   const groups = new Map<string, LDrawMeshBatch>()
   const lines = new Map<string, LDrawLineGroup>()
   const individualBricks: PlacedBrick[] = []
+  // The editor's placement preview has its own rigid meshes. Keep ordinary
+  // geometry together when selection merely changes the outline.
+  const splitSelection = !options.keepSelectionInBaseBatches && options.highlightedIds.size > 1
   const appendLines = (key: string, color: string, points: number[], matrix: Matrix4, brick: PlacedBrick, rigid = false) => {
     const group = lines.get(key) ?? { color, items: [], length: 0, rigid }
     group.items.push({ points, matrix, brick }); group.length += points.length
@@ -109,7 +114,7 @@ function* generateLDrawSceneBatches(bricks: PlacedBrick[], options: Options, pre
   }
   const addMesh = (geometry: BufferGeometry, matrix: Matrix4, brick: PlacedBrick, color: string, print: boolean, doubleSide: boolean, opacity: number) => {
     const positive = getPositiveLDrawGeometry(geometry, matrix)
-    const scope = opacity >= 1 && options.highlightedIds.size > 1 && options.highlightedIds.has(brick.id) ? 'active' as const : undefined
+    const scope = opacity >= 1 && splitSelection && options.highlightedIds.has(brick.id) ? 'active' as const : undefined
     const key = `${positive.geometry.uuid}:${print}:${doubleSide}:${opacity}:${scope ?? ''}`
     const group = groups.get(key) ?? { key, geometry: positive.geometry, instances: [], print, doubleSide, opacity, scope }
     group.instances.push({ brick, matrix: positive.matrix, color }); groups.set(key, group)
@@ -153,10 +158,10 @@ function* generateLDrawSceneBatches(bricks: PlacedBrick[], options: Options, pre
     if (brick.id === options.selectedId) continue
     const highlighted = options.highlightedIds.has(brick.id)
     const floating = options.supportedByBrickId.get(brick.id) === false
+    const splitBaseLines = splitSelection && highlighted
     const chunk = `${Math.floor(brick.pose.xStud / edgeChunkSize)}:${Math.floor(brick.pose.zStud / edgeChunkSize)}`
     if (options.showEdges || highlighted || floating) {
-      const rigid = options.highlightedIds.size > 1 && highlighted
-      appendLines(`body:${rigid ? 'active:' : ''}${chunk}`, '#172033', getLDrawEdgePoints(body), matrix, brick, rigid)
+      appendLines(`body:${splitBaseLines ? 'active:' : ''}${chunk}`, '#172033', getLDrawEdgePoints(body), matrix, brick, splitBaseLines)
     }
     if (highlighted || floating) {
       const bounds = getBrickWorldBoundsFrame(definition, brick.pose)
@@ -164,7 +169,7 @@ function* generateLDrawSceneBatches(bricks: PlacedBrick[], options: Options, pre
         .scale(new Vector3(bounds.width + x, bounds.height + y, bounds.depth + z))
       const rigid = options.highlightedIds.size > 1 && highlighted
       if (highlighted) appendLines(`highlight:${rigid ? 'active:' : ''}${chunk}`, '#f59e0b', boxEdges, boundsMatrix(.16, .2, .16), brick, rigid)
-      if (floating) appendLines(`floating:${rigid ? 'active:' : ''}${chunk}`, '#ef4444', boxEdges, boundsMatrix(.14, .18, .14), brick, rigid)
+      if (floating) appendLines(`floating:${splitBaseLines ? 'active:' : ''}${chunk}`, '#ef4444', boxEdges, boundsMatrix(.14, .18, .14), brick, splitBaseLines)
     }
   }
   const lineBatches = mergeLines(lines, previous?.lineBatches)

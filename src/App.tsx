@@ -16,6 +16,7 @@ import { aiTasks } from './lib/aiTasks'
 import { useAiTaskContext } from './hooks/useAiTaskContext'
 import { useLlmConnection } from './hooks/useLlmConnection'
 import { useWorkspacePersistence } from './hooks/useWorkspacePersistence'
+import { bridgeLabPlanPrefix, createBridgeLabPlan } from './lib/bridgeLabExample'
 import { WorkspaceStorageStatus } from './components/WorkspaceStorageStatus'
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { BookOpen, Box, Boxes, ClipboardList, Download, Eye, EyeOff, FileUp, Gauge, Github, Globe2, Link, MessageCircle, MessageSquareText, Pause, Play, Plus, Redo2, RotateCcw, ScanLine, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
@@ -2695,6 +2696,15 @@ function App() {
     }
   }
 
+  const openBridgeLabExample = async () => {
+    const title = t('asset.bridgeLabTitle')
+    const example = createBridgeLabPlan(bridgeLabPlanPrefix + crypto.randomUUID(), title, locale)
+    await workspaceStorage.create(title, false, example)
+    if (planRef.current.id !== example.id) return
+    setIsAssetLibraryOpen(false)
+    setIsStabilityLabOpen(true)
+  }
+
   const applyWorldScenario = (mode: 'start' | 'add', scenarioId: string) => {
     const scenario = worldScenarios.find((candidate) => candidate.id === scenarioId)
     if (!scenario) return
@@ -3668,6 +3678,11 @@ function App() {
             </nav>
 
             {assetLibraryKind === 'models' ? <>
+            <div className="asset-actions">
+              <button type="button" disabled={!workspaceStorage.hydrated || workspaceStorage.busy} onClick={() => void openBridgeLabExample()}>
+                {t('asset.bridgeLabOpen')}
+              </button>
+            </div>
             <section className="asset-create">
               <div className="asset-create-fields">
                 <input value={assetTitle} onChange={(event) => setAssetTitle(event.target.value)} placeholder={t('asset.titlePlaceholder', { title: plan.title })} />

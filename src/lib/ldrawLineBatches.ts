@@ -46,7 +46,11 @@ function* generateLines(lines: Map<string, LDrawLineGroup>, previous: LDrawLineB
     const points = new Float32Array(group.length)
     let offset = 0
     for (const item of group.items) for (let i = 0; i < item.points.length; i += 3) {
-      point.fromArray(item.points, i).applyMatrix4(item.matrix).toArray(points, offset); offset += 3
+      point.fromArray(item.points, i).applyMatrix4(item.matrix)
+      points[offset] = point.x
+      points[offset + 1] = point.y
+      points[offset + 2] = point.z
+      offset += 3
       if (i % 12288 === 0 && performance.now() - sliceStart >= 8) { yield undefined; sliceStart = performance.now() }
     }
     yield { key, color: group.color, points, sources: group.items, rigid: group.rigid }

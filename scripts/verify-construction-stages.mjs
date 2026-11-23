@@ -12,6 +12,7 @@ const cachePath = resolve(option('--cache', 'src/data/hogwartsConstructionValida
 const reportPath = resolve(option('--report', 'docs/precision-2026-11-16/construction-validation.json'))
 const checkCache = args.includes('--check-cache')
 const writeCache = args.includes('--write-cache')
+const rebuildCache = 'npm run audit:construction -- --write-cache'
 const temporary = await mkdtemp(join(tmpdir(), 'brick-stage-verification-'))
 try {
   const entry = join(temporary, 'api.ts'), output = join(temporary, 'api.mjs')
@@ -34,8 +35,8 @@ try {
   const sourcePlanSha256 = createHash('sha256').update(JSON.stringify(plan)).digest('hex')
   if (checkCache) {
     const cache = JSON.parse(await readFile(cachePath, 'utf8'))
-    assert.equal(cache.physicsRevision, physicsRevision, 'Construction physics cache is stale; rerun the native stage audit')
-    assert.equal(cache.sourcePlanSha256, sourcePlanSha256, 'Construction asset changed without a native stage audit')
+    assert.equal(cache.physicsRevision, physicsRevision, `Construction physics cache is stale. Rebuild with: ${rebuildCache}`)
+    assert.equal(cache.sourcePlanSha256, sourcePlanSha256, `Construction asset changed without a native stage audit. Rebuild with: ${rebuildCache}`)
     const expected = plan.steps.filter(step => step.construction).map(step => step.construction.sourceStepId ?? step.id).sort()
     assert.deepEqual(Object.keys(cache.steps).sort(), expected)
     console.log(JSON.stringify({ stages: expected.length, physicsRevision, sourcePlanSha256, cacheValid: true }))
@@ -78,7 +79,10 @@ try {
       }
     }
     assert.equal(completed.size, plan.bricks.length)
-    assert.equal(failed, 0, 'Native construction stages must pass before a cache can be published')
+    const firstFailure = rows.find(row => row.blocking.length > 0)
+    assert.equal(failed, 0, firstFailure
+      ? `Construction stage ${firstFailure.index} (${firstFailure.id}) failed. See ${reportPath}. Reproduce with: ${rebuildCache}`
+      : 'Native construction stages must pass before a cache can be published')
     if (writeCache) {
       const shipped = JSON.parse(await readFile(join(root, 'src/data/legoHogwartsPlan.json'), 'utf8'))
       let legacy

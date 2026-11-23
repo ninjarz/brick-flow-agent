@@ -23,7 +23,13 @@ const workspace = process.cwd()
 const tempDir = await mkdtemp(join(tmpdir(), 'brick-flow-agent-validate-'))
 const entry = join(tempDir, 'entry.ts')
 const outfile = join(tempDir, 'entry.mjs')
+const revision = join(tempDir, 'revision.ts')
 const ldrawConfigSource = await readFile(join(workspace, 'public/ldraw/LDConfig.ldr'), 'utf8')
+
+await writeFile(revision, `
+  import { getConstructionPhysicsRevision } from ${JSON.stringify(`${workspace}/server/constructionPhysicsRevision.ts`)};
+  export const __CONSTRUCTION_PHYSICS_REVISION__ = getConstructionPhysicsRevision(${JSON.stringify(workspace)});
+`)
 
 await writeFile(entry, `
   import { brickById, brickDefinitions, getDefaultBrickColor } from ${JSON.stringify(`${workspace}/src/data/basicBricks.ts`)};
@@ -37,6 +43,7 @@ await writeFile(entry, `
   import { assemblyLimits } from ${JSON.stringify(`${workspace}/src/lib/llmAssembly.ts`)};
   import { getBrickConnectors } from ${JSON.stringify(`${workspace}/src/lib/brickUnits.ts`)};
   import { serializeBuildManual } from ${JSON.stringify(`${workspace}/src/lib/manualSerializer.ts`)};
+  import { prepareConstructionValidator } from ${JSON.stringify(`${workspace}/src/lib/constructionValidationCache.ts`)};
   import { normalizeImportedPlan, normalizeImportedPose, tryNormalizeImportedPlan } from ${JSON.stringify(`${workspace}/src/lib/planImport.ts`)};
   import { importObjToBrickPlan } from ${JSON.stringify(`${workspace}/src/lib/objImport.ts`)};
   import { getScenePerformanceSettings, shadowBrickThreshold, simplifiedBrickThreshold } from ${JSON.stringify(`${workspace}/src/lib/scenePerformance.ts`)};
@@ -113,13 +120,22 @@ await writeFile(entry, `
   ].map((id) => brickById.get(id));
 
   const defaultFinishedAssets = await loadAllDefaultFinishedAssets();
-  const results = defaultFinishedAssets.map((asset) => {
+  const results = await Promise.all(defaultFinishedAssets.map(async (asset) => {
     const plan = asset.plan;
     const planIssues = validateBuildPlan(plan);
     const planBlockingIssues = getBlockingBuildPlanIssues(planIssues);
     const planRoundTripIssues = validateBuildPlan(normalizeImportedPlan(JSON.parse(JSON.stringify(plan))));
     const planRoundTripBlockingIssues = getBlockingBuildPlanIssues(planRoundTripIssues);
-    const manual = serializeBuildManual(plan);
+    const constructionValidator = await prepareConstructionValidator(plan);
+    if (asset.id === 'finished-lego-71043' && !constructionValidator) {
+      throw new Error('Hogwarts construction validation cache unavailable. Run npm run verify:construction-cache.');
+    }
+    const validateStage = constructionValidator && ((step, bricks) => {
+      const validation = constructionValidator(step, bricks);
+      if (!validation) throw new Error('No matching construction validation for ' + step.id + '. Run npm run verify:construction-cache.');
+      return validation;
+    });
+    const manual = serializeBuildManual(plan, undefined, planIssues, validateStage);
     const manualPlan = manual ? {
       id: manual.planId,
       title: manual.title,
@@ -164,7 +180,7 @@ await writeFile(entry, `
         manualRoundTrip: summarizeBuildPlanIssues(manualRoundTripIssues),
       },
     };
-  });
+  }));
 
   const distance = (source, target) => Math.sqrt(
     Math.pow(source.pose.xStud - target.pose.xStud, 2) +
@@ -1234,6 +1250,7 @@ await esbuild.build({
   bundle: true,
   entryPoints: [entry],
   format: 'esm',
+  inject: [revision],
   logLevel: 'silent',
   outfile,
   platform: 'node',

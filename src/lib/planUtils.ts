@@ -406,6 +406,13 @@ const hasVerticalLoadContact = (
   support: PlacedBrick,
   boundsById?: Map<string, NonNullable<ReturnType<typeof getBrickBounds>>>,
 ) => {
+  const bounds = boundsById?.get(brick.id) ?? getBrickSupportBodyBounds(brick)
+  const supportBounds = boundsById?.get(support.id) ?? getBrickSupportBodyBounds(support)
+  if (!bounds || !supportBounds) return false
+  if (supportBounds.maxY < bounds.minY - connectionTolerance) return false
+  if (supportBounds.minY > bounds.maxY + connectionTolerance) return false
+  if (!doBoundsOverlapHorizontally(bounds, supportBounds)) return false
+
   const cacheKey = [
     getStructuralCacheVersion(),
     getBrickPoseGeometryCacheKey(brick),
@@ -417,13 +424,6 @@ const hasVerticalLoadContact = (
     setLimitedBooleanCache(verticalLoadContactCache, cacheKey, value)
     return value
   }
-
-  const bounds = boundsById?.get(brick.id) ?? getBrickSupportBodyBounds(brick)
-  const supportBounds = boundsById?.get(support.id) ?? getBrickSupportBodyBounds(support)
-  if (!bounds || !supportBounds) return remember(false)
-  if (supportBounds.maxY < bounds.minY - connectionTolerance) return remember(false)
-  if (supportBounds.minY > bounds.maxY + connectionTolerance) return remember(false)
-  if (!doBoundsOverlapHorizontally(bounds, supportBounds)) return remember(false)
 
   const brickFaces = getBrickWorldSupportFaces(brick)
   const supportFaces = getBrickWorldSupportFaces(support)
@@ -769,14 +769,7 @@ const computeBuildGraph = (
       const target = bricksById.get(targetId)
       if (!target) continue
 
-      const sourceOnTarget = hasVerticalLoadContact(source, target, boundsById)
-      const targetOnSource = hasVerticalLoadContact(target, source, boundsById)
-      const connectorConnected = !sourceOnTarget &&
-        !targetOnSource &&
-        graphPairNeedsConnectorCheck(source, target, context) &&
-        hasConnectorConnection(source, target, context)
-
-      if (sourceOnTarget || targetOnSource || connectorConnected) {
+      if (areBricksAttached(source, target, context, boundsById)) {
         addUndirectedGraphEdge(attachmentEdges, source.id, target.id)
       }
     }

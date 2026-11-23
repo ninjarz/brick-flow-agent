@@ -285,6 +285,30 @@ it('uses prepared destination artwork when jumping from another printed step', a
   expect(finalStep.lineBatches.some(batch => batch.key.startsWith('highlight:'))).toBe(true)
 })
 
+it('keeps large editor body, artwork and ordinary edges when a group highlight changes', () => {
+  const printed = [...brickById.values()].find(def => def.partNumber === '3068bpbf71043s60')!
+  const pieces = [
+    makeBrick('brick-1x1', 'red', 0, 0, 0),
+    makeBrick(printed.id, 'red', 3, 0, 0),
+    makeBrick('brick-1x1', 'red', 5, 0, 0),
+  ]
+  const options = {
+    excludedIds: new Set<string>(), highlightedIds: new Set<string>(),
+    supportedByBrickId: new Map([[pieces[1].id, false]]), showEdges: true, keepSelectionInBaseBatches: true,
+  }
+  const before = buildLDrawSceneBatches(pieces, options)
+  const after = buildLDrawSceneBatches(pieces, { ...options, highlightedIds: new Set(pieces.slice(1).map(piece => piece.id)) }, before)
+  expect(before.meshBatches.length).toBeGreaterThan(0)
+  expect(before.printBatches.length).toBeGreaterThan(0)
+  expect(after.meshBatches).toHaveLength(before.meshBatches.length)
+  expect(after.printBatches).toHaveLength(before.printBatches.length)
+  before.meshBatches.forEach((batch, index) => expect(after.meshBatches[index]).toBe(batch))
+  before.printBatches.forEach((batch, index) => expect(after.printBatches[index]).toBe(batch))
+  for (const batch of before.lineBatches) expect(after.lineBatches.find(line => line.key === batch.key)).toBe(batch)
+  expect(after.lineBatches.filter(line => line.key.startsWith('highlight:')).flatMap(line => line.sources.map(source => source.brick.id)))
+    .toEqual(pieces.slice(1).map(piece => piece.id))
+})
+
 it('keeps active print chunks and stationary artwork uploaded across rigid chunk boundary edits', () => {
   const geometry = new BoxGeometry(1, 1, 1).toNonIndexed()
   const pieces = [7.9, 8.1, 8.2].map(x => makeBrick('brick-1x1', 'red', x, 0, 0))

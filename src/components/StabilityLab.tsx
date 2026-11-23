@@ -19,6 +19,7 @@ import { getSimulationPlaybackFps } from '../lib/scenePerformance'
 import { createBrickStabilityInsights, createStabilityReport, formatStabilityReportMarkdown, formatStabilityReportSvg } from '../lib/stabilityReport'
 import { createPlanFingerprint, deleteStabilitySnapshot, loadStabilityHistory, renameStabilitySnapshot, saveStabilitySnapshot, type StabilitySnapshot } from '../lib/stabilityHistory'
 import { createBuildGraph } from '../lib/planUtils'
+import { bridgeLabPlanPrefix } from '../lib/bridgeLabExample'
 import { StabilityHistoryPanel } from './StabilityHistoryPanel'
 import { StabilitySuitePanel } from './StabilitySuitePanel'
 import { StabilityReinforcementPanel } from './StabilityReinforcementPanel'
@@ -449,6 +450,7 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
           <div>
             <h2 id="stability-lab-title">{t('stabilityLab.title')}</h2>
             <p>{t('stabilityLab.description', { title: plan.title })}</p>
+            {plan.id.startsWith(bridgeLabPlanPrefix) && <p>{t('asset.bridgeLabGuide')}</p>}
           </div>
           <button className="icon-button" type="button" aria-label={t('common.close')} title={t('common.close')} onClick={onClose}>
             <X size={18} />

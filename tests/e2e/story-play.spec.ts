@@ -74,18 +74,8 @@ test('fighting immediately reaches a simulated ending that can be replayed', asy
 test('the story dock updates after revival and keeps the next action draft', async ({ page }) => {
   // Isolate the composer state from provider availability and request billing.
   await page.evaluate(async () => {
-    const reactPath = '/brick-flow-agent/node_modules/.vite/deps/react.js'
-    const domPath = '/brick-flow-agent/node_modules/.vite/deps/react-dom_client.js'
-    const dockPath = '/brick-flow-agent/src/components/WorldStoryDock.tsx'
-    const i18nPath = '/brick-flow-agent/src/lib/i18n.tsx'
-    const scenarioPath = '/brick-flow-agent/src/data/worldScenarios.ts'
-    const reactModule = await import(reactPath)
-    const React = reactModule.default ?? reactModule
-    const domModule = await import(domPath)
-    const createRoot = domModule.createRoot ?? domModule.default.createRoot
-    const { WorldStoryDock } = await import(dockPath)
-    const { I18nProvider } = await import(i18nPath)
-    const { createDefaultWorldScenarios } = await import(scenarioPath)
+    const fixturePath = '/brick-flow-agent/tests/e2e/fixtures/storyDockModules.ts'
+    const { React, createRoot, WorldStoryDock, I18nProvider, createDefaultWorldScenarios } = await import(fixturePath)
     const asset = createDefaultWorldScenarios('zh-CN')[0]
     const world = asset.world
     const roland = world.entities.find((entity: { controller: string }) => entity.controller === 'player')

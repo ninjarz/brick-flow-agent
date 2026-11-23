@@ -823,12 +823,6 @@ export const getBrickWorldSupportCellBoxes = (brick: PlacedBrick): WorldStructur
   return boxes
 }
 
-const makeSupportFaceKey = (
-  y: number,
-  box: Pick<WorldStructuralCellBox, 'minX' | 'maxX' | 'minZ' | 'maxZ'>,
-) =>
-  `${round(y)}:${round(box.minX)},${round(box.maxX)},${round(box.minZ)},${round(box.maxZ)}`
-
 const makeSupportFace = (
   y: number,
   box: Pick<WorldStructuralCellBox, 'minX' | 'maxX' | 'minZ' | 'maxZ'>,
@@ -839,8 +833,6 @@ const makeSupportFace = (
   minZ: round(box.minZ),
   maxZ: round(box.maxZ),
 })
-
-const makeSupportFacePlaneKey = (y: number) => String(round(y))
 
 const mergeSupportFaceRows = (faces: WorldStructuralSupportFace[]) => {
   const rowsByZ = new Map<string, WorldStructuralSupportFace[]>()
@@ -912,7 +904,7 @@ const groupSupportFacesByPlane = (faces: WorldStructuralSupportFace[]) => {
   const facesByPlane = new Map<string, WorldStructuralSupportFace[]>()
 
   for (const face of faces) {
-    const key = makeSupportFacePlaneKey(face.y)
+    const key = String(face.y)
     const planeFaces = facesByPlane.get(key)
     if (planeFaces) {
       planeFaces.push(face)
@@ -938,22 +930,39 @@ const makeSupportFaces = (
   bottomPlanes: groupSupportFacesByPlane(bottom),
 })
 
+const collectSupportFaces = (boxes: WorldStructuralCellBox[]) => {
+  const topByKey = new Set<string>()
+  const bottomByKey = new Set<string>()
+  const boxFaces = boxes.map(box => {
+    const minX = round(box.minX)
+    const maxX = round(box.maxX)
+    const minZ = round(box.minZ)
+    const maxZ = round(box.maxZ)
+    const minY = round(box.minY)
+    const maxY = round(box.maxY)
+    const rectangle = `${minX},${maxX},${minZ},${maxZ}`
+    const topKey = `${maxY}:${rectangle}`
+    const bottomKey = `${minY}:${rectangle}`
+    topByKey.add(topKey)
+    bottomByKey.add(bottomKey)
+    return { minX, maxX, minZ, maxZ, minY, maxY, topKey, bottomKey }
+  })
+
+  const top: WorldStructuralSupportFace[] = []
+  const bottom: WorldStructuralSupportFace[] = []
+  for (const { minX, maxX, minZ, maxZ, minY, maxY, topKey, bottomKey } of boxFaces) {
+    if (!bottomByKey.has(topKey)) top.push({ y: maxY, minX, maxX, minZ, maxZ })
+    if (!topByKey.has(bottomKey)) bottom.push({ y: minY, minX, maxX, minZ, maxZ })
+  }
+  return makeSupportFaces(top, bottom)
+}
+
 const getBrickLocalSupportFaces = (definition: BrickDefinition): WorldStructuralSupportFaces => {
   const cacheKey = makeStructuralDefinitionCacheKey(definition)
   const cached = localSupportFaceCache.get(cacheKey)
   if (cached) return cached
 
-  const boxes = getBrickLocalSupportCellBoxes(definition)
-  const bottomFaceKeys = new Set(boxes.map((box) => makeSupportFaceKey(box.minY, box)))
-  const topFaceKeys = new Set(boxes.map((box) => makeSupportFaceKey(box.maxY, box)))
-  const faces = makeSupportFaces(
-    boxes
-      .filter((box) => !bottomFaceKeys.has(makeSupportFaceKey(box.maxY, box)))
-      .map((box) => makeSupportFace(box.maxY, box)),
-    boxes
-      .filter((box) => !topFaceKeys.has(makeSupportFaceKey(box.minY, box)))
-      .map((box) => makeSupportFace(box.minY, box)),
-  )
+  const faces = collectSupportFaces(getBrickLocalSupportCellBoxes(definition))
 
   localSupportFaceCache.set(cacheKey, faces)
   return faces
@@ -1016,16 +1025,7 @@ export const getBrickWorldSupportFaces = (brick: PlacedBrick): WorldStructuralSu
     return faces
   }
 
-  const boxes = getBrickWorldSupportCellBoxes(brick)
-  const bottomFaceKeys = new Set(boxes.map((box) => makeSupportFaceKey(box.minY, box)))
-  const topFaceKeys = new Set(boxes.map((box) => makeSupportFaceKey(box.maxY, box)))
-  const top = boxes
-    .filter((box) => !bottomFaceKeys.has(makeSupportFaceKey(box.maxY, box)))
-    .map((box) => makeSupportFace(box.maxY, box))
-  const bottom = boxes
-    .filter((box) => !topFaceKeys.has(makeSupportFaceKey(box.minY, box)))
-    .map((box) => makeSupportFace(box.minY, box))
-  const faces = makeSupportFaces(top, bottom)
+  const faces = collectSupportFaces(getBrickWorldSupportCellBoxes(brick))
 
   setLimitedWorldCache(worldSupportFaceCache, cacheKey, faces)
   return faces
