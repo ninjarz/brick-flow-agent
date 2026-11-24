@@ -76,6 +76,8 @@ import { clearStabilityHistory, createPlanFingerprint, loadStabilityHistory } fr
 import { isDebugModeEnabled } from './lib/debugMode'
 import { loadImportDiagnostics, saveImportDiagnostic, type ImportDiagnostic } from './lib/importDiagnostics'
 import type { BrickStructure, BuildPlan, FinishedAsset, PlacedBrick } from './types/bricks'
+import type { AssemblyIssue, AssemblyModuleProgress } from './lib/llmAssembly'
+import type { AgenticStatus } from './lib/agenticBuild/loop'
 import type { WorldDirectorTurn, WorldEntity, WorldEntityCommand, WorldEntityControllerKind, WorldState } from './types/world'
 import './App.css'
 
@@ -241,6 +243,8 @@ function App() {
   const [catalogPack, setCatalogPack] = useState<CatalogPackPreference>(() => loadCatalogPreferences().pack)
   const [isGenerating, setIsGenerating] = useState(false)
   const [generationPhase, setGenerationPhase] = useState<'planning' | 'thinking' | 'building'>('planning')
+  const [generationModule, setGenerationModule] = useState<AssemblyModuleProgress>()
+  const [agentStatus, setAgentStatus] = useState<AgenticStatus>()
   const [generationPreview, setGenerationPreview] = useState<BuildPlan & { frameBricks: PlacedBrick[] }>()
   const generationAbortRef = useRef<AbortController | undefined>(undefined)
   const [exportingManualHtml, setExportingManualHtml] = useState(false)
@@ -307,6 +311,7 @@ function App() {
   const [assetCategoryFilter, setAssetCategoryFilter] = useState('all')
   const [assetLibraryKind, setAssetLibraryKind] = useState<AssetLibraryKind>('models')
   const [scenarioQuery, setScenarioQuery] = useState('')
+  const viewerRef = useRef<HTMLDivElement>(null)
   const [sceneViewMode, setSceneViewMode] = useState<BrickSceneViewMode>('border')
   const [showHiddenScenarioObjects, setShowHiddenScenarioObjects] = useState(false)
   const [assetImportFrameVersion, setAssetImportFrameVersion] = useState(0)
@@ -642,6 +647,14 @@ function App() {
       }
     })
   }, [isManualExploded, manualPreviewBricks, selectedManualStep, manualHighlightedIds, locale])
+  const generationLabel = [
+    t(`scene.${generationPhase}`),
+    generationModule && t('scene.moduleProgress', { index: generationModule.index + 1, total: generationModule.total, name: generationModule.name }),
+    generationModule && generationModule.attempt > 0 && t('scene.moduleRepair', { attempt: generationModule.attempt, retries: generationModule.retries }),
+    generationModule && generationModule.ahead > 0 && t('scene.moduleAhead', { count: generationModule.ahead }),
+    (agentStatus?.phase === 'building' || agentStatus?.phase === 'details') && t('scene.moduleProgress', { index: (agentStatus.index ?? 0) + 1, total: agentStatus.total ?? 1, name: agentStatus.phase === 'details' ? t('scene.agentDetails') : agentStatus.component ?? '' }),
+    (agentStatus?.phase === 'building' || agentStatus?.phase === 'details') && t('scene.agentTurn', { turn: agentStatus.turn + 1, parts: agentStatus.parts }),
+  ].filter(Boolean).join(' · ')
   const localizedFinishedAssets = useMemo(
     () => finishedAssets.map((asset) => localizeFinishedAsset(asset, t)),
     [finishedAssets, t],
@@ -1164,6 +1177,25 @@ function App() {
     clearGenerationFeedback()
   }
 
+  /** A JPEG of the main 3D view, for the agent's detail pass. */
+  const captureSceneView = async () => {
+    // Let the latest draft render, including geometry that loads asynchronously.
+    await new Promise(resolve => setTimeout(resolve, 900))
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    const source = viewerRef.current?.querySelector('canvas')
+    if (!source || !source.width || !source.height) return undefined
+    const width = Math.min(960, source.width)
+    const output = document.createElement('canvas')
+    output.width = width
+    output.height = Math.round(source.height * width / source.width)
+    const context = output.getContext('2d')
+    if (!context) return undefined
+    context.fillStyle = '#eef2f6'
+    context.fillRect(0, 0, output.width, output.height)
+    context.drawImage(source, 0, 0, output.width, output.height)
+    return output.toDataURL('image/jpeg', 0.85)
+  }
+
   const handleGenerate = async () => {
     const input = {
       prompt: prompt.trim() || fallbackPrompt,
@@ -1183,6 +1215,8 @@ function App() {
 
     setIsGenerating(true)
     setGenerationPhase('planning')
+    setGenerationModule(undefined)
+    setAgentStatus(undefined)
     setGenerationPreview(undefined)
     generationAbortRef.current?.abort()
     const requestEpoch = workspaceSession.getEpoch()
@@ -1203,6 +1237,13 @@ function App() {
       generationController.signal.throwIfAborted()
       setGenerationPreview({ ...candidate, frameBricks: candidate.bricks })
     }
+
+    const isCurrentGeneration = () => !generationController.signal.aborted &&
+      workspaceSession.getEpoch() === requestEpoch && generationAbortRef.current === generationController
+    const assemblyIssues: AssemblyIssue[] = []
+    const describeAssemblyIssue = (issue: AssemblyIssue) => issue.kind === 'skipped-module'
+      ? t('error.assemblySkipped', { name: issue.module, reason: issue.detail.split('\n')[0].slice(0, 200) })
+      : t('error.assemblyColors', { name: issue.module, colors: issue.detail })
 
     let lastDraftAt = 0
     const showDraft = (candidate: BuildPlan) => {
@@ -1232,7 +1273,16 @@ function App() {
         }
       }
 
-      const initialPlan = await generateLlmBuildPlan({ ...input, config: llmConfig, signal: generationController.signal, locale, onProgress: showBuildProgress, onDraft: showDraft, onPhase: phase => { if (!generationController.signal.aborted && workspaceSession.getEpoch() === requestEpoch && generationAbortRef.current === generationController) setGenerationPhase(phase) } })
+      const useAgent = llmConfig.buildMode === 'agentic' && input.pack === 'lego'
+      const initialPlan = useAgent
+        ? await (await import('./lib/agenticBuild/loop')).generateAgenticBuildPlan({
+            prompt: input.prompt, config: llmConfig, signal: generationController.signal, locale,
+            imageDataUrl: input.imageDataUrl,
+            captureView: captureSceneView,
+            onStatus: status => { if (isCurrentGeneration()) { setAgentStatus(status); setGenerationPhase(status.phase === 'manual' ? 'planning' : 'building') } },
+            onProgress: showDraft,
+          })
+        : await generateLlmBuildPlan({ ...input, config: llmConfig, signal: generationController.signal, locale, onProgress: showBuildProgress, onDraft: showDraft, onPhase: phase => { if (isCurrentGeneration()) setGenerationPhase(phase) }, onModuleProgress: progress => { if (isCurrentGeneration()) setGenerationModule(progress) }, onAssemblyIssue: issue => { assemblyIssues.push(issue) } })
       if (generationController.signal.aborted || workspaceSession.getEpoch() !== requestEpoch) return
       let candidatePlan = initialPlan
       let result = validateCandidate(candidatePlan)
@@ -1271,13 +1321,13 @@ function App() {
         repairs: repairAttempts + (result.repairedLocally ? 1 : 0),
       }))
       setGenerationManualOffer(true)
-      if (repairAttempts > 0) {
-        setGenerationWarning(t('error.generationRetried', { summary: firstFailureSummary, attempts: repairAttempts }))
-      } else if (result.repairedLocally) {
-        setGenerationWarning(t('error.generationRepaired', { summary: firstFailureSummary }))
-      } else if (result.issues.length > 0) {
-        setGenerationWarning(summarizeBuildPlanIssues(result.issues, locale))
-      }
+      const repairWarning = repairAttempts > 0
+        ? t('error.generationRetried', { summary: firstFailureSummary, attempts: repairAttempts })
+        : result.repairedLocally
+          ? t('error.generationRepaired', { summary: firstFailureSummary })
+          : result.issues.length > 0 ? summarizeBuildPlanIssues(result.issues, locale) : ''
+      const warning = [...assemblyIssues.map(describeAssemblyIssue), repairWarning].filter(Boolean).join('\n')
+      if (warning) setGenerationWarning(warning)
     } catch (error) {
       if (workspaceSession.getEpoch() !== requestEpoch || generationAbortRef.current !== generationController) return
       setGenerationFailure(error instanceof Error ? error.message : t('error.generationFailed'))
@@ -1285,6 +1335,8 @@ function App() {
       if (generationAbortRef.current === generationController) {
         generationAbortRef.current = undefined
         setIsGenerating(false)
+        setGenerationModule(undefined)
+        setAgentStatus(undefined)
         setGenerationPreview(undefined)
       }
     }
@@ -3077,7 +3129,7 @@ function App() {
           </nav>
         </header>
 
-        <div className="viewer">
+        <div className="viewer" ref={viewerRef}>
           {(world.entities.length > 0 || world.hiddenTargets.length > 0) && (
             <>
               <div className="world-simulation-toolbar" role="status">
@@ -3290,8 +3342,9 @@ function App() {
           <Suspense fallback={<div className="scene-loading">{t('scene.loading')}</div>}>
             <BrickScene
               bricks={generationPreview?.bricks ?? plan.bricks}
+              preserveDrawingBuffer={llmConfig.buildMode === 'agentic'}
               building={isLoadingAsset || isGenerating || isManualPreparing || isExportingPlan}
-              buildingLabel={isLoadingAsset ? t('asset.loadingModel') : isGenerating ? t(`scene.${generationPhase}`) : isExportingPlan ? (locale === 'zh-CN' ? '正在导出' : 'Exporting') : (locale === 'zh-CN' ? '正在准备手册' : 'Preparing manual')}
+              buildingLabel={isLoadingAsset ? t('asset.loadingModel') : isGenerating ? generationLabel : isExportingPlan ? (locale === 'zh-CN' ? '正在导出' : 'Exporting') : (locale === 'zh-CN' ? '正在准备手册' : 'Preparing manual')}
               framingBricks={generationPreview?.frameBricks}
               selectedId={generationPreview ? undefined : selectedId}
               cameraFrameKey={`${generationPreview?.id ?? plan.id}:asset-import-${assetImportFrameVersion}${generationPreview ? `:module-${generationPreview.structures?.length ?? 0}` : ''}`}

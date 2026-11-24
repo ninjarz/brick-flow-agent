@@ -2,6 +2,9 @@ type Point = [number, number, number]
 type Shape = { name: string; shape: 'ellipsoid' | 'box'; center: Point; size: Point; color: string }
 type Feature = { name: string; on: string; shape: 'ellipse' | 'rectangle'; center: [number, number]; size: [number, number]; color: string }
 
+// Sculptures are tiled from plates; keep the id plate-1x1 carries for the colour.
+const sculptureColor = (value: unknown) => resolvePartColor(brickById.get('plate-1x1')!.colors, value) ?? String(value)
+
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
@@ -64,7 +67,7 @@ export const createSculptureLayers = (command: Record<string, unknown>) => {
     if (center.some((n, axis) => n - dimensions[axis] / 2 < -0.001 || n + dimensions[axis] / 2 > size[axis] + 0.001)) {
       throw new Error(`Solid "${value.name}" extends outside the sculpture bounds. Centres are local to the sculpture bounding box.`)
     }
-    return { name: value.name, shape: value.shape as Shape['shape'], center, size: dimensions, color: value.color }
+    return { name: value.name, shape: value.shape as Shape['shape'], center, size: dimensions, color: sculptureColor(value.color) }
   })
   const featureNames = new Set<string>()
   const shifts = supportSolids(solids, size)
@@ -78,7 +81,7 @@ export const createSculptureLayers = (command: Record<string, unknown>) => {
     if (!dimensions.every(n => n > 0 && n <= 32)) throw new Error('Surface feature dimensions must be positive and at most 32 studs.')
     const center = vector(value.center, 2) as [number, number]
     center[1] += shifts.get(value.on) ?? 0
-    return { name: value.name, on: value.on, shape: value.shape as Feature['shape'], center, size: dimensions, color: value.color }
+    return { name: value.name, on: value.on, shape: value.shape as Feature['shape'], center, size: dimensions, color: sculptureColor(value.color) }
   })
   const layerHeight = 0.4
   const [width, height, depth] = size
@@ -139,6 +142,7 @@ export const createSculptureLayers = (command: Record<string, unknown>) => {
 }
 import { brickById } from '../data/basicBricks'
 import type { BrickColor } from '../types/bricks'
+import { resolvePartColor } from './colorIds'
 
 
 class SculptureSupportError extends Error {
@@ -180,7 +184,7 @@ const tileSupportedLayers = (sculpture: ReturnType<typeof createSculptureLayers>
       const options: Candidate[] = []
       const color = sculpture.palette[cells[cell]]
       for (const shape of shapes) {
-        if (!brickById.get(shape.id)?.colors.includes(color as BrickColor)) continue
+        if (!resolvePartColor(brickById.get(shape.id)?.colors ?? [], color)) continue
         for (let dz = 0; dz < shape.depth; dz++) {
           for (let dx = 0; dx < shape.width; dx++) {
             const x = cell % width - dx

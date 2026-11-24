@@ -29,5 +29,8 @@ test-results
 
 .workbuddy
 
+# Local agent skills and design notes
+.agents/
+
 # Local documentation and review evidence
 /docs/

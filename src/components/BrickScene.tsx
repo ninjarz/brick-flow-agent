@@ -2921,6 +2921,8 @@ export const BrickScene = ({
 
   return (
     <Canvas
+      // The drawing-buffer flag is fixed at context creation: remount when it changes.
+      key={preserveDrawingBuffer ? 'preserve' : 'default'}
       data-geometry-ready={preferDetailedGeometry ? 'true' : 'false'}
       shadows={enableRealtimeShadows}
       frameloop="demand"

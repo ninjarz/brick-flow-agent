@@ -44,6 +44,7 @@ export const loadLlmConfig = (): LlmConfig => {
       enableThinking: parsed.enableThinking === true,
       autoRepair: parsed.autoRepair !== false,
       maxRepairAttempts: normalizeMaxRepairAttempts(parsed.maxRepairAttempts),
+      buildMode: parsed.buildMode === 'agentic' ? 'agentic' : 'assembly',
     }
   } catch {
     return defaultLlmConfig

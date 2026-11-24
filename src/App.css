@@ -6164,8 +6164,11 @@ button:disabled {
   position: absolute;
   top: 12px;
   right: 12px;
-  width: 230px;
-  max-width: calc(100% - 24px);
+  /* Grows for module progress text, then wraps instead of overflowing. */
+  width: max-content;
+  min-width: 230px;
+  max-width: min(420px, calc(100% - 24px));
+  box-sizing: border-box;
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -6173,6 +6176,19 @@ button:disabled {
   pointer-events: none;
 }
 .scene-loading-progress-label { display: flex; justify-content: space-between; gap: 12px; white-space: nowrap; font-size: 12px; color: #64748b; }
+
+/* Long module names wrap to at most two lines; the percentage stays on one. */
+.scene-loading-progress-label > span:first-child {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.scene-loading-progress-label > span + span { flex: none; }
 .scene-loading-progress-track { height: 4px; margin-top: 8px; overflow: hidden; border-radius: 3px; background: #e2e8f0; }
 .scene-loading-progress-track > div { height: 100%; border-radius: inherit; background: #3478f6; transition: width 160ms ease; }
 

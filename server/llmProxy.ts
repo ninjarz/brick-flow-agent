@@ -4,7 +4,13 @@ import { isIP } from 'node:net'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Connect, Plugin } from 'vite'
 
-export const llmProxyTimeoutMs = 120_000
+/**
+ * Idle timeout: aborts when the upstream sends nothing for this long, and is
+ * reset by every streamed chunk. Slow reasoning models can stay silent for
+ * minutes before their first byte. Kept just below the browser's 240 s total
+ * request limit so a silent upstream still gets a clear 504 back.
+ */
+export const llmProxyTimeoutMs = 230_000
 /** Generous enough for a base64 reference image plus a long prompt. */
 export const llmProxyMaxBodyBytes = 32 * 1024 * 1024
 

@@ -4,12 +4,13 @@ import { LlmOutputLimitError } from './llmOutputLimit'
 import { assemblyCheckpointSignature, clearAssemblyCheckpoint, loadAssemblyCheckpoint, saveAssemblyCheckpoint } from './llmAssemblyCheckpoint'
 import type { AssemblyCheckpoint } from './llmAssemblyCheckpoint'
 import { chatCompletionEndpoint } from './llmEndpoint'
-import { assemblyLimits, generateAssembly, parseAssemblyLayout } from './llmAssembly'
+import { assemblyLimits, generateAssembly, parseAssemblyLayout, type AssemblyIssue, type AssemblyModuleProgress } from './llmAssembly'
+import { canonicalColorIds, describeCodedColors, resolvePartColor } from './colorIds'
 import { normalizeMaxRepairAttempts } from './llmConfig'
 import { aiTasks } from './aiTasks'
-import { createRequestLifetime, withAbortSignal } from './requestLifetime'
-import { brickById, brickDefinitions, colorHex } from '../data/basicBricks'
-import type { BrickColor, BrickPack, BuildPlan, GeneratorInput, LlmConfig, PlacedBrick } from '../types/bricks'
+import { createRequestLifetime, trackResponseActivity, withAbortSignal } from './requestLifetime'
+import { brickById, brickDefinitions } from '../data/basicBricks'
+import type { BrickDefinition, BrickPack, BuildPlan, GeneratorInput, LlmConfig, PlacedBrick } from '../types/bricks'
 import { generateBuildPlan } from './localGenerator'
 import { PLATE_HEIGHT_WORLD, WORLD_EDIT_STEP_STUDS, normalizeHorizontalStud, normalizeYStud, plateHeightToWorldStud } from './brickUnits'
 import { createId, createSingleBrickSteps, findSupportedOpenPose, hasBrickCollision, isBrickSupported, makeBrick } from './planUtils'
@@ -49,6 +50,8 @@ type LlmGenerateInput = GeneratorInput & {
   onProgress?: (plan: BuildPlan) => void | Promise<void>
   onDraft?: (plan: BuildPlan) => void
   onPhase?: (phase: 'planning' | 'thinking' | 'building') => void
+  onModuleProgress?: (progress: AssemblyModuleProgress) => void
+  onAssemblyIssue?: (issue: AssemblyIssue) => void
 }
 
 type LlmRequestPayload = Record<string, unknown>
@@ -75,6 +78,8 @@ export type LlmJsonRequestInput = {
   config: LlmConfig
   systemPrompt: string
   userPrompt: string
+  /** Images sent with the user prompt (data URLs), e.g. a reference photo or a render of the build. */
+  images?: string[]
   signal?: AbortSignal
   locale?: LlmLocale
   temperature?: number
@@ -92,7 +97,10 @@ export type LlmStreamRequestInput = Omit<LlmJsonRequestInput, 'systemPrompt' | '
   onReasoningDelta?: (text: string) => void
 }
 
+/** Idle limit: no data for this long aborts. Just above the dev proxy's 230 s, so a silent upstream gets the proxy's 504. */
 const clientRequestTimeoutMs = 240_000
+/** Total limit for one request, however steadily it streams. */
+const clientRequestMaxMs = 15 * 60_000
 const configTestTimeoutMs = 15_000
 const configTestMaxTokens = 128
 const generationMaxTokens = 12_288
@@ -102,13 +110,29 @@ const emptyStreamRetryMaxTokens = 32_768
 export const maxLlmBricks = 64
 
 let omitUnsupportedThinkingParameters = false
+let omitUnsupportedReasoningEffort = false
 let omitUnsupportedStreamOptions = false
 const mandatoryReasoningModels = new Set<string>()
+/**
+ * Models observed reasoning even though thinking was disabled. Some gateways
+ * (Gemini via OpenAI-compatible endpoints) ignore every disable field, and the
+ * hidden reasoning counts against max_tokens, so later requests to these
+ * models get the thinking output budget instead of being truncated.
+ */
+const observedReasoningModels = new Set<string>()
+const reasoningModelKey = (config: LlmConfig) => `${config.endpoint.trim()}\n${config.modelName.trim()}`
+const observedReasoningThreshold = 256
+const noteReasoningTokens = (config: LlmConfig, tokens: number) => {
+  if (tokens >= observedReasoningThreshold) observedReasoningModels.add(reasoningModelKey(config))
+}
+export const modelReasonsWhenDisabled = (config: LlmConfig) => observedReasoningModels.has(reasoningModelKey(config))
 
 export const resetLlmThinkingCompatibility = () => {
   omitUnsupportedThinkingParameters = false
+  omitUnsupportedReasoningEffort = false
   omitUnsupportedStreamOptions = false
   mandatoryReasoningModels.clear()
+  observedReasoningModels.clear()
 }
 
 const llmText: Record<LlmLocale, {
@@ -151,7 +175,7 @@ const llmText: Record<LlmLocale, {
     configTimeout: `LLM 配置测试超时：${configTestTimeoutMs / 1000} 秒内没有返回`,
     emptyConfigResponse: 'LLM 配置测试失败：响应为空',
     generationCanceled: '生成已取消',
-    generationTimeout: `LLM 请求超时：${clientRequestTimeoutMs / 1000} 秒内没有返回`,
+    generationTimeout: `LLM 请求超时：连续 ${clientRequestTimeoutMs / 1000} 秒没有收到数据，或单次请求超过 ${clientRequestMaxMs / 60_000} 分钟`,
     emptyGenerationResponse: 'LLM 响应为空，请检查模型名字、api_key 或接口兼容性',
     generatedTitle: 'LLM 生成方案',
   },
@@ -173,13 +197,12 @@ const llmText: Record<LlmLocale, {
     configTimeout: `LLM config test timed out after ${configTestTimeoutMs / 1000} seconds.`,
     emptyConfigResponse: 'LLM config test failed: the response was empty.',
     generationCanceled: 'Generation was canceled.',
-    generationTimeout: `LLM request timed out after ${clientRequestTimeoutMs / 1000} seconds.`,
+    generationTimeout: `LLM request timed out: no data for ${clientRequestTimeoutMs / 1000} seconds, or the request exceeded ${clientRequestMaxMs / 60_000} minutes.`,
     emptyGenerationResponse: 'The LLM response was empty. Check the model name, api_key, or endpoint compatibility.',
     generatedTitle: 'LLM generated plan',
   },
 }
 
-const colors = Object.keys(colorHex) as BrickColor[]
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
@@ -211,11 +234,6 @@ const asLegacyPlateGrid = (value: unknown, fallback = 0) => {
   return Number.isFinite(number) ? plateHeightToWorldStud(number) : fallback
 }
 
-const asColor = (value: unknown, fallback: BrickColor): BrickColor => {
-  const color = asString(value)
-  return colors.includes(color as BrickColor) ? (color as BrickColor) : fallback
-}
-
 const clampRotation = (value: unknown) => {
   const rotation = asInteger(value, 0)
   return (((rotation % 4) + 4) % 4) as 0 | 1 | 2 | 3
@@ -239,19 +257,57 @@ const formatInventoryForPrompt = (inventory: number) =>
 const formatLegoHeightForPrompt = (heightStuds: number) =>
   Number((heightStuds / PLATE_HEIGHT_WORLD).toFixed(3))
 
-const getInventorySummary = (pack: BrickPack = 'lego', inventoryOverrides?: Record<string, number>, partIds?: string[]) => brickDefinitions
+const getGenerationParts = (pack: BrickPack, partIds?: string[]) => brickDefinitions
   .filter((brick) => brick.pack === pack && (pack !== 'lego' || (!brick.id.startsWith('hogwarts-') && !brick.id.startsWith('architecture-'))))
+  // Set-specific printed nameplates are only meaningful in their replicas.
+  .filter((brick) => pack !== 'lego' || !brick.id.endsWith('-nameplate'))
   .filter(brick => !partIds || partIds.includes(brick.id))
-  .map((brick) => {
+
+/**
+ * The LEGO catalogue in a compact form. Colours are most of its size, so the
+ * colours most parts share are listed once as palette "*" and each part lists
+ * only its differences. LDraw codes are shown under their readable ids
+ * (reddish-brown, dark-gray); module expansion maps them back to each part.
+ */
+const formatLegoInventory = (parts: BrickDefinition[], inventoryOverrides?: Record<string, number>) => {
+  const colorsById = new Map(parts.map((brick) => [brick.id, canonicalColorIds(brick.colors)]))
+  const counts = new Map<string, number>()
+  for (const colors of colorsById.values()) for (const color of colors) counts.set(color, (counts.get(color) ?? 0) + 1)
+  // Only worth a palette when several parts share it.
+  const common = parts.length >= 6 ? [...counts].filter(([, count]) => count >= parts.length * 0.4).map(([color]) => color) : []
+  const commonSet = new Set(common)
+  const describe = (colors: string[]) => {
+    const plain = colors.join('/')
+    if (!common.length) return plain
+    const has = new Set(colors)
+    const missing = common.filter((color) => !has.has(color))
+    const extra = colors.filter((color) => !commonSet.has(color))
+    const delta = `*${missing.length ? ` -${missing.join('/')}` : ''}${extra.length ? ` +${extra.join('/')}` : ''}`
+    return delta.length < plain.length ? delta : plain
+  }
+  const coded = describeCodedColors([...counts.keys()])
+  const header = [
+    'Each line: id: name, footprint WxD, height in plates, kind; colours; inventory (unlimited unless listed).',
+    'Kind tile has a smooth top and cannot support another brick. Kind slope supports only at its actual stud positions, not its full footprint.',
+    ...(common.length ? [`Colour palette * = ${common.join('/')}. "* -a +b" means the palette without a, plus b.`] : []),
+    ...(coded.length ? [`Coded colours: ${coded.join(', ')}.`] : []),
+  ]
+  return [...header, ...parts.map((brick) => {
     const inventory = inventoryOverrides?.[brick.id] ?? brick.inventory
-    if (pack === 'minecraft') {
-      const shape = brick.voxelVisual?.shape ?? 'cube'
-      const supportNote = shape === 'cross' ? ', plant: must sit on a solid cube top' : ''
-      return `${brick.id}: ${brick.name}, shape ${shape}, size ${brick.footprint.widthStuds}x${brick.footprint.depthStuds}x${brick.footprint.heightStuds} blocks, colors ${brick.colors.join('/')}, inventory ${formatInventoryForPrompt(inventory)}${supportNote}`
-    }
-    return `${brick.id}: ${brick.name}, footprint ${brick.footprint.widthStuds}x${brick.footprint.depthStuds}, height ${formatLegoHeightForPrompt(brick.footprint.heightStuds)} plates, ${brick.kind === 'tile' ? 'smooth top: cannot support another brick' : brick.kind === 'slope' ? 'sloped top: use actual stud positions, not full footprint support' : 'kind ' + brick.kind}, colors ${brick.colors.join('/')}, inventory ${formatInventoryForPrompt(inventory)}`
-  })
-  .join('\n')
+    return `${brick.id}: ${brick.name}, ${brick.footprint.widthStuds}x${brick.footprint.depthStuds}, ${formatLegoHeightForPrompt(brick.footprint.heightStuds)}p, ${brick.kind}; ${describe(colorsById.get(brick.id)!)}${Number.isFinite(inventory) ? `; inventory ${inventory}` : ''}`
+  })].join('\n')
+}
+
+const getInventorySummary = (pack: BrickPack = 'lego', inventoryOverrides?: Record<string, number>, partIds?: string[]) => {
+  const parts = getGenerationParts(pack, partIds)
+  if (pack === 'lego') return formatLegoInventory(parts, inventoryOverrides)
+  return parts.map((brick) => {
+    const inventory = inventoryOverrides?.[brick.id] ?? brick.inventory
+    const shape = brick.voxelVisual?.shape ?? 'cube'
+    const supportNote = shape === 'cross' ? ', plant: must sit on a solid cube top' : ''
+    return `${brick.id}: ${brick.name}, shape ${shape}, size ${brick.footprint.widthStuds}x${brick.footprint.depthStuds}x${brick.footprint.heightStuds} blocks, colors ${brick.colors.join('/')}, inventory ${formatInventoryForPrompt(inventory)}${supportNote}`
+  }).join('\n')
+}
 
 export const llmSystemPrompt = 'You are a brick build-planning engine. Return compact valid JSON only. Do not include reasoning.'
 
@@ -357,20 +413,22 @@ export const buildLlmUserPrompt = (input: GeneratorInput): string => {
   return `You design LEGO brick build plans for a browser 3D editor.
 User request: ${input.prompt}
 Reference image: ${input.imageName ?? 'none'}
-Tool registry: building creates a complete parametric architectural hall. sculpture compiles named ellipsoid/box volumes with visible curved-surface markings into real plates for characters and animals. parts assembles custom details from individual real bricks and repeated arrays. Each parts module will receive the precise part/colour/inventory catalogue (including brick-1x1) at assembly time. Plan shapes, proportions, palette and attachment interfaces now.
+Tool registry: building creates a complete parametric architectural hall. sculpture compiles named ellipsoid/box volumes with visible curved-surface markings into real plates for characters and animals. parts assembles custom shapes from individual real bricks, repeated arrays and structural primitives (deck surfaces, rectangular or straight walls with coloured openings, stepped roofs). Each parts module will receive the precise part/colour/inventory catalogue (including brick-1x1) at assembly time. Plan shapes, proportions, palette and attachment interfaces now.
 Choose the scale and architectural proportions from the request and reference image. Identify the distinctive silhouette, colour palette and important details before allocating parts.
 For a small object, use one parts module. For a large object, split into connected modules. Return only a compact module layout, never an individual brick list in this planning stage.
 For a recognizable character, use one sculpture module with the sculpture-shapes tool. It models the head, torso, arms/hands and feet as separate overlapping ellipsoid/box volumes, with visible curved-surface markings for the face and clothing. State the actual subject's head/body proportions, shape, distinctive anatomy and essential features. Plan a genuinely three-dimensional figure, usually 16–20 studs wide, 10–14 deep and 20–26 tall, within 2048 parts. Front is maximum Z, facing the default editor camera. Distinguish eye whites and pupils, a projecting nose, mouth and characteristic small accessories. Leave exact geometry to the sculpture stage.
 This stage only names the main shapes and their overall proportions. Leave individual brick placements, connector calculations and collision checking to the assembly stage. Keep each module description under 80 words. Produce the layout immediately without solving the entire assembly in advance.
-For architectural requests, prefer a FIRST module using the deterministic building tool: a connected foundation, hall, windows, buttresses, ceiling and roof. It accepts width 8 or 16, wallCourses 6–10 and base/wall/window/trim/roof colours. Its complete outer base is (width+4) x 12 studs; roof ridge Y=origin.y+1.2+wallCourses*1.2+4.8. This tool yields roughly 250–500 editable pieces. Do not plan a separate foundation underneath it. Later modules may attach towers, a porch or details OUTSIDE its occupied volume. Avoid mechanisms and extra rooms absent from the request. Prefer one complete building-tool module and at most one attached detail module. Use only 1–3 modules when that meets the user's requested complexity.
+The building tool is optional: use it only when a formal hall with buttresses and glazed bays fits the request. It accepts width 8 or 16, wallCourses 6–10; base (width+4) x 12 studs; roof ridge Y=origin.y+1.2+wallCourses*1.2+4.8. Otherwise design the building as parts modules with your own footprint, height, openings and roof. Do not plan a foundation under a building-tool module; attach later modules outside its volume. Use 1–3 modules when that meets the requested complexity.
 For a detailed building or larger object, return an assembly layout instead:
-{"title":"English title","modules":[{"name":"Main hall","tool":"building","description":"Exact dimensions, palette and requested architectural character","origin":[0,0,0]}]}.
+{"title":"English title","modules":[{"name":"Main structure","tool":"parts","description":"Exact dimensions, palette and requested character","requiredColors":["gray"],"origin":[0,0,0]}]}.
 Use 1–${assemblyLimits.modules} modules in construction order, at most ${assemblyLimits.moduleBricks} expanded parts per module and ${assemblyLimits.bricks} total. A shared connected foundation must precede walls, towers, roofs and decoration. Adjacent ground plates alone are disconnected: use two overlapping staggered layers of plates to bridge every seam. A plate has studs only at its listed grid positions, not on arbitrary edges. Later modules attach to previously accepted modules. Describe their interfaces in world coordinates and use local coordinates relative to each origin during assembly.
 For a building-tool module, include its complete program in the planning response to avoid another model request:
 "program":{"commands":[{"kind":"building","at":[0,0,0],"width":16,"wallCourses":8,"wallColor":"tan","roofColor":"gray","windowColor":"black","trimColor":"white","baseColor":"gray"}]}.
 The building tool accepts width 8 or 16, wallCourses 6–10 and the listed colour parameters. Do not expand it into raw bricks. For custom parts modules, omit program until the assembly stage.
-Every module MUST specify tool: "building" for a parameterized hall, "sculpture" for characters/animals, or "parts" for custom brick details. The first module of a building request should use tool:"building". Budget the whole model before splitting it. Allocate enough detail to characteristic windows, roofs and interiors requested by the user. Repeated windows and masonry can be generated as arrays in later module programs.
+Every module MUST specify tool: "building" for a parameterized hall, "sculpture" for characters/animals, or "parts" for custom brick details. Budget the whole model before splitting it. Allocate enough detail to characteristic windows, roofs and interiors requested by the user. Repeated windows and masonry can be generated as arrays in later module programs.
 Every parts or sculpture module must also specify requiredColors, an array of the exact colour ids essential to its identifying features (include the body, face, pupils, clothing and small accents wherever their colours identify the subject). These colours will be checked against the actual compiled parts. In the description explicitly assign each required colour to its visible feature. They must survive structural repairs. Include all characteristic facial features instead of leaving a blank face.
+requiredColors use readable colour ids with hyphens, such as dark-gray, reddish-brown or trans-yellow.
+Give every module after the first a dependsOn array of the earlier module names it attaches to. Modules that attach only to the foundation, such as a tower, porch or chimney, list only that module so they can be generated in parallel.
 Positions are the minimum X/Z corner and bottom Y of the rotated footprint, not its centre. A 4x2 brick at [0,0,0] occupies X=0..4, Z=0..2, Y=0..1.2. Odd horizontal quarter turns swap width and depth. All coordinates are in studs on the 0.1-stud grid. One plate is 0.4 studs tall. Use actual part dimensions and compatible connectors, legal colours and available inventory. Every construction prefix must be connected and supported. Avoid overlaps. Quarter turns are integers from 0 to 3.
 Return only the chosen JSON shape. Module programs will be requested separately. Do not claim fidelity to an official set without its instructions and inventory.`
 }
@@ -498,6 +556,15 @@ const extractLlmTokenUsage = (payload: unknown): LlmTokenUsage | undefined => {
         ...(totalTokens !== undefined ? { totalTokens } : {}),
       }
     : undefined
+}
+
+const extractReasoningTokens = (payload: unknown) => {
+  if (!isRecord(payload)) return undefined
+  const usage = isRecord(payload.usage) ? payload.usage : isRecord(payload.usage_metadata) ? payload.usage_metadata : undefined
+  if (!usage) return undefined
+  const completion = isRecord(usage.completion_tokens_details) ? usage.completion_tokens_details : undefined
+  const output = isRecord(usage.output_tokens_details) ? usage.output_tokens_details : undefined
+  return readUsageNumber(completion?.reasoning_tokens, output?.reasoning_tokens, usage.reasoning_tokens, usage.thoughtsTokenCount)
 }
 
 const extractLlmFinishReason = (payload: unknown) => {
@@ -640,6 +707,12 @@ const withoutThinkingParameters = (payload: LlmRequestPayload): LlmRequestPayloa
   return compatiblePayload
 }
 
+const withoutReasoningEffort = (payload: LlmRequestPayload): LlmRequestPayload => {
+  const compatiblePayload = { ...payload }
+  delete compatiblePayload.reasoning_effort
+  return compatiblePayload
+}
+
 const withoutStreamOptions = (payload: LlmRequestPayload): LlmRequestPayload => {
   const compatiblePayload = { ...payload }
   delete compatiblePayload.stream_options
@@ -654,6 +727,7 @@ const requestLlmChatWithCompatibility = async (
   const compatiblePayload = () => {
     let next = payload
     if (omitUnsupportedThinkingParameters) next = withoutThinkingParameters(next)
+    if (omitUnsupportedReasoningEffort) next = withoutReasoningEffort(next)
     if (omitUnsupportedStreamOptions) next = withoutStreamOptions(next)
     return next
   }
@@ -668,17 +742,28 @@ const requestLlmChatWithCompatibility = async (
     if (response.ok) return response
     detail = (await withAbortSignal(signal, () => response.clone().text())).toLowerCase()
   }
-  if (!omitUnsupportedThinkingParameters && (detail.includes('thinking') || detail.includes('enable_thinking'))) {
-    omitUnsupportedThinkingParameters = true
+  // Providers reject unknown fields one message at a time (NVIDIA names only
+  // enable_thinking first). Drop whichever fields each error names and retry,
+  // at most once per field group.
+  for (;;) {
+    let changed = false
+    if (!omitUnsupportedReasoningEffort && detail.includes('reasoning_effort')) {
+      omitUnsupportedReasoningEffort = true
+      changed = true
+    }
+    if (!omitUnsupportedThinkingParameters && (detail.includes('enable_thinking') || /\bthinking\b/.test(detail.replaceAll('reasoning_effort', '')))) {
+      omitUnsupportedThinkingParameters = true
+      changed = true
+    }
+    if (!omitUnsupportedStreamOptions && detail.includes('stream_options')) {
+      omitUnsupportedStreamOptions = true
+      changed = true
+    }
+    if (!changed) return response
     response = await requestLlmChat(config, compatiblePayload(), signal)
     if (response.ok) return response
     detail = (await withAbortSignal(signal, () => response.clone().text())).toLowerCase()
   }
-  if (!omitUnsupportedStreamOptions && detail.includes('stream_options')) {
-    omitUnsupportedStreamOptions = true
-    return requestLlmChat(config, compatiblePayload(), signal)
-  }
-  return response
 }
 
 const formatFetchError = (error: unknown, requestMode: LlmConfig['requestMode'], locale: LlmLocale) => {
@@ -764,8 +849,7 @@ const normalizeBricks = (
     if (Number.isFinite(inventory) && currentCount >= inventory) continue
 
     const pose = isRecord(brick.pose) ? brick.pose : {}
-    const color = asColor(brick.color, definition.colors[0])
-    const safeColor = definition.colors.includes(color) ? color : definition.colors[0]
+    const safeColor = resolvePartColor(definition.colors, brick.color) ?? definition.colors[0]
     const candidate = makeBrick(
       brickId,
       safeColor,
@@ -861,6 +945,7 @@ const requestLlmJsonContentImpl = async ({
   config,
   systemPrompt,
   userPrompt,
+  images,
   signal,
   locale = 'zh-CN',
   temperature = 0.2,
@@ -870,7 +955,7 @@ const requestLlmJsonContentImpl = async ({
 }: LlmJsonRequestInput) => {
   if (!isLlmConfigComplete(config)) throw new Error(llmText[locale].incompleteConfig)
 
-  const { controller, dispose } = createRequestLifetime(signal, clientRequestTimeoutMs)
+  const { controller, touch, dispose } = createRequestLifetime(signal, clientRequestTimeoutMs, clientRequestMaxMs)
   aiTasks.bind(signal, controller.signal)
   let response: Response
 
@@ -879,17 +964,23 @@ const requestLlmJsonContentImpl = async ({
       model: config.modelName.trim(),
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
+        {
+          role: 'user',
+          content: images?.length
+            ? [{ type: 'text', text: userPrompt }, ...images.map(url => ({ type: 'image_url', image_url: { url, detail: 'high' } }))]
+            : userPrompt,
+        },
       ],
       temperature,
       max_tokens: maxTokens,
       stream,
       response_format: { type: 'json_object' },
     }, config.enableThinking), controller.signal)
+    response = trackResponseActivity(response, touch)
 
     if (!response.ok) throw new Error(await formatRequestError(response, config.requestMode, locale))
     aiTasks.phase(signal, 'receiving')
-    return await readGenerationContent(response, controller.signal, locale, onContent, onReasoning)
+    return await readGenerationContent(response, controller.signal, locale, onContent, onReasoning, tokens => noteReasoningTokens(config, tokens))
 
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
@@ -907,6 +998,7 @@ const readLlmEventStream = async (
   onDelta: (text: string) => void,
   onReasoningDelta?: (text: string) => void,
   locale: LlmLocale = 'zh-CN',
+  onReasoningTokens?: (tokens: number) => void,
 ) => {
   if (!response.body) return { content: '', maxTokens: 0, retryCount: 0 } satisfies LlmStreamResult
   const reader = response.body.getReader()
@@ -926,6 +1018,8 @@ const readLlmEventStream = async (
     }
     checkProviderError(payload, locale)
     usage = extractLlmTokenUsage(payload) ?? usage
+    const reasoningTokens = extractReasoningTokens(payload)
+    if (reasoningTokens !== undefined) onReasoningTokens?.(reasoningTokens)
     finishReason = extractLlmFinishReason(payload) ?? finishReason
     const reasoningDelta = extractReasoningContent(payload)
     if (reasoningDelta) onReasoningDelta?.(reasoningDelta)
@@ -969,12 +1063,12 @@ const readLlmEventStream = async (
   } satisfies LlmStreamResult
 }
 
-const readGenerationContent = async (response: Response, signal: AbortSignal, locale: LlmLocale, onContent?: (text: string) => void, onReasoning?: () => void) => {
+const readGenerationContent = async (response: Response, signal: AbortSignal, locale: LlmLocale, onContent?: (text: string) => void, onReasoning?: () => void, onReasoningTokens?: (tokens: number) => void) => {
   let content: string
   let finishReason: string | undefined
   let reasoningLength = 0
   if (response.headers.get('content-type')?.includes('text/event-stream')) {
-    const result = await withAbortSignal(signal, () => readLlmEventStream(response, text => onContent?.(text), text => { reasoningLength += text.length; onReasoning?.() }, locale))
+    const result = await withAbortSignal(signal, () => readLlmEventStream(response, text => onContent?.(text), text => { reasoningLength += text.length; onReasoning?.() }, locale, onReasoningTokens))
     aiTasks.usage(signal, result.usage?.outputTokens)
     content = result.content
     finishReason = result.finishReason
@@ -985,6 +1079,8 @@ const readGenerationContent = async (response: Response, signal: AbortSignal, lo
     if (content) onContent?.(content)
     finishReason = extractLlmFinishReason(payload)
     reasoningLength = extractReasoningContent(payload).length
+    const reasoningTokens = extractReasoningTokens(payload)
+    if (reasoningTokens !== undefined) onReasoningTokens?.(reasoningTokens)
     aiTasks.usage(signal, extractLlmTokenUsage(payload)?.outputTokens)
     if (!content && finishReason !== 'length') throw new Error(formatEmptyContentError(payload, llmText[locale].responseContext, locale))
   }
@@ -1025,21 +1121,21 @@ const requestLlmTextStreamImpl = async ({
         ]
       : []
   if (requestMessages.length === 0) throw new Error('LLM messages are required.')
-  const { controller, dispose } = createRequestLifetime(signal, clientRequestTimeoutMs)
+  const { controller, touch, dispose } = createRequestLifetime(signal, clientRequestTimeoutMs, clientRequestMaxMs)
   aiTasks.bind(signal, controller.signal)
   try {
     const retryMaxTokens = getLlmEmptyResponseRetryTokens(maxTokens)
     const tokenBudgets = retryMaxTokens > maxTokens ? [maxTokens, retryMaxTokens] : [maxTokens]
     for (let attempt = 0; attempt < tokenBudgets.length; attempt += 1) {
       const attemptMaxTokens = tokenBudgets[attempt]
-      const response = await requestLlmChatWithCompatibility(config, applyThinkingMode({
+      const response = trackResponseActivity(await requestLlmChatWithCompatibility(config, applyThinkingMode({
         model: config.modelName.trim(),
         messages: requestMessages,
         temperature,
         max_tokens: attemptMaxTokens,
         stream: true,
         stream_options: { include_usage: true },
-      }, config.enableThinking), controller.signal)
+      }, config.enableThinking), controller.signal), touch)
       if (!response.ok) throw new Error(await formatRequestError(response, config.requestMode, locale))
       aiTasks.phase(signal, 'receiving')
       const contentType = response.headers.get('content-type')?.toLowerCase() ?? ''
@@ -1085,14 +1181,25 @@ const requestLlmTextStreamImpl = async ({
 const generatePlannedAssembly = async (checkpoint: AssemblyCheckpoint, input: LlmGenerateInput) => {
   const { prompt, imageName, config, inventoryOverrides, signal, locale = 'zh-CN' } = input
   saveAssemblyCheckpoint(checkpoint)
-  const plan = await generateAssembly(checkpoint.layout, { prompt, imageName }, async (modulePrompt, tool, onProgram) => {
-    input.onPhase?.('planning')
-    const push = createStreamedAssembly(program => { input.onPhase?.('building'); onProgram?.(program) })
+  const plan = await generateAssembly(checkpoint.layout, { prompt, imageName }, async (modulePrompt, tool, onProgram, options) => {
+    // Requests started ahead of the current module must not change its phase.
+    const foreground = !options?.background
+    // The layout already exists; until the first command streams in, the
+    // model is working on this module rather than re-planning the build.
+    if (foreground) input.onPhase?.('thinking')
+    const push = createStreamedAssembly(program => { if (foreground) input.onPhase?.('building'); onProgram?.(program) })
+    const requestSignal = options?.signal ?? signal
+    // Count background requests against the same generation task.
+    if (options?.signal) aiTasks.bind(signal, options.signal)
     const content = await requestLlmJsonContentImpl({
-      config, signal, locale, systemPrompt: llmSystemPrompt,
+      config, signal: requestSignal, locale, systemPrompt: llmSystemPrompt,
       userPrompt: `User request: ${prompt}\nAvailable parts:\n${tool === 'building' ? 'The building tool uses real standard LEGO parts. Choose parameter colours from its allowed palette.' : getInventorySummary('lego', inventoryOverrides, tool === 'sculpture' ? ['plate-1x1', 'plate-1x2', 'plate-1x3', 'plate-1x4', 'plate-2x2', 'plate-2x3', 'plate-2x4', 'plate-4x4'] : undefined)}\n${modulePrompt}`,
-      maxTokens: tool === 'building' ? 1_024 : config.enableThinking ? generationThinkingMaxTokens : generationMaxTokens, stream: true,
-      onContent: push, onReasoning: () => input.onPhase?.('thinking'),
+      // Leave room for hidden reasoning when the model reasons regardless.
+      maxTokens: tool === 'building'
+        ? (modelReasonsWhenDisabled(config) ? 8_192 : 1_024)
+        : config.enableThinking || modelReasonsWhenDisabled(config) ? generationThinkingMaxTokens : generationMaxTokens,
+      stream: true,
+      onContent: push, onReasoning: foreground ? () => input.onPhase?.('thinking') : undefined,
     })
     return parseJsonContent(content, locale)
   }, signal, inventoryOverrides, config.autoRepair ? normalizeMaxRepairAttempts(config.maxRepairAttempts) : 0, locale, {
@@ -1100,22 +1207,25 @@ const generatePlannedAssembly = async (checkpoint: AssemblyCheckpoint, input: Ll
     save: programs => saveAssemblyCheckpoint({ ...checkpoint, programs }),
     onProgress: async plan => { input.onPhase?.('building'); await input.onProgress?.(plan) },
     onDraft: input.onDraft,
+    onModule: input.onModuleProgress,
+    onIssue: input.onAssemblyIssue,
+    skipFailedModules: true,
   })
   clearAssemblyCheckpoint(checkpoint.signature)
   return plan
 }
 
-const generateLlmBuildPlanImpl = async ({ prompt, imageName, imageDataUrl, inventoryOverrides, pack, config, signal, locale = 'zh-CN', repairFeedback, previousPlan, onProgress, onDraft, onPhase }: LlmGenerateInput): Promise<BuildPlan> => {
+const generateLlmBuildPlanImpl = async ({ prompt, imageName, imageDataUrl, inventoryOverrides, pack, config, signal, locale = 'zh-CN', repairFeedback, previousPlan, onProgress, onDraft, onPhase, onModuleProgress, onAssemblyIssue }: LlmGenerateInput): Promise<BuildPlan> => {
   if (!isLlmConfigComplete(config)) throw new Error(llmText[locale].incompleteConfig)
 
-  const input = { prompt, imageName, imageDataUrl, inventoryOverrides, pack, config, signal, locale, onProgress, onDraft, onPhase }
+  const input = { prompt, imageName, imageDataUrl, inventoryOverrides, pack, config, signal, locale, onProgress, onDraft, onPhase, onModuleProgress, onAssemblyIssue }
   onPhase?.('planning')
   const signature = (pack ?? 'lego') === 'lego' && !previousPlan ? await assemblyCheckpointSignature(input, config) : ''
   signal?.throwIfAborted()
   const checkpoint = signature ? loadAssemblyCheckpoint(signature) : undefined
   if (checkpoint) return generatePlannedAssembly(checkpoint, input)
 
-  const { controller, dispose } = createRequestLifetime(signal, clientRequestTimeoutMs)
+  const { controller, touch, dispose } = createRequestLifetime(signal, clientRequestTimeoutMs, clientRequestMaxMs)
   aiTasks.bind(signal, controller.signal)
   let response: Response
   const userPrompt = `${(previousPlan ? buildSmallLlmUserPrompt : buildLlmUserPrompt)({ prompt, imageName, inventoryOverrides, pack })}${
@@ -1149,17 +1259,18 @@ const generateLlmBuildPlanImpl = async ({ prompt, imageName, imageDataUrl, inven
             },
           ],
           temperature: 0.2,
-          max_tokens: attempt === 0 ? (config.enableThinking ? generationThinkingMaxTokens : 4_096) : 8_192,
+          max_tokens: attempt === 0 ? (config.enableThinking || modelReasonsWhenDisabled(config) ? generationThinkingMaxTokens : 4_096) : 8_192,
           stream: true,
           response_format: { type: 'json_object' },
         }, attempt === 0 && config.enableThinking), controller.signal)
+        response = trackResponseActivity(response, touch)
 
         if (!response.ok) {
           throw new Error(await formatRequestError(response, config.requestMode, locale))
         }
 
         aiTasks.phase(signal, 'receiving')
-        content = await readGenerationContent(response, controller.signal, locale, undefined, () => onPhase?.('thinking'))
+        content = await readGenerationContent(response, controller.signal, locale, undefined, () => onPhase?.('thinking'), tokens => noteReasoningTokens(config, tokens))
 
         break
       } catch (error) {

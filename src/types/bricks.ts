@@ -269,6 +269,8 @@ export type LlmConfig = {
   autoRepair: boolean
   /** LLM repair retries allowed after the first invalid candidate (1-4, default 2). */
   maxRepairAttempts?: number
+  /** LEGO generation: whole-module programs, or the experimental step-by-step agent. */
+  buildMode?: 'assembly' | 'agentic'
 }
 
 export type FinishedAsset = {

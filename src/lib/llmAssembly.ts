@@ -1,16 +1,27 @@
 import { createSculptureLayers, tileSculptureLayers } from './llmSculpture'
 import { LlmOutputLimitError } from './llmOutputLimit'
 import { LlmServiceError } from './llmServiceError'
-import { brickById } from '../data/basicBricks'
-import type { BrickColor, BuildPlan, PlacedBrick } from '../types/bricks'
-import { createId, createSingleBrickSteps, makeBrick, summarizeBuildPlanIssues, validateBuildPlan } from './planUtils'
+import { brickById, brickDefinitions } from '../data/basicBricks'
+import type { BuildPlan, PlacedBrick } from '../types/bricks'
+import { createId, createSingleBrickSteps, getBrickBounds, makeBrick, summarizeBuildPlanIssues, validateBuildPlan } from './planUtils'
+import { canonicalColorId, canonicalColorIds, resolveColorId, resolvePartColor } from './colorIds'
 
 export const assemblyLimits = { modules: 8, commands: 128, moduleBricks: 512, sculptureBricks: 2048, bricks: 4096 }
 
 type Point = [number, number, number]
-type Module = { name: string; description: string; origin: Point; tool?: 'building' | 'parts' | 'sculpture'; program?: unknown; requiredColors?: string[] }
+type Module = { name: string; description: string; origin: Point; tool?: 'building' | 'parts' | 'sculpture'; program?: unknown; requiredColors?: string[]; dependsOn?: string[] }
 type AssemblyLayout = { title: string; modules: Module[] }
-type RequestModule = (prompt: string, tool?: Module['tool'], onProgram?: (program: unknown) => void) => Promise<unknown>
+/** background requests run ahead of the module being accepted: no phase updates or draft previews. */
+type RequestModuleOptions = { background?: boolean; signal?: AbortSignal }
+type RequestModule = (prompt: string, tool?: Module['tool'], onProgram?: (program: unknown) => void, options?: RequestModuleOptions) => Promise<unknown>
+
+/** Module requests in flight at once: the module being accepted plus those generated ahead of it. */
+export const assemblyParallelRequests = 3
+
+/** Reported before each module request so the UI can show where generation is. */
+export type AssemblyModuleProgress = { index: number; total: number; name: string; attempt: number; retries: number; ahead: number }
+/** Non-fatal problems: a module skipped after exhausting repairs, or accepted without some required colours. */
+export type AssemblyIssue = { kind: 'skipped-module' | 'missing-colors'; module: string; detail: string }
 
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -21,6 +32,18 @@ const point = (value: unknown): Point => {
   }
   return value as Point
 }
+
+let partsModuleColors: Set<string> | undefined
+
+/**
+ * Colours a module can actually place. Sculptures are tiled from plates, so
+ * they are limited to plate colours; other modules use the generation catalogue.
+ */
+export const getAssemblyModuleColors = (tool?: Module['tool']): ReadonlySet<string> => tool === 'sculpture'
+  ? new Set<string>(canonicalColorIds(brickById.get('plate-1x1')!.colors))
+  : partsModuleColors ??= new Set<string>(canonicalColorIds(brickDefinitions
+    .filter(definition => definition.pack === 'lego' && !definition.id.startsWith('hogwarts-') && !definition.id.startsWith('architecture-'))
+    .flatMap(definition => definition.colors)))
 
 export const parseAssemblyLayout = (value: unknown): AssemblyLayout => {
   if (!record(value) || typeof value.title !== 'string' || !Array.isArray(value.modules) || !value.modules.length || value.modules.length > assemblyLimits.modules) {
@@ -37,7 +60,25 @@ export const parseAssemblyLayout = (value: unknown): AssemblyLayout => {
       || !item.requiredColors.every(color => typeof color === 'string' && color.length > 0 && color.length <= 64))) {
       throw new Error('Required colours must be an array of at most 16 colour ids.')
     }
-    return { name: item.name, description: item.description, origin: point(item.origin), ...(item.tool ? { tool: item.tool as Module['tool'] } : {}), ...(item.program !== undefined ? { program: item.program } : {}), ...(item.requiredColors ? { requiredColors: item.requiredColors as string[] } : {}) }
+    if (item.dependsOn !== undefined && (!Array.isArray(item.dependsOn) || !item.dependsOn.every(name => typeof name === 'string'))) {
+      throw new Error('dependsOn must be an array of earlier module names.')
+    }
+    // Only earlier modules can be dependencies; unknown names are ignored.
+    const dependsOn = Array.isArray(item.dependsOn)
+      ? [...new Set((item.dependsOn as string[]).filter(name => name !== item.name && names.has(name)))]
+      : undefined
+    // Planning models often spell colours loosely (dark_gray). Map them to
+    // legal ids and drop unknown ones: a colour no part can use would make
+    // the module unsatisfiable and fail every repair attempt.
+    const placeable = getAssemblyModuleColors(item.tool as Module['tool'])
+    const requiredColors = item.requiredColors
+      ? [...new Set((item.requiredColors as string[]).flatMap(color => {
+        const id = resolveColorId(color)
+        const canonical = id && canonicalColorId(id)
+        return canonical && placeable.has(canonical) ? [canonical] : []
+      }))]
+      : undefined
+    return { name: item.name, description: item.description, origin: point(item.origin), ...(item.tool ? { tool: item.tool as Module['tool'] } : {}), ...(item.program !== undefined ? { program: item.program } : {}), ...(requiredColors ? { requiredColors } : {}), ...(dependsOn ? { dependsOn } : {}) }
   })
   return { title: value.title, modules }
 }
@@ -46,18 +87,30 @@ export const assemblyProgramInstructions = `Return JSON {"commands":[{"brickId":
 Coordinates and repeat steps are in studs on the 0.1-stud grid. One plate is 0.4 studs tall. at is local to this module's origin.
 at is the minimum X/Z corner and bottom Y of the rotated footprint, not the centre. A brick-1x4 at [0,0,0] occupies X=0..4, Z=0..1, Y=0..1.2. Quarter turns 1 or 3 swap X/Z dimensions. Each command places a real part. Optional repeat expands a rectangular array along world X/Y/Z. For example count [8,1,1], step [2,0,0] places eight copies at two-stud intervals.
 For a substantial architectural hall, prefer {"kind":"building","at":[0,0,0],"width":16,"wallCourses":8,"wallColor":"tan","roofColor":"gray","windowColor":"black","trimColor":"white","baseColor":"gray"}.
-This deterministic tool builds a fully connected two-course foundation, an 8-stud-deep hall, dark glazed brick window bays, front buttresses, a studded ceiling and a four-course gabled roof from real editable parts. width is 8 or 16; wallCourses is 6–10. The outer base is (width+4) x 12 studs. The hall starts at at+[2,0.8,2]; roof ridge reaches Y=at.y+1.2+wallCourses*1.2+4.8. Use this in the FIRST module, at ground level. Reserve later modules for supported towers, a porch or attached details. Never overlay raw walls or floors on its occupied volume.
+Builds a connected foundation, hall, glazing, buttresses, ceiling and gabled roof. width: 8 or 16; wallCourses: 6–10. Base: (width+4) x 12; hall starts at at+[2,0.8,2]; ridge Y=at.y+1.2+wallCourses*1.2+4.8. Use in the first module at ground level. Keep its volume clear of other parts.
+Combinable structural primitives:
+{"kind":"deck","at":[0,0,0],"size":[12,10],"color":"gray"}: a rigid two-plate surface, 0.8 studs thick. A foundation on the ground, or a floor or ceiling resting on walls.
+{"kind":"walls","at":[1,0.8,1],"size":[10,8],"courses":5,"color":"brown","openings":[{"side":"front","offset":4,"width":2,"bottom":0,"height":3,"color":"black"}]}: a closed rectangle of one-stud walls with interlocking corners, 1.2 studs per course. Sides front (z=at.z), back, left (x=at.x), right; offset counts studs along the side from its lower-x or lower-z end. Openings are coloured inlays such as trans-clear glass or a black door; the wall stays solid.
+{"kind":"wall","at":[0,0.8,0],"length":8,"courses":3,"axis":"x","color":"gray","openings":[{"offset":3,"width":2,"bottom":1,"height":1,"color":"trans-clear"}]}: a straight one-stud wall for fences, partitions or wings.
+Stack them: walls on a deck, a ceiling deck at the wall top, a roof on the ceiling. Every course must rest on the one below.
 For roofs, prefer the deterministic recipe {"kind":"stepped-roof","at":[0,12,0],"size":[8,8],"tiers":4,"style":"pyramid","color":"gray"}.
-This creates solid, supported stepped masonry roof courses using real brick-1x2 and brick-1x1 parts. Each tier is 1.2 studs high and shrinks by one stud on each side. style "gable" shrinks only Z, leaving X unchanged. Place it on a studded ceiling covering its full base, and do not add raw bricks inside the recipe volume. Use legal colour ids such as gray or lego-72 where listed, never invented dark-gray.
+This creates solid, supported stepped masonry roof courses using real brick-1x2 and brick-1x1 parts. Each tier is 1.2 studs high and shrinks by one stud on each side. style "gable" shrinks only Z, leaving X unchanged. Place it on a studded ceiling covering its full base, and do not add raw bricks inside the recipe volume. Use the readable colour ids listed in the catalogue, such as gray or dark-gray.
 Use at most 128 commands and 512 expanded parts per module. Quarter turns must be integers from 0 to 3.
 Ground-level neighbours do not connect through side contact. Build a connected foundation using overlapping staggered plate layers before adding walls. Build bottom-up, using real stud or side connector positions and exact part dimensions. Raised parts must connect to this module or the accepted assembly.
 Keep the planned proportions, openings, roof profile and colour palette. Use repeated details to express windows, buttresses and masonry efficiently.
-For characters and animals, preserve the planned head/body silhouette, facial markings, belly, feet and other identifying features. Vary course widths to make rounded or tapered outlines. Use coloured upright bricks as front-surface inlays, replacing the corresponding body bricks instead of overlapping decorations with a filled volume. Front inlays must be visible on the exterior and supported from below. Avoid complicated side attachments when an upright inlay expresses the same feature. Do not simplify the subject to a plain rectangular tower during validation repairs. Repair supports or placement while retaining the requested visible colours and recognizable features.
+For characters and animals, preserve the head/body silhouette, facial markings, belly, feet and other identifying details. Vary course widths for rounded or tapered outlines. Prefer visible upright inlays supported from below; replace body bricks at those positions. During repairs, fix support or placement while keeping the visible colours and recognizable shape.
 Use only listed part/color combinations. Output the entire replacement program for this module only.`
 
-const buildingToolInstructions = `This module uses the building tool. Return exactly:
+const formatRoleColors = (partIds: string[]) => getBuildingRoleColors(partIds).join('/')
+
+let buildingToolInstructions: string | undefined
+const getBuildingToolInstructions = () => buildingToolInstructions ??= `This module uses the building tool. Return exactly:
 {"commands":[{"kind":"building","at":[0,0,0],"width":16,"wallCourses":8,"wallColor":"tan","roofColor":"gray","windowColor":"black","trimColor":"white","baseColor":"gray"}]}.
-Choose width 8 or 16 and wallCourses 6–10 based on the design. Colour parameters may use tan, gray, black, white, brown, red, blue, yellow or green. Use exact colour ids.
+Choose width 8 or 16 and wallCourses 6–10 based on the design. Colours per part role:
+- base: ${formatRoleColors(buildingRoleParts.base)}
+- walls and windows: ${formatRoleColors(buildingRoleParts.hallWall)}
+- trim: ${formatRoleColors(buildingRoleParts.hallTrim)}
+- roof: ${formatRoleColors(buildingRoleParts.roof)}
 The tool itself creates every real part of the connected foundation, walls, glazing, buttresses, ceiling and roof. Do not expand it into individual brick commands. Output exactly ONE building command and no additional commands. at is relative to the module origin. The base footprint is (width+4) x 12 studs. A width16/eight-course hall expands to approximately 430 pieces. Your responsibility here is choosing parameters, not calculating brick positions.`
 
 const sculptureToolInstructions = `This module uses the sculpture tool. Return ONE sculpture-shapes command in a commands array. Describe a real three-dimensional sculpture using intersecting ellipsoids and boxes, then paint visible features onto its curved front surface. The compiler samples curved solids with thin plates (0.4 studs tall), tiles them with real LEGO parts and checks their support.
@@ -73,9 +126,14 @@ const compileVoxelLayers = (command: Record<string, unknown>) => {
   if (!record(command.palette) || !Array.isArray(command.layers) || !command.layers.length || command.layers.length > 32) {
     throw new Error('Voxel layers require a palette and 1–32 layers.')
   }
-  const palette = command.palette
+  // Keep the readable id; each brick resolves it to its own colour code.
+  const voxelColors = brickById.get('brick-1x1')!.colors
+  const palette = Object.fromEntries(Object.entries(command.palette).map(([symbol, color]) => {
+    const resolved = resolvePartColor(voxelColors, color)
+    return [symbol, resolved ? canonicalColorId(resolved) : color]
+  }))
   for (const [symbol, color] of Object.entries(palette)) {
-    if (symbol.length !== 1 || symbol === '.' || !brickById.get('brick-1x1')!.colors.includes(color as BrickColor)) {
+    if (symbol.length !== 1 || symbol === '.' || !resolvePartColor(voxelColors, color)) {
       throw new Error('Voxel palette symbols must be single characters mapped to legal brick colours. A dot means empty.')
     }
   }
@@ -144,6 +202,211 @@ const compileRoof = (command: Record<string, unknown>) => {
   return result
 }
 
+/** Parts each building role is built from; a colour must exist on all of them. */
+export const buildingRoleParts = {
+  base: ['plate-2x4', 'plate-2x2', 'plate-1x4', 'plate-1x2'],
+  hallWall: ['brick-1x2', 'brick-1x3', 'brick-1x4'],
+  hallTrim: ['brick-1x1', 'plate-4x8'],
+  roof: ['brick-1x2'],
+}
+
+/** Readable colour ids every listed part can use. */
+export const getBuildingRoleColors = (partIds: string[]) => {
+  const [first, ...rest] = partIds.map(id => canonicalColorIds(brickById.get(id)?.colors ?? []))
+  return (first ?? []).filter(color => rest.every(colors => colors.includes(color)))
+}
+
+const supportsColor = (partIds: string[], color: unknown) =>
+  partIds.every(id => resolvePartColor(brickById.get(id)?.colors ?? [], color))
+
+const checkBuildingColor = (role: string, color: unknown, partIds: string[]) => {
+  if (supportsColor(partIds, color)) return
+  throw new Error(`Building ${role} colour ${String(color)} is not available for ${partIds.filter(id => !resolvePartColor(brickById.get(id)?.colors ?? [], color)).join(', ')}. Choose one of: ${getBuildingRoleColors(partIds).join(', ')}.`)
+}
+
+/*
+ * General structural primitives. They fix only how parts bond (staggered
+ * seams, interlocking corners, support from below); size, layout, openings
+ * and colours come from the program, so different requests compose them
+ * into different shapes. Each expands to ordinary part commands, so colours
+ * are checked per part like any other command.
+ */
+const primitiveInteger = (value: unknown, min: number, max: number, label: string) => {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > max) throw new Error(`${label} must be an integer from ${min} to ${max}.`)
+  return value
+}
+
+const primitiveSize = (value: unknown, min: number, label: string): [number, number] => {
+  if (!Array.isArray(value) || value.length !== 2) throw new Error(`${label} size must be [width, depth].`)
+  return [primitiveInteger(value[0], min, 32, `${label} width`), primitiveInteger(value[1], min, 32, `${label} depth`)]
+}
+
+/** Splits a run into a first piece (for stagger), then pieces of size, then the remainder. */
+const splitRun = (total: number, first: number, size: number) => {
+  const pieces: Array<[start: number, length: number]> = []
+  let position = Math.min(first, total)
+  if (position > 0) pieces.push([0, position])
+  while (position < total) {
+    const length = Math.min(size, total - position)
+    pieces.push([position, length])
+    position += length
+  }
+  return pieces
+}
+
+/** A plate piece covering length studs along X and depth (1 or 2) studs along Z. */
+const deckPiece = (length: number, depth: number): [brickId: string, rotation: number] =>
+  depth === 1 ? [`plate-1x${length}`, 0] : length === 1 ? ['plate-1x2', 1] : [`plate-2x${length}`, 0]
+
+/**
+ * A rigid plate surface of any rectangle: two plate courses whose seams are
+ * offset in both directions, 0.8 studs thick. Use it as a foundation on the
+ * ground, or as a floor or ceiling resting on walls.
+ */
+const compileDeck = (command: Record<string, unknown>) => {
+  const at = point(command.at)
+  const [width, depth] = primitiveSize(command.size, 1, 'Deck')
+  const result: Record<string, unknown>[] = []
+  for (const [layer, xFirst, zFirst] of [[0, 0, 0], [1, 2, 1]]) {
+    for (const [z, zLength] of splitRun(depth, zFirst, 2)) {
+      for (const [x, xLength] of splitRun(width, xFirst, 4)) {
+        const [brickId, rotationQuarterTurns] = deckPiece(xLength, zLength)
+        result.push({ brickId, color: command.color, at: [at[0] + x, at[1] + layer * 0.4, at[2] + z], rotationQuarterTurns })
+      }
+    }
+  }
+  return result
+}
+
+type WallOpening = { side: string; offset: number; width: number; bottom: number; height: number; color: unknown; part?: 'window' }
+
+/** Marks wall cells left open for window frames. */
+const openCell = Symbol('open')
+
+const parseOpenings = (value: unknown, sides: Record<string, number>, courses: number): WallOpening[] => {
+  if (value === undefined) return []
+  if (!Array.isArray(value) || value.length > 32) throw new Error('openings must be an array of at most 32 openings.')
+  return value.map((opening, index) => {
+    const label = `Opening ${index + 1}`
+    if (!record(opening)) throw new Error(`${label} must be an object.`)
+    const side = typeof opening.side === 'string' ? opening.side : Object.keys(sides).length === 1 ? Object.keys(sides)[0] : ''
+    const length = sides[side]
+    if (length === undefined) throw new Error(`${label} side must be one of ${Object.keys(sides).join(', ')}.`)
+    const width = primitiveInteger(opening.width, 1, length, `${label} width`)
+    const offset = primitiveInteger(opening.offset, 0, length - width, `${label} offset`)
+    const height = primitiveInteger(opening.height ?? 1, 1, courses, `${label} height`)
+    const bottom = primitiveInteger(opening.bottom ?? 0, 0, courses - height, `${label} bottom`)
+    if (typeof opening.color !== 'string') throw new Error(`${label} needs a colour, such as trans-clear for glass or black for a door.`)
+    if (opening.part === 'window') {
+      // Real 1x2x2 window frames: two studs wide, two courses tall, away from the corners.
+      if (width % 2 || height % 2) throw new Error(`${label}: window openings need an even width and an even height in courses (each frame is 2 studs wide and 2 courses tall).`)
+      if (offset < 1 || offset + width > length - 1) throw new Error(`${label}: window openings must leave at least one stud of wall at each corner.`)
+      return { side, offset, width, bottom, height, color: opening.color, part: 'window' as const }
+    }
+    return { side, offset, width, bottom, height, color: opening.color }
+  })
+}
+
+const colorAtOpening = (openings: WallOpening[], side: string, cell: number, course: number, wallColor: unknown) => {
+  const opening = openings.find(item => item.side === side && cell >= item.offset && cell < item.offset + item.width
+    && course >= item.bottom && course < item.bottom + item.height)
+  return opening ? opening.part === 'window' ? openCell : opening.color : wallColor
+}
+
+/** Window frames filling the window openings; the bricks above rest on the frames' studs. */
+const windowFrames = (openings: WallOpening[], place: (side: string, cell: number, course: number, color: unknown) => void) => {
+  for (const opening of openings) {
+    if (opening.part !== 'window') continue
+    for (let course = opening.bottom; course < opening.bottom + opening.height; course += 2) {
+      for (let cell = opening.offset; cell < opening.offset + opening.width; cell += 2) place(opening.side, cell, course, opening.color)
+    }
+  }
+}
+
+/** Groups consecutive same-coloured cells into 1x2 bricks, optionally forcing a single first cell. */
+const wallRuns = (cells: number[], colorOf: (cell: number) => unknown, singleFirst = false) => {
+  const runs: Array<[cell: number, length: number, color: unknown]> = []
+  for (let index = 0; index < cells.length;) {
+    const color = colorOf(cells[index])
+    const length = !(singleFirst && index === 0) && index + 1 < cells.length && colorOf(cells[index + 1]) === color ? 2 : 1
+    runs.push([cells[index], length, color])
+    index += length
+  }
+  return runs
+}
+
+const cellRange = (from: number, to: number) => Array.from({ length: Math.max(0, to - from + 1) }, (_, index) => from + index)
+
+/**
+ * A closed rectangle of one-stud walls with interlocking corners, laid in
+ * running bond. Openings are coloured inlay bricks (glass, doors, shutters):
+ * the wall stays solid, so every brick is supported from below.
+ */
+const compileWalls = (command: Record<string, unknown>) => {
+  const at = point(command.at)
+  const [width, depth] = primitiveSize(command.size, 3, 'Walls')
+  const courses = primitiveInteger(command.courses, 1, 16, 'Walls courses')
+  const openings = parseOpenings(command.openings, { front: width, back: width, left: depth, right: depth }, courses)
+  const result: Record<string, unknown>[] = []
+  for (let course = 0; course < courses; course++) {
+    const y = at[1] + course * 1.2
+    // Front and back walls own the corners on even courses, the side walls
+    // on odd ones, so corners interlock and seams stagger between courses.
+    const even = course % 2 === 0
+    const lines: Array<[string, number[]]> = [
+      ['front', even ? cellRange(0, width - 1) : cellRange(1, width - 2)],
+      ['back', even ? cellRange(0, width - 1) : cellRange(1, width - 2)],
+      ['left', even ? cellRange(1, depth - 2) : cellRange(0, depth - 1)],
+      ['right', even ? cellRange(1, depth - 2) : cellRange(0, depth - 1)],
+    ]
+    for (const [side, cells] of lines) {
+      for (const [cell, length, color] of wallRuns(cells, cell => colorAtOpening(openings, side, cell, course, command.color))) {
+        if (color === openCell) continue
+        const brickId = `brick-1x${length}`
+        if (side === 'front' || side === 'back') {
+          result.push({ brickId, color, at: [at[0] + cell, y, at[2] + (side === 'front' ? 0 : depth - 1)] })
+        } else {
+          result.push({ brickId, color, at: [at[0] + (side === 'left' ? 0 : width - 1), y, at[2] + cell], rotationQuarterTurns: 1 })
+        }
+      }
+    }
+  }
+  windowFrames(openings, (side, cell, course, color) => {
+    const y = at[1] + course * 1.2
+    if (side === 'front' || side === 'back') result.push({ brickId: 'window-1x2x2', color, at: [at[0] + cell, y, at[2] + (side === 'front' ? 0 : depth - 1)] })
+    else result.push({ brickId: 'window-1x2x2', color, at: [at[0] + (side === 'left' ? 0 : width - 1), y, at[2] + cell], rotationQuarterTurns: 1 })
+  })
+  return result
+}
+
+/** A straight one-stud wall in running bond along X or Z, with optional coloured openings. */
+const compileWall = (command: Record<string, unknown>) => {
+  const at = point(command.at)
+  const length = primitiveInteger(command.length, 1, 32, 'Wall length')
+  const courses = primitiveInteger(command.courses, 1, 16, 'Wall courses')
+  if (command.axis !== undefined && command.axis !== 'x' && command.axis !== 'z') throw new Error('Wall axis must be "x" or "z".')
+  const alongZ = command.axis === 'z'
+  const openings = parseOpenings(command.openings, { wall: length }, courses)
+  const result: Record<string, unknown>[] = []
+  for (let course = 0; course < courses; course++) {
+    const y = at[1] + course * 1.2
+    // Odd courses start with a single cell so seams stagger.
+    for (const [cell, size, color] of wallRuns(cellRange(0, length - 1), cell => colorAtOpening(openings, 'wall', cell, course, command.color), course % 2 === 1)) {
+      if (color === openCell) continue
+      result.push(alongZ
+        ? { brickId: `brick-1x${size}`, color, at: [at[0], y, at[2] + cell], rotationQuarterTurns: 1 }
+        : { brickId: `brick-1x${size}`, color, at: [at[0] + cell, y, at[2]] })
+    }
+  }
+  windowFrames(openings, (_side, cell, course, color) => {
+    const y = at[1] + course * 1.2
+    result.push(alongZ
+      ? { brickId: 'window-1x2x2', color, at: [at[0], y, at[2] + cell], rotationQuarterTurns: 1 }
+      : { brickId: 'window-1x2x2', color, at: [at[0] + cell, y, at[2]] })
+  })
+  return result
+}
+
 const compileBuilding = (command: Record<string, unknown>) => {
   const at = point(command.at)
   const width = command.width
@@ -151,6 +414,12 @@ const compileBuilding = (command: Record<string, unknown>) => {
   if ((width !== 8 && width !== 16) || typeof courses !== 'number' || !Number.isInteger(courses) || courses < 6 || courses > 10) {
     throw new Error('Building width must be 8 or 16 studs and wallCourses must be 6–10. Its hall depth is 8 studs, with a two-stud base margin.')
   }
+  checkBuildingColor('base', command.baseColor, buildingRoleParts.base)
+  const hallWallParts = width === 16 ? buildingRoleParts.hallWall : ['brick-1x2']
+  checkBuildingColor('wall', command.wallColor, hallWallParts)
+  checkBuildingColor('window', command.windowColor, hallWallParts)
+  checkBuildingColor('trim', command.trimColor, buildingRoleParts.hallTrim)
+  checkBuildingColor('roof', command.roofColor, buildingRoleParts.roof)
   const result: Record<string, unknown>[] = []
   const add = (brickId: string, color: unknown, x: number, y: number, z: number, rotation = 0) => {
     result.push({ brickId, color, at: [at[0] + x, at[1] + y, at[2] + z], rotationQuarterTurns: rotation })
@@ -220,6 +489,9 @@ export const expandAssemblyProgram = (value: unknown, origin: Point, inventory: 
     if (!record(command)) return [command]
     if (command.kind === 'stepped-roof') return compileRoof(command)
     if (command.kind === 'building') return compileBuilding(command)
+    if (command.kind === 'deck') return compileDeck(command)
+    if (command.kind === 'walls') return compileWalls(command)
+    if (command.kind === 'wall') return compileWall(command)
     if (command.kind === 'sculpture-shapes') return tileSculptureLayers(createSculptureLayers(command), moduleLimit)
     if (command.kind === 'voxel-layers') return compileVoxelLayers(command)
     return [command]
@@ -228,7 +500,8 @@ export const expandAssemblyProgram = (value: unknown, origin: Point, inventory: 
     if (!record(command) || typeof command.brickId !== 'string') throw new Error('Invalid part command.')
     const definition = brickById.get(command.brickId)
     if (!definition || definition.pack !== 'lego') throw new Error(`Unknown part id: ${command.brickId}. Select an exact id from Available parts.`)
-    if (!definition.colors.includes(command.color as BrickColor)) throw new Error(`Part ${command.brickId} does not support colour ${String(command.color)}. Allowed colours: ${definition.colors.join(', ')}.`)
+    const color = resolvePartColor(definition.colors, command.color)
+    if (!color) throw new Error(`Part ${command.brickId} does not support colour ${String(command.color)}. Allowed colours: ${canonicalColorIds(definition.colors).join(', ')}.`)
     const at = point(command.at)
     const rotation = command.rotationQuarterTurns ?? 0
     const vertical = command.verticalQuarterTurns ?? 0
@@ -254,7 +527,7 @@ export const expandAssemblyProgram = (value: unknown, origin: Point, inventory: 
           if (position[1] < 0 || !position.every(n => Number.isFinite(n) && Math.abs(n) <= 1024)) {
             throw new Error('Part position is outside the assembly bounds.')
           }
-          const brick = makeBrick(definition.id, command.color as BrickColor, ...position, rotation as number, vertical as number)
+          const brick = makeBrick(definition.id, color, ...position, rotation as number, vertical as number)
           const actual = [brick.pose.xStud, brick.pose.yStud, brick.pose.zStud]
           if (actual.some((n, axis) => Math.abs(n - position[axis]) > 0.000001)) {
             throw new Error('Part coordinates must use the 0.1-stud grid.')
@@ -289,6 +562,41 @@ const expandModuleProgram = async (program: unknown, origin: Point, inventory: R
   })
 }
 
+/** Above this, accepted modules are described by their extent instead of their full programs. */
+export const acceptedProgramsInlineLimit = 4_000
+
+const roundStud = (value: number) => Math.round(value * 10) / 10
+
+const summarizeAcceptedModule = (module: Module, bricks: PlacedBrick[]) => {
+  const min = [Infinity, Infinity, Infinity]
+  const max = [-Infinity, -Infinity, -Infinity]
+  for (const brick of bricks) {
+    const bounds = getBrickBounds(brick)
+    if (!bounds) continue
+    min[0] = Math.min(min[0], bounds.minX); min[1] = Math.min(min[1], bounds.minY); min[2] = Math.min(min[2], bounds.minZ)
+    max[0] = Math.max(max[0], bounds.maxX); max[1] = Math.max(max[1], bounds.maxY); max[2] = Math.max(max[2], bounds.maxZ)
+  }
+  return {
+    name: module.name,
+    parts: bricks.length,
+    colours: canonicalColorIds(bricks.map(brick => brick.color)),
+    ...(Number.isFinite(min[0]) ? { worldMin: min.map(roundStud), worldMax: max.map(roundStud) } : {}),
+  }
+}
+
+/**
+ * Full accepted programs grow with every module and are resent on every
+ * request and repair. Once they are large, send each module's world extent
+ * instead; exact coordinates of any conflicting part are still returned by
+ * validation feedback.
+ */
+const describeAcceptedModules = (programs: Array<{ module: Module; program: unknown }>, summaries: Array<Record<string, unknown>>) => {
+  const full = JSON.stringify(programs)
+  return full.length <= acceptedProgramsInlineLimit
+    ? `Accepted programs (expand using each module origin): ${full}`
+    : `Accepted modules, as world-coordinate extents (attach to their top surfaces or outer faces; do not overlap their volumes): ${JSON.stringify(summaries)}`
+}
+
 export const generateAssembly = async (
   layout: AssemblyLayout,
   base: Pick<BuildPlan, 'prompt' | 'imageName'>,
@@ -297,75 +605,162 @@ export const generateAssembly = async (
   inventory: Record<string, number> | undefined,
   retries: number,
   locale: 'zh-CN' | 'en-US',
-  checkpoint?: { programs: unknown[]; save: (programs: unknown[]) => void; onProgress?: (plan: BuildPlan) => void | Promise<void>; onDraft?: (plan: BuildPlan) => void },
+  checkpoint?: {
+    programs: unknown[]
+    save: (programs: unknown[]) => void
+    onProgress?: (plan: BuildPlan) => void | Promise<void>
+    onDraft?: (plan: BuildPlan) => void
+    onModule?: (progress: AssemblyModuleProgress) => void
+    onIssue?: (issue: AssemblyIssue) => void
+    /** Keep accepted modules and continue when a later module exhausts its repairs. */
+    skipFailedModules?: boolean
+  },
 ): Promise<BuildPlan> => {
   const plan: BuildPlan = { ...base, id: createId('plan'), title: layout.title, source: 'llm', bricks: [], steps: [], structures: [] }
   const acceptedPrograms: Array<{ module: Module; program: unknown }> = []
-  for (const [moduleIndex, module] of layout.modules.entries()) {
-    const context = `Design: ${JSON.stringify(layout)}\nCurrent module: ${JSON.stringify(module)}\nAccepted programs (expand using each module origin): ${JSON.stringify(acceptedPrograms)}\n${module.tool === 'building' ? buildingToolInstructions : module.tool === 'sculpture' ? sculptureToolInstructions : assemblyProgramInstructions}`
-    const publishDraft = (program: unknown) => {
-      signal?.throwIfAborted()
-      if (!checkpoint?.onDraft) return
-      if (hasSculptureShapes(program)) return
-      try {
-        const bricks = expandAssemblyProgram(program, module.origin, inventory, plan.bricks)
-        bricks.forEach((brick, index) => { brick.id = `draft-${plan.id}-${moduleIndex}-${index}` })
-        checkpoint.onDraft({ ...plan, bricks: [...plan.bricks, ...bricks], structures: [...plan.structures!], steps: [] })
-      } catch { /* Incomplete or invalid commands cannot become preview geometry. */ }
+  const acceptedSummaries: Array<Record<string, unknown>> = []
+  // Aligned with layout.modules for resume; null marks a skipped module.
+  const savedPrograms: unknown[] = []
+  const moduleContext = (module: Module) => `Design: ${JSON.stringify(layout)}\nCurrent module: ${JSON.stringify(module)}\n${describeAcceptedModules(acceptedPrograms, acceptedSummaries)}\n${module.tool === 'building' ? getBuildingToolInstructions() : module.tool === 'sculpture' ? sculptureToolInstructions : assemblyProgramInstructions}`
+
+  /*
+   * Pipelined generation. Modules are still accepted strictly in layout order,
+   * each validated against everything accepted before it, so results and
+   * resume checkpoints are unchanged. A later module whose dependencies are
+   * all resolved has its first request started early, while earlier modules
+   * are still being generated or repaired. If it then conflicts with a module
+   * accepted after its request began, the normal repair loop fixes it with
+   * the full accepted context. Without dependsOn a module waits for every
+   * earlier module, which keeps generation sequential.
+   */
+  const moduleIndexByName = new Map(layout.modules.map((module, index) => [module.name, index]))
+  const dependencies = layout.modules.map((module, index) => {
+    if (!module.dependsOn) return Array.from({ length: index }, (_, earlier) => earlier)
+    const earlier = module.dependsOn.flatMap(name => moduleIndexByName.get(name) ?? []).filter(dependency => dependency < index)
+    // Every later module has to attach to something: default to the foundation.
+    return earlier.length || index === 0 ? earlier : [0]
+  })
+  const resolvedModules = new Set<number>()
+  const prefetched = new Map<number, Promise<unknown>>()
+  const background = new AbortController()
+  const stopBackground = () => background.abort()
+  signal?.addEventListener('abort', stopBackground, { once: true })
+  let backgroundRequests = 0
+  const hasInitialProgram = (index: number) =>
+    (checkpoint && index < checkpoint.programs.length && checkpoint.programs[index] != null) || layout.modules[index].program !== undefined
+  const scheduleAhead = (current: number) => {
+    for (let index = current + 1; index < layout.modules.length && backgroundRequests < assemblyParallelRequests - 1; index++) {
+      if (prefetched.has(index) || hasInitialProgram(index) || !dependencies[index].every(dependency => resolvedModules.has(dependency))) continue
+      const module = layout.modules[index]
+      backgroundRequests++
+      // Start it now, before the current module's own request is sent.
+      let started: Promise<unknown>
+      try { started = Promise.resolve(request(moduleContext(module), module.tool, undefined, { background: true, signal: background.signal })) }
+      catch (error) { started = Promise.reject(error) }
+      const pending = started.finally(() => { backgroundRequests-- })
+      // Consumed later; an unused or canceled request must not surface as unhandled.
+      pending.catch(() => undefined)
+      prefetched.set(index, pending)
     }
-    let feedback = ''
-    let previous: unknown
-    const initialProgram = checkpoint && moduleIndex < checkpoint.programs.length ? checkpoint.programs[moduleIndex] : module.program
-    for (let attempt = initialProgram !== undefined ? -1 : 0; ; attempt++) {
-      signal?.throwIfAborted()
-      let program: unknown
-      try {
-        program = attempt < 0
-          ? initialProgram
-          : await request(`${context}${feedback ? `\nPrevious module program: ${JSON.stringify(previous)}\nFix these issues while preserving its intended design: ${feedback}` : ''}`, module.tool, publishDraft)
+  }
+
+  try {
+    for (const [moduleIndex, module] of layout.modules.entries()) {
+      scheduleAhead(moduleIndex)
+      const context = moduleContext(module)
+      const publishDraft = (program: unknown) => {
         signal?.throwIfAborted()
-        if (module.tool === 'building' && (!record(program) || !Array.isArray(program.commands) || program.commands.length !== 1 || !record(program.commands[0]) || program.commands[0].kind !== 'building')) {
-          throw new Error('Use exactly one kind:"building" tool command. Do not expand the tool into raw bricks.')
-        }
-        if (module.tool === 'sculpture' && (!record(program) || !Array.isArray(program.commands) || program.commands.length !== 1 || !record(program.commands[0]) || !['sculpture-shapes', 'voxel-layers'].includes(String(program.commands[0].kind)))) {
-          throw new Error('Use exactly one sculpture-shapes command wrapped in {"commands":[...]}. Describe colour grids, not individual bricks.')
-        }
-        const bricks = await expandModuleProgram(program, module.origin, inventory, plan.bricks, signal)
-        const usedColors = new Set<string>(bricks.map(brick => brick.color))
-        const missingColors = module.requiredColors?.filter(color => !usedColors.has(color)) ?? []
-        if (missingColors.length) throw new Error(`Missing required visible colours: ${missingColors.join(', ')}. Restore the identifying features described for this module using these colours as exterior inlays. Do not remove them during structural repairs.`)
-        const candidate = { ...plan, bricks: [...plan.bricks, ...bricks], steps: createSingleBrickSteps([...plan.bricks, ...bricks]) }
-        const issues = validateBuildPlan(candidate)
-        if (issues.length) {
-          const byId = new Map(candidate.bricks.map(brick => [brick.id, brick]))
-          const detail = (id: string) => {
-            const brick = byId.get(id)
-            return brick ? { part: brick.brickId, at: [brick.pose.xStud, brick.pose.yStud, brick.pose.zStud], rotation: brick.pose.rotationQuarterTurns, accepted: plan.bricks.includes(brick) } : id
-          }
-          const examples = issues.slice(0, 24).map(issue => ({
-            type: issue.type,
-            parts: issue.type === 'collision' ? issue.brickIds.map(detail) : [detail(issue.brickId)],
-          }))
-          throw new Error(`${summarizeBuildPlanIssues(issues, locale)}\nExact failing parts in WORLD coordinates: ${JSON.stringify(examples)}`)
-        }
-        acceptedPrograms.push({ module, program })
-        checkpoint?.save(acceptedPrograms.map(item => item.program))
-        plan.bricks = candidate.bricks
-        plan.structures!.push({ id: createId('structure'), name: module.name, description: module.description, brickIds: bricks.map(b => b.id) })
-        break
-      } catch (error) {
-        signal?.throwIfAborted()
-        if (error instanceof LlmServiceError || error instanceof LlmOutputLimitError && error.reasoningOnly) throw error
-        checkpoint?.onDraft?.({ ...plan, bricks: [...plan.bricks], structures: [...plan.structures!], steps: [] })
-        if (attempt < 0) checkpoint?.programs.splice(moduleIndex)
-        if (attempt >= retries) throw new Error(`${module.name}: ${error instanceof Error ? error.message : String(error)}`)
-        if (program !== undefined) previous = program
-        feedback = error instanceof Error ? error.message : String(error)
+        if (!checkpoint?.onDraft) return
+        if (hasSculptureShapes(program)) return
+        try {
+          const bricks = expandAssemblyProgram(program, module.origin, inventory, plan.bricks)
+          bricks.forEach((brick, index) => { brick.id = `draft-${plan.id}-${moduleIndex}-${index}` })
+          checkpoint.onDraft({ ...plan, bricks: [...plan.bricks, ...bricks], structures: [...plan.structures!], steps: [] })
+        } catch { /* Incomplete or invalid commands cannot become preview geometry. */ }
       }
+      let feedback = ''
+      let previous: unknown
+      const cachedProgram = checkpoint && moduleIndex < checkpoint.programs.length ? checkpoint.programs[moduleIndex] : undefined
+      const initialProgram = cachedProgram ?? module.program
+      for (let attempt = initialProgram !== undefined ? -1 : 0; ; attempt++) {
+        signal?.throwIfAborted()
+        checkpoint?.onModule?.({ index: moduleIndex, total: layout.modules.length, name: module.name, attempt: Math.max(0, attempt), retries, ahead: [...prefetched.keys()].filter(index => index > moduleIndex).length })
+        let program: unknown
+        try {
+          const early = attempt === 0 ? prefetched.get(moduleIndex) : undefined
+          prefetched.delete(moduleIndex)
+          program = attempt < 0
+            ? initialProgram
+            : early
+              ? await early
+              : await request(`${context}${feedback ? `\nPrevious module program: ${JSON.stringify(previous)}\nFix these issues while preserving its intended design: ${feedback}` : ''}`, module.tool, publishDraft)
+          signal?.throwIfAborted()
+          if (module.tool === 'building' && (!record(program) || !Array.isArray(program.commands) || program.commands.length !== 1 || !record(program.commands[0]) || program.commands[0].kind !== 'building')) {
+            throw new Error('Use exactly one kind:"building" tool command. Do not expand the tool into raw bricks.')
+          }
+          if (module.tool === 'sculpture' && (!record(program) || !Array.isArray(program.commands) || program.commands.length !== 1 || !record(program.commands[0]) || !['sculpture-shapes', 'voxel-layers'].includes(String(program.commands[0].kind)))) {
+            throw new Error('Use exactly one sculpture-shapes command wrapped in {"commands":[...]}. Describe colour grids, not individual bricks.')
+          }
+          const bricks = await expandModuleProgram(program, module.origin, inventory, plan.bricks, signal)
+          const usedColors = new Set<string>(bricks.map(brick => canonicalColorId(brick.color)))
+          const missingColors = module.requiredColors?.filter(color => !usedColors.has(color)) ?? []
+          // Ask for the colours while repairs remain; afterwards a structurally
+          // valid module is kept and the missing colours are reported instead.
+          if (missingColors.length && attempt < retries) throw new Error(`Missing required visible colours: ${missingColors.join(', ')}. Restore the identifying features described for this module using these colours as exterior inlays. Do not remove them during structural repairs.`)
+          const candidate = { ...plan, bricks: [...plan.bricks, ...bricks], steps: createSingleBrickSteps([...plan.bricks, ...bricks]) }
+          const issues = validateBuildPlan(candidate)
+          if (issues.length) {
+            const byId = new Map(candidate.bricks.map(brick => [brick.id, brick]))
+            const detail = (id: string) => {
+              const brick = byId.get(id)
+              return brick ? { part: brick.brickId, at: [brick.pose.xStud, brick.pose.yStud, brick.pose.zStud], rotation: brick.pose.rotationQuarterTurns, accepted: plan.bricks.includes(brick) } : id
+            }
+            const examples = issues.slice(0, 24).map(issue => ({
+              type: issue.type,
+              parts: issue.type === 'collision' ? issue.brickIds.map(detail) : [detail(issue.brickId)],
+            }))
+            throw new Error(`${summarizeBuildPlanIssues(issues, locale)}\nExact failing parts in WORLD coordinates: ${JSON.stringify(examples)}`)
+          }
+          if (missingColors.length) checkpoint?.onIssue?.({ kind: 'missing-colors', module: module.name, detail: missingColors.join(', ') })
+          acceptedPrograms.push({ module, program })
+          savedPrograms.push(program)
+          checkpoint?.save([...savedPrograms])
+          plan.bricks = candidate.bricks
+          plan.structures!.push({ id: createId('structure'), name: module.name, description: module.description, brickIds: bricks.map(b => b.id) })
+          acceptedSummaries.push(summarizeAcceptedModule(module, bricks))
+          resolvedModules.add(moduleIndex)
+          break
+        } catch (error) {
+          signal?.throwIfAborted()
+          if (error instanceof LlmServiceError || error instanceof LlmOutputLimitError && error.reasoningOnly) throw error
+          checkpoint?.onDraft?.({ ...plan, bricks: [...plan.bricks], structures: [...plan.structures!], steps: [] })
+          if (attempt < 0 && cachedProgram !== undefined) checkpoint?.programs.splice(moduleIndex)
+          const message = error instanceof Error ? error.message : String(error)
+          if (attempt >= retries) {
+            // Losing every accepted module to one failed detail is worse than a
+            // build without that detail. The first module carries the foundation,
+            // so a failure there still ends generation.
+            if (checkpoint?.skipFailedModules && plan.bricks.length > 0) {
+              checkpoint.onIssue?.({ kind: 'skipped-module', module: module.name, detail: message })
+              savedPrograms.push(null)
+              checkpoint.save([...savedPrograms])
+              resolvedModules.add(moduleIndex)
+              break
+            }
+            throw new Error(`${module.name}: ${message}`)
+          }
+          if (program !== undefined) previous = program
+          feedback = message
+        }
+      }
+      signal?.throwIfAborted()
+      await checkpoint?.onProgress?.({ ...plan, bricks: [...plan.bricks], structures: [...plan.structures!], steps: createSingleBrickSteps(plan.bricks) })
+      signal?.throwIfAborted()
     }
-    signal?.throwIfAborted()
-    await checkpoint?.onProgress?.({ ...plan, bricks: [...plan.bricks], structures: [...plan.structures!], steps: createSingleBrickSteps(plan.bricks) })
-    signal?.throwIfAborted()
+  } finally {
+    // Stop requests started ahead when generation ends early or fails.
+    signal?.removeEventListener('abort', stopBackground)
+    stopBackground()
   }
   plan.steps = createSingleBrickSteps(plan.bricks)
   return plan

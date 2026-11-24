@@ -1,45 +1,46 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { generateLlmBuildPlan, requestLlmJsonContent, testLlmConnection } from './llmGenerator'
-import { defaultLlmConfig } from './llmConfig'
+import { createRequestLifetime, trackResponseActivity } from './requestLifetime'
 
-const config = { ...defaultLlmConfig, modelName: 'mock', apiKey: 'mock', endpoint: 'https://example.invalid' }
-afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
+afterEach(() => { vi.useRealTimers() })
 
-describe('request lifecycle', () => {
-  it.each(['generate', 'json', 'test'])('cancels %s after headers even if the body stalls', async (kind) => {
-    let bodyStarted!: () => void
-    const started = new Promise<void>((resolve) => { bodyStarted = resolve })
-    const response = new Response()
-    const stalledBody = () => { bodyStarted(); return new Promise<never>(() => {}) }
-    vi.spyOn(response, 'text').mockImplementation(stalledBody)
-    vi.spyOn(response, 'json').mockImplementation(stalledBody)
-    vi.stubGlobal('fetch', vi.fn(async () => response))
-    const controller = new AbortController()
-    const pending = kind === 'generate' ? generateLlmBuildPlan({ prompt: 'mock', config, signal: controller.signal })
-      : kind === 'json' ? requestLlmJsonContent({ config, systemPrompt: '', userPrompt: '', signal: controller.signal })
-        : testLlmConnection(config, 'en-US', controller.signal)
-    const result = expect(pending).rejects.toThrow()
-    await started
-    controller.abort()
-    await result
-  })
-
-  it('does not issue an already canceled request', async () => {
-    const fetch = vi.fn()
-    vi.stubGlobal('fetch', fetch)
-    const controller = new AbortController()
-    controller.abort()
-    await expect(generateLlmBuildPlan({ prompt: '', config, signal: controller.signal })).rejects.toThrow()
-    expect(fetch).not.toHaveBeenCalled()
-  })
-
-  it('times out while waiting for the response body', async () => {
+describe('request lifetime', () => {
+  it('stays alive while data keeps arriving and aborts after an idle gap', () => {
     vi.useFakeTimers()
-    const response = new Response()
-    vi.spyOn(response, 'text').mockImplementation(() => new Promise<string>(() => {}))
-    vi.stubGlobal('fetch', vi.fn(async () => response))
-    const result = expect(testLlmConnection(config, 'en-US')).rejects.toThrow(/timed out|timeout/i)
-    await vi.runAllTimersAsync()
-    await result
+    const { controller, touch, dispose } = createRequestLifetime(undefined, 1_000)
+    for (let index = 0; index < 5; index++) { vi.advanceTimersByTime(900); touch() }
+    expect(controller.signal.aborted).toBe(false)
+    vi.advanceTimersByTime(1_000)
+    expect(controller.signal.aborted).toBe(true)
+    dispose()
+  })
+
+  it('caps the total duration regardless of activity', () => {
+    vi.useFakeTimers()
+    const { controller, touch, dispose } = createRequestLifetime(undefined, 1_000, 3_000)
+    for (let index = 0; index < 4; index++) { vi.advanceTimersByTime(900); touch() }
+    expect(controller.signal.aborted).toBe(true)
+    dispose()
+  })
+
+  it('follows the caller and stops timing once disposed', () => {
+    vi.useFakeTimers()
+    const caller = new AbortController()
+    const first = createRequestLifetime(caller.signal, 1_000)
+    caller.abort()
+    expect(first.controller.signal.aborted).toBe(true)
+    const second = createRequestLifetime(undefined, 1_000)
+    second.dispose()
+    vi.advanceTimersByTime(5_000)
+    expect(second.controller.signal.aborted).toBe(false)
+  })
+
+  it('reports body chunks and preserves the response', async () => {
+    const touch = vi.fn()
+    const original = new Response('data: one\n\ndata: two\n\n', { status: 201, headers: { 'content-type': 'text/event-stream' } })
+    const tracked = trackResponseActivity(original, touch)
+    expect(tracked.status).toBe(201)
+    expect(tracked.headers.get('content-type')).toBe('text/event-stream')
+    expect(await tracked.text()).toBe('data: one\n\ndata: two\n\n')
+    expect(touch.mock.calls.length).toBeGreaterThanOrEqual(2)
   })
 })

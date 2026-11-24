@@ -201,7 +201,7 @@ New or corrected parts should be backed by real references:
 3. Preserve real part numbers, dimensions, connector semantics, and regression coverage
 4. Run `npm run generate:ldraw` and `npm run validate:builds` after changing LDraw-derived data
 
-For another official set replica, use the project skill [lego-official-replica](.agents/skills/lego-official-replica/SKILL.md). It covers manual mapping, inventory reconciliation, actual per-stage visual comparisons, and native data verification.
+For another official set replica, map the official manual step by step, reconcile the inventory, compare every stage visually in the editor, and run the native data checks (`npm run validate:builds`, `npm run verify:replicas`).
 
 For non-LEGO packs, prefer explicit structural semantics instead of forcing every system into LEGO stud and tube rules. The Minecraft basic block uses a bidirectional `studsocket` face connector so the block stays solid while still supporting face-to-face attachment
 

@@ -475,3 +475,54 @@ it('retries mandatory reasoning models with low effort and scopes the fallback t
     vi.unstubAllGlobals()
   }
 })
+
+describe('reasoning that ignores disabled thinking', () => {
+  const streamed = (content: string, reasoningTokens: number) => new Response([
+    `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}`,
+    '',
+    `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { completion_tokens: 20, completion_tokens_details: { reasoning_tokens: reasoningTokens } } })}`,
+    '',
+    'data: [DONE]',
+    '',
+  ].join('\n'), { headers: { 'content-type': 'text/event-stream' } })
+
+  it('raises later output budgets once a model reasons with thinking disabled', async () => {
+    resetLlmThinkingCompatibility()
+    vi.stubGlobal('window', { setTimeout, clearTimeout })
+    const layout = { title: 'Tower', modules: [{ name: 'Base', tool: 'parts', description: 'one brick', origin: [0, 0, 0] }] }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(streamed(JSON.stringify(layout), 2_000))
+      .mockResolvedValueOnce(streamed(JSON.stringify({ commands: [{ brickId: 'brick-1x1', color: 'red', at: [0, 0, 0] }] }), 2_000))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await generateLlmBuildPlan({ prompt: 'reasoning tower', config: { ...config, enableThinking: false } })
+      expect(payloadAt(fetchMock, 0).max_tokens).toBe(4_096)
+      expect(payloadAt(fetchMock, 1).max_tokens).toBe(24_576)
+    } finally {
+      resetLlmThinkingCompatibility()
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('drops each unsupported field named by successive provider errors', async () => {
+    resetLlmThinkingCompatibility()
+    vi.stubGlobal('window', { setTimeout, clearTimeout })
+    const reject = (message: string) => new Response(JSON.stringify({ error: { message } }), { status: 400 })
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(reject('Unsupported parameter(s): `enable_thinking`'))
+      .mockResolvedValueOnce(reject("Unsupported parameter: 'reasoning_effort'"))
+      .mockImplementation(() => Promise.resolve(successResponse()))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await expect(request()).resolves.toBe('{"ok":true}')
+      expect(fetchMock).toHaveBeenCalledTimes(3)
+      expect(payloadAt(fetchMock, 0)).toHaveProperty('reasoning_effort', 'high')
+      expect(payloadAt(fetchMock, 1)).not.toHaveProperty('enable_thinking')
+      expect(payloadAt(fetchMock, 2)).not.toHaveProperty('reasoning_effort')
+      expect(payloadAt(fetchMock, 2)).not.toHaveProperty('thinking')
+    } finally {
+      resetLlmThinkingCompatibility()
+      vi.unstubAllGlobals()
+    }
+  })
+})
