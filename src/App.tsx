@@ -34,7 +34,7 @@ import { dropBrickGroupAtPoint, findNearestOpenBrickGroupAround, getBrickGroupDr
 import { createEmptyBuildPlan, generateBuildPlan, robotTemplateTitle } from './lib/localGenerator'
 import { buildLlmUserPrompt, generateLlmBuildPlan, llmSystemPrompt, requestLlmJsonContent, requestLlmTextStream, testLlmConnection } from './lib/llmGenerator'
 import { clearLlmConnection, normalizeMaxRepairAttempts, saveLlmConnection } from './lib/llmConfig'
-import { defaultFinishedAssets, needsFinishedAssetsRecovery, isDefaultFinishedAsset, mergeRecoveredFinishedAssets, loadAllDefaultFinishedAssets, loadFinishedAssets, loadFinishedAssetsFromIndexedDb, mergeWithDefaultAssets, saveFinishedAssets } from './lib/finishedAssets'
+import { defaultFinishedAssets, getFinishedAssetCounts, isFinishedAssetPlanDeferred, needsFinishedAssetsRecovery, isDefaultFinishedAsset, mergeRecoveredFinishedAssets, loadAllDefaultFinishedAssets, loadFinishedAssets, loadFinishedAssetsFromIndexedDb, mergeWithDefaultAssets, resolveFinishedAssetPlan, saveFinishedAssets } from './lib/finishedAssets'
 import { preparePlanGeometry } from './lib/planGeometry'
 import { formatBuildManualMarkdown, getAssemblyGuide, type BuildManual } from './lib/manualSerializer'
 import { getManualStepPage, manualStepPageSize } from './lib/manualPagination'
@@ -101,7 +101,10 @@ type LocalizedFinishedAsset = {
   displayCategory: string
   displayDescription: string
   displayPrompt: string
+  /** A placeholder while the asset's plan is deferred; use getAssetDisplayPlan. */
   displayPlan: BuildPlan
+  partCount: number
+  stepCount: number
 }
 type PlacementSession = {
   kind: 'new' | 'move'
@@ -133,6 +136,7 @@ const localizeFinishedAsset = (
   const i18nKey = asset.i18nKey ?? defaultFinishedAssetI18nKeys.get(asset.id)
   const title = i18nKey ? t(`${i18nKey}.title`) : asset.title
   const prompt = i18nKey ? t(`${i18nKey}.prompt`) : asset.plan.prompt
+  const counts = getFinishedAssetCounts(asset)
   return {
     source: asset,
     displayTitle: title,
@@ -144,7 +148,16 @@ const localizeFinishedAsset = (
       title,
       prompt,
     },
+    partCount: counts.bricks,
+    stepCount: counts.steps,
   }
+}
+
+/** The asset's full display plan, fetching a deferred replica on first use. */
+const getAssetDisplayPlan = async (asset: LocalizedFinishedAsset): Promise<BuildPlan> => {
+  if (!isFinishedAssetPlanDeferred(asset.source)) return asset.displayPlan
+  const resolved = await resolveFinishedAssetPlan(asset.source)
+  return { ...resolved.plan, title: asset.displayTitle, prompt: asset.displayPrompt }
 }
 
 const getLlmEngineStatusTone = (status: LlmEngineStatus) => {
@@ -686,7 +699,7 @@ function App() {
   useEffect(() => {
     let isCanceled = false
 
-    loadAllDefaultFinishedAssets().then((defaultAssets) => {
+    loadAllDefaultFinishedAssets({ deferPlans: true }).then((defaultAssets) => {
       if (isCanceled) return
       setFinishedAssets((current) => mergeWithDefaultAssets(current, defaultAssets))
     })
@@ -2662,18 +2675,24 @@ function App() {
     setIsAssetLibraryOpen(false)
     try {
       await yieldToBrowser()
-      try { await preparePlanGeometry(asset.displayPlan) } catch {
+      let displayPlan: BuildPlan
+      try { displayPlan = await getAssetDisplayPlan(asset) } catch {
+        if (workspaceSession.getEpoch() === epoch) setGenerationFailure(t('error.assetLoad'))
+        return
+      }
+      if (workspaceSession.getEpoch() !== epoch) return
+      try { await preparePlanGeometry(displayPlan) } catch {
         if (workspaceSession.getEpoch() === epoch) setGenerationFailure(t('error.geometryLoad'))
         return
       }
       if (workspaceSession.getEpoch() !== epoch) return
-      const issues = isDefaultFinishedAsset(asset.source) ? [] : validateBuildPlan(asset.displayPlan)
+      const issues = isDefaultFinishedAsset(asset.source) ? [] : validateBuildPlan(displayPlan)
       if (getBlockingBuildPlanIssues(issues).length > 0) {
         setGenerationFailure(t('error.assetInvalid', { summary: summarizeBuildPlanIssues(issues, locale) }))
         return
       }
 
-      const imported = importAssetPlanIncrementally(planRef.current, asset.displayPlan)
+      const imported = importAssetPlanIncrementally(planRef.current, displayPlan)
       if (!imported) {
         setGenerationFailure(t('error.assetNoSpace'))
         return
@@ -2769,7 +2788,7 @@ function App() {
 
   const resetFinishedAssets = () => {
     setFinishedAssets(defaultFinishedAssets)
-    loadAllDefaultFinishedAssets().then((defaultAssets) => {
+    loadAllDefaultFinishedAssets({ deferPlans: true }).then((defaultAssets) => {
       setFinishedAssets(defaultAssets)
     })
     setAssetQuery('')
@@ -2846,6 +2865,23 @@ function App() {
     }
 
     if (issues.length > 0) setGenerationWarning(summarizeBuildPlanIssues(issues, locale))
+  }
+
+  const openAssetManual = async (asset: LocalizedFinishedAsset) => {
+    if (!isFinishedAssetPlanDeferred(asset.source)) return openManual(asset.displayPlan)
+    const requestId = ++manualRequest.current
+    setIsManualPreparing(true)
+    let sourcePlan: BuildPlan
+    try { sourcePlan = await getAssetDisplayPlan(asset) } catch {
+      if (manualRequest.current === requestId) {
+        setIsManualPreparing(false)
+        setGenerationFailure(t('error.assetLoad'))
+      }
+      return
+    }
+    // Another manual request started while the replica was downloading.
+    if (manualRequest.current !== requestId) return
+    return openManual(sourcePlan)
   }
 
   const openManual = async (sourcePlan?: BuildPlan) => {
@@ -3734,13 +3770,13 @@ function App() {
                     )}
                     <h3>{asset.displayTitle}</h3>
                     <p>{asset.displayDescription}</p>
-                    <small>{t('common.parts', { count: asset.displayPlan.bricks.length })} · {t('common.steps', { count: asset.displayPlan.steps.length })} · {asset.displayPrompt}</small>
+                    <small>{t('common.parts', { count: asset.partCount })} · {t('common.steps', { count: asset.stepCount })} · {asset.displayPrompt}</small>
                   </div>
                   <div className="asset-actions">
                     <button type="button" disabled={isLoadingAsset} onClick={() => loadFinishedAsset(asset)}>
                       {t('common.load')}
                     </button>
-                    <button type="button" onClick={() => openManual(asset.displayPlan)}>
+                    <button type="button" onClick={() => void openAssetManual(asset)}>
                       {t('asset.manual')}
                     </button>
                     {asset.source.instructionUrl && (

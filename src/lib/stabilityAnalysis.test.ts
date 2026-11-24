@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { makeBrick } from './planUtils'
-import { analyzeBuildStability, createConvexHull } from './stabilityAnalysis'
+import { analyzeBuildStability, createConvexHull, getRiskLevel, getStabilityRiskColor, stabilityRiskThresholds } from './stabilityAnalysis'
 
 describe('stability analysis', () => {
   it('builds the outer support hull without interior points', () => {
@@ -33,5 +33,13 @@ describe('stability analysis', () => {
 
     expect(result?.supportCoverage).toBeLessThan(0.4)
     expect(result?.reasons).toContain('cantilever')
+  })
+
+  it('keeps risk colours consistent with risk levels', () => {
+    for (let risk = 0; risk <= 1; risk += 0.01) {
+      const critical = getRiskLevel(risk, true) === 'critical'
+      expect(getStabilityRiskColor(risk) === '#ef4444').toBe(critical)
+      expect(getStabilityRiskColor(risk) === '#22c55e').toBe(risk < stabilityRiskThresholds.watch)
+    }
   })
 })

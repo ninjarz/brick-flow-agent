@@ -1,7 +1,6 @@
 import { preparePlanGeometry } from './planGeometry'
 import { safeStorage } from './safeStorage'
 import { coordinateStorageWrite } from './storageCoordinator'
-import hogwartsPlan from '../data/legoHogwartsPlan.json'
 import searsTowerPlan from '../data/legoSearsTowerPlan.json'
 import empireStatePlan from '../data/legoEmpireStatePlan.json'
 import rockefellerPlan from '../data/legoRockefellerPlan.json'
@@ -49,6 +48,51 @@ let recoveryBlocked = false
 
 let generatedObjAssetsPromise: Promise<FinishedAsset[]> | undefined
 
+/**
+ * The 71043 replica is 5.8 MB of JSON. Keep it out of the startup bundle: the
+ * library shows a placeholder with these counts, and the full plan is fetched
+ * from its own chunk only when the asset is opened or its manual is viewed.
+ * deferredFinishedAssets.test.ts checks the summary against the shipped JSON.
+ */
+export const hogwartsAssetId = 'finished-lego-71043'
+export const hogwartsPlanSummary = {
+  id: 'lego-71043-hogwarts-castle',
+  title: 'LEGO 71043 霍格沃茨城堡',
+  prompt: '按官方四册说明书复刻完整霍格沃茨城堡，含礼堂、主塔、东楼、海格小屋、打人柳、五艘渡船、四位创始人及微缩人物。',
+  brickCount: 6025,
+  stepCount: 1906,
+} as const
+
+const deferredPlanLoaders = new Map<string, () => Promise<BuildPlan>>([
+  [hogwartsAssetId, () => import('../data/legoHogwartsPlan.json').then((module) => module.default as unknown as BuildPlan)],
+])
+const deferredPlanPromises = new Map<string, Promise<BuildPlan>>()
+
+export const isFinishedAssetPlanDeferred = (asset: Pick<FinishedAsset, 'deferredPlan'>) => Boolean(asset.deferredPlan)
+
+export const getFinishedAssetCounts = (asset: FinishedAsset) => asset.deferredPlan
+  ? { bricks: asset.deferredPlan.brickCount, steps: asset.deferredPlan.stepCount }
+  : { bricks: asset.plan.bricks.length, steps: asset.plan.steps.length }
+
+/** Returns the asset with its full plan, loading a deferred replica once. */
+export const resolveFinishedAssetPlan = async (asset: FinishedAsset): Promise<FinishedAsset> => {
+  if (!asset.deferredPlan) return asset
+  const loader = deferredPlanLoaders.get(asset.id)
+  if (!loader) throw new Error(`Missing plan loader for ${asset.id}`)
+  let pending = deferredPlanPromises.get(asset.id)
+  if (!pending) {
+    pending = loader()
+    deferredPlanPromises.set(asset.id, pending)
+    // A failed chunk request (offline, redeploy) may be retried later.
+    pending.catch(() => deferredPlanPromises.delete(asset.id))
+  }
+  const resolved: FinishedAsset = { ...asset, plan: await pending }
+  delete resolved.deferredPlan
+  return resolved
+}
+
+const resolveDeferredPlans = (assets: FinishedAsset[]) => Promise.all(assets.map(resolveFinishedAssetPlan))
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
 
@@ -90,7 +134,12 @@ export const defaultFinishedAssets: FinishedAsset[] = [
     id: 'finished-lego-71043', title: 'LEGO 71043 霍格沃茨城堡', category: 'Classic',
     description: '按官方四册说明书完整复刻，6025 个可编辑零件，含礼堂、主塔、东楼、海格小屋、打人柳、五艘渡船、四位创始人与微缩人物。铰链上下半件可分别编辑。',
     instructionUrl: 'https://www.lego.com/en-us/service/building-instructions/71043',
-    instructionStatus: 'mapped', plan: hogwartsPlan as unknown as BuildPlan,
+    instructionStatus: 'mapped',
+    deferredPlan: { brickCount: hogwartsPlanSummary.brickCount, stepCount: hogwartsPlanSummary.stepCount },
+    plan: {
+      id: hogwartsPlanSummary.id, title: hogwartsPlanSummary.title, prompt: hogwartsPlanSummary.prompt,
+      source: 'template-local', bricks: [], steps: [],
+    },
   },
   {
     id: 'finished-lego-21000', title: 'LEGO 21000 西尔斯大厦', category: 'Classic',
@@ -163,9 +212,14 @@ export const mergeWithDefaultAssets = (
   return [...defaultAssets, ...customAssets]
 }
 
-export const loadAllDefaultFinishedAssets = async () => {
+/**
+ * All built-in assets. Scripts and tests get full plans by default; the app
+ * passes deferPlans so the library can list large replicas without fetching them.
+ */
+export const loadAllDefaultFinishedAssets = async ({ deferPlans = false }: { deferPlans?: boolean } = {}) => {
   generatedObjAssetsPromise ??= import('../data/generatedObjAssets').then((module) => module.generatedObjAssets)
-  return [...defaultFinishedAssets, ...await generatedObjAssetsPromise]
+  const assets = [...defaultFinishedAssets, ...await generatedObjAssetsPromise]
+  return deferPlans ? assets : resolveDeferredPlans(assets)
 }
 
 const normalizeStoredAssets = (value: unknown): FinishedAsset[] => {

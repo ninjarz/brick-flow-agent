@@ -279,6 +279,11 @@ export type FinishedAsset = {
   description: string
   instructionUrl?: string
   instructionStatus?: 'mapped' | 'inspired'
+  /**
+   * Present while `plan` is a lightweight placeholder for a large built-in
+   * replica; resolve the full plan with resolveFinishedAssetPlan before use.
+   */
+  deferredPlan?: { brickCount: number; stepCount: number }
   plan: BuildPlan
 }
 

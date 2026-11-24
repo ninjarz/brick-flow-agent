@@ -112,6 +112,94 @@ export const getSignedDistanceToSupportHull = (point: StabilityPoint2, hull: Sta
 const overlapLength = (sourceMin: number, sourceMax: number, targetMin: number, targetMax: number) =>
   Math.max(0, Math.min(sourceMax, targetMax) - Math.max(sourceMin, targetMin))
 
+type LoadPathItem = {
+  id: string
+  mass: number
+  bounds: NonNullable<ReturnType<BuildGraph['boundsById']['get']>>
+  centerY: number
+}
+
+const restsOn = (upper: LoadPathItem['bounds'], lower: LoadPathItem['bounds']) =>
+  Math.abs(upper.minY - lower.maxY) <= contactTolerance
+    ? overlapLength(upper.minX, upper.maxX, lower.minX, lower.maxX) *
+      overlapLength(upper.minZ, upper.maxZ, lower.minZ, lower.maxZ)
+    : 0
+
+/**
+ * Mass carried by each brick from the pieces it actually holds up.
+ *
+ * Load ranks follow the same rule as the disaster load paths: from a ground
+ * piece, stepping onto a piece resting on top is free, while a side joint or
+ * a hanging attachment costs one step. Every piece then hands its own mass
+ * plus everything it carries to neighbours that are strictly closer to the
+ * ground in (rank, height) order, so the transfer graph is acyclic and the
+ * total mass is conserved down to the ground pieces. Resting contacts share
+ * the load by contact area; a piece with no resting contact splits it evenly
+ * across its joints.
+ */
+export const computeCarriedMass = (items: LoadPathItem[], graph: BuildGraph) => {
+  const byId = new Map(items.map((item) => [item.id, item]))
+  const rank = new Map<string, number>()
+  const buckets: string[][] = [[]]
+  for (const item of items) {
+    if (Math.abs(item.bounds.minY) > contactTolerance) continue
+    rank.set(item.id, 0)
+    buckets[0].push(item.id)
+  }
+  for (let depth = 0; depth < buckets.length; depth += 1) {
+    const queue = buckets[depth] ?? []
+    for (let index = 0; index < queue.length; index += 1) {
+      const currentId = queue[index]
+      if (rank.get(currentId) !== depth) continue
+      const current = byId.get(currentId)!
+      for (const targetId of graph.attachmentEdges.get(currentId) ?? []) {
+        const target = byId.get(targetId)
+        if (!target) continue
+        const next = depth + (restsOn(target.bounds, current.bounds) > epsilon ? 0 : 1)
+        const known = rank.get(targetId)
+        if (known !== undefined && known <= next) continue
+        rank.set(targetId, next)
+        ;(buckets[next] ??= []).push(targetId)
+      }
+    }
+  }
+
+  const isCloserToGround = (target: LoadPathItem, source: LoadPathItem) => {
+    const targetRank = rank.get(target.id)!
+    const sourceRank = rank.get(source.id)!
+    return targetRank < sourceRank || (targetRank === sourceRank && target.centerY < source.centerY - epsilon)
+  }
+  const order = items
+    .filter((item) => rank.has(item.id))
+    .sort((source, target) => rank.get(target.id)! - rank.get(source.id)! || target.centerY - source.centerY)
+  const carried = new Map<string, number>()
+  for (const item of order) {
+    // Ground pieces hand their load to the floor.
+    if (Math.abs(item.bounds.minY) <= contactTolerance) continue
+    const total = item.mass + (carried.get(item.id) ?? 0)
+    const bearings: Array<{ id: string; weight: number }> = []
+    const joints: string[] = []
+    for (const targetId of graph.attachmentEdges.get(item.id) ?? []) {
+      const target = byId.get(targetId)
+      if (!target || !rank.has(targetId) || !isCloserToGround(target, item)) continue
+      const area = restsOn(item.bounds, target.bounds)
+      if (area > epsilon) bearings.push({ id: targetId, weight: area })
+      else joints.push(targetId)
+    }
+    if (bearings.length) {
+      const totalWeight = bearings.reduce((sum, bearing) => sum + bearing.weight, 0)
+      for (const bearing of bearings) {
+        carried.set(bearing.id, (carried.get(bearing.id) ?? 0) + total * bearing.weight / totalWeight)
+      }
+    } else {
+      for (const targetId of joints) {
+        carried.set(targetId, (carried.get(targetId) ?? 0) + total / joints.length)
+      }
+    }
+  }
+  return carried
+}
+
 const getSupportCoverage = (
   brickId: string,
   graph: BuildGraph,
@@ -133,18 +221,26 @@ const getSupportCoverage = (
   return clamp(supportArea / baseArea)
 }
 
-const getRiskLevel = (risk: number, grounded: boolean): StabilityRiskLevel => {
+/** Shared by risk levels and colours so a "critical" brick is always red. */
+export const stabilityRiskThresholds = {
+  watch: 0.36,
+  elevated: 0.52,
+  critical: 0.67,
+} as const
+
+export const getRiskLevel = (risk: number, grounded: boolean): StabilityRiskLevel => {
   if (!grounded) return 'detached'
-  if (risk >= 0.67) return 'critical'
-  if (risk >= 0.36) return 'watch'
+  if (risk >= stabilityRiskThresholds.critical) return 'critical'
+  if (risk >= stabilityRiskThresholds.watch) return 'watch'
   return 'stable'
 }
 
 export const getStabilityRiskColor = (risk: number, grounded = true) => {
   if (!grounded) return '#7f1d1d'
-  if (risk >= 0.72) return '#ef4444'
-  if (risk >= 0.46) return '#f97316'
-  if (risk >= 0.24) return '#facc15'
+  if (risk >= stabilityRiskThresholds.critical) return '#ef4444'
+  // "watch" is split into yellow and orange for a finer visual gradient.
+  if (risk >= stabilityRiskThresholds.elevated) return '#f97316'
+  if (risk >= stabilityRiskThresholds.watch) return '#facc15'
   return '#22c55e'
 }
 
@@ -223,18 +319,12 @@ export const analyzeBuildStability = (
   const redundantCount = elevated.filter(({ brick }) => (graph.attachmentEdges.get(brick.id)?.size ?? 0) >= 2).length
   const connectionRedundancy = elevated.length === 0 ? 1 : redundantCount / elevated.length
 
-  const massAboveById = new Map<string, number>()
-  const byLeftEdge = [...measured].sort((a, b) => a.bounds.minX - b.bounds.minX)
-  for (const [index, left] of byLeftEdge.entries()) {
-    for (let next = index + 1; next < byLeftEdge.length; next += 1) {
-      const right = byLeftEdge[next]
-      if (right.bounds.minX >= left.bounds.maxX) break
-      if (overlapLength(left.bounds.minZ, left.bounds.maxZ, right.bounds.minZ, right.bounds.maxZ) <= 0) continue
-      if (Math.abs(left.center.y - right.center.y) <= epsilon) continue
-      const [lower, upper] = left.center.y < right.center.y ? [left, right] : [right, left]
-      massAboveById.set(lower.brick.id, (massAboveById.get(lower.brick.id) ?? 0) + upper.mass)
-    }
-  }
+  // Only load that actually reaches a brick through its connections counts;
+  // overlapping in plan view alone no longer adds unrelated pieces' mass.
+  const massAboveById = computeCarriedMass(
+    measured.map(({ brick, mass, bounds, center }) => ({ id: brick.id, mass, bounds, centerY: center.y })),
+    graph,
+  )
 
   const riskByBrickId = new Map<string, BrickStability>()
   let weightedCoverage = 0

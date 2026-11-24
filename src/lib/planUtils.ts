@@ -158,8 +158,18 @@ const createPlanValidationContextFromSpatialState = (state: PlanSpatialState): P
 export const createPlanSpatialState = (bricks: PlacedBrick[]) =>
   PlanSpatialState.fromBricks(bricks, connectorSnapSearchTolerance)
 
-export const createId = (prefix: string) =>
-  `${prefix}-${Math.random().toString(36).slice(2, 8)}`
+const idAlphabet = '0123456789abcdefghijklmnopqrstuvwxyz'
+const idLength = 12
+
+// 12 base-36 characters (~62 bits) keep collisions negligible even for
+// 6,000+ piece replicas. getRandomValues also works outside secure contexts,
+// unlike crypto.randomUUID (e.g. when the dev server is opened via a LAN IP).
+export const createId = (prefix: string) => {
+  const bytes = crypto.getRandomValues(new Uint8Array(idLength))
+  let suffix = ''
+  for (const byte of bytes) suffix += idAlphabet[byte % idAlphabet.length]
+  return `${prefix}-${suffix}`
+}
 
 export const makeBrick = (
   brickId: string,
@@ -739,6 +749,19 @@ const computeGroundedIds = (
   return groundedIds
 }
 
+/**
+ * Visit each unordered pair once without building string keys: a pair is
+ * evaluated only from the earlier piece. Spatial candidate lookups are
+ * symmetric, so the later piece always appears in the earlier one's set.
+ * With duplicate ids only the last occurrence takes part, matching the
+ * id-keyed maps the callers use.
+ */
+const createPairOrder = (bricks: PlacedBrick[]) =>
+  new Map(bricks.map((brick, index) => [brick.id, index]))
+
+const isLaterPair = (pairOrder: Map<string, number>, sourceIndex: number, sourceId: string, targetId: string) =>
+  pairOrder.get(sourceId) === sourceIndex && (pairOrder.get(targetId) ?? -1) > sourceIndex
+
 const computeBuildGraph = (
   bricks: PlacedBrick[],
   context: PlanValidationContext,
@@ -758,13 +781,11 @@ const computeBuildGraph = (
     }),
   )
   const graphPairIndex = createGraphPairSpatialIndex(bricks, graphPairBoundsById)
-  const checkedPairs = new Set<string>()
+  const pairOrder = createPairOrder(bricks)
 
-  for (const source of bricks) {
+  for (const [sourceIndex, source] of bricks.entries()) {
     for (const targetId of getPotentialGraphPairIds(source, graphPairBoundsById, graphPairIndex)) {
-      const pairKey = [source.id, targetId].sort().join(':')
-      if (checkedPairs.has(pairKey)) continue
-      checkedPairs.add(pairKey)
+      if (!isLaterPair(pairOrder, sourceIndex, source.id, targetId)) continue
 
       const target = bricksById.get(targetId)
       if (!target) continue
@@ -943,6 +964,22 @@ export const findOpenPose = (
   const maxX = Math.max(bounds.width + (footprint?.widthStuds ?? 1), 8)
   const maxZ = Math.max(bounds.depth + (footprint?.depthStuds ?? 1), 8)
 
+  // Nearest free ground spot first, searched outward from the requested
+  // position in whole studs. The radius reaches past the model on every
+  // side, so a free spot is found next to the model, not at the origin.
+  const reach = Math.max(
+    Math.abs(brick.pose.xStud), Math.abs(brick.pose.xStud - maxX),
+    Math.abs(brick.pose.zStud), Math.abs(brick.pose.zStud - maxZ),
+  ) + Math.max(footprint?.widthStuds ?? 1, footprint?.depthStuds ?? 1) + 1
+  // Round up so the shared offset cache stays small.
+  const groundSearchRadius = Math.ceil(reach / 8) * 8
+  const groundBase = { ...brick, pose: { ...brick.pose, yStud: 0 } }
+  for (const offset of getNearestHorizontalSearchOffsets(groundSearchRadius, 1)) {
+    const candidate = liftBrickAboveGround({ ...groundBase, pose: translateBrickPose(groundBase.pose, offset) })
+    if (isBrickAboveGround(candidate) && !hasBrickCollision(candidate, bricks, collisionIndex)) return candidate
+  }
+
+  // Legacy volume scan, reached only when the ground is fully covered.
   for (let yStud = 0; yStud <= bounds.height + 2.4; yStud += HORIZONTAL_EDIT_STEP_STUDS) {
     for (let zStep = 0; zStep <= Math.ceil(maxZ / HORIZONTAL_EDIT_STEP_STUDS); zStep += 1) {
       for (let xStep = 0; xStep <= Math.ceil(maxX / HORIZONTAL_EDIT_STEP_STUDS); xStep += 1) {
@@ -1487,6 +1524,11 @@ const cloneBrickWithUniqueId = (brick: PlacedBrick, usedIds: Set<string>): Place
   }
 }
 
+const restsOnGround = (brick: PlacedBrick) => {
+  const bounds = getBrickBounds(brick)
+  return Boolean(bounds && bounds.minY <= boundsTolerance)
+}
+
 const tryPlaceBrick = (brick: PlacedBrick, placed: PlacedBrick[]) => {
   const groundedBrick: PlacedBrick = placed.length === 0
     ? {
@@ -1500,13 +1542,18 @@ const tryPlaceBrick = (brick: PlacedBrick, placed: PlacedBrick[]) => {
 
   const snappedBrick = groundedBrick
   const collisionIndex = createBrickCollisionIndex(placed)
+  // Ground-level pieces are valid at any time: a base made of several
+  // side-by-side bricks must not be relocated onto the first one.
   if (!hasBrickCollision(snappedBrick, placed, collisionIndex) && isBrickSupported(snappedBrick, placed, collisionIndex)) {
-    if (placed.length === 0 || snappedBrick.pose.yStud > 0) return snappedBrick
+    return snappedBrick
   }
 
   const supportedBrick = findSupportedOpenPose(snappedBrick, placed)
+  // Ground pieces may be nudged along the ground, but a piece the generator
+  // placed in the air is dropped rather than dumped on a distant floor spot.
+  if (!restsOnGround(snappedBrick) && restsOnGround(supportedBrick)) return undefined
   if (!hasBrickCollision(supportedBrick, placed, collisionIndex) && isBrickSupported(supportedBrick, placed, collisionIndex)) {
-    if (placed.length === 0 || supportedBrick.pose.yStud > 0) return supportedBrick
+    return supportedBrick
   }
 
   return undefined
@@ -1516,8 +1563,18 @@ export const repairBuildPlan = (plan: BuildPlan): BuildPlan => {
   const placed: PlacedBrick[] = []
   const usedIds = new Set<string>()
   const repairedCounts = new Map<string, number>()
+  // Original id -> repaired id, for the first placed occurrence of each id.
+  const repairedIdBySourceId = new Map<string, string>()
 
-  for (const brick of plan.bricks) {
+  // Place from the ground up so an upper piece listed before its support is
+  // not rejected as unsupported. The sort is stable, so pieces at the same
+  // height keep the generator's order (and its inventory priority).
+  const groundUp = plan.bricks
+    .map((brick, index) => ({ brick, index, minY: getBrickBounds(brick)?.minY ?? Infinity }))
+    .sort((source, target) => source.minY - target.minY || source.index - target.index)
+    .map(({ brick }) => brick)
+
+  for (const brick of groundUp) {
     const definition = brickById.get(brick.brickId)
     if (!definition || !definition.colors.includes(brick.color)) continue
     const currentCount = repairedCounts.get(brick.brickId) ?? 0
@@ -1529,12 +1586,25 @@ export const repairBuildPlan = (plan: BuildPlan): BuildPlan => {
 
     placed.push(placedBrick)
     repairedCounts.set(brick.brickId, currentCount + 1)
+    if (!repairedIdBySourceId.has(brick.id)) repairedIdBySourceId.set(brick.id, placedBrick.id)
   }
+
+  // Keep structure membership consistent with the pieces that survived repair.
+  const structures = plan.structures
+    ?.map((structure) => ({
+      ...structure,
+      brickIds: [...new Set(structure.brickIds.flatMap((id) => {
+        const repairedId = repairedIdBySourceId.get(id)
+        return repairedId ? [repairedId] : []
+      }))],
+    }))
+    .filter((structure) => structure.brickIds.length > 0)
 
   return {
     ...plan,
     bricks: placed,
     steps: createSingleBrickSteps(placed),
+    ...(structures ? { structures } : {}),
   }
 }
 
@@ -1625,13 +1695,11 @@ const computeConnectedBrickComponents = (bricks: PlacedBrick[]) => {
     }),
   )
   const graphPairIndex = createGraphPairSpatialIndex(bricks, graphPairBoundsById)
-  const checkedPairs = new Set<string>()
+  const pairOrder = createPairOrder(bricks)
 
-  for (const source of bricks) {
+  for (const [sourceIndex, source] of bricks.entries()) {
     for (const targetId of getPotentialGraphPairIds(source, graphPairBoundsById, graphPairIndex)) {
-      const pairKey = [source.id, targetId].sort().join(':')
-      if (checkedPairs.has(pairKey)) continue
-      checkedPairs.add(pairKey)
+      if (!isLaterPair(pairOrder, sourceIndex, source.id, targetId)) continue
 
       const target = bricksById.get(targetId)
       if (target && areBricksAttached(source, target, context, boundsById)) {
@@ -1735,12 +1803,10 @@ export const validateBuildPlanStructural = (plan: BuildPlan, preparedGraph?: Bui
   )
   const boundsPairIndex = createGraphPairSpatialIndex(plan.bricks, collisionBoundsById, 0)
   const bricksById = new Map(plan.bricks.map((brick) => [brick.id, brick]))
-  const checkedCollisionPairs = new Set<string>()
-  for (const source of plan.bricks) {
+  const pairOrder = createPairOrder(plan.bricks)
+  for (const [sourceIndex, source] of plan.bricks.entries()) {
     for (const targetId of getPotentialBoundsCollisionPairIds(source, collisionBoundsById, boundsPairIndex)) {
-      const pairKey = [source.id, targetId].sort().join(':')
-      if (checkedCollisionPairs.has(pairKey)) continue
-      checkedCollisionPairs.add(pairKey)
+      if (!isLaterPair(pairOrder, sourceIndex, source.id, targetId)) continue
 
       const target = bricksById.get(targetId)
       if (

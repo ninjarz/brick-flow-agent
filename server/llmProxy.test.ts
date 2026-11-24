@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { IncomingMessage, ServerResponse } from 'node:http'
 import { Socket } from 'node:net'
-import { handleLlmProxyRequest, llmProxyTimeoutMs } from './llmProxy'
+import { handleLlmProxyRequest, llmProxyMaxBodyBytes, llmProxyTimeoutMs, resolveProxyTarget } from './llmProxy'
 
-const fixture = (operation?: 'models') => {
+const jsonHeaders = { 'content-type': 'application/json', host: 'localhost:5173' }
+const fixture = (operation?: 'models', options: { endpoint?: string; headers?: Record<string, string> } = {}) => {
   const request = new IncomingMessage(new Socket())
   request.method = 'POST'
+  request.headers = { ...jsonHeaders, ...options.headers }
   const response = new ServerResponse(request)
   const write = response.write.bind(response)
   // No client socket is attached; forward writes without waiting for its drain.
@@ -13,7 +15,7 @@ const fixture = (operation?: 'models') => {
   const end = vi.spyOn(response, 'end')
   const run = () => {
     const done = handleLlmProxyRequest(request, response)
-    request.emit('data', Buffer.from(JSON.stringify({ endpoint: 'https://fixture.invalid/chat', apiKey: 'fixture', payload: operation ? undefined : {}, operation })))
+    request.emit('data', Buffer.from(JSON.stringify({ endpoint: options.endpoint ?? 'https://fixture.invalid/chat', apiKey: 'fixture', payload: operation ? undefined : {}, operation })))
     request.emit('end')
     return done
   }
@@ -141,4 +143,104 @@ it('preserves provider rate limits and Retry-After instead of turning them into 
   await run()
   expect(response.statusCode).toBe(429)
   expect(response.getHeader('Retry-After')).toBe('60')
+})
+
+it('decodes a UTF-8 character split across request chunks', async () => {
+  const reader = readerFixture()
+  reader.read.mockResolvedValueOnce({ done: true })
+  const fetchMock = vi.fn().mockResolvedValue(mockUpstream(reader))
+  vi.stubGlobal('fetch', fetchMock)
+  const request = new IncomingMessage(new Socket())
+  request.method = 'POST'
+  request.headers = { ...jsonHeaders }
+  const response = new ServerResponse(request)
+  const body = Buffer.from(JSON.stringify({ endpoint: 'https://fixture.invalid/chat', apiKey: 'fixture', payload: { prompt: '城堡' } }))
+  const split = body.indexOf(Buffer.from('城')) + 1
+  const done = handleLlmProxyRequest(request, response)
+  request.emit('data', body.subarray(0, split))
+  request.emit('data', body.subarray(split))
+  request.emit('end')
+  await done
+  expect(JSON.parse(String(fetchMock.mock.calls[0][1].body)).prompt).toBe('城堡')
+})
+
+describe('proxy request hardening', () => {
+  const statusOf = async (options: Parameters<typeof fixture>[1]) => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{}'))
+    vi.stubGlobal('fetch', fetchMock)
+    const { run, response, end } = fixture(undefined, options)
+    await run()
+    return { status: response.statusCode, fetchMock, error: JSON.parse(String(end.mock.calls.at(-1)?.[0] ?? '{}')).error }
+  }
+
+  it('rejects a cross-site text/plain form post before reading credentials', async () => {
+    const result = await statusOf({ headers: { 'content-type': 'text/plain' } })
+    expect(result.status).toBe(415)
+    expect(result.fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects a JSON request from another origin', async () => {
+    expect((await statusOf({ headers: { origin: 'https://evil.example' } })).status).toBe(403)
+    expect((await statusOf({ headers: { 'sec-fetch-site': 'cross-site' } })).status).toBe(403)
+    expect((await statusOf({ headers: { origin: 'null' } })).status).toBe(403)
+  })
+
+  it('accepts same-origin browser requests and Origin-less tools', async () => {
+    expect((await statusOf({ headers: { origin: 'http://localhost:5173', 'sec-fetch-site': 'same-origin' } })).status).toBe(200)
+    expect((await statusOf({ headers: { 'content-type': 'application/json; charset=utf-8' } })).status).toBe(200)
+  })
+
+  it('refuses link-local and cloud metadata endpoints', async () => {
+    for (const endpoint of [
+      'http://169.254.169.254/latest/meta-data',
+      'http://2852039166/v1',
+      'http://[fe80::1]/v1',
+      'http://[::ffff:169.254.169.254]/v1',
+      'http://metadata.google.internal/v1',
+      'http://0.0.0.0:11434/v1',
+    ]) {
+      const result = await statusOf({ endpoint })
+      expect(result.status, endpoint).toBe(403)
+      expect(result.fetchMock).not.toHaveBeenCalled()
+    }
+  })
+
+  it('keeps local and private model servers reachable', () => {
+    expect(resolveProxyTarget('http://localhost:11434/v1', false)).toBe('http://localhost:11434/v1/chat/completions')
+    expect(resolveProxyTarget('http://192.168.1.20:1234/v1', false)).toBe('http://192.168.1.20:1234/v1/chat/completions')
+    expect(resolveProxyTarget('http://127.0.0.1:8000/v1/models', true)).toBe('http://127.0.0.1:8000/v1/models')
+  })
+
+  it('rejects non-HTTP schemes and embedded credentials for model listing too', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    for (const endpoint of ['file:///etc/passwd', 'http://user:pass@api.example/v1/models']) {
+      const { run, response } = fixture('models', { endpoint })
+      await run()
+      expect(response.statusCode, endpoint).toBe(400)
+    }
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects an oversized body by Content-Length and while streaming', async () => {
+    expect((await statusOf({ headers: { 'content-length': String(llmProxyMaxBodyBytes + 1) } })).status).toBe(413)
+    vi.stubGlobal('fetch', vi.fn())
+    const request = new IncomingMessage(new Socket())
+    request.method = 'POST'
+    request.headers = { ...jsonHeaders }
+    const response = new ServerResponse(request)
+    const done = handleLlmProxyRequest(request, response)
+    request.emit('data', Buffer.alloc(llmProxyMaxBodyBytes + 1, 32))
+    await done
+    expect(response.statusCode).toBe(413)
+    expect(response.getHeader('Connection')).toBe('close')
+  })
+
+  it('reports an upstream redirect instead of following it', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 301, headers: { location: 'http://169.254.169.254/' } })))
+    const { run, response, end } = fixture()
+    await run()
+    expect(response.statusCode).toBe(502)
+    expect(JSON.parse(String(end.mock.calls[0][0]))).toMatchObject({ upstreamStatus: 301, location: 'http://169.254.169.254/' })
+  })
 })

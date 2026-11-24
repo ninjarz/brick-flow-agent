@@ -103,7 +103,12 @@ export const useWorkspacePersistence = (session: ReturnType<typeof createWorkspa
       setStatus('saved')
       // Compatibility backup for older releases; project content is authoritative.
       await saveWorkspaceDraft(snapshot.plan, snapshot.prompt, snapshot.world)
-      if (session.getEditRevision() !== editing) { setStatus('unavailable'); return false }
+      if (session.getEditRevision() !== editing) {
+        // Newer edits arrived while writing. Storage is healthy; the session
+        // subscription has already scheduled the follow-up save.
+        setStatus('saving')
+        return false
+      }
       return true
     } catch (error) {
       blocked.current = error instanceof ProjectConflict
@@ -196,15 +201,16 @@ export const useWorkspacePersistence = (session: ReturnType<typeof createWorkspa
       active.current = saved; setCurrent(saved); await refresh()
     }),
     remove: () => action(async () => {
-      if (!await saveCurrent() || !active.current) return
-      let old = active.current
+      // Save first, then create a fallback target: a failed save must not
+      // leave an orphaned "Untitled" project behind.
+      if (!await saveUntilStable() || !active.current) return
+      const old = active.current
+      // Edits arriving from here on are preserved by preserveLateEdits below.
+      const revision = session.getRevision()
       const others = (await projectStore.list()).filter(item => item.id !== old.id)
       // Keep a formal project available so a legacy backup is never re-migrated.
       const id = crypto.randomUUID()
       const target = others[0] ?? await projectStore.create({ ...old.snapshot, plan: { ...old.snapshot.plan, id, bricks: [], steps: [], prompt: '', title: 'Untitled' }, prompt: '', world: createEmptyWorldState(id) }, 'Untitled')
-      if (!await saveUntilStable() || !active.current) return
-      old = active.current
-      const revision = session.getRevision()
       const selected = await projectStore.removeAndActivate(old.id, old.revision, target.id)
       await preserveLateEdits(selected, revision)
       clearProjectAnalysis(old.id)
