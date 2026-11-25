@@ -1,229 +1,47 @@
-# brick-flow-agent
+# Brick Flow Agent
 
-> A browser-based workspace for brick-like construction systems, powered by part packs, LDraw geometry, structural voxels, and optional LLM generation
+A 3D brick-building workspace in your browser. Open a model and make it your own, build from scratch, or start with a prompt or reference image.
 
-[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=111)](https://react.dev/)
-[![Three.js](https://img.shields.io/badge/Three.js-r168-000?logo=three.js)](https://threejs.org/)
-[![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=fff)](https://vite.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=fff)](https://www.typescriptlang.org/)
+**[Open the live demo](https://ninjarz.github.io/brick-flow-agent/)** · [Chinese README](docs/README_zh.md)
 
-English README | [中文文档](docs/README_zh.md)
+[![Hogwarts Castle rendered in Brick Flow Agent](preview/hogwarts/castle.webp)](https://ninjarz.github.io/brick-flow-agent/)
 
-[LEGO replica sources and verification / 乐高复刻来源与校验](docs/lego-replicas.md)
+*LEGO 71043 Hogwarts Castle · 6,025 editable pieces. Find it in the Asset Library.*
 
-**[Try the live demo](https://ninjarz.github.io/brick-flow-agent/)** — runs directly in the browser with no sign-up required
+## Try it in the browser
 
-brick-flow-agent, also named 积流工坊 in Chinese, turns prompts, imported plans, and hand-edited layouts into an interactive 3D building workspace. The goal is to bring different brick-like systems into one editor: LEGO-compatible LDraw parts today, Minecraft-style voxel blocks next, and more part packs later
-
-The app uses React + Three.js for the editor, LDraw data for part rendering, and connector plus structural voxel rules for collision, support, and validation. It also includes a local asset library, voxel debugging, build-manual preview, and Markdown/HTML/JSON export
-
-## Hogwarts Castle · In Detail
-
-LEGO 71043 · 6,025 editable components. Captured directly from the project’s 3D model with consistent studio lighting and background.
+1. **Explore a model.** Open Hogwarts Castle or another model from the Asset Library, then rotate the view and edit individual pieces.
+2. **Follow the build.** Open the Build Manual to step through assembly, or use the Stability Lab to see how a structure responds to wind, heavy rain, and earthquakes.
+3. **Make something of your own.** Build with LEGO-compatible parts or Minecraft-style blocks, import a JSON, LDraw/MPD, or OBJ file, or generate a starting point from an idea or image.
 
 <p align="center">
-  <img src="preview/hogwarts/castle.webp" alt="Hogwarts Castle panorama" width="100%">
+  <img src="preview/hogwarts/hall-interior.webp" alt="Inside Hogwarts Castle's Great Hall" width="47%">
+  <img src="preview/build-manual.png" alt="Build Manual showing an assembly step" width="47%">
 </p>
 
-<table>
-  <tr>
-    <td width="50%" align="center"><img src="preview/hogwarts/hall-interior.webp" alt="Inside the Great Hall · House Banners & Tables" width="100%"><br><sub>Inside the Great Hall · House Banners & Tables</sub></td>
-    <td width="50%" align="center"><img src="preview/hogwarts/chamber.webp" alt="Chamber of Secrets · Basilisk & Serpent Statues" width="100%"><br><sub>Chamber of Secrets · Basilisk & Serpent Statues</sub></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><img src="preview/hogwarts/great-hall.webp" alt="Great Hall · Windows & Buttresses" width="100%"><br><sub>Great Hall · Windows & Buttresses</sub></td>
-    <td width="50%" align="center"><img src="preview/hogwarts/grand-tower.webp" alt="Grand Tower · Spires & Dragon" width="100%"><br><sub>Grand Tower · Spires & Dragon</sub></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><img src="preview/hogwarts/hagrids-hut.webp" alt="Hagrid’s Hut · Pumpkins & Stonework" width="100%"><br><sub>Hagrid’s Hut · Pumpkins & Stonework</sub></td>
-    <td width="50%" align="center"><img src="preview/hogwarts/founders.webp" alt="The Founders · House Crests" width="100%"><br><sub>The Founders · House Crests</sub></td>
-  </tr>
-</table>
+The editor and built-in models are ready to use without an account or API key. For optional AI generation, open **Config** and enter your OpenAI-compatible endpoint, model name, and API key. In browser-direct mode, the app sends your prompts and any attached reference image to the endpoint you configure.
 
-## ✨ Highlights
+## Run locally
 
-- Prompt- and reference-image-to-build generation through multimodal OpenAI-compatible LLM endpoints
-- Structural validation, local repair, and an optional single LLM feedback retry for invalid generations
-- Static-hosting friendly browser-direct LLM requests, with an optional local proxy for CORS-restricted APIs
-- Part-pack switching, currently with a LEGO-compatible LDraw pack and an original Minecraft-style voxel pack
-- LDraw-derived visual and structural data for part rendering, collision, and support checks
-- Brick-level editing: add, select, move, rotate, recolor, duplicate, delete, import, and export
-- Connector validation for studs, tubes, bars, pins, axles, and bidirectional block faces
-- Four scene modes: bordered, borderless, structure X-ray, and structural voxels
-- Static stability analysis with per-brick risk colors, support hull, center of mass, tipping margin, and connection redundancy
-- A bridge-game-style disaster lab with deterministic wind, heavy-rain, and earthquake simulations, failure propagation, playback, and scoring
-- Reproducible structural test suites with quick, standard, and stress coverage, background progress, aggregate resilience scoring, and weakest-case replay
-- Deterministic reinforcement proposals with inventory-aware support columns, measured before/after results, translucent previews, and undoable application
-- Actionable per-part stability explanations, risk navigation, and related-support highlighting
-- Per-project analysis history with named baselines, before/after metric comparisons, and stale-result detection
-- JSON, Markdown, themed SVG, and PNG analysis reports with an embedded scene thumbnail
-- Editable per-part inventory limits shared by manual editing and LLM generation
-- Built-in asset library with IndexedDB-backed persistence for large user models
-- Seven sourced LEGO set replicas in the asset library, including the complete 71043 Hogwarts Castle with 6,025 editable components, with local LDraw geometry and step playback
-- Browser-side OBJ/MTL import with multi-material color mapping, size, brick-budget, edge-style, silhouette, and quality previews
-- JSON and LDraw/MPD import plus lossless LDraw export for application round trips
-- Workspace-wide drag-and-drop import for JSON, LDraw/MPD, and OBJ files
-- An import compatibility center retaining the latest 10 reports, unsupported-part counts, repair notes, and OBJ quality metrics
-- Build Manual 2.0 with delta-only storage, installation arrows, exploded view, guided camera angles, timeline playback, and Markdown/HTML/JSON export
-- Adaptive rendering for large scenes and lazy loading for 3D/OBJ-heavy modules
-- Bilingual UI with browser-language defaults and manual language selection
-
-<p align="center">
-  <img src="preview/classic-ghost-demo.png" alt="Classic ghost demo preview" width="420">
-  <img src="preview/build-manual.png" alt="Build manual preview" width="420">
-</p>
-
-## 🧱 Part Packs
-
-- **LEGO-compatible pack:** the main pack today. It uses bundled LDraw data where possible for visuals and structure, with regression checks for official colors, connector positions, collision, support, and default assets
-- **Minecraft pack:** an original voxel-first pack with 48 terrain, stone, wood, ore, building, and functional blocks. It includes face textures, opaque/cutout/translucent/emissive layers, slabs, stairs, fences, plants, and face-to-face connectivity. It does not bundle or import Minecraft game assets
-
-### Minecraft-style workflow
-
-- Search the catalog with either localized names or aliases; the selected pack, category, and query persist locally
-- Stairs orient from the placement view, slabs distinguish upper and lower halves, and fences connect only toward eligible neighbors
-- Plants require a supporting voxel block; removing that support marks the plant as structurally invalid
-- The asset library includes five original incremental presets: **Valley Waystation**, **Ore Cutaway**, **Forest Camp**, **Seaside Lighthouse**, and **Village Square**. Loading one preserves the current world and places the preset in nearby free space
-- Repeated cube and slab materials are instanced in stable `16 x 16` spatial chunks. Unchanged chunks reuse their instance groups and each chunk participates in frustum culling
-
-## 🚀 Quick Start
+Install Git and Node.js 20 or later, which includes npm. Run these commands in a terminal:
 
 ```bash
-npm install
+git clone https://github.com/ninjarz/brick-flow-agent.git
+cd brick-flow-agent
+npm ci
 npm run dev
 ```
 
-Open the Vite URL printed in the terminal, usually:
+`npm ci` installs the dependencies pinned in `package-lock.json`. For this setup, run it once before starting the server.
 
-```text
-http://127.0.0.1:5173/
-```
+1. Open the URL printed by Vite, usually [http://localhost:5173/brick-flow-agent/](http://localhost:5173/brick-flow-agent/). Vite may choose another port if 5173 is in use.
+2. Open **Asset Library** to load a model, or use **Config** to set up optional AI generation.
+3. Keep the terminal open while you use the app. Press `Ctrl+C` to stop the server. To start it again, run `npm run dev` from the `brick-flow-agent` directory.
 
-## 🛠️ Build
+To preview a production build locally, run `npm run build` followed by `npm run preview`, then open the printed URL. The static site files are in `dist/`. Before opening a pull request, run `npm run verify:release`.
 
-```bash
-npm run build
-npm run preview
-```
+## Learn more
 
-The app can run as a static frontend when LLM requests use browser-direct mode and the configured endpoint allows CORS
+[LEGO replica sources and verification](docs/lego-replicas.md) · [Stability model](docs/STABILITY_MODEL.md) · [Report an issue](https://github.com/ninjarz/brick-flow-agent/issues)
 
-## 🧪 Development Scripts
-
-```bash
-npm run dev                  # start Vite
-npm run build                # type-check and build
-npm run lint                 # run ESLint
-npm test                     # run focused Vitest regressions
-npm run test:e2e             # run browser workflows with Playwright
-npm run validate:builds      # validate default assets and regression cases
-npm run verify:replicas      # verify replica counts, hashes, and all LDraw dependencies
-npm run audit:obj-connectivity # require every generated OBJ asset to stay connected
-npm run profile:performance  # profile performance-sensitive routines
-npm run verify:release       # run the complete release gate
-npm run generate:obj         # rebuild OBJ-derived default assets
-```
-
-The profile fixes repeatable workloads for validation and spatial indexing at 100/500/1,500 voxel blocks, plus 100 simulation steps at 10/30/60 NPCs. CI records relative timings for trend review rather than unstable absolute millisecond gates on shared runners.
-
-The workspace restores unfinished builds, including floating pieces. Unreadable drafts pause autosave and can be downloaded before clearing the canvas. The save indicator distinguishes restoration, saving, saved data, and unavailable storage. IndexedDB drafts are checked independently of localStorage markers, with timestamps resolving stale copies.
-
-Undo/redo covers model edits, explicit NPC/scenario authoring, and complete project replacements. Simulation ticks do not create history entries. Playtests use disposable history and keep the pre-test workspace as the autosave checkpoint; **Exit and restore** returns to that workspace and its original undo/redo history. Manual JSON schema 6 retains voxel placement and interaction state and imports older manual schemas.
-
-Project copies have independent structural-analysis history and suite results, even when their plans share an ID. Existing analysis records from older versions move to the first project opened with that plan.
-
-`npm run verify:quality` runs the shared lint, build, unit, development-browser, production-browser and asset checks. `verify:release` also enforces local CPU performance budgets. Production tests write browser resource, frame-time and heap samples into Playwright attachments; the ten-second sample is a baseline, not a long-running memory-leak guarantee. The CPU profile also measures fence-heavy scenes and worker payload cloning.
-
-### OBJ to brick assets
-
-The OBJ generator reads `.ignored/objs/stanford-bunny.obj` and `.ignored/objs/armadillo.obj`, then writes `src/data/generatedObjAssets.ts`. Source meshes stay outside Git because of their size and licensing provenance.
-
-```bash
-npm run generate:obj
-node scripts/generate-obj-assets.mjs --dry-run
-node scripts/generate-obj-assets.mjs --dry-run --source=stanford-bunny --profile=m
-```
-
-The pipeline uses four-sample solid voxelization, removes isolated mesh noise, adds only minimal bridge/support cells, prunes boundary voxels that cannot be connected, replaces suitable stair-step boundaries with oriented slopes, and tiles each layer with a connectivity-aware brick scorer. Its console metrics include voxel and multi-view silhouette IoU, voxel dimensions, shape modifications, unresolved supports, connected components, slope/brick counts, and odd scan-ray ratio. Default publishing is quality-gated per source; experimental profiles remain available through explicit `--source` and `--profile` arguments.
-
-The same conversion core powers the in-browser **Import OBJ** dialog. Files stay local; the dialog accepts OBJ files up to 100 MB, can read companion MTL files and map their diffuse colors to legal part colors, adapts voxel resolution to a selected brick budget, and shows source/result silhouettes before the plan is loaded. Generated default assets use a compact tuple format and are expanded only when the asset library loads.
-
-## 🌪️ Stability Lab
-
-Structure X-ray provides immediate static feedback. The stability lab then applies time-varying wind, heavy-rain, or earthquake loads, propagates failed connections through the support graph, and scores survival, static stability, span, and material efficiency. Each run is retained per project for baseline comparison; changing the model marks the previous result as stale. The structural test suite batches multiple hazards, intensities, and directions in a worker, calculates an aggregate resilience score, and can replay the weakest case in the simulator. From any active case, deterministic reinforcement analysis can generate inventory-aware support columns, reject collisions and invalid plans, re-run each candidate, preview additions in the scene, and apply a measured improvement through the normal undo history. Single-run reports export as JSON, Markdown, themed SVG, or PNG with a scene thumbnail; suite reports export as JSON, Markdown, or SVG. See [the stability model](docs/STABILITY_MODEL.md) for formulas, weights, and limitations.
-
-## 🤖 LLM Configuration
-
-Open **Config** in the app and set:
-
-<p align="center">
-  <img src="preview/llm-config.png" alt="LLM configuration preview" width="320">
-</p>
-
-- API endpoint: an OpenAI-compatible chat completions URL
-- API key: stored locally in the browser
-- Model name: any model supported by your endpoint
-- Request mode: browser direct or local proxy
-- Thinking mode: optional, off by default for faster and more predictable generation
-- Structural feedback retry: on by default; if deterministic repair still fails, the validator feedback and previous candidate are sent for one corrected retry
-
-Projects, custom assets, preferences, and API configuration remain in this browser. In browser-direct mode, prompts, selected reference images, and the API key are sent directly to the endpoint you configure; Brick Flow does not operate an application server. **Config → Privacy and local data** can clear only the API configuration or remove all Brick Flow browser data.
-
-## 💬 Feedback
-
-Use the feedback button in the top toolbar to open a prefilled GitHub issue. It includes the app version, browser, platform, locale, part count, and active pack counts, but never includes the project contents, prompt, reference image, endpoint, or API key. Dedicated issue templates are available for bugs, feature requests, and import compatibility reports.
-
-The import compatibility center keeps the latest 10 local import reports. A report can be copied or opened as a prefilled GitHub issue, including unsupported part/color counts, validation messages, and OBJ conversion metrics without uploading the source model.
-
-## ⌨️ Keyboard Controls
-
-Keyboard controls are ignored while typing in text fields. Brick movement works after a brick is selected, moves in `1/5` stud steps, and repeats while the key is held.
-
-| Key | Action |
-| --- | --- |
-| `W` / `A` / `S` / `D` | Move the selected brick relative to the current camera view |
-| `R` / `F` | Move the selected brick up or down |
-| `Q` | Rotate the selected brick horizontally |
-| `E` | Rotate the selected brick vertically |
-| `Backspace` | Delete the selected brick |
-| `Ctrl`/`Cmd` + `Z` | Undo |
-| `Ctrl`/`Cmd` + `Shift` + `Z` or `Ctrl`/`Cmd` + `Y` | Redo |
-| `Esc` | Close the open config, import, stability lab, prompt preview, asset library, or build manual dialog |
-| `←` / `→` | Move to the previous or next build-manual step while the build manual is open |
-| `Enter` / `Space` | Select a focused build-manual step card |
-
-## 🧩 Working With Parts
-
-New or corrected parts should be backed by real references:
-
-1. Check the official LDraw `.dat`, subpart, and primitive data
-2. Compare against official LEGO imagery or build-manual images when visual shape matters
-3. Preserve real part numbers, dimensions, connector semantics, and regression coverage
-4. Run `npm run generate:ldraw` and `npm run validate:builds` after changing LDraw-derived data
-
-For another official set replica, map the official manual step by step, reconcile the inventory, compare every stage visually in the editor, and run the native data checks (`npm run validate:builds`, `npm run verify:replicas`).
-
-For non-LEGO packs, prefer explicit structural semantics instead of forcing every system into LEGO stud and tube rules. The Minecraft basic block uses a bidirectional `studsocket` face connector so the block stays solid while still supporting face-to-face attachment
-
-## 🤝 Contributing
-
-Issues and patches are welcome. Useful contribution areas include:
-
-- Improving the agent workflow
-- Expanding the part library and correcting part data
-- Creating polished demo assets
-- Improving import and export format compatibility
-- Optimizing performance
-
-Before opening a pull request:
-
-```bash
-npm run verify:release
-```
-
-The release gate type-checks and builds the app, runs the full regression suite (including structural-voxel fingerprints and static-gravity cases), validates every default asset/manual round trip, audits LDraw coverage, and requires every bundled OBJ model to remain connected.
-
-## 🙏 Acknowledgements
-
-- [LDraw](https://ldraw.org/): open part geometry, primitives, and the community-maintained part library that make the LDraw-backed pack possible
-- [Rebrickable](https://rebrickable.com/downloads/): public element and color datasets used to derive coarse official color availability
+Part geometry and color references come from [LDraw](https://ldraw.org/) and [Rebrickable](https://rebrickable.com/downloads/).

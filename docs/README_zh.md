@@ -1,224 +1,47 @@
 # 积流工坊
 
-> 一个运行在浏览器里的砖块类搭建工作台，结合零件包、LDraw 几何、结构体素和可选的 LLM 生成能力
+在浏览器里拼搭积木。你可以打开现成模型逐件编辑，从空画布开始搭建，也可以用文字或参考图生成一个起点。
 
-[English README](../README.md) | 中文文档
+**[打开在线试玩](https://ninjarz.github.io/brick-flow-agent/)** · [English README](../README.md)
 
-**[打开在线演示](https://ninjarz.github.io/brick-flow-agent/)** — 无需注册，浏览器直接运行
+[![积流工坊中的霍格沃茨城堡全景](../preview/hogwarts/castle.webp)](https://ninjarz.github.io/brick-flow-agent/)
 
-积流工坊（brick-flow-agent）可以把提示词、导入方案和手动编辑的布局变成可交互的 3D 搭建工作区。项目的目标是把不同砖块类体系放进同一个编辑器：当前以 LEGO-compatible LDraw 零件为主，下一步扩展 Minecraft 风格体素方块，之后可以继续接入更多零件包
+*LEGO 71043 霍格沃茨城堡共有 6,025 个可编辑零件，可在素材库打开。*
 
-项目使用 React + Three.js 构建编辑器，使用 LDraw 数据渲染零件，并通过连接点、结构体素、碰撞和支撑规则来校验模型；同时支持素材库、体素调试、搭建手册预览和 Markdown/HTML/JSON 导出
+## 在浏览器里试试
 
-## 霍格沃茨 · 细节巡礼
-
-LEGO 71043 · 6,025 个可编辑组件。以下图片直接取自项目中的 3D 模型，采用统一的摄影光照与背景。
-
-<p align="center">
-  <img src="../preview/hogwarts/castle.webp" alt="霍格沃茨城堡全景" width="100%">
-</p>
-
-<table>
-  <tr>
-    <td width="50%" align="center"><img src="../preview/hogwarts/hall-interior.webp" alt="礼堂内部 · 学院旗帜与长桌" width="100%"><br><sub>礼堂内部 · 学院旗帜与长桌</sub></td>
-    <td width="50%" align="center"><img src="../preview/hogwarts/chamber.webp" alt="斯莱特林密室 · 蛇怪与蛇形雕像" width="100%"><br><sub>斯莱特林密室 · 蛇怪与蛇形雕像</sub></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><img src="../preview/hogwarts/great-hall.webp" alt="礼堂 · 彩窗与扶壁" width="100%"><br><sub>礼堂 · 彩窗与扶壁</sub></td>
-    <td width="50%" align="center"><img src="../preview/hogwarts/grand-tower.webp" alt="主塔 · 尖顶与飞龙" width="100%"><br><sub>主塔 · 尖顶与飞龙</sub></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><img src="../preview/hogwarts/hagrids-hut.webp" alt="海格小屋 · 南瓜与石墙" width="100%"><br><sub>海格小屋 · 南瓜与石墙</sub></td>
-    <td width="50%" align="center"><img src="../preview/hogwarts/founders.webp" alt="四位创始人 · 学院纹章" width="100%"><br><sub>四位创始人 · 学院纹章</sub></td>
-  </tr>
-</table>
-
-## ✨ 功能亮点
-
-- 通过多模态 OpenAI-compatible 接口按提示词和参考图生成搭建方案
-- 生成后执行结构校验、本地修复，并可在仍不合格时反馈问题自动重试一次
-- 默认支持浏览器直连 LLM，适合纯静态部署；也支持本地代理绕过 CORS
-- 支持零件包切换，目前有 LEGO-compatible LDraw 包和原创 Minecraft 风格体素包
-- 使用 LDraw 数据生成零件视觉和结构数据
-- 支持积木级编辑：添加、选择、移动、旋转、换色、复制、删除、导入、导出
-- 支持 stud、tube、bar、pin、axle 和双向连接面等连接语义的校验
-- 提供边框、无边框、结构 X 光、结构体素四种场景模式
-- 静态稳定性分析会计算逐砖风险、支撑范围、重心、倾覆裕度与连接冗余
-- 内置类似桥梁搭建游戏的灾害实验室，支持阵风、暴雨、地震、失效传播、时间轴回放与评分
-- 可复现的结构测试套件支持快速、标准和极限三档覆盖，在后台汇总韧性得分并复现最弱工况
-- 确定性加固建议会生成符合库存的支撑柱，实测前后变化、半透明预览，并通过正常撤销历史安全应用
-- 提供逐零件稳定性解释、风险前后导航和关联支撑高亮
-- 按项目保留分析历史，可命名基准、比较前后指标，并提示模型变更导致的旧结果
-- 支持带场景缩略图的 JSON、Markdown、明暗主题 SVG 和 PNG 分析报告
-- 支持按零件编辑个人库存，手动添加和 LLM 生成共用同一约束
-- 内置成品素材库，大型用户素材通过 IndexedDB 持久化
-- 支持浏览器本地导入 OBJ/MTL，可按多材质映射合法零件颜色，并配置尺寸、砖块预算和边缘风格
-- 支持 JSON、LDraw/MPD 导入，以及可无损回到应用内编辑状态的 LDraw 导出
-- 可在整个工作区拖放 JSON、LDraw/MPD 和 OBJ
-- 导入兼容性中心保留最近 10 份报告，包括不支持零件计数、修复记录和 OBJ 质量指标
-- 搭建手册 2.0 采用只存增量的线性结构，支持安装箭头、爆炸图、引导相机、时间轴播放和 HTML/Markdown/JSON 导出
-- 大型场景自适应简化渲染，3D 与 OBJ 重模块按需加载
-- 中英文 UI，默认跟随浏览器语言，也可以在配置里手动切换
+1. **逛一逛现成模型。** 从素材库打开霍格沃茨或其他作品，旋转视角查看细节，也能移动或修改单个零件。
+2. **看模型怎么搭起来。** 打开搭建手册逐步查看装配过程，或在稳定性实验室里观察风、暴雨和地震对结构的影响。
+3. **搭自己的作品。** 使用 LEGO 兼容零件或 Minecraft 风格方块，导入 JSON、LDraw/MPD 或 OBJ 文件，也可以输入一句话或上传参考图开始生成。
 
 <p align="center">
-  <img src="../preview/classic-ghost-demo.png" alt="Classic 小幽灵 demo 预览" width="420">
-  <img src="../preview/build-manual.png" alt="搭建手册预览" width="420">
+  <img src="../preview/hogwarts/hall-interior.webp" alt="霍格沃茨城堡的礼堂内景" width="47%">
+  <img src="../preview/build-manual.png" alt="搭建手册中的装配步骤" width="47%">
 </p>
 
-## 🧱 零件包
+编辑器和内置模型可直接使用。需要 AI 生成时，在「配置」里填写兼容 OpenAI 的接口地址、模型名和 API Key。使用浏览器直连时，提示词和上传的参考图会发送到你配置的接口。
 
-- **LEGO-compatible 包：** 当前主要零件包。尽可能使用内置 LDraw 数据生成视觉和结构信息，并通过回归测试覆盖官方颜色数据、连接点位置、碰撞、支撑和默认素材
-- **Minecraft 包：** 原创体素优先零件包，包含 48 种地形、石材、木材、矿物、建筑和功能方块，支持独立面纹理、不透明/镂空/半透明/发光渲染层、半砖、台阶、栅栏、植物以及面对面连接。项目不打包或导入 Minecraft 游戏素材
+## 本地运行
 
-### Minecraft 风格工作流
-
-- 素材库支持中英文名称和别名搜索，并在本地记住零件包、分类和搜索条件
-- 台阶按放置视角自动朝向；半砖区分上、下半层；栅栏只向可连接邻居伸出
-- 植物必须由合法体素方块支撑；删除支撑后会立即显示为结构无效
-- 素材库内置五个原创增量预设：**溪谷驿站**、**矿脉剖面**、**林间营地**、**滨海灯塔**、**村庄广场**。点击加载不会重置当前世界，而是在附近空位追加
-- 重复立方体和半砖按稳定的 `16 x 16` 空间区块实例化；未变化区块会复用实例组，并参与逐区块视锥裁剪
-
-## 🚀 快速开始
+先安装 Git 和 Node.js 20 或更高版本。Node.js 自带 npm。在终端执行以下命令：
 
 ```bash
-npm install
+git clone https://github.com/ninjarz/brick-flow-agent.git
+cd brick-flow-agent
+npm ci
 npm run dev
 ```
 
-打开终端中显示的 Vite 地址，通常是：
+`npm ci` 会按 `package-lock.json` 安装项目依赖。首次启动前执行一次即可。
 
-```text
-http://127.0.0.1:5173/
-```
+1. 打开终端显示的 Vite 地址，通常是 [http://localhost:5173/brick-flow-agent/](http://localhost:5173/brick-flow-agent/)。如果 5173 端口已被占用，以终端打印的端口为准。
+2. 打开「素材库」加载一个模型，或在「配置」里启用可选的 AI 生成。
+3. 使用时保持终端开启。按 `Ctrl+C` 停止服务。下次启动时进入 `brick-flow-agent` 目录，再运行 `npm run dev`。
 
-## 🛠️ 构建
+要在本地预览生产版本，先运行 `npm run build`，再运行 `npm run preview` 并打开终端显示的地址。静态构建产物位于 `dist/`。提交 PR 前可运行 `npm run verify:release`。
 
-```bash
-npm run build
-npm run preview
-```
+## 进一步了解
 
-如果 LLM 使用浏览器直连模式，并且接口支持 CORS，生产构建可以作为纯静态前端部署
+[乐高复刻来源与校验](lego-replicas.md) · [稳定性模型](STABILITY_MODEL.md) · [反馈问题](https://github.com/ninjarz/brick-flow-agent/issues)
 
-## 🧪 开发脚本
-
-```bash
-npm run dev                  # 启动 Vite
-npm run build                # 类型检查并构建
-npm run lint                 # 运行 ESLint
-npm test                     # 运行 Vitest 定向回归测试
-npm run validate:builds      # 校验默认素材和回归用例
-npm run audit:obj-connectivity # 确保每个生成的 OBJ 素材保持单一连通结构
-npm run profile:performance  # 性能分析
-npm run verify:release       # 执行完整发布验收
-npm run generate:obj         # 重新生成 OBJ 默认素材
-```
-
-性能分析固定覆盖 100/500/1500 个体素块的校验与空间索引，以及 10/30/60 个 NPC 的 100 步模拟。CI 记录相对耗时用于观察趋势，不使用受共享机器波动影响的绝对毫秒门槛。
-
-### OBJ 转积木素材
-
-OBJ 生成器读取 `.ignored/objs/stanford-bunny.obj` 和 `.ignored/objs/armadillo.obj`，并写入 `src/data/generatedObjAssets.ts`。源网格因为体积和授权来源不进入 Git。
-
-```bash
-npm run generate:obj
-node scripts/generate-obj-assets.mjs --dry-run
-node scripts/generate-obj-assets.mjs --dry-run --source=stanford-bunny --profile=m
-```
-
-流水线包含四点采样实体体素化、孤立网格噪点清理、最少桥接与支撑、不可连接边界裁剪、适合位置的定向斜坡替换，以及连接组件感知的逐层分砖。控制台指标会输出体素与三视图轮廓 IoU、体素尺寸、形状改动、未解决支撑、连接组件、斜坡/零件数量和异常扫描射线比例。默认发布档位会按源模型进行质量筛选，实验档仍可通过显式传入 `--source` 和 `--profile` 生成。
-
-应用内的 **导入 OBJ** 使用同一套转换核心。文件只在本机处理，最大支持 100 MB；可以同时读取 MTL，并把漫反射颜色映射到零件真实支持的颜色；还会根据砖块预算自适应降低体素分辨率，在正式加载前对比源模型与生成结果的三视图轮廓。内置 OBJ 素材采用紧凑元组保存，打开素材库时才恢复为完整方案。
-
-## 🌪️ 稳定性实验室
-
-复制项目会保留模型内容，但分析历史与结构测试套件结果各自独立。旧版本按模型 ID 保存的记录会迁入首次打开的对应项目。
-
-结构 X 光负责即时静态反馈；稳定性实验室会施加随时间变化的阵风、暴雨或地震载荷，在支撑图中传播连接失效，并按结构存活、初始稳定、有效跨度和材料效率评分。每次分析会按项目保留，可选历史记录作为基准；模型发生变化时，工具栏会提示旧结果已经过期。结构测试套件会在 Worker 中批量执行多种灾害、强度和方向，汇总综合韧性，并可在模拟器中一键复现最弱工况。针对当前工况，确定性加固分析可以生成符合库存的支撑柱，排除碰撞和无效方案，逐个重跑候选，在场景中预览新增零件，并通过正常撤销历史应用经过实测的改善。单次报告支持 JSON、Markdown、明暗主题 SVG 和带场景缩略图的 PNG；套件报告支持 JSON、Markdown 和 SVG。当前模型是可解释、确定性的游戏化结构近似，不是现实工程有限元分析；具体公式、权重和限制见[稳定性模型文档](STABILITY_MODEL_zh.md)。
-
-## 🤖 LLM 配置
-
-在应用内打开 **配置**，填写：
-
-<p align="center">
-  <img src="../preview/llm-config.png" alt="LLM 配置界面预览" width="320">
-</p>
-
-- API endpoint：OpenAI-compatible chat completions 地址
-- API key：只保存在本地浏览器
-- Model name：接口支持的模型名
-- Request mode：浏览器直连或本地代理
-- Thinking mode：思考模式，默认关闭，让生成更快也更稳定
-- Structural feedback retry：结构反馈重试，默认开启；确定性修复仍失败时，会把校验摘要和上一版方案交给模型纠正一次
-
-项目、自定义素材、偏好和 API 配置只保存在当前浏览器中。浏览器直连模式会把提示词、所选参考图片和 API Key 直接发送到你配置的模型服务商；Brick Flow 本身没有应用服务器。可在 **配置 → 隐私与本地数据** 中只清除 API 配置，或删除全部 Brick Flow 浏览器数据。
-
-## 💬 反馈
-
-顶部工具栏的反馈按钮会打开预填充的 GitHub Issue，其中只包含版本、浏览器、平台、语言、零件数量和零件包统计，不包含项目内容、提示词、参考图片、接口地址或 API Key。仓库还提供 Bug、功能需求和导入兼容性三类 Issue 模板。
-
-导入兼容性中心会在本地保留最近 10 次导入报告。可以复制报告，或打开预填充的 GitHub Issue；内容包括不支持的零件/颜色计数、校验消息和 OBJ 转换指标，但不会上传源模型。
-
-## ⌨️ 键盘操作
-
-在文本输入框中输入时，键盘快捷键不会触发。砖块移动需要先选中一个砖块，每次移动 `1/5` 个 stud，按住按键会连续移动。
-
-| 按键 | 操作 |
-| --- | --- |
-| `W` / `A` / `S` / `D` | 按当前相机视角移动选中的砖块 |
-| `R` / `F` | 将选中的砖块上移或下移 |
-| `Q` | 水平旋转选中的砖块 |
-| `E` | 垂直旋转选中的砖块 |
-| `Backspace` | 删除选中的砖块 |
-| `Ctrl`/`Cmd` + `Z` | 撤销 |
-| `Ctrl`/`Cmd` + `Shift` + `Z` 或 `Ctrl`/`Cmd` + `Y` | 重做 |
-| `Esc` | 关闭当前打开的配置、导入、稳定性实验室、提示词预览、素材库或搭建手册弹窗 |
-| `←` / `→` | 搭建手册打开时切换到上一步或下一步 |
-| `Enter` / `Space` | 选中当前聚焦的搭建手册步骤卡片 |
-
-## 🧩 零件维护
-
-新增或修正零件时应基于真实资料：
-
-1. 先看官方 LDraw `.dat`、subpart 和 primitive 数据
-2. 外形有争议时，对照 LEGO 官方图或说明书图片
-3. 保留真实零件号、尺寸、连接点语义和回归测试
-4. 修改 LDraw 生成数据后运行 `npm run generate:ldraw` 和 `npm run validate:builds`
-
-对于非 LEGO 零件包，应优先定义清晰的结构语义，而不是硬套 LEGO 的 stud/tube 规则。例如 Minecraft 基础方块使用 `studsocket` 双向面连接器：方块保持完整实心，同时又能支持面对面连接
-
-## 性能回归门禁
-
-`npm run check:performance` 会在标准数据集上验证 1500 个体素的校验/索引、60 个 NPC 的 100 步模拟，以及 10000 个体素的渲染分区。阈值刻意保留跨机器余量，用于阻止数量级退化，而不是比较微小的计时噪声。
-
-## 🤝 参与贡献
-
-欢迎 issue 和 patch。比较有价值的贡献方向包括：
-
-- 改进优化 agent 能力
-- 迭代零件库，修正错误数据
-- 制作素材库 demo
-- 导入导出多格式兼容
-- 性能优化
-
-提交前建议运行：
-
-```bash
-npm run verify:release
-```
-
-发布验收会完成类型检查和构建、执行全部回归（包括结构体素指纹与静态自重测试）、验证所有默认素材及手册往返、审计 LDraw 覆盖，并要求内置 OBJ 模型保持单一连通体。
-
-## 🙏 特别鸣谢
-
-- [LDraw](https://ldraw.org/)：开放的零件几何、primitive 和社区维护的零件库，是 LDraw 零件包的基础
-- [Rebrickable](https://rebrickable.com/downloads/)：公开的 element 和 color 数据，用于生成粗粒度官方颜色可用性
-
-
-## 工作区恢复、撤销与试演
-
-草稿可以包含未完成的结构，例如悬空零件。无法解析的原草稿会暂停自动保存，并提供原始数据下载；下载备份后可清空画布重新开始。界面显示恢复、保存成功或存储不可用状态。IndexedDB 恢复不依赖 localStorage 标记，并按保存时间处理新旧副本。
-
-全局撤销/重做覆盖模型修改、显式角色/剧本编辑和完整项目切换。模拟推进不会为每个 tick 创建历史记录。试演采用临时历史，自动保存进入试演前的正式工作区；“退出并还原”恢复正式内容及原撤销/重做历史。手册 JSON schema 6 保留方块交互状态，仍兼容旧手册格式。
-
-`npm run verify:quality` 执行共享质量门禁；`npm run verify:release` 额外执行本机性能预算。构建后可单独运行 `npm run test:production`，验证生产资源与 Worker 路径，并生成 1500 方块、60 NPC 的十秒浏览器性能样本。该样本用于建立基线，不代表完成长期内存泄漏验证。
+零件几何和颜色资料来自 [LDraw](https://ldraw.org/) 和 [Rebrickable](https://rebrickable.com/downloads/)。
