@@ -424,7 +424,8 @@ For a detailed building or larger object, return an assembly layout instead:
 Use 1–${assemblyLimits.modules} modules in construction order, at most ${assemblyLimits.moduleBricks} expanded parts per module and ${assemblyLimits.bricks} total. A shared connected foundation must precede walls, towers, roofs and decoration. Adjacent ground plates alone are disconnected: use two overlapping staggered layers of plates to bridge every seam. A plate has studs only at its listed grid positions, not on arbitrary edges. Later modules attach to previously accepted modules. Describe their interfaces in world coordinates and use local coordinates relative to each origin during assembly.
 For a building-tool module, include its complete program in the planning response to avoid another model request:
 "program":{"commands":[{"kind":"building","at":[0,0,0],"width":16,"wallCourses":8,"wallColor":"tan","roofColor":"gray","windowColor":"black","trimColor":"white","baseColor":"gray"}]}.
-The building tool accepts width 8 or 16, wallCourses 6–10 and the listed colour parameters. Do not expand it into raw bricks. For custom parts modules, omit program until the assembly stage.
+The building tool accepts width 8 or 16, wallCourses 6–10 and the listed colour parameters. Do not expand it into raw bricks.
+For regular rectangular cabins and houses, plan a studded foundation, a separate wall shell, then a roof. Include complete inline programs for simple foundation and wall modules so the editor can compile them locally. Example: a foundation with {"kind":"deck","at":[0,0,0],"size":[12,10],"color":"green"} at origin [0,0,0]; a wall module depending on it, at origin [1,0.8,1], with "program":{"commands":[{"kind":"walls","at":[0,0,0],"size":[10,8],"courses":4,"color":"brown","openings":[{"side":"front","offset":4,"width":2,"bottom":0,"height":3,"color":"black"}]}]}. Command coordinates are relative to the module origin. The wall top is origin.y + 1.2 × courses; attach the next module at that elevation. Use side front for min Z, back for max Z, left for min X, and right for max X. For a real window frame include "part":"window", use even width and height, and leave at least one stud at each corner. Put porch furniture, foliage and custom geometry in separate parts modules; omit inline programs for custom geometry.
 Every module MUST specify tool: "building" for a parameterized hall, "sculpture" for characters/animals, or "parts" for custom brick details. Budget the whole model before splitting it. Allocate enough detail to characteristic windows, roofs and interiors requested by the user. Repeated windows and masonry can be generated as arrays in later module programs.
 Every parts or sculpture module must also specify requiredColors, an array of the exact colour ids essential to its identifying features (include the body, face, pupils, clothing and small accents wherever their colours identify the subject). These colours will be checked against the actual compiled parts. In the description explicitly assign each required colour to its visible feature. They must survive structural repairs. Include all characteristic facial features instead of leaving a blank face.
 requiredColors use readable colour ids with hyphens, such as dark-gray, reddish-brown or trans-yellow.
@@ -1187,7 +1188,9 @@ const generatePlannedAssembly = async (checkpoint: AssemblyCheckpoint, input: Ll
     // The layout already exists; until the first command streams in, the
     // model is working on this module rather than re-planning the build.
     if (foreground) input.onPhase?.('thinking')
-    const push = createStreamedAssembly(program => { if (foreground) input.onPhase?.('building'); onProgram?.(program) })
+    const push = input.onDraft && onProgram
+      ? createStreamedAssembly(program => { if (foreground) input.onPhase?.('building'); onProgram(program) })
+      : undefined
     const requestSignal = options?.signal ?? signal
     // Count background requests against the same generation task.
     if (options?.signal) aiTasks.bind(signal, options.signal)
@@ -1209,7 +1212,6 @@ const generatePlannedAssembly = async (checkpoint: AssemblyCheckpoint, input: Ll
     onDraft: input.onDraft,
     onModule: input.onModuleProgress,
     onIssue: input.onAssemblyIssue,
-    skipFailedModules: true,
   })
   clearAssemblyCheckpoint(checkpoint.signature)
   return plan

@@ -295,6 +295,7 @@ function App() {
   const [manualPlaybackIntervalMs, setManualPlaybackIntervalMs] = useState(1200)
   const [manualCopyStatus, setManualCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
   const [promptCopyStatus, setPromptCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
+  const [promptPreview, setPromptPreview] = useState({ original: '', system: '', user: '' })
   const [finishedAssets, setFinishedAssets] = useState<FinishedAsset[]>(() => loadFinishedAssets())
   const workspaceStorage = useWorkspacePersistence(workspaceSession)
   const activeProjectId = workspaceStorage.current?.id
@@ -695,16 +696,6 @@ function App() {
       scenario.plan.prompt,
     ].some((value) => value.toLowerCase().includes(query)))
   }, [scenarioQuery, worldScenarios])
-  const llmPromptPreview = useMemo(
-    () => buildLlmUserPrompt({
-      prompt: prompt.trim() || fallbackPrompt,
-      imageName,
-      inventoryOverrides,
-      pack: catalogPack === 'minecraft' ? 'minecraft' : 'lego',
-    }),
-    [catalogPack, fallbackPrompt, imageName, inventoryOverrides, prompt],
-  )
-
   useEffect(() => {
     saveInventoryOverrides(inventoryOverrides)
   }, [inventoryOverrides])
@@ -1241,9 +1232,7 @@ function App() {
     const isCurrentGeneration = () => !generationController.signal.aborted &&
       workspaceSession.getEpoch() === requestEpoch && generationAbortRef.current === generationController
     const assemblyIssues: AssemblyIssue[] = []
-    const describeAssemblyIssue = (issue: AssemblyIssue) => issue.kind === 'skipped-module'
-      ? t('error.assemblySkipped', { name: issue.module, reason: issue.detail.split('\n')[0].slice(0, 200) })
-      : t('error.assemblyColors', { name: issue.module, colors: issue.detail })
+    const describeAssemblyIssue = (issue: AssemblyIssue) => t('error.assemblyColors', { name: issue.module, colors: issue.detail })
 
     let lastDraftAt = 0
     const showDraft = (candidate: BuildPlan) => {
@@ -1287,7 +1276,7 @@ function App() {
             onStatus: status => { if (isCurrentGeneration()) { setAgentStatus(status); setGenerationPhase(status.phase === 'manual' ? 'planning' : 'building') } },
             onProgress: showDraft,
           })
-        : await generateLlmBuildPlan({ ...input, config: llmConfig, signal: generationController.signal, locale, onProgress: showBuildProgress, onDraft: showDraft, onPhase: phase => { if (isCurrentGeneration()) setGenerationPhase(phase) }, onModuleProgress: progress => { if (isCurrentGeneration()) setGenerationModule(progress) }, onAssemblyIssue: issue => { assemblyIssues.push(issue) } })
+        : await generateLlmBuildPlan({ ...input, config: llmConfig, signal: generationController.signal, locale, onProgress: showBuildProgress, onPhase: phase => { if (isCurrentGeneration()) setGenerationPhase(phase) }, onModuleProgress: progress => { if (isCurrentGeneration()) setGenerationModule(progress) }, onAssemblyIssue: issue => { assemblyIssues.push(issue) } })
       if (generationController.signal.aborted || workspaceSession.getEpoch() !== requestEpoch) return
       let candidatePlan = initialPlan
       let result = await validateCandidate(candidatePlan)
@@ -2671,12 +2660,29 @@ function App() {
     } finally { setExportingManualHtml(false) }
   }
 
+  const openPromptPreview = async () => {
+    const pack = catalogPack === 'minecraft' ? 'minecraft' : 'lego'
+    const original = prompt.trim() || fallbackPrompt
+    try {
+      if (llmConfig.buildMode === 'agentic' && pack === 'lego') {
+        const { agentSystemPrompt, buildManualPrompt } = await import('./lib/agenticBuild/loop')
+        setPromptPreview({ original, system: agentSystemPrompt, user: buildManualPrompt(original, Boolean(imagePreview)) })
+      } else {
+        setPromptPreview({ original, system: llmSystemPrompt, user: buildLlmUserPrompt({ prompt: original, pack, imageName, inventoryOverrides }) })
+      }
+      setPromptCopyStatus('idle')
+      setIsPromptPreviewOpen(true)
+    } catch (error) {
+      setGenerationFailure(error instanceof Error ? error.message : t('error.generationFailed'))
+    }
+  }
+
   const formatPromptPreviewText = () => [
     '# system',
-    llmSystemPrompt,
+    promptPreview.system,
     '',
     '# user',
-    llmPromptPreview,
+    promptPreview.user,
   ].join('\n')
 
   const exportPromptPreview = () => {
@@ -3460,7 +3466,6 @@ function App() {
       </section>
 
       <ControlPanel
-        debugMode={debugMode}
         analysisPaused={Boolean(keyboardTransforms)}
         engineStatusLabel={t('control.engineStatus', { status: llmEngineStatusLabel })}
         engineStatusTone={llmEngineStatusTone}
@@ -3473,10 +3478,7 @@ function App() {
         onImage={handleImage}
         onGenerate={handleGenerate}
         onCancelGenerate={cancelGenerate}
-        onOpenPromptPreview={() => {
-          setPromptCopyStatus('idle')
-          setIsPromptPreviewOpen(true)
-        }}
+        onOpenPromptPreview={openPromptPreview}
         plan={plan}
         brickCounts={brickCounts}
         onRenamePlan={renamePlan}
@@ -3690,7 +3692,8 @@ function App() {
             <header>
               <div>
                 <h2 id="prompt-preview-title">{t('prompt.title')}</h2>
-                <p>{prompt.trim() || fallbackPrompt}</p>
+                <p><strong>{t('prompt.request')}</strong> {promptPreview.original}</p>
+                <p>{t('prompt.firstRequest')}</p>
               </div>
               <button
                 className="icon-button"
@@ -3707,11 +3710,11 @@ function App() {
             </header>
             <label>
               {t('prompt.system')}
-              <textarea readOnly value={llmSystemPrompt} />
+              <textarea readOnly value={promptPreview.system} />
             </label>
             <label>
               {t('prompt.user')}
-              <textarea readOnly value={llmPromptPreview} />
+              <textarea readOnly value={promptPreview.user} />
             </label>
             <div className="prompt-actions">
               <button className="secondary" type="button" onClick={copyPromptPreview}>

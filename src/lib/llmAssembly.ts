@@ -20,8 +20,8 @@ export const assemblyParallelRequests = 3
 
 /** Reported before each module request so the UI can show where generation is. */
 export type AssemblyModuleProgress = { index: number; total: number; name: string; attempt: number; retries: number; ahead: number }
-/** Non-fatal problems: a module skipped after exhausting repairs, or accepted without some required colours. */
-export type AssemblyIssue = { kind: 'skipped-module' | 'missing-colors'; module: string; detail: string }
+/** A structurally valid module was accepted without some required colours. */
+export type AssemblyIssue = { kind: 'missing-colors'; module: string; detail: string }
 
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -93,6 +93,7 @@ Combinable structural primitives:
 {"kind":"walls","at":[1,0.8,1],"size":[10,8],"courses":5,"color":"brown","openings":[{"side":"front","offset":4,"width":2,"bottom":0,"height":3,"color":"black"}]}: a closed rectangle of one-stud walls with interlocking corners, 1.2 studs per course. Sides front (z=at.z), back, left (x=at.x), right; offset counts studs along the side from its lower-x or lower-z end. Openings are coloured inlays such as trans-clear glass or a black door; the wall stays solid.
 {"kind":"wall","at":[0,0.8,0],"length":8,"courses":3,"axis":"x","color":"gray","openings":[{"offset":3,"width":2,"bottom":1,"height":1,"color":"trans-clear"}]}: a straight one-stud wall for fences, partitions or wings.
 Stack them: walls on a deck, a ceiling deck at the wall top, a roof on the ceiling. Every course must rest on the one below.
+For regular cabins use one "walls" command at the foundation top. Place porch details separately. Real windows use part "window", even width and height, and one stud of corner clearance.
 For roofs, prefer the deterministic recipe {"kind":"stepped-roof","at":[0,12,0],"size":[8,8],"tiers":4,"style":"pyramid","color":"gray"}.
 This creates solid, supported stepped masonry roof courses using real brick-1x2 and brick-1x1 parts. Each tier is 1.2 studs high and shrinks by one stud on each side. style "gable" shrinks only Z, leaving X unchanged. Place it on a studded ceiling covering its full base, and do not add raw bricks inside the recipe volume. Use the readable colour ids listed in the catalogue, such as gray or dark-gray.
 Use at most 128 commands and 512 expanded parts per module. Quarter turns must be integers from 0 to 3.
@@ -612,14 +613,12 @@ export const generateAssembly = async (
     onDraft?: (plan: BuildPlan) => void
     onModule?: (progress: AssemblyModuleProgress) => void
     onIssue?: (issue: AssemblyIssue) => void
-    /** Keep accepted modules and continue when a later module exhausts its repairs. */
-    skipFailedModules?: boolean
   },
 ): Promise<BuildPlan> => {
   const plan: BuildPlan = { ...base, id: createId('plan'), title: layout.title, source: 'llm', bricks: [], steps: [], structures: [] }
   const acceptedPrograms: Array<{ module: Module; program: unknown }> = []
   const acceptedSummaries: Array<Record<string, unknown>> = []
-  // Aligned with layout.modules for resume; null marks a skipped module.
+  // Only the validated prefix is saved for resume.
   const savedPrograms: unknown[] = []
   const moduleContext = (module: Module) => `Design: ${JSON.stringify(layout)}\nCurrent module: ${JSON.stringify(module)}\n${describeAcceptedModules(acceptedPrograms, acceptedSummaries)}\n${module.tool === 'building' ? getBuildingToolInstructions() : module.tool === 'sculpture' ? sculptureToolInstructions : assemblyProgramInstructions}`
 
@@ -693,7 +692,7 @@ export const generateAssembly = async (
             ? initialProgram
             : early
               ? await early
-              : await request(`${context}${feedback ? `\nPrevious module program: ${JSON.stringify(previous)}\nFix these issues while preserving its intended design: ${feedback}` : ''}`, module.tool, publishDraft)
+              : await request(`${context}${feedback ? `\nPrevious module program: ${JSON.stringify(previous)}\nFix these issues while preserving its intended design: ${feedback}\nReturn the full program, keeping unaffected commands. Validation coordinates are in world space. Subtract the module origin before editing local coordinates. For a wall primitive, correct the offending placement or opening parameters and keep the planned wall shape.` : ''}`, module.tool, publishDraft)
           signal?.throwIfAborted()
           if (module.tool === 'building' && (!record(program) || !Array.isArray(program.commands) || program.commands.length !== 1 || !record(program.commands[0]) || program.commands[0].kind !== 'building')) {
             throw new Error('Use exactly one kind:"building" tool command. Do not expand the tool into raw bricks.')
@@ -737,17 +736,10 @@ export const generateAssembly = async (
           if (attempt < 0 && cachedProgram !== undefined) checkpoint?.programs.splice(moduleIndex)
           const message = error instanceof Error ? error.message : String(error)
           if (attempt >= retries) {
-            // Losing every accepted module to one failed detail is worse than a
-            // build without that detail. The first module carries the foundation,
-            // so a failure there still ends generation.
-            if (checkpoint?.skipFailedModules && plan.bricks.length > 0) {
-              checkpoint.onIssue?.({ kind: 'skipped-module', module: module.name, detail: message })
-              savedPrograms.push(null)
-              checkpoint.save([...savedPrograms])
-              resolvedModules.add(moduleIndex)
-              break
-            }
-            throw new Error(`${module.name}: ${message}`)
+            const reason = message.split('\n')[0]
+            throw new Error(locale === 'zh-CN'
+              ? `生成未完成：模块「${module.name}」未通过校验（${reason}）。原作品已保留。`
+              : `Generation incomplete: module “${module.name}” failed validation (${reason}). Your original build was kept.`, { cause: error })
           }
           if (program !== undefined) previous = program
           feedback = message

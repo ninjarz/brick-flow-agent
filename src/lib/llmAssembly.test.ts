@@ -15,6 +15,30 @@ const layout = parseAssemblyLayout({ title: 'Tower', modules: [
 afterEach(() => vi.unstubAllGlobals())
 
 describe('procedural LEGO assembly', () => {
+  it('builds the planned cabin deck and walls with door and window from a single model response', async () => {
+    vi.stubGlobal('window', { setTimeout, clearTimeout })
+    const cabin = { title: 'Woodland cabin', modules: [
+      { name: 'Base', description: 'Staggered deck', tool: 'parts', origin: [0, 0, 0],
+        program: { commands: [{ kind: 'deck', at: [0, 0, 0], size: [12, 10], color: 'green' }] } },
+      { name: 'Cabin walls', description: 'Wooden shell', tool: 'parts', origin: [1, 0.8, 1], dependsOn: ['Base'],
+        program: { commands: [{ kind: 'walls', at: [0, 0, 0], size: [10, 8], courses: 4, color: 'brown',
+          openings: [
+            { side: 'front', offset: 4, width: 2, bottom: 0, height: 3, color: 'black' },
+            { side: 'right', offset: 2, width: 2, bottom: 1, height: 2, color: 'white', part: 'window' },
+          ] }] } },
+    ] }
+    const fetch = vi.fn().mockImplementation(async () => Response.json({ choices: [{ message: { content: JSON.stringify(cabin) } }] }))
+    vi.stubGlobal('fetch', fetch)
+    const plan = await generateLlmBuildPlan({ prompt: '树林里面有一栋木屋', pack: 'lego', config: {
+      endpoint: 'https://mock.invalid/chat', modelName: 'fixture', apiKey: 'fixture', requestMode: 'direct', enableThinking: false, autoRepair: false,
+    } })
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(plan.structures?.map(structure => structure.name)).toEqual(['Base', 'Cabin walls'])
+    expect(plan.bricks.some(brick => brick.brickId === 'window-1x2x2' && brick.pose.yStud === 2)).toBe(true)
+    expect(plan.bricks.some(brick => brick.color === 'black' && brick.pose.zStud === 1)).toBe(true)
+    expect(validateBuildPlan(plan)).toEqual([])
+  })
+
   it('compiles coloured voxel courses into bonded editable bricks with exact offsets', () => {
     const bricks = expandAssemblyProgram({ commands: [{ kind: 'voxel-layers', at: [1, 0, 2],
       palette: { B: 'blue', W: 'white' }, layers: [
@@ -68,7 +92,7 @@ describe('procedural LEGO assembly', () => {
     const request = vi.fn()
       .mockResolvedValueOnce({ commands: [command] })
       .mockResolvedValueOnce({ commands: [{ ...command, at: [10, -1.2, 0] }] })
-    await expect(generateAssembly(layout, { prompt: 'tower' }, request, undefined, undefined, 0, 'en-US')).rejects.toThrow('Top:')
+    await expect(generateAssembly(layout, { prompt: 'tower' }, request, undefined, undefined, 0, 'en-US')).rejects.toThrow('module “Top” failed validation')
   })
 
   it('accounts for inventory already used in accepted modules', () => {
@@ -204,26 +228,22 @@ describe('assembly resilience', () => {
     expect(bricks[0].color).toBe('red')
   })
 
-  it('skips a later module that exhausts its repairs and keeps the accepted ones', async () => {
+  it('fails an incomplete build while keeping the validated prefix for resume', async () => {
     const request = vi.fn()
       .mockResolvedValueOnce({ commands: [command] })
       .mockResolvedValueOnce({ commands: [{ ...command, at: [10, 4, 0] }] })
-    const onIssue = vi.fn()
     const save = vi.fn()
-    const plan = await generateAssembly(layout, { prompt: 'tower' }, request, undefined, undefined, 0, 'en-US', {
-      programs: [], save, onIssue, skipFailedModules: true,
-    })
-    expect(plan.structures?.map(structure => structure.name)).toEqual(['Base'])
-    expect(plan.bricks).toHaveLength(1)
-    expect(onIssue).toHaveBeenCalledWith(expect.objectContaining({ kind: 'skipped-module', module: 'Top' }))
-    expect(save).toHaveBeenLastCalledWith([{ commands: [command] }, null])
+    await expect(generateAssembly(layout, { prompt: 'tower' }, request, undefined, undefined, 0, 'en-US', {
+      programs: [], save,
+    })).rejects.toThrow('module “Top” failed validation')
+    expect(save).toHaveBeenCalledExactlyOnceWith([{ commands: [command] }])
   })
 
   it('still fails when the first module cannot be built', async () => {
     const request = vi.fn().mockResolvedValue({ commands: [{ ...command, at: [0, 4, 0] }] })
     await expect(generateAssembly(layout, { prompt: 'tower' }, request, undefined, undefined, 0, 'en-US', {
-      programs: [], save: () => undefined, skipFailedModules: true,
-    })).rejects.toThrow('Base:')
+      programs: [], save: () => undefined,
+    })).rejects.toThrow('module “Base” failed validation')
   })
 
   it('keeps a valid module without its required colours once repairs run out', async () => {
@@ -382,7 +402,7 @@ describe('pipelined module requests', () => {
       if (name === 'Right') { backgroundSignal = options?.signal; return new Promise(() => undefined) }
       return Promise.resolve({ commands: [{ ...cap, at: [0, 6, 0] }] })
     })
-    await expect(generateAssembly(branchLayout(['Base']), { prompt: 'branches' }, request, undefined, undefined, 0, 'en-US')).rejects.toThrow('Left:')
+    await expect(generateAssembly(branchLayout(['Base']), { prompt: 'branches' }, request, undefined, undefined, 0, 'en-US')).rejects.toThrow('module “Left” failed validation')
     expect(backgroundSignal?.aborted).toBe(true)
   })
 })

@@ -7,7 +7,7 @@ export type AssemblyCheckpoint = { signature: string; layout: ReturnType<typeof 
 export const assemblyCheckpointSignature = async (input: GeneratorInput, config: LlmConfig) => {
   // Bump protocol whenever planning prompts, layout fields or module tools
   // change, so plans cached under the old rules are not replayed.
-  const context = JSON.stringify({ protocol: 8, prompt: input.prompt, image: input.imageDataUrl, inventory: input.inventoryOverrides, model: config.modelName, endpoint: config.endpoint })
+  const context = JSON.stringify({ protocol: 9, prompt: input.prompt, image: input.imageDataUrl, inventory: input.inventoryOverrides, model: config.modelName, endpoint: config.endpoint })
   const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(context)))
   return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
 }

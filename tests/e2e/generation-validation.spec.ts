@@ -1,5 +1,45 @@
 import { expect, test } from '@playwright/test'
 
+test('an incomplete modular build keeps the current project and resumes from the validated base', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('brick-flow-agent:locale:v1', 'en-US')
+    const endpoint = 'https://mock.invalid/chat'
+    localStorage.setItem('brick-flow-agent:llm-config', JSON.stringify({ modelName: 'mock', endpoint, apiKey: 'mock', requestMode: 'direct', autoRepair: false }))
+    const layout = {
+      title: 'Resumed cabin',
+      modules: [
+        { name: 'Base', tool: 'parts', description: 'Foundation', origin: [0, 0, 0] },
+        { name: 'Cabin walls', tool: 'parts', description: 'Cabin structure', origin: [0, 1.2, 0] },
+      ],
+    }
+    const original = window.fetch
+    const requests: string[] = []
+    window.fetch = async (input, init) => {
+      if (String(input) !== endpoint) return original(input, init)
+      const body = JSON.parse(String(init?.body))
+      const prompt = body.messages.find((message: { role: string }) => message.role === 'user').content as string
+      const module = /Current module: \{"name":"([^"]+)"/.exec(prompt)?.[1]
+      requests.push(module ?? 'Layout')
+      localStorage.setItem('cabin-requests', JSON.stringify(requests))
+      const at = module === 'Cabin walls' && !localStorage.getItem('cabin-ready') ? [10, 8, 0] : [0, 0, 0]
+      const response = module ? { commands: [{ brickId: 'brick-1x1', color: 'red', at }] } : layout
+      return Response.json({ choices: [{ message: { content: JSON.stringify(response) } }] })
+    }
+  })
+  await page.goto('./')
+  const name = page.getByLabel('Plan name')
+  const originalName = await name.inputValue()
+  const generate = page.getByRole('button', { name: 'Generate plan', exact: true })
+  await generate.click()
+  await expect(page.getByText(/Generation incomplete: module “Cabin walls” failed validation/)).toBeVisible()
+  await expect(name).toHaveValue(originalName)
+  await expect(page.getByText(/Plan generated/)).toHaveCount(0)
+  await page.evaluate(() => localStorage.setItem('cabin-ready', 'yes'))
+  await generate.click()
+  await expect(name).toHaveValue('Resumed cabin')
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('cabin-requests')!))).toEqual(['Layout', 'Base', 'Cabin walls', 'Cabin walls'])
+})
+
 test('step-by-step generation publishes the locally built roof and includes it in the saved plan', async ({ page }) => {
   const fixture = {
     title: 'Roof recipe house',
@@ -28,14 +68,31 @@ test('step-by-step generation publishes the locally built roof and includes it i
     let calls = 0
     window.fetch = async (input, init) => {
       if (String(input) !== endpoint) return original(input, init)
+      if (calls === 0) localStorage.setItem('roof-recipe-first-messages', JSON.stringify(JSON.parse(String(init?.body)).messages))
       const answer = responses[calls++]
       localStorage.setItem('roof-recipe-request-count', String(calls))
       return Response.json({ choices: [{ message: { content: JSON.stringify(answer) } }] })
     }
   }, fixture)
   await page.goto('./')
+  await page.getByPlaceholder(/Describe what to build/).fill('树林里面有一栋木屋')
+  await page.getByRole('button', { name: 'Preview prompt', exact: true }).click()
+  const preview = page.getByRole('dialog', { name: 'LLM Prompt' })
+  const system = await preview.getByLabel('System message').inputValue()
+  const user = await preview.getByLabel('User message (including app instructions)').inputValue()
+  expect(user).toContain('Write a build manual')
+  expect(user).toContain('User request: 树林里面有一栋木屋')
+  const download = page.waitForEvent('download')
+  await preview.getByRole('button', { name: /export txt/i }).click()
+  const stream = await (await download).createReadStream()
+  const chunks: Buffer[] = []
+  for await (const chunk of stream) chunks.push(chunk)
+  expect(Buffer.concat(chunks).toString()).toBe(`# system\n${system}\n\n# user\n${user}`)
+  await preview.getByRole('button', { name: 'Close', exact: true }).click()
   await page.getByRole('button', { name: 'Generate plan', exact: true }).click()
   await expect(page.getByLabel('Plan name')).toHaveValue(fixture.title, { timeout: 30_000 })
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('roof-recipe-first-messages')!)))
+    .toEqual([{ role: 'system', content: system }, { role: 'user', content: user }])
   await expect.poll(() => page.evaluate(() => {
     const draft = JSON.parse(localStorage.getItem('brick-flow-agent:workspace-draft:v1') ?? '{}')
     const roof = draft.plan?.structures?.find((structure: { name: string }) => structure.name === 'Roof')
