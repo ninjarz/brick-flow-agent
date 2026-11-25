@@ -3467,6 +3467,7 @@ function App() {
 
       <ControlPanel
         analysisPaused={Boolean(keyboardTransforms)}
+        debugMode={debugMode}
         engineStatusLabel={t('control.engineStatus', { status: llmEngineStatusLabel })}
         engineStatusTone={llmEngineStatusTone}
         onEngineStatusClick={llmEngineStatus === 'connected' ? undefined : () => setIsConfigOpen(true)}

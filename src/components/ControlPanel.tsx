@@ -15,6 +15,7 @@ import type { BuildPlan } from '../types/bricks'
 
 type ControlPanelProps = {
   analysisPaused?: boolean
+  debugMode?: boolean
   engineStatusLabel?: string
   engineStatusTone?: 'neutral' | 'warning' | 'pending' | 'success' | 'error'
   onEngineStatusClick?: () => void
@@ -59,6 +60,7 @@ const initialVisiblePartCount = 12
 
 export const ControlPanel = ({
   analysisPaused = false,
+  debugMode = false,
   engineStatusLabel,
   engineStatusTone = 'neutral',
   onEngineStatusClick,
@@ -260,7 +262,7 @@ export const ControlPanel = ({
             <Sparkles size={17} />
             {isGenerating ? t('control.generating') : t('control.generatePlan')}
           </button>
-          {!isGenerating && (
+          {debugMode && !isGenerating && (
             <button className="secondary" type="button" onClick={onOpenPromptPreview}>
               {t('control.previewPrompt')}
             </button>

@@ -29,6 +29,7 @@ test('an incomplete modular build keeps the current project and resumes from the
   await page.goto('./')
   const name = page.getByLabel('Plan name')
   const originalName = await name.inputValue()
+  await expect(page.getByRole('button', { name: 'Preview prompt', exact: true })).toHaveCount(0)
   const generate = page.getByRole('button', { name: 'Generate plan', exact: true })
   await generate.click()
   await expect(page.getByText(/Generation incomplete: module “Cabin walls” failed validation/)).toBeVisible()
@@ -74,7 +75,7 @@ test('step-by-step generation publishes the locally built roof and includes it i
       return Response.json({ choices: [{ message: { content: JSON.stringify(answer) } }] })
     }
   }, fixture)
-  await page.goto('./')
+  await page.goto('./?debug=1')
   await page.getByPlaceholder(/Describe what to build/).fill('树林里面有一栋木屋')
   await page.getByRole('button', { name: 'Preview prompt', exact: true }).click()
   const preview = page.getByRole('dialog', { name: 'LLM Prompt' })
