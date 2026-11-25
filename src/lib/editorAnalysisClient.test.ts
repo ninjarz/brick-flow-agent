@@ -20,6 +20,26 @@ beforeEach(()=>{vi.resetModules();FakeWorker.instances=[];vi.stubGlobal('Worker'
 afterEach(()=>vi.unstubAllGlobals())
 
 describe('shared editor analysis requests',()=>{
+  it('cancels only the generation finalizer and ignores late results', async () => {
+    const api = await import('./editorAnalysisClient')
+    const parts = bricks()
+    const plan: BuildPlan = { id: 'test', title: 'test', prompt: '', source: 'llm', bricks: parts, steps: [] }
+    const support = api.getEditorSupport(parts)
+    const controller = new AbortController()
+    const generation = api.getEditorGenerationValidation(plan, controller.signal)
+    const aborted = expect(generation).rejects.toMatchObject({ name: 'AbortError' })
+    await flush()
+    const worker = FakeWorker.instances.find(instance => instance.messages[0].finalizeGeneration)!
+    const background = FakeWorker.instances.find(instance => instance !== worker)!
+    controller.abort()
+    await aborted
+    expect(worker.terminate).toHaveBeenCalledOnce()
+    expect(background.terminate).not.toHaveBeenCalled()
+    worker.reply({ requestId: worker.messages[0].requestId, type: 'result', result: { supported: new Map(), finalizedGeneration: { plan, issues: [], repairedLocally: false } } })
+    background.reply({ requestId: background.messages[0].requestId, type: 'result', result: { supported: new Map() } })
+    expect(await support).toEqual(new Map())
+  })
+
   it('deduplicates support and shares a snapshot revision with validation',async()=>{
     const api=await import('./editorAnalysisClient'),parts=bricks()
     const support=api.getEditorSupport(parts)

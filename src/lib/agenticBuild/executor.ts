@@ -9,7 +9,7 @@ import { hogwartsExactColors } from '../../data/hogwartsExactColors'
 import type { BrickColor, PlacedBrick } from '../../types/bricks'
 import { canonicalColorId, canonicalColorIds, resolveColorId, resolvePartColor } from '../colorIds'
 import { expandAssemblyProgram } from '../llmAssembly'
-import { createBuildGraph, getBrickBounds, hasBrickCollision, isBrickSupported, makeBrick } from '../planUtils'
+import { createBrickCollisionIndex, createBuildGraph, getBrickBounds, hasBrickCollision, isBrickSupported, makeBrick } from '../planUtils'
 import { compileDetailPrimitive, detailPrimitiveKinds, type DetailPrimitiveKind } from './primitives'
 
 export type AgentPart = {
@@ -254,13 +254,13 @@ const placePart = (state: BuildState, part: AgentPart, index: number, result: Ac
  * every one is connected to the ground (parts of a group may hold each other).
  */
 const acceptGroup = (state: BuildState, kind: string, bricks: PlacedBrick[], index: number, result: ActionResult) => {
-  const trial = [...state.bricks]
+  const trial = [...state.bricks, ...bricks]
+  const collisionIndex = createBrickCollisionIndex(trial)
   const at = (brick: PlacedBrick) => { const bounds = getBrickBounds(brick); return bounds ? [bounds.minX, bounds.minY, bounds.minZ] : undefined }
   for (const brick of bricks) {
     const bounds = getBrickBounds(brick)
-    const reason = !bounds ? 'unknown part geometry' : bounds.minY < -epsilon ? 'below ground' : hasBrickCollision(brick, trial) ? 'collides with an existing part' : undefined
+    const reason = !bounds ? 'unknown part geometry' : bounds.minY < -epsilon ? 'below ground' : hasBrickCollision(brick, trial, collisionIndex) ? 'collides with another part' : undefined
     if (reason) { result.rejected.push({ item: index, reason: `${kind}: ${reason}`, part: brick.brickId, at: at(brick) }); return false }
-    trial.push(brick)
   }
   const grounded = createBuildGraph(trial).groundedIds
   const floating = bricks.filter(brick => !grounded.has(brick.id))
@@ -316,12 +316,10 @@ const placeDetail = (state: BuildState, primitive: AgentPrimitive, kind: DetailP
   }
   const toBricks = (y: number) => colored.map(part => makeBrick(part.brickId, part.color, part.x, y + part.y, part.z, part.rotation ?? 0))
   // Drop onto the highest support under the group's lowest layer.
-  const flat = toBricks(0)
-  const footprints = flat.flatMap((brick, position) => {
+  const y = primitive.y ?? dropHeight(toBricks(0).flatMap((brick, position) => {
     const bounds = getBrickBounds(brick)
     return bounds && colored[position].y < epsilon ? [bounds] : []
-  })
-  const y = primitive.y ?? dropHeight(footprints, state.bricks)
+  }), state.bricks)
   acceptGroup(state, kind, toBricks(y).map((brick, position) => ({ ...brick, id: `trial-${position}` })), index, result)
 }
 
@@ -354,50 +352,35 @@ const placePrimitive = (state: BuildState, primitive: AgentPrimitive, index: num
   }
   let bricks: PlacedBrick[]
   try {
-    const ground = expandAssemblyProgram({ commands: [command] }, [primitive.x, 0, primitive.z], {}, state.bricks)
-    // Drop onto whatever lies under the primitive's lowest layer.
-    const lowest = Math.min(...ground.map(brick => getBrickBounds(brick)?.minY ?? 0))
-    const footprints = ground.flatMap(brick => {
-      const bounds = getBrickBounds(brick)
-      return bounds && Math.abs(bounds.minY - lowest) < epsilon ? [bounds] : []
-    })
-    const y = primitive.y ?? dropHeight(footprints, state.bricks)
-    bricks = expandAssemblyProgram({ commands: [command] }, [primitive.x, y, primitive.z], {}, state.bricks)
+    const expandAt = (y: number) => expandAssemblyProgram({ commands: [command] }, [primitive.x, y, primitive.z], {}, state.bricks)
+    let y = primitive.y
+    if (y === undefined) {
+      // Drop onto whatever lies under the primitive's lowest layer.
+      const bounds = expandAt(0).flatMap(brick => getBrickBounds(brick) ?? [])
+      const lowest = Math.min(...bounds.map(box => box.minY))
+      y = dropHeight(bounds.filter(box => Math.abs(box.minY - lowest) < epsilon), state.bricks)
+    }
+    bricks = expandAt(y)
   } catch (error) {
     result.rejected.push({ item: index, reason: error instanceof Error ? error.message.slice(0, 300) : String(error) })
     return
   }
-  // Parts of a primitive support each other (a deck's lower plates hang from
-  // its upper course), so check collisions part by part but support for the
-  // whole: every new part must be connected to the ground once all are placed.
-  const trial = [...state.bricks]
-  const at = (brick: PlacedBrick) => { const bounds = getBrickBounds(brick); return bounds ? [bounds.minX, bounds.minY, bounds.minZ] : undefined }
-  for (const brick of bricks) {
-    const bounds = getBrickBounds(brick)
-    const reason = !bounds ? 'unknown part geometry' : bounds.minY < -epsilon ? 'below ground' : hasBrickCollision(brick, trial) ? 'collides with an existing part' : undefined
-    if (reason) { result.rejected.push({ item: index, reason: `${primitive.kind}: ${reason}`, part: brick.brickId, at: at(brick) }); return }
-    trial.push(brick)
-  }
-  const grounded = createBuildGraph(trial).groundedIds
-  const floating = bricks.filter(brick => !grounded.has(brick.id))
-  if (floating.length) {
-    result.rejected.push({ item: index, reason: `${primitive.kind}: ${floating.length} of its parts would not connect to anything below; place it on a surface that covers its footprint`, part: floating[0].brickId, at: at(floating[0]) })
-    return
-  }
-  for (const brick of bricks) {
-    const placed = assignId(state, brick)
-    state.bricks.push(placed)
-    result.placedIds.push(placed.id)
-  }
-  result.placed += bricks.length
+  acceptGroup(state, primitive.kind, bricks, index, result)
 }
 
 /** Applies one action. The state is mutated; rejected items leave it unchanged. */
-export const applyAgentAction = (state: BuildState, action: AgentAction): ActionResult => {
+export const applyAgentAction = (state: BuildState, action: AgentAction, protectedIds?: ReadonlySet<string>): ActionResult => {
   const result: ActionResult = { ok: true, placed: 0, placedIds: [], removed: 0, rejected: [], colorSubstitutions: [] }
   if (action.action === 'done') return result
   if (action.action === 'remove') {
     const ids = new Set(action.ids)
+    const rejectProtectedRemoval = () => {
+      result.ok = false
+      result.error = 'This removal would remove parts from a protected, completed structure.'
+      result.rejected.push({ item: 0, reason: result.error })
+      return result
+    }
+    if (action.ids.some(id => protectedIds?.has(id))) return rejectProtectedRemoval()
     // Removing a part can leave parts above it unsupported; remove those too.
     let removing = state.bricks.filter(brick => ids.has(brick.id))
     let remaining = state.bricks.filter(brick => !ids.has(brick.id))
@@ -413,6 +396,7 @@ export const applyAgentAction = (state: BuildState, action: AgentAction): Action
         }
       }
     }
+    if (removing.some(brick => protectedIds?.has(brick.id))) return rejectProtectedRemoval()
     // A removal that would bring down much more than was asked for is almost
     // always a mistake (an id of a load-bearing part): refuse it.
     const requested = removing.length && ids.size

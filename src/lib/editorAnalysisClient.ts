@@ -13,6 +13,7 @@ import { createBuildGraph, getConnectedBrickComponents, validateBuildPlan, type 
 import { preparePlanGeometry } from './planGeometry'
 import { prepareStructuralGeometry } from './prepareStructuralGeometry'
 import { isVoxelPlantSupported } from './voxelBlockState'
+import { finalizeGeneratedPlan } from './generatedPlanValidation'
 import type { BrickDefinition, BuildPlan, PlacedBrick } from '../types/bricks'
 import type { EditorAnalysisResponse, EditorAnalysisResult } from './editorAnalysisProtocol'
 
@@ -79,9 +80,10 @@ export const getAnalysisGeometry = (bricks: PlacedBrick[]) => {
   return loading
 }
 
-const request = async (bricks: PlacedBrick[], plan?: BuildPlan, stability = false, drop?: EditorAnalysisRequest['drop'], transform?: EditorAnalysisRequest['transform'], manualLocale?: ManualLocale): Promise<EditorAnalysisResult> => {
+const request = async (bricks: PlacedBrick[], plan?: BuildPlan, stability = false, drop?: EditorAnalysisRequest['drop'], transform?: EditorAnalysisRequest['transform'], manualLocale?: ManualLocale, generation?: { channel: AnalysisChannel; signal: AbortSignal }): Promise<EditorAnalysisResult> => {
   const geometry = await getAnalysisGeometry(bricks)
-  const channel = transform || drop ? interactionChannel : backgroundChannel
+  generation?.signal.throwIfAborted()
+  const channel = generation?.channel ?? (transform || drop ? interactionChannel : backgroundChannel)
   const { sentRevisions, pending } = channel
   if (!channel.worker) {
     channel.worker = new Worker(new URL('../workers/editorAnalysisWorker.ts', import.meta.url), { type: 'module' })
@@ -108,7 +110,7 @@ const request = async (bricks: PlacedBrick[], plan?: BuildPlan, stability = fals
       // The canonical snapshot already carries the pieces; do not clone them
       // twice when validation also needs the plan metadata.
       const initialized = sentRevisions.has(revision)
-      channel.worker!.postMessage({ requestId, revision, bricks: initialized ? [] : bricks, plan: plan ? { ...plan, bricks: [] } : undefined, stability, manualLocale, geometry: initialized ? [] : geometry, drop, transform })
+      channel.worker!.postMessage({ requestId, revision, bricks: initialized ? [] : bricks, plan: plan ? { ...plan, bricks: [] } : undefined, stability, manualLocale, geometry: initialized ? [] : geometry, drop, transform, finalizeGeneration: Boolean(generation) })
       if (!initialized) {
         if (sentRevisions.size >= 2) sentRevisions.delete(sentRevisions.values().next().value!)
         sentRevisions.add(revision)
@@ -118,6 +120,29 @@ const request = async (bricks: PlacedBrick[], plan?: BuildPlan, stability = fals
       reject(error)
     }
   })
+}
+
+export const getEditorGenerationValidation = async (plan: BuildPlan, signal: AbortSignal) => {
+  signal.throwIfAborted()
+  if (plan.bricks.length < backgroundAnalysisThreshold || typeof Worker === 'undefined') return finalizeGeneratedPlan(plan)
+
+  // Cancellation can terminate this job without interrupting the editor's
+  // support, preview and placement workers.
+  const channel: AnalysisChannel = { sentRevisions: new Set(), pending: new Map() }
+  let onAbort: () => void = () => undefined
+  try {
+    const aborted = new Promise<never>((_, reject) => {
+      onAbort = () => reject(signal.reason)
+      signal.addEventListener('abort', onAbort, { once: true })
+    })
+    const result = await Promise.race([request(plan.bricks, plan, false, undefined, undefined, undefined, { channel, signal }), aborted])
+    if (!result.finalizedGeneration) throw new Error('EDITOR_ANALYSIS_GENERATION_RESULT_MISSING')
+    const finalized = result.finalizedGeneration
+    return finalized.repairedLocally ? finalized : { ...finalized, plan }
+  } finally {
+    signal.removeEventListener('abort', onAbort)
+    fail(channel)
+  }
 }
 
 const connectedSelectionCache = new WeakMap<PlacedBrick[], Map<string, string[]>>()

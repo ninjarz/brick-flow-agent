@@ -78,6 +78,6 @@ describe('agentic build executor', () => {
     expect(() => parseAgentAction({ action: 'place', items: [] })).toThrow('non-empty')
     expect(parseAgentAction({ action: 'place', parts: [{ brickId: 'brick-1x1' }] }).action).toBe('place')
     expect(() => parseAgentManual({ components: [] })).toThrow('components')
-    expect(parseAgentManual({ title: 'Cabin', components: [{ name: 'Base', description: 'deck' }] }).components[0]).toMatchObject({ name: 'Base', goal: 'deck' })
+    expect(parseAgentManual({ title: 'Cabin', subject: 'other', size: [6, 6, 5], components: [{ name: 'Base', description: 'deck' }] }).components[0]).toMatchObject({ name: 'Base', goal: 'deck' })
   })
 })

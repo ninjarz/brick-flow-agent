@@ -5,7 +5,7 @@ import { createCumulativeManualView } from './lib/manualPresentation'
 import { createKeyboardMoveSession } from './lib/keyboardMoveSession'
 import { getEditorKeyboardMove } from './lib/editorAnalysisClient'
 import { getBrickSelectionReference } from './lib/brickEditorCoordinates'
-import { getEditorValidation, getEditorConnectedSelection, getEditorSupport, getEditorManual, getPreparedManualPlan, getEditorTransform, setEditorAnalysisActive, backgroundAnalysisThreshold } from './lib/editorAnalysisClient'
+import { getEditorValidation, getEditorGenerationValidation, getEditorConnectedSelection, getEditorSupport, getEditorManual, getPreparedManualPlan, getEditorTransform, setEditorAnalysisActive, backgroundAnalysisThreshold } from './lib/editorAnalysisClient'
 import { rotateRigidBrickGroup, translateRigidBrickGroup } from './lib/rigidBrickGroup'
 import { createManualHtmlBlob, createLDrawBlob } from './lib/manualExportClient'
 import { useIntentState } from './hooks/useIntentState'
@@ -38,7 +38,7 @@ import { defaultFinishedAssets, getFinishedAssetCounts, isFinishedAssetPlanDefer
 import { preparePlanGeometry } from './lib/planGeometry'
 import { formatBuildManualMarkdown, getAssemblyGuide, type BuildManual } from './lib/manualSerializer'
 import { getManualStepPage, manualStepPageSize } from './lib/manualPagination'
-import { createSingleBrickSteps, countBricks, createBrickCollisionIndex, createPlanSpatialState, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickPlacementDiagnostics, getBrickRawOverlapScore, hasBrickCollision, isBrickAboveGround, makeBrick, repairBuildPlan, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
+import { createSingleBrickSteps, countBricks, createBrickCollisionIndex, createPlanSpatialState, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickPlacementDiagnostics, getBrickRawOverlapScore, hasBrickCollision, isBrickAboveGround, makeBrick, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
 import { loadCatalogPreferences, type CatalogPackPreference } from './lib/catalogPreferences'
 import { getBrickWorldFrame, normalizeHorizontalStud, normalizeQuarterTurns, normalizeVerticalQuarterTurns, normalizeYStud, roundToGrid, STUD_PITCH_WORLD, translateBrickPose } from './lib/brickUnits'
 import { useI18n } from './lib/i18n'
@@ -242,7 +242,7 @@ function App() {
   const [inventoryOverrides, setInventoryOverrides] = useState(() => loadInventoryOverrides())
   const [catalogPack, setCatalogPack] = useState<CatalogPackPreference>(() => loadCatalogPreferences().pack)
   const [isGenerating, setIsGenerating] = useState(false)
-  const [generationPhase, setGenerationPhase] = useState<'planning' | 'thinking' | 'building'>('planning')
+  const [generationPhase, setGenerationPhase] = useState<'planning' | 'thinking' | 'building' | 'validating'>('planning')
   const [generationModule, setGenerationModule] = useState<AssemblyModuleProgress>()
   const [agentStatus, setAgentStatus] = useState<AgenticStatus>()
   const [generationPreview, setGenerationPreview] = useState<BuildPlan & { frameBricks: PlacedBrick[] }>()
@@ -649,7 +649,7 @@ function App() {
   }, [isManualExploded, manualPreviewBricks, selectedManualStep, manualHighlightedIds, locale])
   const generationLabel = [
     t(`scene.${generationPhase}`),
-    generationModule && t('scene.moduleProgress', { index: generationModule.index + 1, total: generationModule.total, name: generationModule.name }),
+    generationPhase !== 'validating' && generationModule && t('scene.moduleProgress', { index: generationModule.index + 1, total: generationModule.total, name: generationModule.name }),
     generationModule && generationModule.attempt > 0 && t('scene.moduleRepair', { attempt: generationModule.attempt, retries: generationModule.retries }),
     generationModule && generationModule.ahead > 0 && t('scene.moduleAhead', { count: generationModule.ahead }),
     (agentStatus?.phase === 'building' || agentStatus?.phase === 'details') && t('scene.moduleProgress', { index: (agentStatus.index ?? 0) + 1, total: agentStatus.total ?? 1, name: agentStatus.phase === 'details' ? t('scene.agentDetails') : agentStatus.component ?? '' }),
@@ -1256,20 +1256,23 @@ function App() {
       setGenerationPreview({ ...candidate, frameBricks: candidate.bricks, bricks: candidate.bricks })
     }
     try {
-      const validateCandidate = (candidate: BuildPlan) => {
-        const issues = validateBuildPlan(candidate)
-        if (getBlockingBuildPlanIssues(issues).length === 0) {
-          return { plan: candidate, issues, repairedLocally: false }
-        }
-
-        const repairedPlan = repairBuildPlan(candidate)
-        const repairIssues = validateBuildPlan(repairedPlan)
-        return {
-          plan: repairedPlan.bricks.length > 0 && getBlockingBuildPlanIssues(repairIssues).length === 0
-            ? repairedPlan
-            : undefined,
-          issues,
-          repairedLocally: true,
+      const verifiedIds = new Set<string>()
+      const rememberVerifiedIds = (ids: readonly string[]) => { for (const id of ids) verifiedIds.add(id) }
+      const validateCandidate = async (candidate: BuildPlan) => {
+        generationController.signal.throwIfAborted()
+        setGenerationPhase('validating')
+        setGenerationModule(undefined)
+        setAgentStatus(undefined)
+        const startedAt = performance.now()
+        try {
+          const result = await getEditorGenerationValidation(candidate, generationController.signal)
+          if (!result.repairedLocally || !result.plan || !verifiedIds.size) return result
+          const original = new Map(candidate.bricks.map(brick => [brick.id, brick]))
+          const repaired = new Map(result.plan.bricks.map(brick => [brick.id, brick]))
+          return [...verifiedIds].every(id => JSON.stringify(original.get(id)) === JSON.stringify(repaired.get(id)))
+            ? result : { ...result, plan: undefined }
+        } finally {
+          if (import.meta.env.DEV) performance.measure('brick-flow-generation-validation', { start: startedAt, end: performance.now() })
         }
       }
 
@@ -1279,21 +1282,24 @@ function App() {
             prompt: input.prompt, config: llmConfig, signal: generationController.signal, locale,
             imageDataUrl: input.imageDataUrl,
             captureView: captureSceneView,
+            onFoundationAccepted: rememberVerifiedIds,
+            onComponentVerified: rememberVerifiedIds,
             onStatus: status => { if (isCurrentGeneration()) { setAgentStatus(status); setGenerationPhase(status.phase === 'manual' ? 'planning' : 'building') } },
             onProgress: showDraft,
           })
         : await generateLlmBuildPlan({ ...input, config: llmConfig, signal: generationController.signal, locale, onProgress: showBuildProgress, onDraft: showDraft, onPhase: phase => { if (isCurrentGeneration()) setGenerationPhase(phase) }, onModuleProgress: progress => { if (isCurrentGeneration()) setGenerationModule(progress) }, onAssemblyIssue: issue => { assemblyIssues.push(issue) } })
       if (generationController.signal.aborted || workspaceSession.getEpoch() !== requestEpoch) return
       let candidatePlan = initialPlan
-      let result = validateCandidate(candidatePlan)
+      let result = await validateCandidate(candidatePlan)
       const firstFailureSummary = summarizeBuildPlanIssues(result.issues, locale)
       const repairBudget = llmConfig.autoRepair
         ? normalizeMaxRepairAttempts(llmConfig.maxRepairAttempts)
         : 0
       let repairAttempts = 0
 
-      while (!result.plan && repairAttempts < repairBudget) {
+      while (!useAgent && !result.plan && repairAttempts < repairBudget && isCurrentGeneration()) {
         repairAttempts += 1
+        setGenerationPhase('thinking')
         candidatePlan = await generateLlmBuildPlan({
           ...input,
           config: llmConfig,
@@ -1302,7 +1308,7 @@ function App() {
           repairFeedback: summarizeBuildPlanIssues(result.issues, locale),
           previousPlan: candidatePlan,
         })
-        result = validateCandidate(candidatePlan)
+        result = await validateCandidate(candidatePlan)
       }
 
       if (generationController.signal.aborted || workspaceSession.getEpoch() !== requestEpoch) return
@@ -1329,7 +1335,7 @@ function App() {
       const warning = [...assemblyIssues.map(describeAssemblyIssue), repairWarning].filter(Boolean).join('\n')
       if (warning) setGenerationWarning(warning)
     } catch (error) {
-      if (workspaceSession.getEpoch() !== requestEpoch || generationAbortRef.current !== generationController) return
+      if (!isCurrentGeneration()) return
       setGenerationFailure(error instanceof Error ? error.message : t('error.generationFailed'))
     } finally {
       if (generationAbortRef.current === generationController) {

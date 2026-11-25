@@ -1,4 +1,5 @@
 import { prepareBuildManual } from '../lib/prepareBuildManual'
+import { finalizeGeneratedPlan } from '../lib/generatedPlanValidation'
 import { upgradeLegacyHogwartsConstruction } from '../lib/legacyConstructionMigration'
 /// <reference lib="webworker" />
 import { analyzeBuildStability, type StabilityAnalysis } from '../lib/stabilityAnalysis'
@@ -57,6 +58,13 @@ scope.onmessage = async ({ data }: MessageEvent<EditorAnalysisRequest>) => {
       snapshots.set(data.revision, snapshot)
     }
     await snapshot.ready
+    if (data.finalizeGeneration && data.plan) {
+      const candidate = { ...data.plan, bricks: snapshot.bricks }
+      const finalized = finalizeGeneratedPlan(candidate, getSnapshotValidation(snapshot, data.plan))
+      const result = finalized.repairedLocally ? finalized : { ...finalized, plan: undefined }
+      scope.postMessage({ requestId: data.requestId, type: 'result', result: { supported: new Map(), finalizedGeneration: result } } satisfies EditorAnalysisResponse)
+      return
+    }
     if (data.manualLocale && data.plan) {
       const original = { ...data.plan, bricks: snapshot.bricks }
       const source = await upgradeLegacyHogwartsConstruction(original)
