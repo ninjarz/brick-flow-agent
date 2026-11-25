@@ -21,6 +21,12 @@ A 3D brick-building workspace in your browser. Open a model and make it your own
 
 The editor and built-in models are ready to use without an account or API key. For optional AI generation, open **Config** and enter your OpenAI-compatible endpoint, model name, and API key. In browser-direct mode, the app sends your prompts and any attached reference image to the endpoint you configure.
 
+## Watch a build take shape
+
+![Full editor view as a woodland cabin is assembled from a prompt, from the foundation through the walls, roof, and trees](preview/woodland-cabin-build.gif)
+
+This shortened recording uses simulated model responses. The app compiles and validates all 397 pieces through its step-by-step building workflow.
+
 ## Run locally
 
 Install Git and Node.js 20 or later, which includes npm. Run these commands in a terminal:
