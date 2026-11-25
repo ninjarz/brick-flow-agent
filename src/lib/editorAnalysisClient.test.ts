@@ -117,10 +117,10 @@ describe('shared editor analysis requests',()=>{
   it('keeps only the newest pending drop and deduplicates confirmation at that point', async () => {
     const api = await import('./editorAnalysisClient')
     const parts = bricks(), source = parts.slice(0, 10)
-    const first = api.getEditorDrop(parts, source, source[0].id, { x: 1, z: 0 })
-    const obsolete = api.getEditorDrop(parts, source, source[0].id, { x: 2, z: 0 })
-    const latest = api.getEditorDrop(parts, source, source[0].id, { x: 3, z: 0 })
-    expect(api.getEditorDrop(parts, source, source[0].id, { x: 3, z: 0 })).toBe(latest)
+    const first = api.getEditorDrop(parts, source, source[0].id, { x: 1, z: 0, surfaceY: 0 })
+    const obsolete = api.getEditorDrop(parts, source, source[0].id, { x: 1, z: 0, surfaceY: 1.2 })
+    const latest = api.getEditorDrop(parts, source, source[0].id, { x: 1, z: 0, surfaceY: 2.4 })
+    expect(api.getEditorDrop(parts, source, source[0].id, { x: 1, z: 0, surfaceY: 2.4 })).toBe(latest)
     expect(await obsolete).toBeUndefined()
     await flush()
     const worker = FakeWorker.instances[0]
@@ -129,7 +129,7 @@ describe('shared editor analysis requests',()=>{
     expect(await first).toEqual(source)
     await flush()
     expect(worker.messages).toHaveLength(2)
-    expect(worker.messages[1].drop?.point.x).toBe(3)
+    expect(worker.messages[1].drop?.point).toEqual({ x: 1, z: 0, surfaceY: 2.4 })
     worker.reply({ requestId: worker.messages[1].requestId, type: 'result', result: { supported: new Map(), dropBricks: source } })
     expect(await latest).toEqual(source)
   })

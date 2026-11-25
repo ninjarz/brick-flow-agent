@@ -25,6 +25,34 @@ describe('dropBrickGroupAtPoint', () => {
     expect(getBrickBounds(result![0])?.minY).toBeCloseTo(getBrickBounds(base)!.maxY)
   })
 
+  it('fits a support under a bridge when pointing at the ground and on top when pointing at the deck', () => {
+    const pier = makeBrick('brick-1x1', 'gray', 0, 0, 0)
+    const deck = makeBrick('brick-1x4', 'gray', 0, 1.2, 0)
+    const support = makeBrick('brick-1x1', 'red', 0, 0, 0)
+    const source = [support]
+    const stationary = spatialDataFor([pier, deck])
+    const point = { x: 2.5, z: 0.5 }
+    expect(dropBrickGroupAtPoint(source, support.id, { ...point, surfaceY: 0 }, stationary)?.[0].pose)
+      .toMatchObject({ xStud: 2, yStud: 0, zStud: 0 })
+    expect(dropBrickGroupAtPoint(source, support.id, { ...point, surfaceY: 2.6 }, stationary)?.[0].pose)
+      .toMatchObject({ xStud: 2, yStud: 2.4, zStud: 0 })
+  })
+
+  it('tries the next support above the pointed opening when the part is too tall', () => {
+    const deck = makeBrick('brick-1x4', 'gray', 0, 0.8, 0)
+    const moving = makeBrick('brick-1x1', 'red', 0, 0, 0)
+    const result = dropBrickGroupAtPoint([moving], moving.id, { x: 2.5, z: 0.5, surfaceY: 0 }, spatialDataFor([deck]))
+    expect(result?.[0].pose).toMatchObject({ xStud: 2, yStud: 2, zStud: 0 })
+  })
+
+  it('tries the pointed ledge below a higher obstacle', () => {
+    const ledge = makeBrick('plate-2x3', 'gray', 0, 0, 0)
+    const canopy = makeBrick('brick-1x4', 'gray', 0, 2.4, 0)
+    const moving = makeBrick('brick-1x1', 'red', 0, 0, 0)
+    const result = dropBrickGroupAtPoint([moving], moving.id, { x: 2.5, z: 0.5, surfaceY: 0.4 }, spatialDataFor([ledge, canopy]))
+    expect(result?.[0].pose).toMatchObject({ xStud: 2, yStud: 0.4, zStud: 0 })
+  })
+
   it('preserves offsets while dropping an arbitrary multi-selection', () => {
     const anchor = makeBrick('brick-1x1', 'red', 0, 0, 0)
     const companion = makeBrick('brick-1x1', 'blue', 1, 0, 0)

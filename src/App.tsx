@@ -1651,6 +1651,7 @@ function App() {
   }, [activeSelectedIds, getStationarySpatialState, placementSession, planRef, setPlacementSession, worldEntityPlacement])
 
   const updatePlacementPoint = useCallback((point: VoxelPlacementSurface) => {
+    const surfaceY = normalizeYStud(point.normalY < -0.5 ? 0 : point.y)
     const pointerKey = `${normalizeHorizontalStud(point.x)}:${normalizeYStud(point.y)}:${normalizeHorizontalStud(point.z)}:${point.normalX},${point.normalY},${point.normalZ}`
     if (placementPointerKeyRef.current === pointerKey) return
     placementPointerKeyRef.current = pointerKey
@@ -1661,8 +1662,8 @@ function App() {
         const anchor = current.sourceBricks.find(brick => brick.id === current.anchorBrickId)!
         const frame = getBrickWorldFrame(brickById.get(anchor.brickId)!, anchor.pose)
         const snapped = { x: frame.x + roundToGrid(anchored.x - frame.x, STUD_PITCH_WORLD), z: frame.z + roundToGrid(anchored.z - frame.z, STUD_PITCH_WORLD) }
-        if (snapped.x === current.backgroundDropPoint.x && snapped.z === current.backgroundDropPoint.z) return current
-        return { ...current, backgroundDropPoint: snapped }
+        if (snapped.x === current.backgroundDropPoint.x && snapped.z === current.backgroundDropPoint.z && surfaceY === current.backgroundDropPoint.surfaceY) return current
+        return { ...current, backgroundDropPoint: { ...snapped, surfaceY } }
       }
       const excludedIds = current.kind === 'move'
         ? new Set(current.sourceBricks.map((brick) => brick.id))
@@ -1675,10 +1676,13 @@ function App() {
         ? { ...point, x: point.x + point.normalX * 0.51, z: point.z + point.normalZ * 0.51 }
         : point
       const anchoredPoint = offsetBrickGroupDragPoint(surfaceDropPoint, current.dragPointerOffset)
+      const dropPoint = current.sourceBricks.every(brick => brickById.get(brick.brickId)?.pack === 'lego')
+        ? { ...anchoredPoint, surfaceY }
+        : anchoredPoint
       const droppedBricks = dropBrickGroupAtPoint(
         current.sourceBricks,
         current.anchorBrickId,
-        anchoredPoint,
+        dropPoint,
         stationaryData,
       )
       if (!droppedBricks) return current

@@ -226,7 +226,7 @@ export const getEditorDrop = (bricks: PlacedBrick[], source: PlacedBrick[], anch
     if (bySource.size >= 4) bySource.delete(bySource.keys().next().value!)
     queue = {}; bySource.set(source, queue)
   }
-  const key = `${anchorId}:${point.x}:${point.z}`
+  const key = `${anchorId}:${point.x}:${point.z}:${point.surfaceY ?? ''}`
   if (queue.next?.key === key) return queue.next.promise
   if (!queue.next && queue.active?.key === key) return queue.active.promise
   const job = { key, run: () => request(bricks, undefined, false, { sourceIds: source.map(brick => brick.id), anchorId, point }).then(result => result.dropBricks) } as DropJob

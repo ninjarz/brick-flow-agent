@@ -8,6 +8,7 @@ import {
   getNearestHorizontalSearchOffsets,
   hasBrickCollision,
   isBrickAboveGround,
+  isBrickSupported,
 } from './planUtils'
 import { getGuaranteedClearDropDistance } from './brickDropBroadPhase'
 import { getStructuralCacheVersion } from './structuralGrid'
@@ -71,6 +72,8 @@ export const findNearestOpenBrickGroupAround = (
 export type HorizontalDropPoint = {
   x: number
   z: number
+  /** Height of the surface under the pointer, when the placement has a ray hit. */
+  surfaceY?: number
 }
 
 export const getBrickGroupDragPointerOffset = (
@@ -111,8 +114,9 @@ const canPlaceDroppedGroup = (
 ))
 
 /**
- * Aligns the anchor brick's horizontal centre to the pointer, then lowers the
- * whole rigid selection from above until the next grid step would collide.
+ * Aligns the anchor brick's horizontal centre to the pointer. A ray hit lets
+ * the selection try the pointed surface and then higher supports. Without a
+ * hit, the whole rigid selection descends from above.
  * The source array is never mutated, so callers can use the result as a ghost
  * preview and commit it only after explicit confirmation.
  */
@@ -141,22 +145,34 @@ const dropBrickGroupAtPointUncached = (
   const groupMaxX = Math.max(...groupBounds.map((bounds) => bounds!.maxX))
   const groupMinZ = Math.min(...groupBounds.map((bounds) => bounds!.minZ))
   const groupMaxZ = Math.max(...groupBounds.map((bounds) => bounds!.maxZ))
-  const stationaryMaxY = Math.max(
-    0,
-    ...stationaryData.stationaryBricks
-      .map(getBrickBounds)
-      .filter((bounds) => Boolean(bounds))
-      .filter((bounds) => (
-        bounds!.minX < groupMaxX - boundsTolerance &&
-        bounds!.maxX > groupMinX + boundsTolerance &&
-        bounds!.minZ < groupMaxZ - boundsTolerance &&
-        bounds!.maxZ > groupMinZ + boundsTolerance
-      ))
-      .map((bounds) => bounds!.maxY),
-  )
+  const { stationaryBricks, spatialState: { collisionIndex } } = stationaryData
+  const placeAtHeight = (y: number) => translateBrickGroup(horizontallyAligned, {
+    yStud: Math.ceil((y - groupMinY - boundsTolerance) / WORLD_SNAP_STEP_STUDS) * WORLD_SNAP_STEP_STUDS,
+  })
+  const surfaceY = point.surfaceY
+  if (surfaceY === 0) {
+    const ground = placeAtHeight(0)
+    if (canPlaceDroppedGroup(ground, stationaryBricks, collisionIndex)) return ground
+  }
+  const supportHeights = stationaryBricks.flatMap(brick => {
+    const bounds = getBrickBounds(brick)
+    return bounds && bounds.minX < groupMaxX - boundsTolerance && bounds.maxX > groupMinX + boundsTolerance &&
+      bounds.minZ < groupMaxZ - boundsTolerance && bounds.maxZ > groupMinZ + boundsTolerance ? [bounds.maxY] : []
+  })
+  if (surfaceY !== undefined) {
+    // Rendered studs extend above their bearing plane. Include that plane
+    // when the pointer hits the top of a stud.
+    const lowest = surfaceY - 0.2 - boundsTolerance
+    const heights = [...new Set(supportHeights)].filter(y => y >= lowest).sort((a, b) => a - b)
+    for (const y of heights) {
+      const atHeight = placeAtHeight(y)
+      if (canPlaceDroppedGroup(atHeight, stationaryBricks, collisionIndex) &&
+          atHeight.some(brick => isBrickSupported(brick, stationaryBricks, collisionIndex))) return atHeight
+    }
+  }
+  const stationaryMaxY = Math.max(0, ...supportHeights)
   const startShift = stationaryMaxY + WORLD_SNAP_STEP_STUDS - groupMinY
   let candidate = translateBrickGroup(horizontallyAligned, { yStud: startShift })
-  const collisionIndex = stationaryData.spatialState.collisionIndex
 
   const candidateGroundDistance = Math.min(...candidate.map(brick => getBrickBounds(brick)!.minY))
   const clearDistance = getGuaranteedClearDropDistance(candidate, candidateGroundDistance, stationaryData)
@@ -165,8 +181,7 @@ const dropBrickGroupAtPointUncached = (
 
   if (!canPlaceDroppedGroup(candidate, stationaryData.stationaryBricks, collisionIndex)) return undefined
 
-  // Descending from above deliberately stops at the first obstacle. This
-  // prevents a preview from tunnelling through a roof into an enclosed gap.
+  // The fallback descends from above and stops at the first obstacle.
   const maxDropSteps = Math.ceil((stationaryMaxY + 1) / WORLD_SNAP_STEP_STUDS) + 2
   for (let step = clearSteps; step < maxDropSteps; step += 1) {
     const lowered = translateBrickGroup(candidate, { yStud: -WORLD_SNAP_STEP_STUDS })
@@ -194,7 +209,7 @@ export const dropBrickGroupAtPoint = (
   const definition = anchor && brickById.get(anchor.brickId)
   if (!anchor || !definition) return undefined
   const frame = getBrickWorldFrame(definition, anchor.pose)
-  const key = `${getStructuralCacheVersion()}:${anchorBrickId}:${roundToGrid(point.x-frame.x,STUD_PITCH_WORLD)},${roundToGrid(point.z-frame.z,STUD_PITCH_WORLD)}`
+  const key = `${getStructuralCacheVersion()}:${anchorBrickId}:${roundToGrid(point.x-frame.x,STUD_PITCH_WORLD)},${roundToGrid(point.z-frame.z,STUD_PITCH_WORLD)}:${point.surfaceY ?? ''}`
   let byStationary = dropResults.get(bricks)
   if (!byStationary) { byStationary = new WeakMap(); dropResults.set(bricks, byStationary) }
   let results = byStationary.get(stationaryData.spatialState)
