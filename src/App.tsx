@@ -16,13 +16,13 @@ import { useLlmConnection } from './hooks/useLlmConnection'
 import { useWorkspacePersistence } from './hooks/useWorkspacePersistence'
 import { WorkspaceStorageStatus } from './components/WorkspaceStorageStatus'
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, Box, Boxes, ClipboardList, Eye, EyeOff, FileUp, FolderOpen, Gauge, Github, Globe2, Link, MessageCircle, MessageSquareText, Pause, Play, Plus, Redo2, ScanLine, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
+import { BookOpen, Box, Boxes, ClipboardList, Eye, EyeOff, FileUp, FolderOpen, Gauge, Github, Globe2, Link, MessageCircle, MessageSquareText, Pause, Play, Redo2, ScanLine, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
 import { BrickEditorPanel } from './components/BrickEditorPanel'
 import { BrickCountsPanel } from './components/BrickCountsPanel'
 import type { WorldCommandTargetOption } from './components/WorldEntityEditorPanel'
 import type { BrickSceneTransform, BrickSceneViewMode } from './components/BrickScene'
 import { ControlPanel } from './components/ControlPanel'
-import { CurrentWorkPanel } from './components/CurrentWorkPanel'
+import type { AssetLibraryKind, LocalizedFinishedAsset } from './components/AssetLibraryModal'
 import { SceneErrorBoundary } from './components/SceneErrorBoundary'
 import { useWorkspace } from './hooks/useWorkspace'
 import { useWorldSimulationLoop } from './hooks/useWorldSimulationLoop'
@@ -89,6 +89,7 @@ const WorldEntityEditorPanel = lazy(() => import('./components/WorldEntityEditor
 const WorldTavern = lazy(() => import('./components/WorldTavern').then((module) => ({ default: module.WorldTavern })))
 const WorldStoryDock = lazy(() => import('./components/WorldStoryDock').then((module) => ({ default: module.WorldStoryDock })))
 const PromptPreviewModal = lazy(() => import('./components/PromptPreviewModal').then((module) => ({ default: module.PromptPreviewModal })))
+const AssetLibraryModal = lazy(() => import('./components/AssetLibraryModal').then((module) => ({ default: module.AssetLibraryModal })))
 const BuildManualModal = lazy(() => import('./components/BuildManualModal').then((module) => ({ default: module.BuildManualModal })))
 
 const defaultFinishedAssetI18nKeys = new Map(
@@ -98,17 +99,6 @@ const defaultFinishedAssetI18nKeys = new Map(
 )
 const isInventoryLimited = (inventory: number) => Number.isFinite(inventory)
 type LlmEngineStatus = 'incomplete' | 'untested' | 'testing' | 'connected' | 'failed'
-type LocalizedFinishedAsset = {
-  source: FinishedAsset
-  displayTitle: string
-  displayCategory: string
-  displayDescription: string
-  displayPrompt: string
-  /** A placeholder while the asset's plan is deferred; use getAssetDisplayPlan. */
-  displayPlan: BuildPlan
-  partCount: number
-  stepCount: number
-}
 type PlacementSession = {
   kind: 'new' | 'move'
   anchorBrickId: string
@@ -121,7 +111,6 @@ type WorldEntityPlacementSession = {
   entity: WorldEntity
 }
 type ScenarioPlaytestSession = { world: WorldState; plan: BuildPlan; scenarioTitle: string; stageTitle: string }
-type AssetLibraryKind = 'current' | 'models' | 'scenarios'
 const tavernDirectorPlaybackTimeoutMs = 15_000
 const tavernScenarioDialogueTimeoutMs = 60_000
 const sceneViewModeOrder: BrickSceneViewMode[] = ['border', 'borderless', 'xray', 'voxel']
@@ -3685,193 +3674,55 @@ function App() {
       )}
 
       {isAssetLibraryOpen && (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setIsAssetLibraryOpen(false)}>
-          <section
-            className="asset-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="asset-library-title"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <header>
-              <div>
-                <h2 id="asset-library-title">{t('asset.title')}</h2>
-                {assetLibraryKind !== 'current' && <p>{assetLibraryKind === 'models'
-                  ? t('asset.count', { visible: visibleFinishedAssets.length, total: finishedAssets.length })
-                  : t('asset.scenarioCount', { visible: visibleWorldScenarios.length, total: worldScenarios.length })}</p>}
-              </div>
-              <button className="icon-button" type="button" aria-label={t('common.close')} title={t('common.close')} onClick={() => setIsAssetLibraryOpen(false)}>
-                <X size={18} />
-              </button>
-            </header>
-
-            {assetRecoveryFailed && <p role="alert">
-              {locale === 'zh-CN' ? '素材库读取失败，已暂停保存并保留原数据。' : 'Asset recovery failed. Saving is paused and stored data is preserved.'}
-              <button type="button" onClick={() => { setAssetRecoveryFailed(false); setAssetRecoveryAttempt((attempt) => attempt + 1) }}>
-                {locale === 'zh-CN' ? '重试读取素材库' : 'Retry asset recovery'}
-              </button>
-            </p>}
-            <nav className="asset-kind-tabs" aria-label={t('asset.libraryKinds')}>
-              <button type="button" className={assetLibraryKind === 'current' ? 'active' : ''}
-                aria-pressed={assetLibraryKind === 'current'} onClick={() => setAssetLibraryKind('current')}>
-                <Box size={16} />
-                {t('asset.kind.current')}
-              </button>
-              <button
-                type="button"
-                className={assetLibraryKind === 'models' ? 'active' : ''}
-                aria-pressed={assetLibraryKind === 'models'}
-                onClick={() => setAssetLibraryKind('models')}
-              >
-                <Boxes size={16} />
-                {t('asset.kind.models')}
-              </button>
-              <button
-                type="button"
-                className={assetLibraryKind === 'scenarios' ? 'active' : ''}
-                aria-pressed={assetLibraryKind === 'scenarios'}
-                onClick={() => setAssetLibraryKind('scenarios')}
-              >
-                <BookOpen size={16} />
-                {t('asset.kind.scenarios')}
-              </button>
-            </nav>
-
-            {assetLibraryKind === 'current' && <div className="project-work-grid">
-            <CurrentWorkPanel
-              plan={plan}
-              onRenamePlan={renamePlan}
-              onExport={exportPlan}
-              onExportLDraw={exportLDraw}
-              onOpenManual={() => { setIsAssetLibraryOpen(false); void openManual() }}
-              onImportPlan={file => {
-                if (!file) return
-                setIsAssetLibraryOpen(false)
-                handleImportPlan(file)
-              }}
-            />
-            <section className="asset-create">
-              <h3>{t('asset.saveAsAsset')}</h3>
-              <div className="asset-create-fields">
-                <label className="plan-title-field">
-                  <span>{t('asset.nameLabel')}</span>
-                  <input value={assetTitle} onChange={(event) => setAssetTitle(event.target.value)} placeholder={t('asset.titlePlaceholder', { title: plan.title })} />
-                </label>
-                <label className="plan-title-field">
-                  <span>{t('asset.categoryPlaceholder')}</span>
-                  <input value={assetCategory} onChange={(event) => setAssetCategory(event.target.value)} />
-                </label>
-              </div>
-              <label className="plan-title-field">
-                <span>{t('asset.descriptionLabel')}</span>
-                <input value={assetDescription} onChange={(event) => setAssetDescription(event.target.value)} />
-              </label>
-              <button className="primary compact-primary" type="button" onClick={addFinishedAsset}>
-                <Plus size={16} />
-                {t('asset.saveCurrent')}
-              </button>
-            </section>
-            </div>}
-
-            {assetLibraryKind === 'models' ? <>
-            <section className="asset-tools">
-              <div className="asset-model-tools">
-                <input
-                  value={assetQuery}
-                  onChange={(event) => setAssetQuery(event.target.value)}
-                  placeholder={t('asset.searchPlaceholder')}
-                />
-                <button className="secondary" type="button" onClick={resetFinishedAssets}>
-                  {t('asset.restoreDefault')}
-                </button>
-              </div>
-              <div className="asset-category-tabs" aria-label={t('asset.categories')}>
-                {assetCategories.map((category) => (
-                  <button
-                    key={category.value}
-                    type="button"
-                    className={category.value === assetCategoryFilter ? 'active' : ''}
-                    onClick={() => setAssetCategoryFilter(category.value)}
-                  >
-                    {category.label}
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            <div className="asset-list">
-              {visibleFinishedAssets.map((asset) => (
-                <article key={asset.source.id} className="asset-card">
-                  <div>
-                    <span>{asset.displayCategory}</span>
-                    {asset.source.instructionStatus && (
-                      <span className="asset-status replica">
-                        {t('asset.replica')}
-                      </span>
-                    )}
-                    <h3>{asset.displayTitle}</h3>
-                    <p>{asset.displayDescription}</p>
-                    <small>{t('common.parts', { count: asset.partCount })} · {t('common.steps', { count: asset.stepCount })} · {asset.displayPrompt}</small>
-                  </div>
-                  <div className="asset-actions">
-                    <button type="button" disabled={isLoadingAsset} onClick={() => loadFinishedAsset(asset)}>
-                      {t('common.load')}
-                    </button>
-                    <button type="button" onClick={() => void openAssetManual(asset)}>
-                      {t('asset.manual')}
-                    </button>
-                    {asset.source.instructionUrl && (
-                      <a className="asset-link-button" href={asset.source.instructionUrl} target="_blank" rel="noreferrer">
-                        <Link size={15} />
-                        {t('asset.instructions')}
-                      </a>
-                    )}
-                    <button className="icon-button danger" type="button" aria-label={t('asset.delete')} title={t('asset.delete')} onClick={() => deleteFinishedAsset(asset.source.id)}>
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </article>
-              ))}
-              {visibleFinishedAssets.length === 0 && <p className="muted">{t('asset.noMatches')}</p>}
-            </div>
-            </> : assetLibraryKind === 'scenarios' && <>
-              <section className="asset-tools">
-                <input
-                  value={scenarioQuery}
-                  onChange={(event) => setScenarioQuery(event.target.value)}
-                  placeholder={t('asset.scenarioSearchPlaceholder')}
-                />
-              </section>
-
-              <div className="asset-list scenario-list">
-                {visibleWorldScenarios.map((scenario) => (
-                  <article key={scenario.id} className="asset-card scenario-card">
-                    <div>
-                      <span>{scenario.category}</span>
-                      <span className="asset-status scenario">{t('asset.scenarioBadge')}</span>
-                      <h3>{scenario.title}</h3>
-                      <p>{scenario.description}</p>
-                      <small>
-                        {t('common.parts', { count: scenario.plan.bricks.length })} · {t('asset.scenarioEntities', { count: scenario.world.entities.length })} · {t('asset.scenarioChapters', { count: scenario.world.narrative.stories.length })}
-                      </small>
-                    </div>
-                    <div className="asset-actions scenario-actions">
-                      <button type="button" onClick={() => applyWorldScenario('start', scenario.id)}>
-                        <Play size={15} />
-                        {t('asset.startScenario')}
-                      </button>
-                      <button type="button" onClick={() => applyWorldScenario('add', scenario.id)}>
-                        <Plus size={15} />
-                        {t('asset.addScenario')}
-                      </button>
-                    </div>
-                  </article>
-                ))}
-                {visibleWorldScenarios.length === 0 && <p className="muted">{t('asset.noScenarioMatches')}</p>}
-              </div>
-            </>}
-          </section>
-        </div>
+        <Suspense fallback={null}>
+          <AssetLibraryModal
+            plan={plan}
+            assetLibraryKind={assetLibraryKind}
+            assetRecoveryFailed={assetRecoveryFailed}
+            assetTitle={assetTitle}
+            assetCategory={assetCategory}
+            assetDescription={assetDescription}
+            assetQuery={assetQuery}
+            assetCategoryFilter={assetCategoryFilter}
+            assetCategories={assetCategories}
+            finishedAssetsCount={finishedAssets.length}
+            visibleFinishedAssets={visibleFinishedAssets}
+            isLoadingAsset={isLoadingAsset}
+            scenarioQuery={scenarioQuery}
+            worldScenariosCount={worldScenarios.length}
+            visibleWorldScenarios={visibleWorldScenarios}
+            onClose={() => setIsAssetLibraryOpen(false)}
+            onSelectKind={setAssetLibraryKind}
+            onRetryAssetRecovery={() => {
+              setAssetRecoveryFailed(false)
+              setAssetRecoveryAttempt((attempt) => attempt + 1)
+            }}
+            onRenamePlan={renamePlan}
+            onExportPlan={exportPlan}
+            onExportLDraw={exportLDraw}
+            onOpenManual={() => {
+              setIsAssetLibraryOpen(false)
+              void openManual()
+            }}
+            onImportPlan={(file) => {
+              if (!file) return
+              setIsAssetLibraryOpen(false)
+              handleImportPlan(file)
+            }}
+            onAssetTitleChange={setAssetTitle}
+            onAssetCategoryChange={setAssetCategory}
+            onAssetDescriptionChange={setAssetDescription}
+            onAddFinishedAsset={addFinishedAsset}
+            onAssetQueryChange={setAssetQuery}
+            onResetFinishedAssets={resetFinishedAssets}
+            onSelectAssetCategoryFilter={setAssetCategoryFilter}
+            onLoadFinishedAsset={loadFinishedAsset}
+            onOpenAssetManual={(asset) => void openAssetManual(asset)}
+            onDeleteFinishedAsset={deleteFinishedAsset}
+            onScenarioQueryChange={setScenarioQuery}
+            onApplyWorldScenario={applyWorldScenario}
+          />
+        </Suspense>
       )}
 
       {isManualOpen && buildManual && (
