@@ -71,7 +71,7 @@ import { clearWorkspaceDraft, loadWorkspaceDraft } from './lib/workspaceDraft'
 import { applyVoxelPlacementSurface, isVoxelDoorStateClear, isVoxelPlantSupported, synchronizePlanVoxelBlockStates, synchronizeVoxelBlockStates, type VoxelPlacementSurface } from './lib/voxelBlockState'
 import { createWorldHiddenTargetIndex } from './lib/worldVisibility'
 import { createFeedbackUrl } from './lib/appDiagnostics'
-import { clearStabilityHistory, createPlanFingerprint, loadStabilityHistory } from './lib/stabilityHistory'
+import { clearStabilityHistory } from './lib/stabilityHistory'
 import { isDebugModeEnabled } from './lib/debugMode'
 import { loadImportDiagnostics, saveImportDiagnostic, type ImportDiagnostic } from './lib/importDiagnostics'
 import type { BrickStructure, BuildPlan, FinishedAsset, PlacedBrick } from './types/bricks'
@@ -307,7 +307,6 @@ function App() {
   const [showHiddenScenarioObjects, setShowHiddenScenarioObjects] = useState(false)
   const [assetImportFrameVersion, setAssetImportFrameVersion] = useState(0)
   const [isAutoSnapEnabled, setIsAutoSnapEnabled] = useState(false)
-  const [analysisHistoryVersion, setAnalysisHistoryVersion] = useState(0)
   useEffect(() => {
     if (world.hiddenTargets.length === 0) setShowHiddenScenarioObjects(false)
   }, [world.hiddenTargets.length])
@@ -323,20 +322,6 @@ function App() {
   const sceneStabilityAnalysis = sceneViewMode === 'xray' && sceneAnalysis?.bricks === plan.bricks
     ? sceneAnalysis.analysis
     : undefined
-  const latestAnalysisSnapshot = useMemo(
-    () => {
-      void analysisHistoryVersion
-      return activeProjectId ? loadStabilityHistory(plan.id, activeProjectId)[0] : undefined
-    },
-    [activeProjectId, analysisHistoryVersion, plan.id],
-  )
-  const analysisIsStale = useMemo(
-    () => Boolean(latestAnalysisSnapshot && latestAnalysisSnapshot.planFingerprint !== createPlanFingerprint(plan)),
-    [latestAnalysisSnapshot, plan],
-  )
-  const handleAnalysisSnapshotSaved = useCallback(() => {
-    setAnalysisHistoryVersion((version) => version + 1)
-  }, [])
   const defaultAssetCategoryLabels = useMemo(() => new Set(['自定义', 'Custom']), [])
   const llmEngineStatus: LlmEngineStatus = !llmConfigComplete
     ? 'incomplete'
@@ -1139,7 +1124,6 @@ function App() {
       clearStabilityHistory(clearedPlanId, clearedProjectId)
       void import('./lib/stabilitySuite').then(({ clearStabilitySuiteResult }) => clearStabilitySuiteResult(clearedPlanId, clearedProjectId))
     }
-    setAnalysisHistoryVersion((version) => version + 1)
     const nextPlan = createEmptyBuildPlan({ title: t('control.planNamePlaceholder') })
     const nextWorld = createEmptyWorldState(nextPlan.id)
     workspaceSession.replace({ plan: nextPlan, world: nextWorld, prompt: '' }, false)
@@ -3084,14 +3068,10 @@ function App() {
                   </button>
                 )}
                 <button
-                  className={`icon-button ${analysisIsStale ? 'analysis-stale' : ''}`}
+                  className="icon-button"
                   type="button"
-                  aria-label={analysisIsStale
-                    ? (locale === 'zh-CN' ? '模型已变化，需要重新分析' : 'Model changed; analysis required')
-                    : t('top.stabilityLab')}
-                  title={analysisIsStale
-                    ? (locale === 'zh-CN' ? '模型已变化，需要重新分析' : 'Model changed; analysis required')
-                    : t('top.stabilityLab')}
+                  aria-label={t('top.stabilityLab')}
+                  title={t('top.stabilityLab')}
                   onClick={() => setIsStabilityLabOpen(true)}
                 >
                   <Gauge size={18} />
@@ -3588,7 +3568,6 @@ function App() {
             projectId={activeProjectId ?? ''}
             inventoryOverrides={inventoryOverrides}
             onClose={() => setIsStabilityLabOpen(false)}
-            onSnapshotSaved={handleAnalysisSnapshotSaved}
             onApplyReinforcement={applyStructuralReinforcement}
           />
         </Suspense>

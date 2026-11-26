@@ -148,23 +148,6 @@
   background: #eaf2ff;
 }
 
-.toolbar-group .icon-button.analysis-stale {
-  position: relative;
-  border-color: #f59e0b;
-  color: #b45309;
-}
-
-.toolbar-group .icon-button.analysis-stale::after {
-  content: '';
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #ef4444;
-}
-
 .toolbar-group .icon-button.has-warning { color: #b45309; }
 
 .toolbar-group .icon-button.github-link {
