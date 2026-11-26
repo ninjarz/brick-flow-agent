@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: './tests/e2e',
+  testIgnore: '**/performance/**',
   fullyParallel: true,
   workers: 2,
   reporter: 'line',

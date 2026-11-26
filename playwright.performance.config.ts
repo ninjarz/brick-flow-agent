@@ -5,7 +5,8 @@ const url = 'http://127.0.0.1:4188/brick-flow-agent/'
 
 export default defineConfig({
   ...config,
-  testDir: './e2e',
+  testDir: './tests/e2e/performance',
+  testIgnore: undefined,
   workers: 1,
   outputDir: 'test-results/hogwarts-performance',
   use: { ...config.use, baseURL: url },

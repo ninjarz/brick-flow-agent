@@ -1,6 +1,4 @@
 import { getWorldStoryActions } from './lib/worldStoryActions'
-import { BrickCountList } from './components/BrickCountList'
-import { LazyBrickGlyph } from './components/LazyBrickGlyph'
 import { createCumulativeManualView } from './lib/manualPresentation'
 import { createKeyboardMoveSession } from './lib/keyboardMoveSession'
 import { getEditorKeyboardMove } from './lib/editorAnalysisClient'
@@ -18,7 +16,7 @@ import { useLlmConnection } from './hooks/useLlmConnection'
 import { useWorkspacePersistence } from './hooks/useWorkspacePersistence'
 import { WorkspaceStorageStatus } from './components/WorkspaceStorageStatus'
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, Box, Boxes, ClipboardList, Download, Eye, EyeOff, FileUp, FolderOpen, Gauge, Github, Globe2, Link, MessageCircle, MessageSquareText, Pause, Play, Plus, Redo2, RotateCcw, ScanLine, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
+import { BookOpen, Box, Boxes, ClipboardList, Eye, EyeOff, FileUp, FolderOpen, Gauge, Github, Globe2, Link, MessageCircle, MessageSquareText, Pause, Play, Plus, Redo2, ScanLine, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
 import { BrickEditorPanel } from './components/BrickEditorPanel'
 import { BrickCountsPanel } from './components/BrickCountsPanel'
 import type { WorldCommandTargetOption } from './components/WorldEntityEditorPanel'
@@ -28,7 +26,7 @@ import { CurrentWorkPanel } from './components/CurrentWorkPanel'
 import { SceneErrorBoundary } from './components/SceneErrorBoundary'
 import { useWorkspace } from './hooks/useWorkspace'
 import { useWorldSimulationLoop } from './hooks/useWorldSimulationLoop'
-import { brickById, colorHex, getDefaultBrickColor } from './data/basicBricks'
+import { brickById, getDefaultBrickColor } from './data/basicBricks'
 import { worldEntityDefinitionById } from './data/worldEntityDefinitions'
 import { createDefaultWorldScenarios } from './data/worldScenarios'
 import { dropBrickGroupAtPoint, findNearestOpenBrickGroupAround, getBrickGroupDragPointerOffset, offsetBrickGroupDragPoint, rotationRepositionSearchRadiusStuds, type HorizontalDropPoint, type StationaryPlanSpatialData } from './lib/brickGroupPlacement'
@@ -38,7 +36,7 @@ import { clearLlmConnection, normalizeMaxRepairAttempts, saveLlmConnection } fro
 import { defaultFinishedAssets, getFinishedAssetCounts, isFinishedAssetPlanDeferred, needsFinishedAssetsRecovery, isDefaultFinishedAsset, mergeRecoveredFinishedAssets, loadAllDefaultFinishedAssets, loadFinishedAssets, loadFinishedAssetsFromIndexedDb, mergeWithDefaultAssets, resolveFinishedAssetPlan, saveFinishedAssets } from './lib/finishedAssets'
 import { preparePlanGeometry } from './lib/planGeometry'
 import { formatBuildManualMarkdown, getAssemblyGuide, type BuildManual } from './lib/manualSerializer'
-import { getManualStepPage, manualStepPageSize } from './lib/manualPagination'
+import { getManualStepPage } from './lib/manualPagination'
 import { createSingleBrickSteps, countBricks, createBrickCollisionIndex, createPlanSpatialState, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickPlacementDiagnostics, getBrickRawOverlapScore, hasBrickCollision, isBrickAboveGround, makeBrick, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
 import { loadCatalogPreferences, type CatalogPackPreference } from './lib/catalogPreferences'
 import { getBrickWorldFrame, normalizeHorizontalStud, normalizeQuarterTurns, normalizeVerticalQuarterTurns, normalizeYStud, roundToGrid, STUD_PITCH_WORLD, translateBrickPose } from './lib/brickUnits'
@@ -90,6 +88,8 @@ const ConfigModal = lazy(() => import('./components/ConfigModal').then((module) 
 const WorldEntityEditorPanel = lazy(() => import('./components/WorldEntityEditorPanel').then((module) => ({ default: module.WorldEntityEditorPanel })))
 const WorldTavern = lazy(() => import('./components/WorldTavern').then((module) => ({ default: module.WorldTavern })))
 const WorldStoryDock = lazy(() => import('./components/WorldStoryDock').then((module) => ({ default: module.WorldStoryDock })))
+const PromptPreviewModal = lazy(() => import('./components/PromptPreviewModal').then((module) => ({ default: module.PromptPreviewModal })))
+const BuildManualModal = lazy(() => import('./components/BuildManualModal').then((module) => ({ default: module.BuildManualModal })))
 
 const defaultFinishedAssetI18nKeys = new Map(
   defaultFinishedAssets
@@ -3670,59 +3670,18 @@ function App() {
       )}
 
       {isPromptPreviewOpen && (
-        <div
-          className="modal-backdrop"
-          role="presentation"
-          onMouseDown={() => {
-            setIsPromptPreviewOpen(false)
-            setPromptCopyStatus('idle')
-          }}
-        >
-          <section
-            className="prompt-preview-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="prompt-preview-title"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <header>
-              <div>
-                <h2 id="prompt-preview-title">{t('prompt.title')}</h2>
-                <p><strong>{t('prompt.request')}</strong> {promptPreview.original}</p>
-                <p>{t('prompt.firstRequest')}</p>
-              </div>
-              <button
-                className="icon-button"
-                type="button"
-                aria-label={t('common.close')}
-                title={t('common.close')}
-                onClick={() => {
-                  setIsPromptPreviewOpen(false)
-                  setPromptCopyStatus('idle')
-                }}
-              >
-                <X size={18} />
-              </button>
-            </header>
-            <label>
-              {t('prompt.system')}
-              <textarea readOnly value={promptPreview.system} />
-            </label>
-            <label>
-              {t('prompt.user')}
-              <textarea readOnly value={promptPreview.user} />
-            </label>
-            <div className="prompt-actions">
-              <button className="secondary" type="button" onClick={copyPromptPreview}>
-                {promptCopyStatus === 'copied' ? t('common.copied') : promptCopyStatus === 'failed' ? t('common.copyFailed') : t('prompt.copyAll')}
-              </button>
-              <button className="secondary" type="button" onClick={exportPromptPreview}>
-                <Download size={16} />
-                {t('common.exportTxt')}
-              </button>
-            </div>
-          </section>
-        </div>
+        <Suspense fallback={null}>
+          <PromptPreviewModal
+            promptPreview={promptPreview}
+            copyStatus={promptCopyStatus}
+            onCopy={copyPromptPreview}
+            onExport={exportPromptPreview}
+            onClose={() => {
+              setIsPromptPreviewOpen(false)
+              setPromptCopyStatus('idle')
+            }}
+          />
+        </Suspense>
       )}
 
       {isAssetLibraryOpen && (
@@ -3916,263 +3875,39 @@ function App() {
       )}
 
       {isManualOpen && buildManual && (
-        <div
-          className="modal-backdrop"
-          role="presentation"
-          onMouseDown={() => {
-            closeManual()
-          }}
-        >
-          <section
-            className="manual-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="build-manual-title"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <header>
-              <div>
-                <h2 id="build-manual-title">{t('manual.title')}</h2>
-                <p>{buildManual.title} · {t('common.parts', { count: buildManual.totalPieces })} · {t('common.pages', { count: buildManual.totalSteps })}</p>
-              </div>
-              <button
-                className="icon-button"
-                type="button"
-                aria-label={t('common.close')}
-                title={t('common.close')}
-                onClick={() => {
-                  closeManual()
-                }}
-              >
-                <X size={18} />
-              </button>
-            </header>
-
-
-
-            {selectedManualStep && (
-              <section className="manual-preview">
-                <div>
-                  <h3>{t('manual.pageTitle', { page: selectedManualStep.stepNumber, title: selectedManualStep.title })}</h3>
-                  <p>{selectedManualStep.description}</p>
-                  <p className={`structure-status ${selectedManualValidation?.checked === false ? 'pending' : selectedManualValidation?.ok ? ((selectedManualValidation?.issueCount ?? 0) > 0 ? 'notice' : 'ok') : 'warn'}`}>
-                    {selectedManualValidation?.summary}
-                  </p>
-                </div>
-                <div className="manual-timeline">
-                  <details className="manual-playback"><summary>{locale === 'zh-CN' ? '播放与显示' : 'Playback & display'}</summary>
-                  <div className="manual-timeline-actions">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!isManualPlaying && manualStepIndex >= buildManual.steps.length - 1) setManualStepIndex(0)
-                        setIsManualPlaying((playing) => !playing)
-                      }}
-                    >
-                      {isManualPlaying ? <Pause size={15} /> : <Play size={15} />}
-                      {t(isManualPlaying ? 'manual.pauseTimeline' : 'manual.playTimeline')}
-                    </button>
-                    <button type="button" onClick={() => { setIsManualPlaying(false); setManualStepIndex(0) }}>
-                      <RotateCcw size={15} />
-                      {t('manual.restartTimeline')}
-                    </button>
-                    <label>
-                      <input type="checkbox" checked={isManualExploded} onChange={(event) => setIsManualExploded(event.target.checked)} />
-                      {t('manual.explodedView')}
-                    </label>
-                    <select value={manualPlaybackIntervalMs} onChange={(event) => setManualPlaybackIntervalMs(Number(event.target.value))} aria-label={t('manual.playbackSpeed')}>
-                      <option value={2000}>0.5×</option>
-                      <option value={1200}>1×</option>
-                      <option value={650}>2×</option>
-                    </select>
-                  </div>
-                  </details>
-                  <input
-                    type="range"
-                    min={0}
-                    max={Math.max(0, buildManual.steps.length - 1)}
-                    value={manualStepIndex}
-                    onChange={(event) => { setIsManualPlaying(false); setManualStepIndex(Number(event.target.value)) }}
-                    aria-label={t('manual.timeline')}
-                  />
-                  <span>{t('manual.timelineProgress', { current: manualStepIndex + 1, total: buildManual.steps.length })}</span>
-                </div>
-                <div className="manual-assembly-guides">
-                  {(selectedManualStep.installationLabels ?? [...new Set(selectedManualStep.addPieces.map((piece) => piece.assembly.label))]).map((label) => <span key={label}>{label}</span>)}
-                </div>
-                <aside className="manual-current-parts">
-                  <h3>{locale === 'zh-CN' ? '本步零件' : 'Parts for this step'}</h3>
-                  {selectedManualStep.stepInventory.length ? selectedManualStep.stepInventory.map(item => {
-                    const definition = brickById.get(item.brickId)
-                    return (
-                    <div className="manual-part-item" key={item.key}>
-                      {definition ? <LazyBrickGlyph brickId={definition.id} kind={definition.kind} footprint={definition.footprint} color={item.color} className="manual-part-thumb" />
-                        : <span className="manual-part-color" style={{ backgroundColor: colorHex[item.color] ?? '#cbd5e1' }} />}
-                      <div><strong>{item.name}</strong><small>{brickById.get(item.brickId)?.partNumber ?? item.brickId}</small></div>
-                      <b>×{item.quantity}</b>
-                    </div>
-                  )}) : <p>{locale === 'zh-CN' ? '安装已完成的分总成' : 'Install the completed assembly'}</p>}
-                </aside>
-                <div className="manual-preview-viewer">
-                  <SceneErrorBoundary locale={locale} resetKey={`manual:${manualPlan?.id ?? 'manual'}:${selectedManualStep.stepNumber}`}>
-                    <Suspense fallback={<div className="scene-loading">{t('scene.loading')}</div>}>
-                      <BrickScene
-                      bricks={manualDisplayBricks}
-                      showSupportWarnings={Boolean(selectedManualStep.construction) && !isManualExploded}
-                      selectedId=""
-                      highlightedIds={manualHighlightedIds}
-                      hiddenPrintBrickIds={selectedManualStep.construction?.hiddenPrintBrickIds}
-                      cameraFocusBrickIds={manualCameraFocusIds}
-                      cameraFrameKey={`manual:${manualPlan?.id ?? 'manual'}`}
-                      cameraFollowStepKey={`${selectedManualStep.stepNumber}:${isManualExploded ? 'exploded' : 'assembled'}`}
-                      initialCameraAzimuthDegrees={selectedManualStep.cameraAzimuthDegrees}
-                      onSelect={ignoreSceneInteraction}
-                      onNudgeSelected={ignoreSceneInteraction}
-                      onRotateSelected={ignoreSceneInteraction}
-                      onDeleteSelected={ignoreSceneInteraction}
-                    />
-                  </Suspense>
-                  </SceneErrorBoundary>
-                </div>
-                <div className="manual-page-controls">
-                  <button
-                    type="button"
-                    onClick={() => { setIsManualPlaying(false); setManualStepIndex((current) => Math.max(0, current - 1)) }}
-                    disabled={manualStepIndex === 0}
-                  >
-                    {t('manual.prev')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setIsManualPlaying(false); setManualStepIndex((current) => Math.min(buildManual.steps.length - 1, current + 1)) }}
-                    disabled={manualStepIndex >= buildManual.steps.length - 1}
-                  >
-                    {t('manual.next')}
-                  </button>
-                </div>
-                <label className="manual-step-jump">
-                  {locale === 'zh-CN' ? '跳至' : 'Go to'}
-                  <input type="number" min={1} max={buildManual.steps.length} value={manualStepIndex + 1}
-                    aria-label={locale === 'zh-CN' ? '跳转步骤' : 'Go to step'}
-                    onChange={event => { if (event.target.value) { setIsManualPlaying(false); setManualStepIndex(Math.max(0, Math.min(buildManual.steps.length - 1, Number(event.target.value) - 1))) } }} />
-                  / {buildManual.steps.length}
-                </label>
-              </section>
-            )}
-
-            <div className="manual-secondary-tools">
-              <details className="manual-drawer"><summary>{locale === 'zh-CN' ? '总零件清单' : 'All parts'}</summary>
-            <section className="manual-inventory">
-              <h3>{t('manual.inventory')}</h3>
-              <p className={`structure-status ${manualIssueCount > 0 ? (manualBlockingIssueCount > 0 ? 'warn' : 'notice') : 'ok'}`}>
-                {manualIssueCount > 0 ? manualIssueSummary : t('common.structureOk')}
-              </p>
-              <BrickCountList items={buildManual.inventory} />
-            </section>
-              </details>
-              <details className="manual-drawer"><summary>{locale === 'zh-CN' ? '步骤目录' : 'Step directory'}</summary>
-            <div className="manual-step-list-header">
-              <strong>{t('manual.stepRange', {
-                start: manualStepPage.total > 0 ? manualStepPage.start + 1 : 0,
-                end: manualStepPage.end,
-                total: manualStepPage.total,
-              })}</strong>
-              <div>
-                <button
-                  type="button"
-                  disabled={!manualStepPage.hasPrevious}
-                  onClick={() => {
-                    setIsManualPlaying(false)
-                    setManualStepIndex(Math.max(0, manualStepPage.start - manualStepPageSize))
-                  }}
-                >
-                  {t('manual.prevGroup')}
-                </button>
-                <button
-                  type="button"
-                  disabled={!manualStepPage.hasNext}
-                  onClick={() => {
-                    setIsManualPlaying(false)
-                    setManualStepIndex(manualStepPage.end)
-                  }}
-                >
-                  {t('manual.nextGroup')}
-                </button>
-              </div>
-            </div>
-            <div className="manual-step-list">
-              {visibleManualSteps.map((step, visibleIndex) => {
-                const index = manualStepPage.start + visibleIndex
-                return (
-                <article
-                  key={`${step.stepNumber}-${step.title}`}
-                  className={`manual-step-card ${index === manualStepIndex ? 'active' : ''}`}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => { setIsManualPlaying(false); setManualStepIndex(index) }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault()
-                      setIsManualPlaying(false)
-                      setManualStepIndex(index)
-                    }
-                  }}
-                >
-                  <header>
-                    <span>{step.stepNumber}</span>
-                    <div>
-                      <h3>{step.title}</h3>
-                      <p>{step.description}</p>
-                    </div>
-                  </header>
-                  <div className="manual-piece-list">
-                    {step.addPieces.map((piece) => (
-                      <div key={piece.instanceId}>
-                        <strong>{piece.name}</strong>
-                        <small>
-                          {piece.color} · x{piece.pose.xStud} y{piece.pose.yStud} z{piece.pose.zStud} · {piece.orientationLabel ?? `${piece.rotationDegrees}°`} · {piece.assembly.label}
-                        </small>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="manual-step-meta">
-                    {t('manual.stepMeta', { added: step.addPieces.length, total: step.completedPieceCount })}
-                  </p>
-                  <p className={`structure-status ${step.validation.checked === false ? 'pending' : step.validation.ok ? (step.validation.issueCount > 0 ? 'notice' : 'ok') : 'warn'}`}>
-                    {step.validation.summary}
-                  </p>
-                </article>
-                )
-              })}
-            </div>
-
-              </details>
-              <details className="manual-drawer"><summary>{locale === 'zh-CN' ? '导出与复制' : 'Export & copy'}</summary>
-            <div className="manual-actions">
-              <button className="secondary" type="button" onClick={copyManualMarkdown}>
-                <BookOpen size={16} />
-                {manualCopyStatus === 'copied' ? t('common.copied') : manualCopyStatus === 'failed' ? t('common.copyFailed') : t('manual.copyMarkdown')}
-              </button>
-              <button className="secondary" type="button" onClick={exportManualMarkdown}>
-                <Download size={16} />
-                {t('common.exportMarkdown')}
-              </button>
-              <button className="secondary" type="button" disabled={exportingManualHtml} onClick={exportManualHtml}>
-                <Download size={16} />
-                {t('common.exportHtml')}
-              </button>
-              <button className="primary compact-primary" type="button" onClick={exportManual}>
-                <Download size={16} />
-                {t('manual.exportJson')}
-              </button>
-            </div>
-              </details>
-            </div>
-            {manualCopyStatus === 'failed' && (
-              <textarea className="manual-copy-output" readOnly value={getManualMarkdown()} aria-label={t('manual.markdownText')} />
-            )}
-          </section>
-        </div>
+        <Suspense fallback={null}>
+          <BuildManualModal
+            buildManual={buildManual}
+            manualPlanId={manualPlan?.id}
+            manualStepIndex={manualStepIndex}
+            selectedManualStep={selectedManualStep}
+            selectedManualValidation={selectedManualValidation}
+            manualStepPage={manualStepPage}
+            visibleManualSteps={visibleManualSteps}
+            manualDisplayBricks={manualDisplayBricks}
+            manualHighlightedIds={manualHighlightedIds}
+            manualCameraFocusIds={manualCameraFocusIds}
+            isManualPlaying={isManualPlaying}
+            isManualExploded={isManualExploded}
+            manualPlaybackIntervalMs={manualPlaybackIntervalMs}
+            manualIssueCount={manualIssueCount}
+            manualBlockingIssueCount={manualBlockingIssueCount}
+            manualIssueSummary={manualIssueSummary}
+            manualCopyStatus={manualCopyStatus}
+            exportingManualHtml={exportingManualHtml}
+            onClose={closeManual}
+            onSetManualStepIndex={setManualStepIndex}
+            onSetIsManualPlaying={setIsManualPlaying}
+            onSetIsManualExploded={setIsManualExploded}
+            onSetManualPlaybackIntervalMs={setManualPlaybackIntervalMs}
+            onCopyMarkdown={copyManualMarkdown}
+            onExportMarkdown={exportManualMarkdown}
+            onExportHtml={exportManualHtml}
+            onExportJson={exportManual}
+            getManualMarkdown={getManualMarkdown}
+            ignoreSceneInteraction={ignoreSceneInteraction}
+          />
+        </Suspense>
       )}
     </main>
   )
