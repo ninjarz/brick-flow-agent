@@ -756,14 +756,16 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
                 )}
                 <span>{t('stabilityLab.modelMass', { mass: result.modelMassKilograms.toFixed(3) })}</span>
                 <span>{t('stabilityLab.gravityActive')}</span>
-                <span className={result.initialStaticFailureCount > 0 ? 'failed' : ''}>
+                <span className={result.initialStaticFailureCount > 0 ? 'warning' : 'ok'}>
                   {t(result.initialStaticFailureCount > 0
                     ? 'stabilityLab.staticPreflightFailed'
                     : 'stabilityLab.staticPreflightPassed', {
                     count: result.initialStaticFailureCount,
                   })}
                 </span>
-                <span>{t('stabilityLab.additionalHazardFailures', { count: result.failedBrickCount - result.initialStaticFailureCount })}</span>
+                <span className={result.failedBrickCount - result.initialStaticFailureCount > 0 ? 'failed' : 'ok'}>
+                  {t('stabilityLab.additionalHazardFailures', { count: result.failedBrickCount - result.initialStaticFailureCount })}
+                </span>
                 <span>{t('stabilityLab.brokenConnections', { baseline: result.initialBrokenConnectionCount, total: result.brokenConnectionCount })}</span>
                 {unresolved.size > 0 && <span>{t('stabilityLab.unresolvedConnections', { count: unresolved.size })}</span>}
                 {result.slidingRiskBrickCount > 0 && <span>{t('stabilityLab.slidingRisk', { count: result.slidingRiskBrickCount })}</span>}
