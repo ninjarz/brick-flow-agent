@@ -33,6 +33,11 @@ export default defineConfig({
           // often than app code. Isolating it keeps the shell small and gives
           // the plan its own long-lived browser cache entry.
           if (id.includes('/src/data/legoHogwartsPlan.json')) return 'hogwarts-plan'
+          if (
+            id.includes('/src/data/lddCollisionBoxes.json')
+            || id.includes('/src/data/lddInterfacePoints.json')
+            || id.includes('/src/data/ldrawSourceFrames.json')
+          ) return 'ldd-geometry-data'
           if (!id.includes('/node_modules/')) return undefined
           if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/scheduler/')) return 'react-vendor'
           if (id.includes('/three/') || id.includes('/three-bvh-csg/') || id.includes('/three-mesh-bvh/') || id.includes('/@react-three/')) return 'three-vendor'
