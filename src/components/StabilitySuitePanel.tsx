@@ -47,7 +47,7 @@ export const StabilitySuitePanel = ({ plan, projectId, onInspect }: Props) => {
   const zh = locale === 'zh-CN'
   const initialConfig = useMemo(loadStabilitySuiteConfig, [])
   const [preset, setPreset] = useState<StabilitySuitePreset>(initialConfig.preset)
-  const [physicsProfile, setPhysicsProfile] = useState<DisasterPhysicsProfile>(initialConfig.physicsProfile)
+  const physicsProfile: DisasterPhysicsProfile = 'realistic'
   const [result, setResult] = useState<StabilitySuiteResult | undefined>(() => loadStabilitySuiteResult(plan.id, projectId))
   const [progress, setProgress] = useState<{ completed: number; total: number }>()
   const [error, setError] = useState('')
@@ -148,13 +148,6 @@ export const StabilitySuitePanel = ({ plan, projectId, onInspect }: Props) => {
             <option value="stress">{zh ? '极限 · 9 个工况' : 'Stress · 9 cases'}</option>
           </select>
         </label>
-        <label>
-          <span>{zh ? '物理档案' : 'Physics profile'}</span>
-          <select value={physicsProfile} onChange={(event) => setPhysicsProfile(event.target.value as DisasterPhysicsProfile)} disabled={Boolean(progress)}>
-            <option value="challenge">{zh ? '挑战模式' : 'Challenge'}</option>
-            <option value="realistic">{zh ? '现实近似' : 'Realistic'}</option>
-          </select>
-        </label>
         <button type="button" className="primary" onClick={runSuite} disabled={Boolean(progress) || plan.bricks.length === 0}>
           {progress ? <LoaderCircle className="spin" size={15} /> : <Play size={15} />}
           {progress ? `${progress.completed}/${progress.total}` : (result ? (zh ? '重新测试' : 'Run again') : (zh ? '运行测试套件' : 'Run test suite'))}
@@ -179,7 +172,7 @@ export const StabilitySuitePanel = ({ plan, projectId, onInspect }: Props) => {
             ))}
           </div>
           <footer>
-            <span>{new Date(result.generatedAt).toLocaleString(locale)} · {result.preset} · {result.physicsProfile}</span>
+            <span>{new Date(result.generatedAt).toLocaleString(locale)} · {result.preset}</span>
             <div>
               {weakest && <button type="button" onClick={() => onInspect(suiteCaseToOptions(weakest))}><RotateCcw size={14} />{zh ? '复现最弱工况' : 'Replay weakest'}</button>}
               <button type="button" title={zh ? '导出测试套件 Markdown' : 'Export suite Markdown'} onClick={() => download(`${plan.title}-test-suite.md`, formatStabilitySuiteMarkdown(result, locale), 'text/markdown')}><Download size={14} />MD</button>

@@ -104,7 +104,7 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
   const [scenario, setScenario] = useState<DisasterScenario>('wind')
   const [intensity, setIntensity] = useState(70)
   const [directionDegrees, setDirectionDegrees] = useState(25)
-  const [physicsProfile, setPhysicsProfile] = useState<DisasterPhysicsProfile>('challenge')
+  const [physicsProfile, setPhysicsProfile] = useState<DisasterPhysicsProfile>('realistic')
   const [groundCondition, setGroundCondition] = useState<DisasterGroundCondition>('surface')
   const [result, setResult] = useState<DisasterSimulationResult>()
   const [isSimulating, setIsSimulating] = useState(true)
@@ -225,7 +225,7 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
     setScenario(options.scenario)
     setIntensity(options.intensity)
     setDirectionDegrees(options.directionDegrees ?? 0)
-    setPhysicsProfile(options.physicsProfile ?? 'challenge')
+    setPhysicsProfile(options.physicsProfile ?? 'realistic')
     setGroundCondition(options.groundCondition ?? 'surface')
   }, [])
 
@@ -510,25 +510,6 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
               <input type="range" min={0} max={100} step={5} value={intensity} onChange={(event) => setIntensity(Number(event.target.value))} />
             </label>
             <div className="rain-physics-control">
-              <span>{t('stabilityLab.physicsProfile')}</span>
-              <div className="rain-physics-profiles">
-                {(['challenge', 'realistic'] as const).map((profile) => (
-                  <button
-                    key={profile}
-                    type="button"
-                    className={physicsProfile === profile ? 'active' : ''}
-                    aria-pressed={physicsProfile === profile}
-                    onClick={() => {
-                      setPhysicsProfile(profile)
-                    }}
-                  >
-                    {t(`stabilityLab.physicsProfile.${profile}`)}
-                  </button>
-                ))}
-              </div>
-              <small>{t(`stabilityLab.physicsProfile.${physicsProfile}.hint`)}</small>
-            </div>
-            <div className="rain-physics-control">
               <span>{t('stabilityLab.groundCondition')}</span>
               <div className="rain-physics-profiles">
                 {(['surface', 'anchored'] as const).map(condition => (
@@ -740,14 +721,7 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
                 {result.options.scenario === 'rain' && (
                   <span>{t('stabilityLab.waterAccumulation', { percent: Math.round(frame.waterAccumulation * 100) })}</span>
                 )}
-                <span>{t('stabilityLab.physicsProfileActive', {
-                  profile: t(`stabilityLab.physicsProfile.${result.options.physicsProfile}`),
-                })}</span>
-                <span>{t('stabilityLab.loadCalibration', {
-                  value: result.loadCalibration.baseValue.toFixed(1),
-                  unit: result.loadCalibration.unit,
-                  multiplier: result.loadCalibration.loadMultiplier.toFixed(1),
-                })}</span>
+                <span>{formatDisasterIntensityScale(result.options.scenario, result.options.intensity, locale)}</span>
                 <span>{t('stabilityLab.simulationSteps', { count: result.simulationStepCount })}</span>
                 {peakConnectionUtilization !== undefined && (
                   <span className={peakConnectionUtilization >= 100 ? 'failed' : ''}>
