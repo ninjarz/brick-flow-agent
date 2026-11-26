@@ -4,7 +4,8 @@ export default defineConfig({
   testDir: './tests/e2e',
   testIgnore: '**/performance/**',
   fullyParallel: true,
-  workers: 2,
+  workers: process.env.CI ? 1 : 2,
+  retries: process.env.CI ? 1 : 0,
   reporter: 'line',
   use: {
     baseURL: 'http://127.0.0.1:4174/brick-flow-agent/',

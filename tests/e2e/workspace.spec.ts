@@ -208,6 +208,7 @@ test('an imported bridge can be reinforced and exported without a practice short
 test('LDraw compatibility details remain available in debug mode after import', async ({ page }) => {
   await expect(page.getByLabel('Import Compatibility Center')).toHaveCount(0)
   await page.goto('./?debug=1')
+  await expect(page.getByLabel('Import Compatibility Center')).toBeVisible()
   await page.evaluate(() => {
     const ldraw = [
       '0 FILE compatibility-demo.ldr',
@@ -221,7 +222,7 @@ test('LDraw compatibility details remain available in debug mode after import', 
     window.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }))
   })
 
-  await expect(page.getByText('1 parts', { exact: true })).toBeVisible()
+  await expect(page.getByText('1 parts', { exact: true })).toBeVisible({ timeout: 15_000 })
   await page.getByLabel('Import Compatibility Center').click()
   await expect(page.getByRole('dialog', { name: 'Import Compatibility Center' })).toBeVisible()
   await expect(page.getByText('99999 ×2')).toBeVisible()

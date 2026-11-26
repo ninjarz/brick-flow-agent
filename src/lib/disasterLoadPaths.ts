@@ -215,11 +215,12 @@ const solveSupportRoute = (
       point.x - center.x, point.z - center.z,
     )), 0.22)
     const lateralDemand = Math.abs(load.lateral) * share + Math.abs(moment.yaw) * share / lever
-    const shear = lateralDemand <= epsilon ? 0 : lateralDemand / Math.max(epsilon, grip)
+    const hasGrip = support.bond.studs.length > 0 ? grip > epsilon : grip > 0.01
+    const shear = lateralDemand <= epsilon ? 0 : hasGrip ? lateralDemand / grip : 1
     const pullout = reaction.maxStudTension / studPulloutNewtons
     const compression = reaction.pressure / (patch.area * estimatedBearingNewtonsPerSquareStud)
     const utilization = Math.max(compression, Math.hypot(shear, pullout))
-    const unverified = reaction.requiresTie || (utilization >= 1 && (load.unresolved || !support.bond.studs.length))
+    const unverified = reaction.requiresTie || (!hasGrip && lateralDemand > epsilon) || (utilization >= 1 && (load.unresolved || !support.bond.studs.length))
 
     if (!peak || (unverified ? Math.max(1, utilization) : utilization) >
       (peak.unverified ? Math.max(1, peak.utilization) : peak.utilization)) {

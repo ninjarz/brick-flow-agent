@@ -323,8 +323,13 @@ export const solveBearingReactions = (
     }
     const dx = residualX + pressure * (center.x - tieCenter.x)
     const dz = residualZ + pressure * (center.z - tieCenter.z)
+    const momentArmDemand = Math.hypot(dx, dz)
     const lever = getBoundaryHit(hull, tieCenter, dx, dz)
-    if (lever && lever.distance > tolerance) {
+    // A stud row sitting right on the overturning edge (physical lever arm < 0.15 studs)
+    // cannot form a meaningful resisting couple; treat it as an unresolved tie instead
+    // of dividing by a near-zero lever arm and inventing megaton reactions.
+    const physicalLeverArm = lever ? lever.distance * momentArmDemand : 0
+    if (lever && lever.distance > tolerance && physicalLeverArm >= 0.15) {
       const compression = Math.max(pressure, 1 / lever.distance)
       const extraTension = compression - pressure
       addTension(ties, extraTension, uplift / studs.length)
