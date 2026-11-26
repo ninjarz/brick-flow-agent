@@ -2696,7 +2696,7 @@ button.status-pill:hover {
 .brick-counts p,
 .brick-count-list p,
 .muted,
-.plan-summary p {
+.project-work-card p {
   color: var(--muted);
   font-size: 13px;
   line-height: 1.45;
@@ -3890,8 +3890,7 @@ button:disabled {
 
 .primary,
 .file-button,
-.button-row button,
-.plan-summary button {
+.button-row button {
   min-height: 38px;
   display: inline-flex;
   align-items: center;
@@ -4103,6 +4102,15 @@ button:disabled {
   gap: 7px;
 }
 
+.parts-catalog {
+  --parts-pagination-height: 30px;
+  --parts-pagination-gap: 9px;
+}
+
+.parts-catalog-header {
+  display: flow-root;
+}
+
 .parts-list-summary {
   margin: 10px 0 7px;
   color: var(--muted);
@@ -4110,28 +4118,57 @@ button:disabled {
   font-weight: 750;
 }
 
-.parts-load-more {
-  min-height: 42px;
+.parts-pagination,
+.parts-pagination form {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 7px;
-  border-style: dashed;
-  background: #f8fafc;
-  color: #1d4ed8;
+  align-items: stretch;
+  gap: 5px;
+}
+
+.parts-pagination {
+  grid-template-columns: 32px minmax(0, 1fr) 32px;
+  width: 100%;
+  margin-bottom: var(--parts-pagination-gap);
+}
+
+.parts-pagination form {
+  grid-template-columns: minmax(0, 1fr) auto minmax(44px, auto);
+  min-width: 0;
+}
+
+.parts-pagination button,
+.parts-pagination input {
+  box-sizing: border-box;
+  height: var(--parts-pagination-height);
+  min-height: var(--parts-pagination-height);
   font-size: 12px;
-  font-weight: 800;
 }
 
-.parts-load-more:hover {
-  border-color: #93c5fd;
-  background: #eff6ff;
+.parts-pagination button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
 }
 
-.parts-load-more small {
+.parts-pagination input {
+  width: 100%;
+  min-width: 0;
+  padding: 0 6px;
+  appearance: textfield;
+  text-align: center;
+}
+
+.parts-pagination input::-webkit-inner-spin-button,
+.parts-pagination input::-webkit-outer-spin-button {
+  appearance: none;
+}
+
+.parts-pagination span {
+  align-self: center;
   color: var(--muted);
-  font-size: 10px;
-  font-weight: 700;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .part-list-item {
@@ -5970,11 +6007,6 @@ button:disabled {
   color: #b91c1c;
 }
 
-.plan-summary {
-  display: grid;
-  gap: 9px;
-}
-
 .plan-title-field {
   display: grid;
   gap: 5px;
@@ -5987,10 +6019,6 @@ button:disabled {
   color: var(--ink);
   font-size: 16px;
   font-weight: 750;
-}
-
-.plan-summary button {
-  width: 100%;
 }
 
 .plan-import-button {
@@ -6157,6 +6185,7 @@ button:disabled {
 }
 
 .workspace-storage-status { position: fixed; bottom: 6px; right: 12px; z-index: 70; padding: 4px 9px; border-radius: 6px; background: #f8fafcee; color: #475569; font-size: 11px; max-width: min(520px, 90vw); }
+.workspace-storage-status.saved, .workspace-storage-status.saving { pointer-events: none; }
 .workspace-storage-status.recovery, .workspace-storage-status.unavailable { color: #92400e; background: #fffbeb; border: 1px solid #fcd34d; }
 .workspace-storage-status button { margin-left: 8px; cursor: pointer; }
 
@@ -6283,4 +6312,79 @@ button:disabled {
   .workspace:has(.world-story-dock) {
     grid-template-rows: auto 520px auto;
   }
+}
+
+.workspace-work-title {
+  display: block;
+  max-width: min(300px, 45vw);
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-work-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 12px;
+}
+
+.project-work-card {
+  min-width: 0;
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.project-work-card > p,
+.project-work-grid h3 {
+  margin: 0;
+}
+
+.project-work-grid .asset-create-fields,
+.asset-model-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.project-work-grid .asset-create-fields > label,
+.asset-model-tools > input {
+  min-width: 120px;
+  flex: 1;
+}
+
+.project-work-grid .asset-create-fields input {
+  min-width: 0;
+  width: 100%;
+}
+
+.project-work-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.project-work-actions button,
+.project-work-actions .file-button {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  text-align: center;
+}
+
+.project-work-actions .file-button span {
+  white-space: normal;
+  text-overflow: clip;
+}
+
+@media (max-width: 620px) {
+  .project-work-grid { grid-template-columns: minmax(0, 1fr); }
+  .asset-kind-tabs button { gap: 4px; }
 }

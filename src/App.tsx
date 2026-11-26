@@ -16,15 +16,15 @@ import { aiTasks } from './lib/aiTasks'
 import { useAiTaskContext } from './hooks/useAiTaskContext'
 import { useLlmConnection } from './hooks/useLlmConnection'
 import { useWorkspacePersistence } from './hooks/useWorkspacePersistence'
-import { bridgeLabPlanPrefix, createBridgeLabPlan } from './lib/bridgeLabExample'
 import { WorkspaceStorageStatus } from './components/WorkspaceStorageStatus'
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, Box, Boxes, ClipboardList, Download, Eye, EyeOff, FileUp, Gauge, Github, Globe2, Link, MessageCircle, MessageSquareText, Pause, Play, Plus, Redo2, RotateCcw, ScanLine, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
+import { BookOpen, Box, Boxes, ClipboardList, Download, Eye, EyeOff, FileUp, FolderOpen, Gauge, Github, Globe2, Link, MessageCircle, MessageSquareText, Pause, Play, Plus, Redo2, RotateCcw, ScanLine, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
 import { BrickEditorPanel } from './components/BrickEditorPanel'
 import { BrickCountsPanel } from './components/BrickCountsPanel'
 import type { WorldCommandTargetOption } from './components/WorldEntityEditorPanel'
 import type { BrickSceneTransform, BrickSceneViewMode } from './components/BrickScene'
 import { ControlPanel } from './components/ControlPanel'
+import { CurrentWorkPanel } from './components/CurrentWorkPanel'
 import { useWorkspace } from './hooks/useWorkspace'
 import { useWorldSimulationLoop } from './hooks/useWorldSimulationLoop'
 import { brickById, colorHex, getDefaultBrickColor } from './data/basicBricks'
@@ -120,7 +120,7 @@ type WorldEntityPlacementSession = {
   entity: WorldEntity
 }
 type ScenarioPlaytestSession = { world: WorldState; plan: BuildPlan; scenarioTitle: string; stageTitle: string }
-type AssetLibraryKind = 'models' | 'scenarios'
+type AssetLibraryKind = 'current' | 'models' | 'scenarios'
 const tavernDirectorPlaybackTimeoutMs = 15_000
 const tavernScenarioDialogueTimeoutMs = 60_000
 const sceneViewModeOrder: BrickSceneViewMode[] = ['border', 'borderless', 'xray', 'voxel']
@@ -310,7 +310,7 @@ function App() {
   const [assetDescription, setAssetDescription] = useState('')
   const [assetQuery, setAssetQuery] = useState('')
   const [assetCategoryFilter, setAssetCategoryFilter] = useState('all')
-  const [assetLibraryKind, setAssetLibraryKind] = useState<AssetLibraryKind>('models')
+  const [assetLibraryKind, setAssetLibraryKind] = useState<AssetLibraryKind>('current')
   const [scenarioQuery, setScenarioQuery] = useState('')
   const viewerRef = useRef<HTMLDivElement>(null)
   const [sceneViewMode, setSceneViewMode] = useState<BrickSceneViewMode>('border')
@@ -2783,15 +2783,6 @@ function App() {
     }
   }
 
-  const openBridgeLabExample = async () => {
-    const title = t('asset.bridgeLabTitle')
-    const example = createBridgeLabPlan(bridgeLabPlanPrefix + crypto.randomUUID(), title, locale)
-    await workspaceStorage.create(title, false, example)
-    if (planRef.current.id !== example.id) return
-    setIsAssetLibraryOpen(false)
-    setIsStabilityLabOpen(true)
-  }
-
   const applyWorldScenario = (mode: 'start' | 'add', scenarioId: string) => {
     const scenario = worldScenarios.find((candidate) => candidate.id === scenarioId)
     if (!scenario) return
@@ -2845,6 +2836,9 @@ function App() {
     setAssetTitle('')
     setAssetCategory(t('asset.customCategory'))
     setAssetDescription('')
+    setAssetQuery('')
+    setAssetCategoryFilter('all')
+    setAssetLibraryKind('models')
     if (issues.length > 0) {
       setGenerationWarning(summarizeBuildPlanIssues(issues, locale))
     }
@@ -2985,7 +2979,7 @@ function App() {
   }
 
   return (
-    <main className="app-shell">
+    <main className="app-shell" data-workspace-storage={workspaceStorage.status}>
       <WorkspaceStorageStatus {...workspaceStorage} />
       {isFileDragActive && (
         <div className="workspace-file-drop-overlay" role="status">
@@ -2999,6 +2993,7 @@ function App() {
           <div>
             <p className="eyebrow">brick-flow-agent</p>
             <h1>{t('app.title')}</h1>
+            <output className="workspace-work-title" aria-label={t('asset.currentTitle')}>{plan.title || t('control.planNamePlaceholder')}</output>
           </div>
           <nav className="topbar-toolbars" aria-label={t('top.toolbar')}>
             <section className="toolbar-group" aria-label={t('top.editingTools')}>
@@ -3074,9 +3069,9 @@ function App() {
                   type="button"
                   aria-label={t('top.assetLibrary')}
                   title={t('top.assetLibrary')}
-                  onClick={() => setIsAssetLibraryOpen(true)}
+                  onClick={() => { setAssetLibraryKind('current'); setIsAssetLibraryOpen(true) }}
                 >
-                  <BookOpen size={18} />
+                  <FolderOpen size={18} />
                 </button>
                 <button
                   className="icon-button"
@@ -3470,7 +3465,6 @@ function App() {
       </section>
 
       <ControlPanel
-        analysisPaused={Boolean(keyboardTransforms)}
         debugMode={debugMode}
         engineStatusLabel={t('control.engineStatus', { status: llmEngineStatusLabel })}
         engineStatusTone={llmEngineStatusTone}
@@ -3484,9 +3478,7 @@ function App() {
         onGenerate={handleGenerate}
         onCancelGenerate={cancelGenerate}
         onOpenPromptPreview={openPromptPreview}
-        plan={plan}
         brickCounts={brickCounts}
-        onRenamePlan={renamePlan}
         onAddBrick={beginNewBrickPlacement}
         onAddWorldEntity={beginWorldEntityPlacement}
         worldEntityCounts={worldEntityCounts}
@@ -3500,10 +3492,6 @@ function App() {
           })
         }}
         onResetInventory={() => setInventoryOverrides({})}
-        onExport={exportPlan}
-        onExportLDraw={exportLDraw}
-        onImportPlan={handleImportPlan}
-        onOpenManual={() => openManual()}
         catalogPack={catalogPack}
         onCatalogPackChange={setCatalogPack}
       />
@@ -3746,9 +3734,9 @@ function App() {
             <header>
               <div>
                 <h2 id="asset-library-title">{t('asset.title')}</h2>
-                <p>{assetLibraryKind === 'models'
+                {assetLibraryKind !== 'current' && <p>{assetLibraryKind === 'models'
                   ? t('asset.count', { visible: visibleFinishedAssets.length, total: finishedAssets.length })
-                  : t('asset.scenarioCount', { visible: visibleWorldScenarios.length, total: worldScenarios.length })}</p>
+                  : t('asset.scenarioCount', { visible: visibleWorldScenarios.length, total: worldScenarios.length })}</p>}
               </div>
               <button className="icon-button" type="button" aria-label={t('common.close')} title={t('common.close')} onClick={() => setIsAssetLibraryOpen(false)}>
                 <X size={18} />
@@ -3762,9 +3750,15 @@ function App() {
               </button>
             </p>}
             <nav className="asset-kind-tabs" aria-label={t('asset.libraryKinds')}>
+              <button type="button" className={assetLibraryKind === 'current' ? 'active' : ''}
+                aria-pressed={assetLibraryKind === 'current'} onClick={() => setAssetLibraryKind('current')}>
+                <Box size={16} />
+                {t('asset.kind.current')}
+              </button>
               <button
                 type="button"
                 className={assetLibraryKind === 'models' ? 'active' : ''}
+                aria-pressed={assetLibraryKind === 'models'}
                 onClick={() => setAssetLibraryKind('models')}
               >
                 <Boxes size={16} />
@@ -3773,6 +3767,7 @@ function App() {
               <button
                 type="button"
                 className={assetLibraryKind === 'scenarios' ? 'active' : ''}
+                aria-pressed={assetLibraryKind === 'scenarios'}
                 onClick={() => setAssetLibraryKind('scenarios')}
               >
                 <BookOpen size={16} />
@@ -3780,37 +3775,54 @@ function App() {
               </button>
             </nav>
 
-            {assetLibraryKind === 'models' ? <>
-            <div className="asset-actions">
-              <button type="button" disabled={!workspaceStorage.hydrated || workspaceStorage.busy} onClick={() => void openBridgeLabExample()}>
-                {t('asset.bridgeLabOpen')}
-              </button>
-            </div>
+            {assetLibraryKind === 'current' && <div className="project-work-grid">
+            <CurrentWorkPanel
+              plan={plan}
+              onRenamePlan={renamePlan}
+              onExport={exportPlan}
+              onExportLDraw={exportLDraw}
+              onOpenManual={() => { setIsAssetLibraryOpen(false); void openManual() }}
+              onImportPlan={file => {
+                if (!file) return
+                setIsAssetLibraryOpen(false)
+                handleImportPlan(file)
+              }}
+            />
             <section className="asset-create">
+              <h3>{t('asset.saveAsAsset')}</h3>
               <div className="asset-create-fields">
-                <input value={assetTitle} onChange={(event) => setAssetTitle(event.target.value)} placeholder={t('asset.titlePlaceholder', { title: plan.title })} />
-                <input value={assetCategory} onChange={(event) => setAssetCategory(event.target.value)} placeholder={t('asset.categoryPlaceholder')} />
+                <label className="plan-title-field">
+                  <span>{t('asset.nameLabel')}</span>
+                  <input value={assetTitle} onChange={(event) => setAssetTitle(event.target.value)} placeholder={t('asset.titlePlaceholder', { title: plan.title })} />
+                </label>
+                <label className="plan-title-field">
+                  <span>{t('asset.categoryPlaceholder')}</span>
+                  <input value={assetCategory} onChange={(event) => setAssetCategory(event.target.value)} />
+                </label>
               </div>
-              <input
-                value={assetDescription}
-                onChange={(event) => setAssetDescription(event.target.value)}
-                placeholder={t('asset.descriptionPlaceholder')}
-              />
+              <label className="plan-title-field">
+                <span>{t('asset.descriptionLabel')}</span>
+                <input value={assetDescription} onChange={(event) => setAssetDescription(event.target.value)} />
+              </label>
               <button className="primary compact-primary" type="button" onClick={addFinishedAsset}>
                 <Plus size={16} />
                 {t('asset.saveCurrent')}
               </button>
-              <button className="secondary compact-primary" type="button" onClick={resetFinishedAssets}>
-                {t('asset.restoreDefault')}
-              </button>
             </section>
+            </div>}
 
+            {assetLibraryKind === 'models' ? <>
             <section className="asset-tools">
-              <input
-                value={assetQuery}
-                onChange={(event) => setAssetQuery(event.target.value)}
-                placeholder={t('asset.searchPlaceholder')}
-              />
+              <div className="asset-model-tools">
+                <input
+                  value={assetQuery}
+                  onChange={(event) => setAssetQuery(event.target.value)}
+                  placeholder={t('asset.searchPlaceholder')}
+                />
+                <button className="secondary" type="button" onClick={resetFinishedAssets}>
+                  {t('asset.restoreDefault')}
+                </button>
+              </div>
               <div className="asset-category-tabs" aria-label={t('asset.categories')}>
                 {assetCategories.map((category) => (
                   <button
@@ -3860,7 +3872,7 @@ function App() {
               ))}
               {visibleFinishedAssets.length === 0 && <p className="muted">{t('asset.noMatches')}</p>}
             </div>
-            </> : <>
+            </> : assetLibraryKind === 'scenarios' && <>
               <section className="asset-tools">
                 <input
                   value={scenarioQuery}

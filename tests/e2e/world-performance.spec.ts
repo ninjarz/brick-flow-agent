@@ -8,7 +8,7 @@ test('indexed simulation runs in the page and renders a 200 NPC world', async ({
   page.on('dialog', dialog => dialog.accept())
   await page.addInitScript(() => localStorage.setItem('brick-flow-agent:locale:v1', 'en-US'))
   await page.goto('./')
-  await expect(page.getByLabel('Plan name')).toBeVisible()
+  await expect(page.getByLabel('Current work title', { exact: true })).toBeVisible()
   const result = await page.evaluate(async () => {
     const root = '/brick-flow-agent/src/'
     const { createEmptyWorldState, createWorldEntity } = await import(root + 'lib/worldEntity.ts')
@@ -45,7 +45,7 @@ test('indexed simulation runs in the page and renders a 200 NPC world', async ({
   expect(result.candidates).toBeLessThan(result.fullScanCandidates / 3)
   expect(result.entityCount).toBe(200)
   expect(result.elapsed).toBeCloseTo(3)
-  await expect(page.getByLabel('Plan name')).toHaveValue('200 NPC performance scene')
+  await expect(page.getByLabel('Current work title', { exact: true })).toHaveText('200 NPC performance scene')
   await expect(page.getByText('200 active units', { exact: true })).toBeVisible()
   await page.locator('.world-story-dock').getByLabel('Close', { exact: true }).click()
   await expect(page.locator('.viewer canvas')).toBeVisible()

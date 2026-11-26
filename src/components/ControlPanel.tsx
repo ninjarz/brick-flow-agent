@@ -1,20 +1,15 @@
 import { WorldEntityGlyph } from './WorldEntityGlyph'
-import { useDeferredValue, useEffect, useMemo, useState } from 'react'
-import { BookOpen, Box, Download, ImageUp, Plus, RotateCcw, Sparkles, Upload, X } from 'lucide-react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Box, ChevronLeft, ChevronRight, ImageUp, Plus, RotateCcw, Sparkles, X } from 'lucide-react'
 import { brickDefinitions, getDefaultBrickColor } from '../data/basicBricks'
 import { worldEntityDefinitions } from '../data/worldEntityDefinitions'
 import { PLATE_HEIGHT_WORLD } from '../lib/brickUnits'
 import { getBrickCatalogName, getBrickCatalogSearchTerms } from '../lib/brickCatalog'
 import { loadCatalogPreferences, saveCatalogPreferences, type CatalogPackPreference } from '../lib/catalogPreferences'
-import { getBlockingBuildPlanIssues, summarizeBuildPlanIssues, validateBuildPlanBasics } from '../lib/planUtils'
-import type { validateBuildPlan } from '../lib/planUtils'
-import { getEditorValidation } from '../lib/editorAnalysisClient'
 import { useI18n } from '../lib/i18n'
 import { LazyBrickGlyph } from './LazyBrickGlyph'
-import type { BuildPlan } from '../types/bricks'
 
 type ControlPanelProps = {
-  analysisPaused?: boolean
   debugMode?: boolean
   engineStatusLabel?: string
   engineStatusTone?: 'neutral' | 'warning' | 'pending' | 'success' | 'error'
@@ -28,19 +23,13 @@ type ControlPanelProps = {
   onGenerate: () => void
   onCancelGenerate: () => void
   onOpenPromptPreview: () => void
-  plan: BuildPlan
   brickCounts: Record<string, number>
-  onRenamePlan: (title: string) => void
   onAddBrick: (brickId: string) => void
   onAddWorldEntity: (definitionId: string) => void
   worldEntityCounts: Record<string, number>
   inventoryOverrides: Record<string, number>
   onInventoryChange: (brickId: string, inventory?: number) => void
   onResetInventory: () => void
-  onExport: () => void
-  onExportLDraw: () => void
-  onImportPlan: (file?: File) => void
-  onOpenManual: () => void
   catalogPack: CatalogPackPreference
   onCatalogPackChange: (pack: CatalogPackPreference) => void
 }
@@ -55,11 +44,9 @@ const getHeightLabel = (brick: (typeof brickDefinitions)[number]) =>
 const isInventoryLimited = (inventory: number) => Number.isFinite(inventory)
 const formatInventory = (inventory: number) => isInventoryLimited(inventory) ? String(inventory) : '∞'
 const partPackOptions: CatalogPackPreference[] = ['lego', 'minecraft', 'npc']
-const validationDebounceMs = 120
-const initialVisiblePartCount = 12
+const minimumPartsPerPage = 3
 
 export const ControlPanel = ({
-  analysisPaused = false,
   debugMode = false,
   engineStatusLabel,
   engineStatusTone = 'neutral',
@@ -73,19 +60,13 @@ export const ControlPanel = ({
   onGenerate,
   onCancelGenerate,
   onOpenPromptPreview,
-  plan,
   brickCounts,
-  onRenamePlan,
   onAddBrick,
   onAddWorldEntity,
   worldEntityCounts,
   inventoryOverrides,
   onInventoryChange,
   onResetInventory,
-  onExport,
-  onExportLDraw,
-  onImportPlan,
-  onOpenManual,
   catalogPack: partPackFilter,
   onCatalogPackChange,
 }: ControlPanelProps) => {
@@ -93,57 +74,14 @@ export const ControlPanel = ({
   const [initialCatalogPreferences] = useState(loadCatalogPreferences)
   const [partQuery, setPartQuery] = useState(initialCatalogPreferences.query)
   const [partKindFilter, setPartKindFilter] = useState(initialCatalogPreferences.kind)
-  const [visiblePartLimit, setVisiblePartLimit] = useState(initialVisiblePartCount)
-  const [backgroundValidation, setBackgroundValidation] = useState<{
-    plan: BuildPlan
-    issues: ReturnType<typeof validateBuildPlan>
-  }>()
-  const [geometryLoadFailure, setGeometryLoadFailure] = useState<BuildPlan>()
-  const deferredPlan = useDeferredValue(plan)
-  const derivedPlan = deferredPlan
-  const basicPlanIssues = useMemo(() => validateBuildPlanBasics(derivedPlan), [derivedPlan])
-
-  useEffect(() => {
-    if (analysisPaused) return
-    let isCanceled = false
-    const timeoutId = window.setTimeout(() => {
-      void getEditorValidation(derivedPlan).then((issues) => {
-        if (isCanceled) return
-        setGeometryLoadFailure(undefined)
-        setBackgroundValidation({ plan: derivedPlan, issues })
-      }).catch(() => {
-        if (!isCanceled) setGeometryLoadFailure(derivedPlan)
-      })
-    }, derivedPlan.bricks.length >= 800 ? 300 : validationDebounceMs)
-
-    return () => {
-      isCanceled = true
-      window.clearTimeout(timeoutId)
-    }
-  }, [derivedPlan, analysisPaused])
-
-  const hasGeometryLoadFailure = geometryLoadFailure === derivedPlan
-  const isStructureChecking = !hasGeometryLoadFailure && backgroundValidation?.plan !== derivedPlan
-  const planIssues = useMemo(
-    () => {
-      return backgroundValidation?.plan === derivedPlan ? backgroundValidation.issues : basicPlanIssues
-    },
-    [backgroundValidation, basicPlanIssues, derivedPlan],
-  )
-  const blockingPlanIssues = useMemo(() => getBlockingBuildPlanIssues(planIssues), [planIssues])
-  const planIssueSummary = useMemo(() => summarizeBuildPlanIssues(planIssues, locale), [locale, planIssues])
-  const structureStatusTone = hasGeometryLoadFailure || blockingPlanIssues.length > 0
-    ? 'warn'
-    : planIssues.length > 0 || isStructureChecking
-      ? 'notice'
-      : 'ok'
-  const structureStatusText = hasGeometryLoadFailure ? t('error.geometryLoad') : isStructureChecking
-    ? planIssues.length > 0
-      ? `${planIssueSummary} · ${t('control.validationCheckingLarge')}`
-      : t('control.validationCheckingLarge')
-    : planIssues.length > 0
-      ? planIssueSummary
-      : t('common.structureOk')
+  const [partsPerPage, setPartsPerPage] = useState(minimumPartsPerPage)
+  const [partPageAnchors, setPartPageAnchors] = useState<Record<string, number>>({})
+  const [pageInput, setPageInput] = useState<string>()
+  const sidebarRef = useRef<HTMLElement>(null)
+  const generatorRef = useRef<HTMLElement>(null)
+  const catalogRef = useRef<HTMLElement>(null)
+  const catalogHeaderRef = useRef<HTMLDivElement>(null)
+  const partsListRef = useRef<HTMLDivElement>(null)
   const packBrickDefinitions = useMemo(
     () => partPackFilter === 'npc' ? [] : brickDefinitions.filter((brick) => brick.pack === partPackFilter),
     [partPackFilter],
@@ -211,16 +149,59 @@ export const ControlPanel = ({
       return matchesKind && matchesQuery
     })
   }, [locale, packBrickDefinitions, partKindFilter, partPackFilter, partQuery, t])
-  const renderedBrickDefinitions = visibleBrickDefinitions.slice(0, visiblePartLimit)
-  const remainingPartCount = Math.max(0, visibleBrickDefinitions.length - renderedBrickDefinitions.length)
+  const pageCount = Math.max(1, Math.ceil(visibleBrickDefinitions.length / partsPerPage))
+  const pageKey = JSON.stringify([partPackFilter, partKindFilter, partQuery.trim().toLowerCase()])
+  const currentPage = Math.min(Math.floor((partPageAnchors[pageKey] ?? 0) / partsPerPage) + 1, pageCount)
+  const firstPartIndex = (currentPage - 1) * partsPerPage
+  const renderedBrickDefinitions = visibleBrickDefinitions.slice(firstPartIndex, firstPartIndex + partsPerPage)
+  const goToPage = (page: number) => {
+    const nextPage = Number.isFinite(page) ? Math.max(1, Math.min(pageCount, Math.trunc(page))) : currentPage
+    setPartPageAnchors(anchors => ({ ...anchors, [pageKey]: (nextPage - 1) * partsPerPage }))
+    setPageInput(undefined)
+  }
 
   useEffect(() => {
-    setVisiblePartLimit(initialVisiblePartCount)
-  }, [partKindFilter, partPackFilter, partQuery])
+    setPageInput(undefined)
+  }, [pageKey, partsPerPage])
+
+  useLayoutEffect(() => {
+    const sidebar = sidebarRef.current
+    const generator = generatorRef.current
+    const catalog = catalogRef.current
+    const header = catalogHeaderRef.current
+    const list = partsListRef.current
+    if (!sidebar || !generator || !catalog || !header || !list || !visibleBrickDefinitions.length) return
+    const measure = () => {
+      const row = list.querySelector('.part-list-item')
+      if (!row) return
+      const rowHeight = row.getBoundingClientRect().height
+      if (!rowHeight) return
+      const sidebarStyle = getComputedStyle(sidebar)
+      const catalogStyle = getComputedStyle(catalog)
+      const gap = parseFloat(getComputedStyle(list).rowGap) || 0
+      const pagerSpace = parseFloat(catalogStyle.getPropertyValue('--parts-pagination-height')) +
+        parseFloat(catalogStyle.getPropertyValue('--parts-pagination-gap'))
+      const sidebarHeight = window.matchMedia('(max-width: 980px)').matches ? window.innerHeight : sidebar.clientHeight
+      const headerEnd = header.getBoundingClientRect().bottom - sidebar.getBoundingClientRect().top + sidebar.scrollTop
+      const available = sidebarHeight - headerEnd - parseFloat(sidebarStyle.paddingBottom) -
+        parseFloat(catalogStyle.paddingBottom) - parseFloat(catalogStyle.borderBottomWidth)
+      const fit = (height: number) => Math.max(minimumPartsPerPage, Math.floor((height + gap) / (rowHeight + gap)))
+      const withoutPager = fit(available)
+      setPartsPerPage(visibleBrickDefinitions.length > withoutPager ? fit(available - pagerSpace) : withoutPager)
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    for (const element of [sidebar, generator, header, list]) observer.observe(element)
+    window.addEventListener('resize', measure)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', measure)
+    }
+  }, [visibleBrickDefinitions.length])
 
   return (
-    <aside className="control-panel">
-      <section className="panel-section generator">
+    <aside className="control-panel" ref={sidebarRef}>
+      <section className="panel-section generator" ref={generatorRef}>
         <div className="section-title">
           <Sparkles size={18} />
           <h2>{t('control.generate')}</h2>
@@ -275,7 +256,8 @@ export const ControlPanel = ({
         </div>
       </section>
 
-      <section className="panel-section">
+      <section className="panel-section parts-catalog" ref={catalogRef}>
+        <div ref={catalogHeaderRef} className="parts-catalog-header">
         <div className="section-title parts-section-title">
           <div>
             <Box size={18} />
@@ -324,13 +306,36 @@ export const ControlPanel = ({
         </div>
         {visibleBrickDefinitions.length > 0 && (
           <div className="parts-list-summary">
-            {t('control.visibleParts', {
-              visible: renderedBrickDefinitions.length,
+            {t('control.partsPageRange', {
+              first: firstPartIndex + 1,
+              last: firstPartIndex + renderedBrickDefinitions.length,
               total: visibleBrickDefinitions.length,
             })}
           </div>
         )}
-        <div className="parts-list">
+        </div>
+        {pageCount > 1 && (
+          <nav className="parts-pagination" aria-label={t('control.partsPagination')}>
+            <button type="button" aria-label={t('control.previousPartsPage')} title={t('control.previousPartsPage')}
+              disabled={currentPage === 1} onClick={() => goToPage(currentPage - 1)}>
+              <ChevronLeft size={16} />
+            </button>
+            <form onSubmit={event => {
+              event.preventDefault()
+              goToPage(pageInput?.trim() ? Number(pageInput) : currentPage)
+            }}>
+              <input type="number" aria-label={t('control.partsPageNumber')} inputMode="numeric"
+                value={pageInput ?? String(currentPage)} onChange={event => setPageInput(event.target.value)} />
+              <span>/ {pageCount}</span>
+              <button type="submit">{t('control.goToPartsPage')}</button>
+            </form>
+            <button type="button" aria-label={t('control.nextPartsPage')} title={t('control.nextPartsPage')}
+              disabled={currentPage === pageCount} onClick={() => goToPage(currentPage + 1)}>
+              <ChevronRight size={16} />
+            </button>
+          </nav>
+        )}
+        <div className="parts-list" ref={partsListRef}>
           {partPackFilter === 'npc' && visibleWorldEntityDefinitions.map((definition) => (
             <article className="npc-catalog-item" key={definition.id}>
               <button
@@ -411,63 +416,9 @@ export const ControlPanel = ({
           {partPackFilter === 'npc' && visibleWorldEntityDefinitions.length === 0 && <p className="muted">{t('control.noNpcs')}</p>}
           {partPackFilter !== 'npc' && packBrickDefinitions.length === 0 && <p className="muted">{t('control.noPackParts')}</p>}
           {packBrickDefinitions.length > 0 && visibleBrickDefinitions.length === 0 && <p className="muted">{t('control.noParts')}</p>}
-          {remainingPartCount > 0 && (
-            <button
-              className="parts-load-more"
-              type="button"
-              onClick={() => setVisiblePartLimit((current) => current + initialVisiblePartCount)}
-            >
-              <Plus size={14} />
-              {t('control.showMoreParts', { count: Math.min(initialVisiblePartCount, remainingPartCount) })}
-              <small>{t('control.remainingParts', { count: remainingPartCount })}</small>
-            </button>
-          )}
         </div>
       </section>
 
-      <section className="panel-section plan-summary">
-        <div className="section-title">
-          <Upload size={18} />
-          <h2>{t('control.plan')}</h2>
-        </div>
-        <label className="plan-title-field">
-          <span>{t('control.planName')}</span>
-          <input
-            type="text"
-            value={plan.title}
-            placeholder={t('control.planNamePlaceholder')}
-            onChange={(event) => onRenamePlan(event.target.value)}
-          />
-        </label>
-        <p>{t('common.parts', { count: plan.bricks.length })} · {t('common.steps', { count: plan.steps.length })} · {t(`control.source.${plan.source}`)}</p>
-        <p className={`structure-status ${structureStatusTone}`}>
-          {structureStatusText}
-        </p>
-        <button type="button" onClick={onOpenManual}>
-          <BookOpen size={16} />
-          {t('control.buildManual')}
-        </button>
-        <button type="button" onClick={onExport}>
-          <Download size={16} />
-          {t('common.exportJson')}
-        </button>
-        <button type="button" onClick={onExportLDraw}>
-          <Download size={16} />
-          {t('control.exportLDraw')}
-        </button>
-        <label className="file-button plan-import-button">
-          <Upload size={16} />
-          <span>{t('control.importPlan')}</span>
-          <input
-            type="file"
-            accept="application/json,text/plain,.json,.ldr,.mpd"
-            onChange={(event) => {
-              onImportPlan(event.target.files?.[0])
-              event.target.value = ''
-            }}
-          />
-        </label>
-      </section>
     </aside>
   )
 }

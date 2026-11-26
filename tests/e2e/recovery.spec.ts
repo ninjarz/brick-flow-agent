@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { renameCurrentWork } from './fixtures/currentWork'
 import { createEmptyWorldState, createWorldEntity } from '../../src/lib/worldEntity'
 import { worldEntityDefinitionById } from '../../src/data/worldEntityDefinitions'
 
@@ -10,25 +11,25 @@ test('undo restores the complete original project', async ({ page }) => {
     if (!localStorage.getItem('brick-flow-agent:workspace-draft:v1')) localStorage.setItem('brick-flow-agent:workspace-draft:v1', JSON.stringify(draft))
   }, { plan, prompt: '', world })
   await page.goto('./')
-  await expect(page.getByLabel('Plan name')).toHaveValue('Review A')
+  await expect(page.getByLabel('Current work title', { exact: true })).toHaveText('Review A')
   await page.evaluate((plan) => {
     const transfer = new DataTransfer()
     transfer.items.add(new File([JSON.stringify({ ...plan, id: 'review-B', title: 'Review B' })], 'b.json'))
     window.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }))
   }, plan)
-  await expect(page.getByLabel('Plan name')).toHaveValue('Review B')
+  await expect(page.getByLabel('Current work title', { exact: true })).toHaveText('Review B')
   await page.getByLabel('Undo').click()
-  await expect(page.getByLabel('Plan name')).toHaveValue('Review A')
+  await expect(page.getByLabel('Current work title', { exact: true })).toHaveText('Review A')
   await expect.poll(() => page.evaluate(() => {
     const stored = JSON.parse(localStorage.getItem('brick-flow-agent:workspace-draft:v1')!)
     return { id: stored.plan.id, entities: stored.world.entities.length }
   })).toEqual({ id: 'review-A', entities: 1 })
   await page.getByLabel('Redo').click()
-  await expect(page.getByLabel('Plan name')).toHaveValue('Review B')
+  await expect(page.getByLabel('Current work title', { exact: true })).toHaveText('Review B')
   await page.getByLabel('Undo').click()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('brick-flow-agent:workspace-draft:v1')!).world.entities.length)).toBe(1)
   await page.reload()
-  await expect(page.getByLabel('Plan name')).toHaveValue('Review A')
+  await expect(page.getByLabel('Current work title', { exact: true })).toHaveText('Review A')
 })
 
 test('corrupt draft remains downloadable and cannot be silently overwritten', async ({ page }) => {
@@ -38,8 +39,7 @@ test('corrupt draft remains downloadable and cannot be silently overwritten', as
   })
   await page.goto('./')
   await expect(page.getByRole('button', { name: 'Download original draft' })).toBeVisible()
-  await page.getByLabel('Plan name').fill('New edit')
-  await page.getByLabel('Plan name').blur()
+  await renameCurrentWork(page, 'New edit')
   const download = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Download original draft' }).click()
   expect((await download).suggestedFilename()).toBe('brick-flow-draft-recovery.json')
@@ -49,7 +49,7 @@ test('corrupt draft remains downloadable and cannot be silently overwritten', as
 for (const keepStaleInline of [false, true]) test(`recovers newer IndexedDB data with ${keepStaleInline ? 'a stale inline draft' : 'no storage marker'}`, async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('brick-flow-agent:locale:v1', 'en-US'))
   await page.goto('./')
-  await expect(page.getByText('Saved in this browser', { exact: true })).toBeVisible()
+  await expect(page.locator('main[data-workspace-storage="saved"]')).toBeVisible()
   await expect.poll(() => page.evaluate(() => Boolean(localStorage.getItem('brick-flow-agent:workspace-draft:v1')))).toBe(true)
   await page.evaluate(async (keepStaleInline) => {
     const stored = JSON.parse(localStorage.getItem('brick-flow-agent:workspace-draft:v1')!)
@@ -71,7 +71,7 @@ for (const keepStaleInline of [false, true]) test(`recovers newer IndexedDB data
     if (!keepStaleInline) localStorage.removeItem('brick-flow-agent:workspace-draft:v1')
   }, keepStaleInline)
   await page.reload()
-  await expect(page.getByLabel('Plan name')).toHaveValue('IndexedDB recovery')
+  await expect(page.getByLabel('Current work title', { exact: true })).toHaveText('IndexedDB recovery')
 })
 
 test('a late AI response cannot replace a newly imported project', async ({ page }) => {
@@ -102,12 +102,12 @@ test('a late AI response cannot replace a newly imported project', async ({ page
     transfer.items.add(new File([JSON.stringify({ ...current, title: 'Imported replacement' })], 'replacement.json'))
     window.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }))
   })
-  await expect(page.getByLabel('Plan name')).toHaveValue('Imported replacement')
+  await expect(page.getByLabel('Current work title', { exact: true })).toHaveText('Imported replacement')
   await page.evaluate(() => window.dispatchEvent(new Event('release-review-response')))
   await expect(page.getByRole('button', { name: 'Generate plan', exact: true })).toBeEnabled()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('brick-flow-agent:workspace-draft:v1')!).plan.title)).toBe('Imported replacement')
   await page.reload()
-  await expect(page.getByLabel('Plan name')).toHaveValue('Imported replacement')
+  await expect(page.getByLabel('Current work title', { exact: true })).toHaveText('Imported replacement')
 })
 
 test('storage access denial keeps the workspace usable', async ({ page }) => {
@@ -117,7 +117,7 @@ test('storage access denial keeps the workspace usable', async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
   await page.goto('./')
-  await expect(page.getByLabel('Plan name')).toBeVisible()
+  await expect(page.getByLabel('Current work title', { exact: true })).toBeVisible()
   expect(errors).toEqual([])
 })
 
@@ -131,7 +131,7 @@ test('unfinished saved draft is restored and retained', async ({ page }) => {
     }, prompt: '' }))
   })
   await page.goto('./')
-  await expect(page.getByLabel('Plan name')).toHaveValue('Unfinished review')
+  await expect(page.getByLabel('Current work title', { exact: true })).toHaveText('Unfinished review')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('brick-flow-agent:workspace-draft:v1')!).plan.id)).toBe('unfinished-review')
 })
 
@@ -157,7 +157,7 @@ test('plan changes retain the selected simulation case', async ({ page }) => {
     transfer.items.add(new File([JSON.stringify(plan)], 'changed.json'))
     window.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }))
   })
-  await expect(page.getByLabel('Plan name')).toHaveValue('Changed review')
+  await expect(page.getByLabel('Current work title', { exact: true })).toHaveText('Changed review')
   await expect.poll(() => page.evaluate(() => localStorage.getItem('review-last-scenario'))).toBe('earthquake')
   await expect(quake).toHaveAttribute('aria-pressed', 'true')
 })

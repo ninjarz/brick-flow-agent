@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import type { Camera } from 'three'
 import type { BuildPlan } from '../../src/types/bricks'
+import { importBridgeExample } from './fixtures/importBridgeExample'
 
 test('a ground pointer under the bridge places a support below the deck', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('brick-flow-agent:locale:v1', 'en-US'))
@@ -12,10 +13,7 @@ test('a ground pointer under the bridge places a support below the deck', async 
     await route.fulfill({ response, body: source.replace(marker, marker + ' window.placementTestCamera = camera;') })
   })
   await page.goto('./')
-  await page.getByLabel('Asset Library', { exact: true }).click()
-  await page.getByRole('button', { name: 'Try bridge reinforcement in a new project' }).click()
-  const lab = page.getByRole('dialog', { name: 'Stability disaster lab' })
-  await lab.getByLabel('Close', { exact: true }).click()
+  await importBridgeExample(page)
   const viewer = page.locator('.viewer')
   await expect(viewer.locator('[data-geometry-ready="true"]')).toBeAttached()
   await page.getByTitle('Add 1x1 Brick', { exact: true }).click()

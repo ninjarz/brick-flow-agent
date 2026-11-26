@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { renameCurrentWork } from './fixtures/currentWork'
 import { createWorldEntity } from '../../src/lib/worldEntity'
 import { worldEntityDefinitionById } from '../../src/data/worldEntityDefinitions'
 
@@ -7,9 +8,8 @@ const restoreModule = /\/src\/lib\/projectStore\.ts(?:\?.*)?$/
 const prepare = async (page: Page) => {
   await page.addInitScript(() => localStorage.setItem('brick-flow-agent:locale:v1', 'en-US'))
   await page.goto('./')
-  await expect(page.getByText('Saved in this browser', { exact: true })).toBeVisible()
-  await page.getByLabel('Plan name').fill('Authoritative project')
-  await page.getByLabel('Plan name').blur()
+  await expect(page.locator('main[data-workspace-storage="saved"]')).toBeVisible()
+  await renameCurrentWork(page, 'Authoritative project')
   await expect.poll(() => page.evaluate(async path => {
     const { projectStore } = await import(/* @vite-ignore */ path)
     return (await projectStore.read((await projectStore.list())[0].id)).snapshot.plan.title
@@ -54,13 +54,13 @@ test('slow restoration pauses the stale backup simulation and keeps the formal p
   await delayRestore(page)
   await page.reload()
   await page.waitForFunction(() => Boolean((window as unknown as { releaseProjectRestore?: () => void }).releaseProjectRestore))
-  await expect(page.getByLabel('Plan name')).toHaveValue('Stale backup')
+  await expect(page.getByLabel('Current work title', { exact: true })).toHaveText('Stale backup')
   // Leave more than three simulation pulses inside the delayed restore window.
   await page.waitForTimeout(350)
   expect(await page.evaluate(() => localStorage.getItem('simulation-posted-during-restore'))).toBeNull()
   await releaseRestore(page)
-  await expect(page.getByLabel('Plan name')).toHaveValue('Authoritative project')
-  await expect(page.getByText('Saved in this browser', { exact: true })).toBeVisible()
+  await expect(page.getByLabel('Current work title', { exact: true })).toHaveText('Authoritative project')
+  await expect(page.locator('main[data-workspace-storage="saved"]')).toBeVisible()
   const titles = await page.evaluate(async path => {
     const { projectStore } = await import(/* @vite-ignore */ path)
     return Promise.all((await projectStore.list()).map(async (project: { id: string }) => (await projectStore.read(project.id)).snapshot.plan.title))
@@ -73,10 +73,9 @@ test('editing before slow restoration finishes creates an independent recovered 
   await delayRestore(page)
   await page.reload()
   await page.waitForFunction(() => Boolean((window as unknown as { releaseProjectRestore?: () => void }).releaseProjectRestore))
-  await page.getByLabel('Plan name').fill('Recovered edit')
-  await page.getByLabel('Plan name').blur()
+  await renameCurrentWork(page, 'Recovered edit')
   await releaseRestore(page)
-  await expect(page.getByText('Saved in this browser', { exact: true })).toBeVisible()
+  await expect(page.locator('main[data-workspace-storage="saved"]')).toBeVisible()
   const titles = await page.evaluate(async path => {
     const { projectStore } = await import(/* @vite-ignore */ path)
     return Promise.all((await projectStore.list()).map(async (project: { id: string }) => (await projectStore.read(project.id)).snapshot.plan.title))
@@ -84,19 +83,17 @@ test('editing before slow restoration finishes creates an independent recovered 
   expect(titles.sort()).toEqual(['Authoritative project', 'Recovered edit'])
   await page.unroute(restoreModule)
   await page.reload()
-  await expect(page.getByLabel('Plan name')).toHaveValue('Recovered edit')
+  await expect(page.getByLabel('Current work title', { exact: true })).toHaveText('Recovered edit')
 })
 
 test('save-as retains edits during creation and activation and restores them after reload', async ({ page, context }) => {
   await prepare(page)
   const other = await context.newPage()
   await other.goto('./')
-  await expect(other.getByText('Saved in this browser', { exact: true })).toBeVisible()
-  await other.getByLabel('Plan name').fill('Other tab edit')
-  await other.getByLabel('Plan name').blur()
+  await expect(other.locator('main[data-workspace-storage="saved"]')).toBeVisible()
+  await renameCurrentWork(other, 'Other tab edit')
   await expect.poll(() => other.evaluate(() => JSON.parse(localStorage.getItem('brick-flow-agent:workspace-draft:v1')!).plan.title)).toBe('Other tab edit')
-  await page.getByLabel('Plan name').fill('Before save-as')
-  await page.getByLabel('Plan name').blur()
+  await renameCurrentWork(page, 'Before save-as')
   await expect(page.getByText(/Another tab changed this work/)).toBeVisible()
   await other.close()
   await page.evaluate(async path => {
@@ -115,17 +112,15 @@ test('save-as retains edits during creation and activation and restores them aft
   }, storePath)
   await page.getByRole('button', { name: 'Keep current copy', exact: true }).click()
   await page.waitForFunction(() => Boolean((window as unknown as { releaseProjectCreate?: () => void }).releaseProjectCreate))
-  await page.getByLabel('Plan name').fill('Edit during creation')
-  await page.getByLabel('Plan name').blur()
+  await renameCurrentWork(page, 'Edit during creation')
   await page.evaluate(() => (window as unknown as { releaseProjectCreate: () => void }).releaseProjectCreate())
   await page.waitForFunction(() => Boolean((window as unknown as { releaseProjectActivate?: () => void }).releaseProjectActivate))
-  await page.getByLabel('Plan name').fill('Edit during activation')
-  await page.getByLabel('Plan name').blur()
+  await renameCurrentWork(page, 'Edit during activation')
   await page.evaluate(() => (window as unknown as { releaseProjectActivate: () => void }).releaseProjectActivate())
-  await expect(page.getByText('Saved in this browser', { exact: true })).toBeVisible()
-  await expect(page.getByLabel('Plan name')).toHaveValue('Edit during activation')
+  await expect(page.locator('main[data-workspace-storage="saved"]')).toBeVisible()
+  await expect(page.getByLabel('Current work title', { exact: true })).toHaveText('Edit during activation')
   await page.reload()
-  await expect(page.getByLabel('Plan name')).toHaveValue('Edit during activation')
+  await expect(page.getByLabel('Current work title', { exact: true })).toHaveText('Edit during activation')
 })
 
 test('a file dropped during restoration imports afterwards and retains undo', async ({ page }) => {
@@ -141,9 +136,9 @@ test('a file dropped during restoration imports afterwards and retains undo', as
     transfer.items.add(new File([JSON.stringify(plan)], 'queued.json', { type: 'application/json' }))
     window.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }))
   })
-  await expect(page.getByLabel('Plan name')).toHaveValue('Authoritative project')
+  await expect(page.getByLabel('Current work title', { exact: true })).toHaveText('Authoritative project')
   await releaseRestore(page)
-  await expect(page.getByLabel('Plan name')).toHaveValue('Queued import')
+  await expect(page.getByLabel('Current work title', { exact: true })).toHaveText('Queued import')
   await page.getByLabel('Undo').click()
-  await expect(page.getByLabel('Plan name')).toHaveValue('Authoritative project')
+  await expect(page.getByLabel('Current work title', { exact: true })).toHaveText('Authoritative project')
 })

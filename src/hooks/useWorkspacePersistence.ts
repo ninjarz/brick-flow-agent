@@ -10,6 +10,7 @@ type Status = 'loading' | 'saving' | 'saved' | 'unavailable' | 'recovery' | 'con
 export const useWorkspacePersistence = (session: ReturnType<typeof createWorkspaceSession>) => {
   const [hydrated, setHydrated] = useState(false)
   const [status, setStatus] = useState<Status>('loading')
+  const [saveSequence, setSaveSequence] = useState(0)
   const [projects, setProjects] = useState<ProjectIndex[]>([])
   const [current, setCurrent] = useState<Project>()
   const [checkpoints, setCheckpoints] = useState<ProjectCheckpoint[]>([])
@@ -17,6 +18,7 @@ export const useWorkspacePersistence = (session: ReturnType<typeof createWorkspa
   const active = useRef<Project>()
   const blocked = useRef(false)
   const lastSaved = useRef<WorkspaceSnapshot>()
+  const lastNotifiedEdit = useRef(0)
   const histories = useRef(new Map<string, WorkspaceHistory>())
   const queue = useRef<Promise<unknown>>(Promise.resolve())
   const enqueue = useCallback(<T,>(operation: () => Promise<T>): Promise<T> => {
@@ -35,6 +37,7 @@ export const useWorkspacePersistence = (session: ReturnType<typeof createWorkspa
     lastSaved.current = project.snapshot
     blocked.current = false
     session.switchProject(project.snapshot, reload ? undefined : histories.current.get(project.id))
+    lastNotifiedEdit.current = session.getEditRevision()
     setCurrent(project)
     setStatus('saved')
   }, [session])
@@ -109,6 +112,10 @@ export const useWorkspacePersistence = (session: ReturnType<typeof createWorkspa
         setStatus('saving')
         return false
       }
+      if (lastNotifiedEdit.current !== editing) {
+        lastNotifiedEdit.current = editing
+        setSaveSequence(sequence => sequence + 1)
+      }
       return true
     } catch (error) {
       blocked.current = error instanceof ProjectConflict
@@ -176,7 +183,7 @@ export const useWorkspacePersistence = (session: ReturnType<typeof createWorkspa
     }).finally(() => setBusy(false))
   }, [enqueue])
   return {
-    status, hydrated, retry: save, recovery: getWorkspaceRecovery(), projects, current, checkpoints, busy,
+    status, saveSequence, hydrated, retry: save, recovery: getWorkspaceRecovery(), projects, current, checkpoints, busy,
     refresh: () => enqueue(refresh).catch(error => {
       setStatus(error instanceof ProjectConflict ? 'conflict' : 'unavailable')
     }),

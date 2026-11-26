@@ -1,14 +1,15 @@
 import { expect, test } from '@playwright/test'
 
-test('NPC catalog previews use the same native figures as the scene', async ({ page }, testInfo) => {
+test('character catalog previews use the same native figures as the scene', async ({ page }, testInfo) => {
   await page.addInitScript(() => localStorage.setItem('brick-flow-agent:locale:v1', 'zh-CN'))
   await page.goto('./')
-  await page.locator('select').filter({ has: page.locator('option[value="npc"]') }).selectOption('npc')
+  await page.getByRole('combobox', { name: '选择零件包' }).selectOption({ label: '角色' })
   await expect(page.locator('.npc-catalog-glyph img')).toHaveCount(4)
   await expect.poll(() => page.locator('.npc-catalog-glyph img').evaluateAll(images => images.every(image => (image as HTMLImageElement).naturalWidth > 0))).toBe(true)
   await page.screenshot({ path: testInfo.outputPath('npc-catalog.png') })
-  await page.getByLabel('素材库', { exact: true }).click()
-  await page.locator('.asset-kind-tabs button').nth(1).click()
+  await page.getByLabel('作品与素材', { exact: true }).click()
+  await page.getByRole('button', { name: '世界场景', exact: true }).click()
+  await expect(page.locator('.scenario-card').first().getByText('含角色与剧情', { exact: true })).toBeVisible()
   page.on('dialog', dialog => dialog.accept())
   await page.locator('.scenario-card').first().getByRole('button', { name: '开始场景', exact: true }).click()
   await page.locator('.world-story-dock').getByLabel('关闭', { exact: true }).click()
@@ -22,8 +23,8 @@ test('a missing remote NPC label font does not suspend the scene', async ({ page
   await page.addInitScript(() => localStorage.setItem('brick-flow-agent:locale:v1', 'zh-CN'))
   await page.goto('./')
   page.on('dialog', dialog => dialog.accept())
-  await page.getByLabel('素材库', { exact: true }).click()
-  await page.locator('.asset-kind-tabs button').nth(1).click()
+  await page.getByLabel('作品与素材', { exact: true }).click()
+  await page.getByRole('button', { name: '世界场景', exact: true }).click()
   await page.locator('.scenario-card').first().getByRole('button', { name: '开始场景', exact: true }).click()
   await expect(page.locator('.viewer canvas')).toBeVisible()
   await expect(page.locator('.viewer .scene-loading')).toHaveCount(0)

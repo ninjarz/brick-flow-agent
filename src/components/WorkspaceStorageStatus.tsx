@@ -1,14 +1,23 @@
+import { useEffect, useState } from 'react'
 import type { useWorkspacePersistence } from '../hooks/useWorkspacePersistence'
 import { useI18n } from '../lib/i18n'
 
-export const WorkspaceStorageStatus = ({ status, recovery, retry, reload, saveAs, busy }: ReturnType<typeof useWorkspacePersistence>) => {
+export const WorkspaceStorageStatus = ({ status, saveSequence, recovery, retry, reload, saveAs, busy }: ReturnType<typeof useWorkspacePersistence>) => {
   const { locale } = useI18n()
   const zh = locale === 'zh-CN'
+  const [showSaved, setShowSaved] = useState(false)
+  useEffect(() => {
+    if (saveSequence === 0) return
+    setShowSaved(true)
+    const timeout = window.setTimeout(() => setShowSaved(false), 2000)
+    return () => window.clearTimeout(timeout)
+  }, [saveSequence])
+  if (status === 'saved' && !showSaved) return null
   const label = {
     conflict: zh ? '另一个页面已修改此作品。可重新加载，或保留当前副本。' : 'Another tab changed this work. Reload or keep a copy of your current work.',
     loading: zh ? '正在恢复项目…' : 'Restoring project…',
     saving: zh ? '正在保存…' : 'Saving…',
-    saved: zh ? '已保存在此浏览器' : 'Saved in this browser',
+    saved: zh ? '作品已自动保存' : 'Work autosaved',
     unavailable: zh ? '暂时无法保存，请导出项目备份' : 'Saving unavailable. Export a project backup.',
     recovery: zh ? '原草稿无法恢复，已暂停自动保存以保护原始数据。请先下载备份；清空画布后可重新保存。' : 'The original draft could not be restored. Autosave is paused to protect it. Download a backup before clearing the canvas to start again.',
   }[status]

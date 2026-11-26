@@ -38,9 +38,10 @@ test('Hogwarts editor performance baseline', async ({ page }, testInfo) => {
   page.once('dialog', dialog => dialog.accept())
   await page.getByLabel('Clear Canvas').click()
   await expect(page.getByText('0 parts', { exact: true })).toBeVisible()
-  await expect(page.getByText('Saved in this browser', { exact: true })).toBeVisible()
-  await page.getByLabel('Asset Library', { exact: true }).click()
-  const library = page.getByRole('dialog', { name: 'Asset Library' })
+  await expect(page.locator('main[data-workspace-storage="saved"]')).toBeVisible()
+  await page.getByLabel('Work & Library', { exact: true }).click()
+  const library = page.getByRole('dialog', { name: 'Work & Library' })
+  await library.getByRole('button', { name: 'Models', exact: true }).click()
   const load = library.getByRole('article').filter({ has: page.getByRole('heading', { name: /LEGO 71043/ }) })
     .getByRole('button', { name: 'Load', exact: true })
   if (profileLoading) await cdp.send('Profiler.start')
@@ -53,7 +54,7 @@ test('Hogwarts editor performance baseline', async ({ page }, testInfo) => {
     const { profile: loadingProfile } = await cdp.send('Profiler.stop')
     await writeFile(testInfo.outputPath('hogwarts-loading.cpuprofile'), JSON.stringify(loadingProfile))
   }
-  await expect(page.getByText('Saved in this browser', { exact: true })).toBeVisible()
+  await expect(page.locator('main[data-workspace-storage="saved"]')).toBeVisible()
   await page.evaluate(() => new Promise<void>(resolve => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
   }))
@@ -150,6 +151,7 @@ test('Hogwarts editor performance baseline', async ({ page }, testInfo) => {
   await expect(page.locator('.placement-hint')).toBeHidden()
 
   const manual = performance.now()
+  await page.getByLabel('Work & Library', { exact: true }).click()
   await page.getByRole('button', { name: 'Build Manual', exact: true }).click()
   await expect(page.locator('.manual-current-parts')).toBeVisible({ timeout: 90_000 })
   timings.manualReadyMs = Math.round(performance.now() - manual)
