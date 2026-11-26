@@ -146,7 +146,7 @@ export const reconcileWorldEntityGoals = (
   resolveTargetName: (target: WorldTargetRef) => string | undefined = () => undefined,
 ): WorldEntity => {
   const commands = [entity.activeCommand, ...entity.commandQueue]
-    .filter((command): command is WorldEntityCommand => Boolean(command) && command.type !== 'stop')
+    .filter((command): command is WorldEntityCommand => command !== undefined && command.type !== 'stop')
     .slice(0, 3)
   const remainingGoals = [...entity.mind.goals]
   const commandGoals = commands.map((command) => {

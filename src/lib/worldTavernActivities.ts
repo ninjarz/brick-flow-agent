@@ -98,7 +98,7 @@ export const playTavernActivity = (
     const hostRoll = 1 + Math.floor(random() * 20)
     const guestRoll = guest ? 1 + Math.floor(random() * 20) : undefined
     title = zh ? '酒馆骰局' : 'Tavern Dice'
-    if (!guest) {
+    if (!guest || guestRoll === undefined) {
       body = zh ? `${host.name}掷出了 ${hostRoll} 点。围观的人煞有介事地点了点头。` : `${host.name} rolls ${hostRoll}. The onlookers nod as if it means something profound.`
     } else if (hostRoll === guestRoll) {
       body = zh ? `${host.name}和${guest.name}都掷出了 ${hostRoll} 点。两人决定把胜负留到下一杯。` : `${host.name} and ${guest.name} both roll ${hostRoll}. The rematch can wait for another drink.`

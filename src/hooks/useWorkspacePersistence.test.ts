@@ -54,7 +54,7 @@ describe('workspace persistence across asynchronous storage', () => {
     vi.useFakeTimers()
     vi.stubGlobal('window', { setTimeout, clearTimeout, setInterval, clearInterval })
     vi.stubGlobal('document', { addEventListener: vi.fn(), removeEventListener: vi.fn() })
-    let cleanup: void | (() => void)
+    let cleanup: void | (() => void) = undefined
     try {
       cleanup = mocks.effects[1]()
       await persistence.retry()

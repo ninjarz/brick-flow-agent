@@ -452,14 +452,14 @@ export const WorldTavern = ({
                         <button type="button" disabled={!scenarioDraftChanged} onClick={() => setScenarioEditSession((current) => current ? { ...current, draft: current.baseline } : current)}>
                           <RotateCcw size={13} />{locale === 'zh-CN' ? '撤销全部' : 'Reset'}
                         </button>
-                        <button type="button" disabled={!scenarioEditSession.past.length} onClick={() => setScenarioEditSession((current) => {
+                        <button type="button" disabled={!scenarioEditSession?.past.length} onClick={() => setScenarioEditSession((current) => {
                           if (!current) return current
                           const previous = current.past.at(-1)
                           return previous ? { ...current, draft: previous, past: current.past.slice(0, -1), future: [current.draft, ...current.future].slice(0, 40) } : current
                         })}>
                           {locale === 'zh-CN' ? '撤销' : 'Undo'}
                         </button>
-                        <button type="button" disabled={!scenarioEditSession.future.length} onClick={() => setScenarioEditSession((current) => {
+                        <button type="button" disabled={!scenarioEditSession?.future.length} onClick={() => setScenarioEditSession((current) => {
                           if (!current) return current
                           const next = current.future[0]
                           return next ? { ...current, draft: next, past: [...current.past, current.draft].slice(-40), future: current.future.slice(1) } : current

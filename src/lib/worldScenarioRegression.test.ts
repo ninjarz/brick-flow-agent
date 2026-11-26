@@ -19,7 +19,7 @@ describe('scenario review regressions', () => {
   it('remaps a duplicated AI fallback and executes it when AI fails', () => {
     const original = scenario()
     original.stages[0].ai = { mode: 'choice', instruction: 'Choose', fallbackBranchId: 'fallback' }
-    original.stages[0].branches = [{ id: 'fallback', title: 'Fallback', trigger: { eventType: 'interaction' }, nextStageId: null }]
+    original.stages[0].branches = [{ id: 'fallback', title: 'Fallback', trigger: { eventType: 'interaction' }, nextStageId: undefined }]
     const duplicated = duplicateWorldScenarioStage(original, 'start', 'en-US')!
     const copied = duplicated.scenario
     expect(validateWorldScenario(copied, { entityIds: [], structureIds: [] })).toEqual([])
@@ -68,7 +68,7 @@ describe('scenario review regressions', () => {
     const brick = makeBrick('brick-1x1', 'gray', 5, 0, 0)
     const flow = scenario()
     flow.stages[0].ai = { mode: 'choice', instruction: 'Choose', fallbackBranchId: 'fallback' }
-    flow.stages[0].branches = [{ id: 'fallback', title: 'Fallback', trigger: { eventType: 'interaction' }, nextStageId: null, actions: [{ type: 'issue-command', entityId: entity.id, command: { type: 'attack', target: { kind: 'structure', id: 'fort' } } }] }]
+    flow.stages[0].branches = [{ id: 'fallback', title: 'Fallback', trigger: { eventType: 'interaction' }, nextStageId: undefined, actions: [{ type: 'issue-command', entityId: entity.id, command: { type: 'attack', target: { kind: 'structure', id: 'fort' } } }] }]
     flow.pendingAi = { stageId: 'start', eventId: 'trigger', requestedAtSeconds: 0 }
     const next = resolveWorldScenarioAi({ ...createEmptyWorldState('plan'), entities: [entity], scenarios: [flow] }, flow.id, {}, { bricks: [brick], structures: [{ id: 'fort', name: 'Fort', description: '', brickIds: [brick.id] }] })
     expect(next.entities[0].commandQueue).toContainEqual({ type: 'attack', target: { kind: 'structure', id: 'fort' } })

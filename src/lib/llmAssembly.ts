@@ -141,11 +141,13 @@ const compileVoxelLayers = (command: Record<string, unknown>) => {
   const result: Record<string, unknown>[] = []
   let course = 0
   for (const layer of command.layers) {
-    if (!record(layer) || !Array.isArray(layer.rows) || !layer.rows.length || layer.rows.length > 32
-      || !layer.rows.every(row => typeof row === 'string' && row.length > 0 && row.length <= 32 && row.length === layer.rows[0].length)) {
+    const rawRows = record(layer) && Array.isArray(layer.rows) ? layer.rows : undefined
+    const firstRow = rawRows?.[0]
+    if (!record(layer) || !rawRows || !rawRows.length || rawRows.length > 32 || typeof firstRow !== 'string'
+      || !rawRows.every((row): row is string => typeof row === 'string' && row.length > 0 && row.length <= 32 && row.length === firstRow.length)) {
       throw new Error('Each voxel layer requires equal-width rows of at most 32 cells, ordered from back to front.')
     }
-    const rows = layer.rows as string[]
+    const rows = rawRows
     const repeat = layer.repeat ?? 1
     if (typeof repeat !== 'number' || !Number.isInteger(repeat) || repeat < 1 || repeat > 16 || course + repeat > 64) {
       throw new Error('Voxel layer repetition must be 1–16, with at most 64 courses.')

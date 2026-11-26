@@ -820,7 +820,7 @@ export const parseStoredWorldState = (value: unknown, planId: string) => {
                 ? action.target.kind === 'entity' ? [action.target.id] : []
                 : action.type === 'join-party' ? [action.entityId, action.leaderId] : [action.entityId]),
           ]),
-        ].filter((id): id is string => Boolean(id) && entityIds.has(id)))))
+        ].filter((id): id is string => typeof id === 'string' && id.length > 0 && entityIds.has(id)))))
         const castEntityIds = Array.isArray(scenario.castEntityIds)
           ? scenario.castEntityIds.filter((id): id is string => typeof id === 'string' && entityIds.has(id))
           : inferredCastEntityIds

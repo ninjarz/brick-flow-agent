@@ -29,22 +29,29 @@ type Props = {
 const triggerTypes: WorldEvent['type'][] = ['interaction', 'command-complete', 'command-issued', 'defeated']
 const commandTypes: WorldEntityCommand['type'][] = ['attack', 'interact', 'follow', 'guard', 'move', 'revive', 'wander', 'stop']
 const factions = ['blue', 'red', 'neutral']
-const triggerLabel = (type: WorldEvent['type'], zh: boolean) => ({
-  interaction: zh ? '交谈完成' : 'Conversation completed',
-  'command-complete': zh ? '命令完成' : 'Command completed',
-  'command-issued': zh ? '命令下达' : 'Command issued',
-  defeated: zh ? '单位被击败' : 'Entity defeated',
-}[type] ?? type)
-const commandLabel = (type: WorldEntityCommand['type'], zh: boolean) => ({
-  attack: zh ? '攻击' : 'Attack',
-  interact: zh ? '交谈' : 'Talk',
-  follow: zh ? '跟随' : 'Follow',
-  guard: zh ? '守卫' : 'Guard',
-  move: zh ? '移动' : 'Move',
-  revive: zh ? '复活' : 'Revive',
-  wander: zh ? '闲逛' : 'Wander',
-  stop: zh ? '停止' : 'Stop',
-}[type] ?? type)
+const triggerLabel = (type: WorldEvent['type'], zh: boolean) => {
+  const labels: Partial<Record<WorldEvent['type'], string>> = {
+    interaction: zh ? '交谈完成' : 'Conversation completed',
+    'command-complete': zh ? '命令完成' : 'Command completed',
+    'command-issued': zh ? '命令下达' : 'Command issued',
+    defeated: zh ? '单位被击败' : 'Entity defeated',
+  }
+  return labels[type] ?? type
+}
+const commandLabel = (type: WorldEntityCommand['type'], zh: boolean) => {
+  const labels: Record<WorldEntityCommand['type'], string> = {
+    attack: zh ? '攻击' : 'Attack',
+    interact: zh ? '交谈' : 'Talk',
+    follow: zh ? '跟随' : 'Follow',
+    guard: zh ? '守卫' : 'Guard',
+    move: zh ? '移动' : 'Move',
+    patrol: zh ? '巡逻' : 'Patrol',
+    revive: zh ? '复活' : 'Revive',
+    wander: zh ? '闲逛' : 'Wander',
+    stop: zh ? '停止' : 'Stop',
+  }
+  return labels[type] ?? type
+}
 
 const makeCommand = (type: WorldEntityCommand['type'], targetId?: string): WorldEntityCommand => {
   if (type === 'stop' || type === 'wander') return { type }

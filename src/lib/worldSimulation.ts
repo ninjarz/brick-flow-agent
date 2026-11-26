@@ -1237,12 +1237,13 @@ export const stepWorldSimulation = (
     }
 
     if (activeCommand.type === 'wander') {
+      const wanderSeed = activeCommand.seed ?? Math.floor(timeSeconds * 10)
       const wanderCommand = activeCommand.seed === undefined
-        ? { ...activeCommand, seed: Math.floor(timeSeconds * 10) }
+        ? { ...activeCommand, seed: wanderSeed }
         : activeCommand
       const wanderTarget: WorldTargetRef = {
         kind: 'waypoint',
-        id: `wander:${entity.id}:${wanderCommand.seed}`,
+        id: `wander:${entity.id}:${wanderSeed}`,
       }
       const continuingWander = entity.navigation.target?.kind === wanderTarget.kind
         && entity.navigation.target.id === wanderTarget.id
@@ -1252,7 +1253,7 @@ export const stepWorldSimulation = (
             x: entity.navigation.plannedTargetPoint.x,
             z: entity.navigation.plannedTargetPoint.z,
           }
-        : getWanderDestination(entity, wanderCommand.seed, bricks, entityOccupancy, groundBounds)
+        : getWanderDestination(entity, wanderSeed, bricks, entityOccupancy, groundBounds)
       if (!wanderPoint) {
         entities[index] = {
           ...entity,

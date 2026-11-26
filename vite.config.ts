@@ -35,6 +35,7 @@ export default defineConfig({
           if (id.includes('/src/data/legoHogwartsPlan.json')) return 'hogwarts-plan'
           if (!id.includes('/node_modules/')) return undefined
           if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/scheduler/')) return 'react-vendor'
+          if (id.includes('/three/') || id.includes('/three-bvh-csg/') || id.includes('/three-mesh-bvh/') || id.includes('/@react-three/')) return 'three-vendor'
           if (id.includes('/lucide-react/')) return 'icons-vendor'
           return undefined
         },

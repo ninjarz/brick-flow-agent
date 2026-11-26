@@ -2823,7 +2823,7 @@ export const BrickScene = ({
   const gridFrame = useMemo(() => {
     void ldrawBoundsVersion
 
-    const brickBounds = frameBricks.map(getBrickBounds).filter((bounds) => Boolean(bounds))
+    const brickBounds = frameBricks.map(getBrickBounds).filter((bounds): bounds is NonNullable<typeof bounds> => Boolean(bounds))
     const origin = cameraFollowStepKey && brickBounds.length ? [] : [0]
     const modelMinX = Math.min(...origin, ...brickBounds.map((bounds) => bounds.minX))
     const modelMaxX = Math.max(...origin, ...brickBounds.map((bounds) => bounds.maxX))

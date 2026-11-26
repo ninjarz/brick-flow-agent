@@ -472,7 +472,7 @@ const parseCommand = (value: unknown): { entityId: string; command: WorldEntityC
   return { entityId, command: { type, target } as WorldEntityCommand }
 }
 
-const containsDirectMutation = (value: unknown) => {
+const containsDirectMutation = (value: unknown): boolean => {
   if (!isRecord(value)) return false
   return Object.keys(value).some((key) => [
     'x', 'y', 'z', 'position', 'transform', 'health', 'maxHealth', 'damage', 'cooldown', 'rotationRadians',

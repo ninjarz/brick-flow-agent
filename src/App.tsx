@@ -25,6 +25,7 @@ import type { WorldCommandTargetOption } from './components/WorldEntityEditorPan
 import type { BrickSceneTransform, BrickSceneViewMode } from './components/BrickScene'
 import { ControlPanel } from './components/ControlPanel'
 import { CurrentWorkPanel } from './components/CurrentWorkPanel'
+import { SceneErrorBoundary } from './components/SceneErrorBoundary'
 import { useWorkspace } from './hooks/useWorkspace'
 import { useWorldSimulationLoop } from './hooks/useWorldSimulationLoop'
 import { brickById, colorHex, getDefaultBrickColor } from './data/basicBricks'
@@ -3350,8 +3351,9 @@ function App() {
               <span>{t('placement.instructions')}</span>
             </div>
           )}
-          <Suspense fallback={<div className="scene-loading">{t('scene.loading')}</div>}>
-            <BrickScene
+          <SceneErrorBoundary locale={locale} resetKey={`${generationPreview?.id ?? plan.id}:${sceneViewMode}`}>
+            <Suspense fallback={<div className="scene-loading">{t('scene.loading')}</div>}>
+              <BrickScene
               bricks={generationPreview?.bricks ?? plan.bricks}
               preserveDrawingBuffer={llmConfig.buildMode === 'agentic'}
               building={isLoadingAsset || isGenerating || isManualPreparing || isExportingPlan}
@@ -3391,6 +3393,7 @@ function App() {
               onDeleteSelected={deleteSelected}
             />
           </Suspense>
+          </SceneErrorBoundary>
           {isWorldStoryDockOpen && visibleWorldEntities.length > 0 && !placementSession && !worldEntityPlacement && (
             <Suspense fallback={null}>
               <WorldStoryDock
@@ -4011,8 +4014,9 @@ function App() {
                   )}) : <p>{locale === 'zh-CN' ? '安装已完成的分总成' : 'Install the completed assembly'}</p>}
                 </aside>
                 <div className="manual-preview-viewer">
-                  <Suspense fallback={<div className="scene-loading">{t('scene.loading')}</div>}>
-                    <BrickScene
+                  <SceneErrorBoundary locale={locale} resetKey={`manual:${manualPlan?.id ?? 'manual'}:${selectedManualStep.stepNumber}`}>
+                    <Suspense fallback={<div className="scene-loading">{t('scene.loading')}</div>}>
+                      <BrickScene
                       bricks={manualDisplayBricks}
                       showSupportWarnings={Boolean(selectedManualStep.construction) && !isManualExploded}
                       selectedId=""
@@ -4028,6 +4032,7 @@ function App() {
                       onDeleteSelected={ignoreSceneInteraction}
                     />
                   </Suspense>
+                  </SceneErrorBoundary>
                 </div>
                 <div className="manual-page-controls">
                   <button

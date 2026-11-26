@@ -61,7 +61,7 @@ export const normalizeImportedVoxelState = (value: unknown): VoxelBlockState | u
     ...(Array.isArray(value.storyContents) ? { storyContents: value.storyContents.filter((item) =>
       isRecord(item) && typeof item.id === 'string' && typeof item.title === 'string' && typeof item.description === 'string'
     ).map((item) => ({ id: item.id as string, title: item.title as string, description: item.description as string,
-      ...(Array.isArray(item.tags) ? { tags: item.tags.filter((tag): tag is string => typeof tag === 'string') } : {}),
+      ...(Array.isArray(item.tags) ? { tags: item.tags.filter((tag: unknown): tag is string => typeof tag === 'string') } : {}),
       ...(typeof item.discovered === 'boolean' ? { discovered: item.discovered } : {}),
       ...(typeof item.taken === 'boolean' ? { taken: item.taken } : {}),
     })) } : {}),

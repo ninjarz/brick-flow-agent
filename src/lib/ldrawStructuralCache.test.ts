@@ -60,7 +60,10 @@ describe('offline structural sampling cache', () => {
   }, 120_000)
 
   it('tracks the current sampler and generated geometry revision', async () => {
-    const revisionModule = await import(/* @vite-ignore */ '../../scripts/ldraw-cache-revision.mjs')
+    const modulePath: string = '../../scripts/ldraw-cache-revision.mjs'
+    const revisionModule = await import(/* @vite-ignore */ modulePath) as {
+      getStructuralSourceRevision: (cwd: string) => Promise<string>
+    }
     expect(await revisionModule.getStructuralSourceRevision(process.cwd())).toBe(structuralCacheRevision)
   })
 })

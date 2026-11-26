@@ -284,7 +284,7 @@ export const generateAgenticBuildPlan = async (input: AgenticBuildInput): Promis
       const content = await request(options.foundation ? `${turnPrompt}\n${foundationCommand}` : turnPrompt, images)
       signal?.throwIfAborted()
       const requestMs = performance.now() - requestedAt
-      let action
+      let action: ReturnType<typeof parseAgentAction>
       try {
         action = parseAgentAction(parseJson(content))
         parseError = undefined
@@ -297,7 +297,7 @@ export const generateAgenticBuildPlan = async (input: AgenticBuildInput): Promis
       }
       if (options.foundation) {
         const deck = action.action === 'place' && action.items.find(item =>
-          record(item) && item.kind === 'deck' && item.x === 0 && item.z === 0 && (item.y === undefined || item.y === 0)
+          record(item) && 'kind' in item && item.kind === 'deck' && item.x === 0 && item.z === 0 && (item.y === undefined || item.y === 0)
           && Array.isArray(item.size) && item.size.length === 2 && item.size.every((dimension, i) => dimension === deckSize?.[i]),
         )
         if (!deck) {
@@ -337,8 +337,9 @@ export const generateAgenticBuildPlan = async (input: AgenticBuildInput): Promis
       input.onProgress?.(snapshot())
       // A batch that completes the component ends it without another turn,
       // unless items were rejected and need another attempt.
-      if (completionFeedback || action.done) completionFeedback = completionIssue()
-      if (action.done && lastResult.rejected.length === 0 && !early && lastResult.placedIds.length) {
+      const actionDone = action.action === 'place' && Boolean(action.done)
+      if (completionFeedback || actionDone) completionFeedback = completionIssue()
+      if (actionDone && lastResult.rejected.length === 0 && !early && lastResult.placedIds.length) {
         if (!completionFeedback) break
       }
     }
