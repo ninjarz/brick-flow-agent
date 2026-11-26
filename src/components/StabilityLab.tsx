@@ -120,6 +120,7 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
   const workerRef = useRef<Worker>()
   const workerBricksRef = useRef<BuildPlan['bricks']>()
   const workerBusyRef = useRef(false)
+  const pendingOptionsRef = useRef<DisasterSimulationOptions>()
   const simulatorRef = useRef<HTMLElement>(null)
   const simulationRunRef = useRef(0)
   const simulationPlaybackIntervalMs = 1000 / getSimulationPlaybackFps(plan.bricks.length)
@@ -129,12 +130,24 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
     workerRef.current = undefined
     workerBricksRef.current = undefined
     workerBusyRef.current = false
+    pendingOptionsRef.current = undefined
   }, [])
 
   const runSimulation = useCallback(async (options: DisasterSimulationOptions) => {
+    const bricksChanged = workerBricksRef.current !== plan.bricks
+    if (bricksChanged) {
+      stopWorker()
+      setResult(undefined)
+    }
+    // Keep the warm worker (with cached graph, contacts, and occlusion fields)
+    // alive while busy and coalesce rapid slider changes into a single follow-up run.
+    if (!bricksChanged && workerRef.current && workerBusyRef.current) {
+      pendingOptionsRef.current = options
+      setIsSimulating(true)
+      return
+    }
     const requestId = ++simulationRunRef.current
-    if (workerBusyRef.current || workerBricksRef.current !== plan.bricks) stopWorker()
-    setResult(undefined)
+    pendingOptionsRef.current = undefined
     setIsSimulating(true)
     setSimulationError('')
     setTimeSeconds(0)
@@ -155,12 +168,21 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
       worker.onmessage = (event: MessageEvent<DisasterSimulationWorkerResponse>) => {
         if (event.data.requestId !== simulationRunRef.current) return
         workerBusyRef.current = false
-        setIsSimulating(false)
         if (event.data.type === 'error') {
           stopWorker()
+          setIsSimulating(false)
           setSimulationError(event.data.message)
           return
         }
+        const queued = pendingOptionsRef.current
+        if (queued && workerRef.current === worker) {
+          pendingOptionsRef.current = undefined
+          const nextRequestId = ++simulationRunRef.current
+          workerBusyRef.current = true
+          worker.postMessage({ type: 'simulate', requestId: nextRequestId, options: queued } satisfies DisasterSimulationWorkerRequest)
+          return
+        }
+        setIsSimulating(false)
         setResult(event.data.result)
         setIsPlaying(true)
       }
@@ -313,9 +335,12 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
     const peak = Math.max(0, ...result.peakConnectionUtilizationByBrickId.values())
     return Math.round(peak * 100)
   }, [result])
+  const placedById = useMemo(
+    () => new Map(plan.bricks.map((brick) => [brick.id, brick])),
+    [plan.bricks],
+  )
   const criticalConnections = useMemo(() => {
     if (!result || !frame) return []
-    const placedById = new Map(plan.bricks.map((brick) => [brick.id, brick]))
     return [...frame.connectionUtilizationByBrickId]
       .filter(([, utilization]) => utilization > 0.001)
       .sort((left, right) => right[1] - left[1])
@@ -336,7 +361,7 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
           mode,
         }
       })
-  }, [frame, plan.bricks, result])
+  }, [frame, placedById, result])
   const inspectedInsights = useMemo(() => {
     if (!result || !inspectedBrickId) return []
     const item = result.analysis.riskByBrickId.get(inspectedBrickId)
@@ -413,9 +438,13 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
     .filter((item) => item.riskLevel !== 'stable')
     .sort((left, right) => right.risk - left.risk)
     .map((item) => item.brickId) : [], [result])
+  const inspectionGraphRef = useRef<{ bricks: BuildPlan['bricks']; graph: ReturnType<typeof createBuildGraph> }>()
   const relatedSupportIds = useMemo(() => {
     if (!inspectedBrickId) return []
-    const graph = createBuildGraph(plan.bricks)
+    if (inspectionGraphRef.current?.bricks !== plan.bricks) {
+      inspectionGraphRef.current = { bricks: plan.bricks, graph: createBuildGraph(plan.bricks) }
+    }
+    const { graph } = inspectionGraphRef.current
     const selectedBounds = graph.boundsById.get(inspectedBrickId)
     const connected = [...(graph.attachmentEdges.get(inspectedBrickId) ?? [])]
     if (!selectedBounds) return connected
@@ -766,6 +795,21 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
                   <RotateCcw size={15} />
                   {t('stabilityLab.restart')}
                 </button>
+                {result.firstFailureTimeSeconds !== undefined && result.firstFailureBrickId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsPlaying(false)
+                      setTimeSeconds(result.firstFailureTimeSeconds!)
+                      setInspectedBrickId(result.firstFailureBrickId!)
+                    }}
+                  >
+                    <Zap size={15} />
+                    {locale === 'zh-CN'
+                      ? `首个失效 (${result.firstFailureTimeSeconds.toFixed(1)}s)`
+                      : `First failure (${result.firstFailureTimeSeconds.toFixed(1)}s)`}
+                  </button>
+                )}
               </div>
               <input
                 type="range"

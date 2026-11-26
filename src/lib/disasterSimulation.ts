@@ -139,6 +139,9 @@ export type DisasterSimulationResult = {
   slidingRiskBrickCount: number
   survivedBrickCount: number
   failedBrickCount: number
+  firstFailureTimeSeconds?: number
+  firstFailureBrickId?: string
+  peakLoadTimeSeconds: number
   score: number
   grade: 'S' | 'A' | 'B' | 'C' | 'D'
   scoreBreakdown: DisasterScoreBreakdown
@@ -911,10 +914,51 @@ const buildDisasterScene = (bricks: PlacedBrick[], graph: ReturnType<typeof crea
     analysis, items, ...contacts,
     heights: items.map(({ bounds }) => (bounds.minY + bounds.maxY) / 2),
     totalMassKg: items.reduce((sum, { mass }) => sum + mass, 0),
+    rainOcclusionField: undefined as RainOcclusionField | undefined,
+    windOcclusionByDirection: new Map<number, WindOcclusionField>(),
   }
 }
 
-const disasterSceneByGraph = new WeakMap<ReturnType<typeof createBuildGraph>, ReturnType<typeof buildDisasterScene>>()
+const disasterSceneByBricks = new WeakMap<PlacedBrick[], {
+  length: number
+  first: PlacedBrick | undefined
+  last: PlacedBrick | undefined
+  graph: ReturnType<typeof createBuildGraph>
+  scene: ReturnType<typeof buildDisasterScene>
+}>()
+const frameExposureCache = new WeakMap<DisasterSimulationResult, {
+  failedCount: number
+  wind?: Map<string, WindExposure>
+  rain?: Map<string, RainExposure>
+}>()
+
+const getCachedWindOcclusionField = (
+  scene: ReturnType<typeof buildDisasterScene>,
+  boundsById: Map<string, WindBounds>,
+  directionDegrees: number,
+  direction: { x: number; z: number },
+) => {
+  const key = ((Math.round(directionDegrees * 100) % 36000) + 36000) % 36000
+  const cached = scene.windOcclusionByDirection.get(key)
+  if (cached) return cached
+  const field = createWindOcclusionField(boundsById, direction)
+  if (scene.windOcclusionByDirection.size >= 16) {
+    const oldest = scene.windOcclusionByDirection.keys().next().value
+    if (oldest !== undefined) scene.windOcclusionByDirection.delete(oldest)
+  }
+  scene.windOcclusionByDirection.set(key, field)
+  return field
+}
+
+const getCachedRainOcclusionField = (
+  scene: ReturnType<typeof buildDisasterScene>,
+  boundsById: Map<string, WindBounds>,
+) => {
+  if (!scene.rainOcclusionField) {
+    scene.rainOcclusionField = createRainOcclusionField(boundsById)
+  }
+  return scene.rainOcclusionField
+}
 
 export const runDisasterSimulation = (
   bricks: PlacedBrick[],
@@ -933,15 +977,35 @@ export const runDisasterSimulation = (
   const intensity = resolvedOptions.intensity / 100
   const radians = resolvedOptions.directionDegrees * Math.PI / 180
   const direction = { x: Math.cos(radians), z: Math.sin(radians) }
-  const graph = createBuildGraph(bricks)
-  let scene = disasterSceneByGraph.get(graph)
-  if (!scene) {
+  const cachedEntry = disasterSceneByBricks.get(bricks)
+  let graph: ReturnType<typeof createBuildGraph>
+  let scene: ReturnType<typeof buildDisasterScene>
+  if (
+    cachedEntry
+    && cachedEntry.length === bricks.length
+    && cachedEntry.first === bricks[0]
+    && cachedEntry.last === bricks[bricks.length - 1]
+  ) {
+    graph = cachedEntry.graph
+    scene = cachedEntry.scene
+  } else {
+    graph = createBuildGraph(bricks)
     scene = buildDisasterScene(bricks, graph)
-    disasterSceneByGraph.set(graph, scene)
+    disasterSceneByBricks.set(bricks, {
+      length: bricks.length,
+      first: bricks[0],
+      last: bricks[bricks.length - 1],
+      graph,
+      scene,
+    })
   }
   const { analysis, ground, bonds, neighbors, items, heights, totalMassKg } = scene
-  const windOcclusionField = scenario === 'wind' ? createWindOcclusionField(graph.boundsById, direction) : undefined
-  const rainOcclusionField = scenario === 'rain' ? createRainOcclusionField(graph.boundsById) : undefined
+  const windOcclusionField = scenario === 'wind'
+    ? getCachedWindOcclusionField(scene, graph.boundsById, resolvedOptions.directionDegrees, direction)
+    : undefined
+  const rainOcclusionField = scenario === 'rain'
+    ? getCachedRainOcclusionField(scene, graph.boundsById)
+    : undefined
   const windTracker = windOcclusionField && createDynamicExposureTracker(windOcclusionField)
   const rainTracker = rainOcclusionField && createDynamicExposureTracker(rainOcclusionField)
   const windExposureByBrickId = windOcclusionField
@@ -954,6 +1018,14 @@ export const runDisasterSimulation = (
   const broken = new Uint8Array(bonds.length)
   const directLoads = items.map(createDisasterWrench)
   const loads = items.map(createDisasterWrench)
+  const historyByIndex = items.map(() => new Float32Array(simulationFrameCount + 1))
+  const peakUtilizationByIndex = new Float32Array(items.length)
+  const windExposureByIndex = windTracker
+    ? items.map(({ brick }) => windTracker.exposureByBrickId.get(brick.id))
+    : undefined
+  const rainExposureByIndex = rainTracker
+    ? items.map(({ brick }) => rainTracker.exposureByBrickId.get(brick.id))
+    : undefined
   let paths: ReturnType<typeof createDisasterLoadPaths> | undefined
   let previousRoutes: NonNullable<typeof paths>['routes'] | undefined
   const failureTimeByBrickId = new Map<string, number>()
@@ -962,8 +1034,8 @@ export const runDisasterSimulation = (
   const peakConnectionUtilizationByBrickId = new Map<string, number>()
   const governingFailureModeByBrickId = new Map<string, DisasterFailureMode>()
   const unresolvedConnectionBrickIds = new Set<string>()
-  const connectionUtilizationHistoryByBrickId = new Map(items.map(({ brick }) => [
-    brick.id, new Float32Array(simulationFrameCount + 1),
+  const connectionUtilizationHistoryByBrickId = new Map(items.map(({ brick }, index) => [
+    brick.id, historyByIndex[index],
   ]))
   const maxFallByBrickId = new Map(items.map(({ brick, bounds }) => [brick.id, Math.max(0, bounds.minY)]))
   const timeline: DisasterSimulationResult['timeline'] = []
@@ -972,6 +1044,11 @@ export const runDisasterSimulation = (
   let initialBrokenConnectionCount = 0
   let slidingRiskBrickCount = 0
   let appliedExposureFailureCount = 0
+  let firstFailureTimeSeconds: number | undefined
+  let firstFailureBrickId: string | undefined
+  let firstFailureWasDetached = true
+  let peakLoadFactor = -1
+  let peakLoadTimeSeconds = 0
   const multiplier = getLoadMultiplier(scenario, physicsProfile)
   const windPressure = 0.5 * airDensityKilogramsPerCubicMeter * windDragCoefficient *
     getWindSpeedMetersPerSecond(intensity) ** 2 * studPitchMeters ** 2 * multiplier
@@ -984,6 +1061,16 @@ export const runDisasterSimulation = (
     failureTimeByBrickId.set(brick.id, time)
     failureModeByBrickId.set(brick.id, mode)
     if (hinge) failureHingeByBrickId.set(brick.id, hinge)
+    const isDetached = mode === 'detached'
+    if (
+      firstFailureTimeSeconds === undefined
+      || time < firstFailureTimeSeconds - epsilon
+      || (Math.abs(time - firstFailureTimeSeconds) <= epsilon && firstFailureWasDetached && !isDetached)
+    ) {
+      firstFailureTimeSeconds = time
+      firstFailureBrickId = brick.id
+      firstFailureWasDetached = isDetached
+    }
   }
 
   const markDetached = (
@@ -1022,22 +1109,40 @@ export const runDisasterSimulation = (
     }
     const rainPressure = gravityOnly ? 0 : waterDensityKilogramsPerCubicMeter * gravity * studPitchMeters ** 2 *
       getRainPondingDepthMeters(intensity, getWaterAccumulation(time, durationSeconds, intensity)) * multiplier
-    for (const index of order) {
-      const { brick, center, exposureCenter, mass } = items[index]
+    const isEarthquake = scenario === 'earthquake'
+    for (let i = 0; i < order.length; i += 1) {
+      const index = order[i]
+      const { center, exposureCenter, mass } = items[index]
       const load = directLoads[index]
-      const water = (rainTracker?.exposureByBrickId.get(brick.id)?.exposedArea ?? 0) * rainPressure
-      load.weight = mass * gravity + water
-      load.weightX = mass * gravity * center.x + water * exposureCenter.x
-      load.weightZ = mass * gravity * center.z + water * exposureCenter.z
-      load.lateral = gravityOnly ? 0 : scenario === 'earthquake'
+      const target = loads[index]
+      const weightBase = mass * gravity
+      const water = rainExposureByIndex ? (rainExposureByIndex[index]?.exposedArea ?? 0) * rainPressure : 0
+      const weight = weightBase + water
+      const weightX = weightBase * center.x + water * exposureCenter.x
+      const weightZ = weightBase * center.z + water * exposureCenter.z
+      const lateral = gravityOnly ? 0 : isEarthquake
         ? mass * peakAcceleration * factor
-        : (windTracker?.exposureByBrickId.get(brick.id)?.exposedArea ?? 0) * windPressure * factor
-      const applicationPoint = scenario === 'earthquake' ? center : exposureCenter
-      load.lateralX = load.lateral * applicationPoint.x
-      load.lateralY = load.lateral * applicationPoint.y
-      load.lateralZ = load.lateral * applicationPoint.z
+        : (windExposureByIndex ? (windExposureByIndex[index]?.exposedArea ?? 0) : 0) * windPressure * factor
+      const applicationPoint = isEarthquake ? center : exposureCenter
+      const lateralX = lateral * applicationPoint.x
+      const lateralY = lateral * applicationPoint.y
+      const lateralZ = lateral * applicationPoint.z
+      load.weight = weight
+      load.weightX = weightX
+      load.weightZ = weightZ
+      load.lateral = lateral
+      load.lateralX = lateralX
+      load.lateralY = lateralY
+      load.lateralZ = lateralZ
       load.unresolved = false
-      Object.assign(loads[index], load)
+      target.weight = weight
+      target.weightX = weightX
+      target.weightZ = weightZ
+      target.lateral = lateral
+      target.lateralX = lateralX
+      target.lateralY = lateralY
+      target.lateralZ = lateralZ
+      target.unresolved = false
     }
   }
 
@@ -1091,9 +1196,9 @@ export const runDisasterSimulation = (
     const factor = intensity === 0 ? 0 : getDynamicLoadFactor(scenario, time, durationSeconds)
     const gravityOnly = frameIndex === 0 || intensity === 0
     if (frameIndex > 0) {
-      for (const [index, { brick }] of items.entries()) {
+      for (let index = 0; index < items.length; index += 1) {
         if (failed[index] || intensity === 0) {
-          const history = connectionUtilizationHistoryByBrickId.get(brick.id)!
+          const history = historyByIndex[index]
           history[frameIndex] = history[frameIndex - 1]
         }
       }
@@ -1118,7 +1223,8 @@ export const runDisasterSimulation = (
       }
       blocked.fill(0)
       let changed = false
-      for (const index of paths.order) {
+      for (let orderIdx = 0; orderIdx < paths.order.length; orderIdx += 1) {
+        const index = paths.order[orderIdx]
         const route = paths.routes[index]
         const demand = resolveDisasterSupports(route, loads[index], direction, loads)
         if (!demand) continue
@@ -1126,14 +1232,15 @@ export const runDisasterSimulation = (
           : scenario === 'rain' ? (demand.compressionLimited ? 'water-load' : 'rain-peel')
           : scenario === 'earthquake' ? (demand.overturning ? 'seismic-overturn' : 'seismic-shear')
           : demand.overturning ? 'overturn' : 'shear'
-        const id = items[index].brick.id
-        const history = connectionUtilizationHistoryByBrickId.get(id)!
-        history[frameIndex] = Math.max(history[frameIndex], demand.utilization)
-        if (demand.utilization > (peakConnectionUtilizationByBrickId.get(id) ?? 0)) {
+        const history = historyByIndex[index]
+        if (demand.utilization > history[frameIndex]) history[frameIndex] = demand.utilization
+        if (demand.utilization > peakUtilizationByIndex[index]) {
+          peakUtilizationByIndex[index] = demand.utilization
+          const id = items[index].brick.id
           peakConnectionUtilizationByBrickId.set(id, demand.utilization)
           governingFailureModeByBrickId.set(id, mode)
         }
-        if (demand.unverified) unresolvedConnectionBrickIds.add(id)
+        if (demand.unverified) unresolvedConnectionBrickIds.add(items[index].brick.id)
         const releases = !blocked[index] && !demand.unverified && demand.utilization >= 1
         if (releases) {
           broken[demand.support.bond.index] = 1
@@ -1153,7 +1260,12 @@ export const runDisasterSimulation = (
       paths = undefined
     }
     if (frameIndex === 0) initialBrokenConnectionCount = brokenConnectionCount
-    timeline.push({ timeSeconds: time, failedCount: failureTimeByBrickId.size, loadFactor: Math.abs(factor) })
+    const absFactor = Math.abs(factor)
+    if (absFactor > peakLoadFactor) {
+      peakLoadFactor = absFactor
+      peakLoadTimeSeconds = time
+    }
+    timeline.push({ timeSeconds: time, failedCount: failureTimeByBrickId.size, loadFactor: absFactor })
   }
 
   const survivalRatio = totalMassKg <= epsilon ? 0 : clamp(1 - failedMassKg / totalMassKg)
@@ -1200,6 +1312,9 @@ export const runDisasterSimulation = (
     slidingRiskBrickCount,
     survivedBrickCount: Math.max(0, items.length - failureTimeByBrickId.size),
     failedBrickCount: failureTimeByBrickId.size,
+    firstFailureTimeSeconds,
+    firstFailureBrickId,
+    peakLoadTimeSeconds,
     score,
     grade: getGrade(score),
     scoreBreakdown,
@@ -1240,12 +1355,21 @@ export const getDisasterFrame = (
       lowerValue + (upperValue - lowerValue) * interpolation,
     )
   }
-  const windExposureByBrickId = result.windOcclusionField
-    ? getExposureFromField(result.windOcclusionField, failedIds)
-    : result.windExposureByBrickId
-  const rainExposureByBrickId = result.rainOcclusionField
-    ? getExposureFromField(result.rainOcclusionField, failedIds)
-    : result.rainExposureByBrickId
+  let windExposureByBrickId = result.windExposureByBrickId
+  let rainExposureByBrickId = result.rainExposureByBrickId
+  if (failedIds.size > 0 && (result.windOcclusionField || result.rainOcclusionField)) {
+    const cached = frameExposureCache.get(result)
+    if (cached && cached.failedCount === failedIds.size) {
+      if (cached.wind) windExposureByBrickId = cached.wind
+      if (cached.rain) rainExposureByBrickId = cached.rain
+    } else {
+      const nextWind = result.windOcclusionField ? getExposureFromField(result.windOcclusionField, failedIds) : undefined
+      const nextRain = result.rainOcclusionField ? getExposureFromField(result.rainOcclusionField, failedIds) : undefined
+      frameExposureCache.set(result, { failedCount: failedIds.size, wind: nextWind, rain: nextRain })
+      if (nextWind) windExposureByBrickId = nextWind
+      if (nextRain) rainExposureByBrickId = nextRain
+    }
+  }
   const waterAccumulation = result.options.scenario === 'rain'
     ? getWaterAccumulation(resolvedTime, result.options.durationSeconds, intensity)
     : 0

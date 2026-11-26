@@ -446,4 +446,35 @@ describe('disaster simulation', () => {
     expect(getDisasterFrame(result, 0.5).rotationsByBrickId.get(deck.id)?.angle ?? 0)
       .toBeGreaterThan(0)
   })
+
+  it('reuses cached occlusion fields across repeated runs and tracks the root-cause first failure', () => {
+    const place = (id: string, brickId: string, x: number, y: number, z: number) => ({
+      ...makeBrick(brickId, 'gray', x, y, z),
+      id,
+    })
+    const bricks = [
+      place('cache-footing', 'brick-2x8', 1, 0, 0),
+      place('cache-base', 'brick-2x2', 3, 1.2, 0),
+      place('cache-deck', 'plate-2x6', 0, 2.4, 0),
+      place('cache-load', 'brick-2x4', 0, 2.8, 0),
+    ]
+    const firstRain = runDisasterSimulation(bricks, { scenario: 'rain', intensity: 100 })
+    const secondRain = runDisasterSimulation(bricks, { scenario: 'rain', intensity: 80 })
+    expect(secondRain.rainOcclusionField).toBe(firstRain.rainOcclusionField)
+    expect(firstRain.firstFailureTimeSeconds).toBeDefined()
+    expect(firstRain.firstFailureBrickId).toBeDefined()
+    expect(firstRain.failureModeByBrickId.get(firstRain.firstFailureBrickId!)).not.toBe('detached')
+
+    const firstWind = runDisasterSimulation(bricks, { scenario: 'wind', intensity: 70, directionDegrees: 25 })
+    const sameDirectionWind = runDisasterSimulation(bricks, { scenario: 'wind', intensity: 40, directionDegrees: 385 })
+    const rotatedWind = runDisasterSimulation(bricks, { scenario: 'wind', intensity: 40, directionDegrees: 115 })
+    expect(sameDirectionWind.windOcclusionField).toBe(firstWind.windOcclusionField)
+    expect(rotatedWind.windOcclusionField).not.toBe(firstWind.windOcclusionField)
+
+    const intactFrame = getDisasterFrame(firstRain, 0)
+    expect(intactFrame.failedIds.size).toBe(0)
+    expect(intactFrame.rainExposureByBrickId).toBe(firstRain.rainExposureByBrickId)
+    const afterFailureFrame = getDisasterFrame(firstRain, (firstRain.firstFailureTimeSeconds ?? 0) + 0.5)
+    expect(afterFailureFrame.failedIds.size).toBeGreaterThan(0)
+  })
 })
