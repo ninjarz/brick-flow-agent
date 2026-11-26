@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { BrickScene, type BrickSceneTransform } from './BrickScene'
 import { brickById } from '../data/basicBricks'
 import {
+  formatDisasterIntensityScale,
   getDisasterFrame,
   type DisasterFailureMode,
   type DisasterGroundCondition,
@@ -505,7 +506,7 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
               ))}
             </div>
             <label>
-              <span>{t('stabilityLab.intensity')} <strong>{intensity}%</strong></span>
+              <span>{t('stabilityLab.intensity')} <strong>{formatDisasterIntensityScale(scenario, intensity, locale)}</strong> ({intensity}%)</span>
               <input type="range" min={0} max={100} step={5} value={intensity} onChange={(event) => setIntensity(Number(event.target.value))} />
             </label>
             <div className="rain-physics-control">

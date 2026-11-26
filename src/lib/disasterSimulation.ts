@@ -891,6 +891,64 @@ const getLoadCalibration = (
   }
 }
 
+export const formatDisasterIntensityScale = (
+  scenario: DisasterScenario,
+  intensityPercent: number,
+  locale: 'zh-CN' | 'en-US',
+): string => {
+  const clamped = Math.min(100, Math.max(0, intensityPercent))
+  const intensity = clamped / 100
+  const zh = locale === 'zh-CN'
+
+  if (scenario === 'wind') {
+    const speed = getWindSpeedMetersPerSecond(intensity)
+    const beaufort: Array<[number, string, string]> = [
+      [0.3, '0 级无风', 'Beaufort 0 Calm'],
+      [1.6, '1 级软风', 'Beaufort 1 Light air'],
+      [3.4, '2 级轻风', 'Beaufort 2 Light breeze'],
+      [5.5, '3 级微风', 'Beaufort 3 Gentle breeze'],
+      [8.0, '4 级和风', 'Beaufort 4 Moderate breeze'],
+      [10.8, '5 级清风', 'Beaufort 5 Fresh breeze'],
+      [13.9, '6 级强风', 'Beaufort 6 Strong breeze'],
+      [17.2, '7 级疾风', 'Beaufort 7 Near gale'],
+      [20.8, '8 级大风', 'Beaufort 8 Gale'],
+      [24.5, '9 级烈风', 'Beaufort 9 Strong gale'],
+      [28.5, '10 级狂风', 'Beaufort 10 Storm'],
+      [Infinity, '11 级暴风', 'Beaufort 11 Violent storm'],
+    ]
+    const [, zhLabel, enLabel] = beaufort.find(([limit]) => speed < limit) ?? beaufort[beaufort.length - 1]
+    return `${zh ? zhLabel : enLabel} · ${speed.toFixed(1)} m/s`
+  }
+
+  if (scenario === 'earthquake') {
+    const pga = getPeakGroundAccelerationG(intensity)
+    const mmi: Array<[number, string, string]> = [
+      [0.001, '无震', 'No shaking'],
+      [0.04, 'IV 度轻震', 'MMI IV Light'],
+      [0.09, 'V 度较强', 'MMI V Moderate'],
+      [0.18, 'VI 度强震', 'MMI VI Strong'],
+      [0.34, 'VII 度很强', 'MMI VII Very strong'],
+      [0.65, 'VIII 度严重', 'MMI VIII Severe'],
+      [1.24, 'IX 度极强', 'MMI IX Violent'],
+      [Infinity, 'X+ 度毁灭', 'MMI X+ Extreme'],
+    ]
+    const [, zhLabel, enLabel] = mmi.find(([limit]) => pga < limit) ?? mmi[mmi.length - 1]
+    return `${zh ? zhLabel : enLabel} · ${pga.toFixed(2)} g`
+  }
+
+  const depthMm = getRainPondingDepthMeters(intensity, 0.3 + intensity * 0.7) * 1000
+  const rainLevels: Array<[number, string, string]> = [
+    [0.05, '无雨', 'Dry'],
+    [2.0, '小雨', 'Light rain'],
+    [5.0, '中雨', 'Moderate rain'],
+    [10.0, '大雨', 'Heavy rain'],
+    [18.0, '暴雨', 'Rainstorm'],
+    [Infinity, '特大暴雨', 'Extreme storm'],
+  ]
+  const [, zhLabel, enLabel] = rainLevels.find(([limit]) => depthMm < limit) ?? rainLevels[rainLevels.length - 1]
+  return `${zh ? zhLabel : enLabel} · ${depthMm.toFixed(1)} mm`
+}
+
 const createFailureHinge = (
   pivot: DisasterFailureHinge['pivot'],
   outward: StabilityPoint2,

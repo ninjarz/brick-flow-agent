@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { makeBrick } from './planUtils'
 import { solveBearingReactions, type DisasterBearingGeometry } from './disasterContacts'
 import {
+  formatDisasterIntensityScale,
   getDisasterFrame,
   runDisasterSimulation,
   solveAffineContactReactions,
@@ -476,5 +477,15 @@ describe('disaster simulation', () => {
     expect(intactFrame.rainExposureByBrickId).toBe(firstRain.rainExposureByBrickId)
     const afterFailureFrame = getDisasterFrame(firstRain, (firstRain.firstFailureTimeSeconds ?? 0) + 0.5)
     expect(afterFailureFrame.failedIds.size).toBeGreaterThan(0)
+  })
+
+  it('formats disaster intensity into human-readable Beaufort, rain, and seismic scales', () => {
+    expect(formatDisasterIntensityScale('wind', 0, 'zh-CN')).toBe('0 级无风 · 0.0 m/s')
+    expect(formatDisasterIntensityScale('wind', 30, 'zh-CN')).toBe('5 级清风 · 9.0 m/s')
+    expect(formatDisasterIntensityScale('wind', 70, 'en-US')).toBe('Beaufort 9 Strong gale · 21.0 m/s')
+    expect(formatDisasterIntensityScale('rain', 0, 'zh-CN')).toBe('无雨 · 0.0 mm')
+    expect(formatDisasterIntensityScale('rain', 100, 'zh-CN')).toBe('特大暴雨 · 30.0 mm')
+    expect(formatDisasterIntensityScale('earthquake', 0, 'en-US')).toBe('No shaking · 0.00 g')
+    expect(formatDisasterIntensityScale('earthquake', 15, 'zh-CN')).toBe('VII 度很强 · 0.30 g')
   })
 })
