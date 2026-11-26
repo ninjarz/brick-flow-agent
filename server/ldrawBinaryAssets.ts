@@ -73,11 +73,33 @@ export const prepareLDrawBinaryAssets = async (root: string) => {
   }
 }
 
+const legacyVisualChunkImportPattern = /,\s*\(\)\s*=>\s*import\((['"])\.\/ldrawGeneratedVisualChunks\/chunk-[^'"]+\1\)/g
+
+/**
+ * Production browser builds load the compressed `.bin.gz` visual chunks directly
+ * via `ldrawBinaryWorker`. Stripping the legacy JS module fallbacks during
+ * `vite build` avoids emitting ~160 MB of duplicate JS chunks while keeping
+ * Node scripts and Vitest fallback loading intact.
+ */
+export const stripLegacyLDrawChunkFallbacks = (code: string) =>
+  code.replace(legacyVisualChunkImportPattern, ", () => Promise.reject(new Error('LDRAW_BINARY_REQUIRED'))")
+
 export const ldrawBinaryAssetsPlugin = (): Plugin => {
   let root = ''
+  let isBuild = false
   return {
     name: 'ldraw-binary-assets',
-    configResolved(config) { root = config.root },
+    configResolved(config) {
+      root = config.root
+      isBuild = config.command === 'build'
+    },
     async buildStart() { await prepareLDrawBinaryAssets(root) },
+    transform(code, id) {
+      if (!isBuild) return null
+      const normalized = id.split('?')[0].replace(/\\/g, '/')
+      if (!normalized.endsWith('/src/lib/ldrawGeneratedVisual.ts')) return null
+      const next = stripLegacyLDrawChunkFallbacks(code)
+      return next === code ? null : { code: next, map: null }
+    },
   }
 }

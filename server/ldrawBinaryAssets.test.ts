@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { gunzipSync } from 'node:zlib'
 import { expect, it } from 'vitest'
 import { decodeLDrawBinary } from '../src/lib/ldrawBinaryFormat'
-import { prepareLDrawBinaryAssets } from './ldrawBinaryAssets'
+import { prepareLDrawBinaryAssets, stripLegacyLDrawChunkFallbacks } from './ldrawBinaryAssets'
 
 it('builds exact assets, reuses unchanged inputs and repairs missing cache files', async () => {
   const root = await mkdtemp(join(tmpdir(), 'brick-binary-assets-'))
@@ -34,4 +34,12 @@ it('builds exact assets, reuses unchanged inputs and repairs missing cache files
     await prepareLDrawBinaryAssets(root)
     expect(await readFile(`${output}.sha256`, 'utf8')).not.toBe(hash)
   } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+it('strips legacy JS visual chunk fallbacks for production browser builds', () => {
+  const source = "const loadVisualChunk0 = () => loadBinaryLDrawVisualChunk(new URL('../../node_modules/.cache/brick-flow-visuals/chunk-00.bin.gz', import.meta.url).href, () => import('./ldrawGeneratedVisualChunks/chunk-00'))"
+  const transformed = stripLegacyLDrawChunkFallbacks(source)
+  expect(transformed).toContain('chunk-00.bin.gz')
+  expect(transformed).not.toContain('./ldrawGeneratedVisualChunks/chunk-00')
+  expect(transformed).toContain("Promise.reject(new Error('LDRAW_BINARY_REQUIRED'))")
 })

@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react-swc'
 import { readFileSync } from 'node:fs'
 import { ldrawBinaryAssetsPlugin } from './server/ldrawBinaryAssets'
@@ -6,6 +6,23 @@ import { llmProxyPlugin } from './server/llmProxy'
 import { getConstructionPhysicsRevision } from './server/constructionPhysicsRevision'
 
 const packageVersion = (JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string }).version
+
+/**
+ * `public/ldraw` (139 MB) and `public/lego-replicas` (8.6 MB) are offline
+ * authoring/verification inputs used by scripts and Node tests, never fetched
+ * by the browser runtime. Emit only web runtime files into `dist/`.
+ */
+const webPublicAssetsPlugin = (): Plugin => ({
+  name: 'web-public-assets',
+  apply: 'build',
+  generateBundle() {
+    this.emitFile({
+      type: 'asset',
+      fileName: 'favicon.svg',
+      source: readFileSync(new URL('./public/favicon.svg', import.meta.url)),
+    })
+  },
+})
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -16,13 +33,14 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(packageVersion),
     __CONSTRUCTION_PHYSICS_REVISION__: JSON.stringify(getConstructionPhysicsRevision(process.cwd())),
   },
-  plugins: [ldrawBinaryAssetsPlugin(), react(), llmProxyPlugin()],
+  plugins: [ldrawBinaryAssetsPlugin(), webPublicAssetsPlugin(), react(), llmProxyPlugin()],
   worker: {
     format: 'es',
     // Workers have their own Rollup graph and need the same geometry bound.
     rollupOptions: { maxParallelFileOps: 8 },
   },
   build: {
+    copyPublicDir: false,
     rollupOptions: {
       // Bound simultaneous geometry transforms to keep large replica builds
       // within Node's default heap rather than raising its memory limit.
