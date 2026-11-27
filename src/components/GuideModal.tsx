@@ -1,168 +1,174 @@
 import { BookOpen, Compass, Keyboard, Move, RotateCw, ShieldAlert, X } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useI18n } from '../lib/i18n'
 
-type GuideTab = 'camera' | 'move' | 'rotate' | 'shortcuts'
+type GuideTab = 'shortcuts' | 'camera' | 'move' | 'rotate'
+type DemoKey = 'camera' | 'select' | 'move' | 'rotate' | 'undo'
 
 type GuideModalProps = {
   onClose: () => void
 }
 
-const CameraDemoSvg = ({ isZh }: { isZh: boolean }) => (
-  <svg className="guide-demo-svg" viewBox="0 0 360 190" role="img" aria-label={isZh ? '视角控制与多选动图演示' : 'Camera and multi-select animation'}>
-    <defs>
-      <pattern id="guide-grid-cam" width="24" height="24" patternUnits="userSpaceOnUse">
-        <path d="M 24 0 L 0 0 0 24" fill="none" stroke="#dbeafe" strokeWidth="1" />
-      </pattern>
-    </defs>
-    <rect width="360" height="190" rx="10" fill="#f8fafc" />
-    <rect x="12" y="12" width="336" height="166" rx="8" fill="url(#guide-grid-cam)" />
-    {/* Orbiting brick assembly */}
-    <g className="demo-orbit-group">
-      <rect x="125" y="76" width="54" height="32" rx="4" fill="#3b82f6" stroke="#1e3a8a" strokeWidth="1.5" />
-      <circle cx="141" cy="92" r="6" fill="#60a5fa" stroke="#1e3a8a" strokeWidth="1.2" />
-      <circle cx="163" cy="92" r="6" fill="#60a5fa" stroke="#1e3a8a" strokeWidth="1.2" />
-      {/* Single select blue OBB */}
-      <rect className="demo-blue-obb" x="120" y="71" width="64" height="42" rx="5" fill="none" stroke="#38bdf8" strokeWidth="2.2" strokeDasharray="6 3" />
+type DemoConfig = {
+  frames: string[]
+  captionsZh: string[]
+  captionsEn: string[]
+}
 
-      <rect x="184" y="76" width="54" height="32" rx="4" fill="#eab308" stroke="#854d0e" strokeWidth="1.5" />
-      <circle cx="200" cy="92" r="6" fill="#fde047" stroke="#854d0e" strokeWidth="1.2" />
-      <circle cx="222" cy="92" r="6" fill="#fde047" stroke="#854d0e" strokeWidth="1.2" />
-      {/* Multi-select yellow OBB */}
-      <rect className="demo-yellow-obb" x="179" y="71" width="64" height="42" rx="5" fill="none" stroke="#f59e0b" strokeWidth="2.2" />
-    </g>
-    {/* Animated pointer cursor */}
-    <g className="demo-cursor-select">
-      <path d="M0 0 L0 16 L4.5 12.5 L8 19 L10.5 17.6 L7 11 L12.5 11 Z" fill="#0f172a" stroke="#fff" strokeWidth="1.2" />
-    </g>
-    <rect x="20" y="144" width="320" height="24" rx="6" fill="rgba(255,255,255,0.9)" stroke="#e2e8f0" />
-    <text x="180" y="160" textAnchor="middle" fontSize="11" fontWeight="700" fill="#334155">
-      {isZh ? '左键单选（蓝框）· Shift+点击多选（黄框）· 双击选中整组连通结构' : 'Click (Blue OBB) · Shift+Click Multi-select (Yellow) · Double-click Connected'}
-    </text>
-  </svg>
-)
+const guideDemoModules = import.meta.glob('../assets/guide-demos/*.jpg', {
+  eager: true,
+  import: 'default',
+}) as Record<string, string>
 
-const MoveSnapDemoSvg = ({ isZh }: { isZh: boolean }) => (
-  <svg className="guide-demo-svg" viewBox="0 0 360 190" role="img" aria-label={isZh ? '斜角自动对齐吸附动图演示' : 'Angled stud auto-alignment animation'}>
-    <defs>
-      <pattern id="guide-grid-move" width="24" height="24" patternUnits="userSpaceOnUse">
-        <path d="M 24 0 L 0 0 0 24" fill="none" stroke="#dbeafe" strokeWidth="1" />
-      </pattern>
-    </defs>
-    <rect width="360" height="190" rx="10" fill="#f8fafc" />
-    <rect x="12" y="12" width="336" height="166" rx="8" fill="url(#guide-grid-move)" />
-    {/* Target angled 33.7 deg wall */}
-    <g transform="translate(228 84) rotate(33.7)">
-      <rect x="-46" y="-15" width="92" height="30" rx="4" fill="#d6c5a3" stroke="#78716c" strokeWidth="1.5" />
-      <circle cx="-30" cy="0" r="6" fill="#e7dcc5" stroke="#78716c" strokeWidth="1.2" />
-      <circle cx="0" cy="0" r="6" fill="#e7dcc5" stroke="#78716c" strokeWidth="1.2" />
-      <circle cx="30" cy="0" r="6" fill="#e7dcc5" stroke="#78716c" strokeWidth="1.2" />
-    </g>
-    <text x="275" y="42" fontSize="10.5" fontWeight="800" fill="#64748b">33.7°</text>
-    {/* Dragged brick auto-aligning to 33.7 deg and snapping */}
-    <g className="demo-angled-snap-brick">
-      <rect x="-46" y="-15" width="92" height="30" rx="4" fill="#64748b" stroke="#0f172a" strokeWidth="1.5" />
-      <circle cx="-30" cy="0" r="6" fill="#94a3b8" stroke="#0f172a" strokeWidth="1.2" />
-      <circle cx="0" cy="0" r="6" fill="#94a3b8" stroke="#0f172a" strokeWidth="1.2" />
-      <circle cx="30" cy="0" r="6" fill="#94a3b8" stroke="#0f172a" strokeWidth="1.2" />
-      <rect x="-50" y="-19" width="100" height="38" rx="5" fill="none" stroke="#38bdf8" strokeWidth="2" />
-    </g>
-    <rect x="20" y="144" width="320" height="24" rx="6" fill="rgba(255,255,255,0.9)" stroke="#e2e8f0" />
-    <text x="180" y="160" textAnchor="middle" fontSize="11" fontWeight="700" fill="#334155">
-      {isZh ? '拖到斜角砖块上方时，自动匹配 33.7° 朝向并吸附凸点' : 'Drag over an angled wall to auto-align to 33.7° and snap onto studs'}
-    </text>
-  </svg>
-)
+const demoFrame = (name: string) => guideDemoModules[`../assets/guide-demos/${name}.jpg`] ?? ''
 
-const RotateCollisionDemoSvg = ({ isZh }: { isZh: boolean }) => (
-  <svg className="guide-demo-svg" viewBox="0 0 360 190" role="img" aria-label={isZh ? '任意角度旋转与凸点碰撞拦截动图演示' : 'Arbitrary angle rotation and stud collision guard animation'}>
-    <defs>
-      <pattern id="guide-grid-rot" width="24" height="24" patternUnits="userSpaceOnUse">
-        <path d="M 24 0 L 0 0 0 24" fill="none" stroke="#dbeafe" strokeWidth="1" />
-      </pattern>
-    </defs>
-    <rect width="360" height="190" rx="10" fill="#f8fafc" />
-    <rect x="12" y="12" width="336" height="166" rx="8" fill="url(#guide-grid-rot)" />
-    {/* Left: 1x1 pivot smooth 15-deg rotation */}
-    <g transform="translate(104 82)">
-      <circle cx="0" cy="0" r="14" fill="#cbd5e1" stroke="#475569" strokeWidth="1.5" />
-      <g className="demo-pivot-rotate">
-        <rect x="-42" y="-13" width="84" height="26" rx="4" fill="#3b82f6" stroke="#1e3a8a" strokeWidth="1.5" />
-        <circle cx="-28" cy="0" r="5" fill="#93c5fd" stroke="#1e3a8a" strokeWidth="1.2" />
-        <circle cx="0" cy="0" r="5" fill="#93c5fd" stroke="#1e3a8a" strokeWidth="1.2" />
-        <circle cx="28" cy="0" r="5" fill="#93c5fd" stroke="#1e3a8a" strokeWidth="1.2" />
-        <rect x="-46" y="-17" width="92" height="34" rx="5" fill="none" stroke="#38bdf8" strokeWidth="2" />
-      </g>
-      <text x="0" y="45" textAnchor="middle" fontSize="10.5" fontWeight="800" fill="#16a34a">
-        {isZh ? '单点轴心：15°/任意角 ✓' : '1-stud pivot: 15° / any ✓'}
-      </text>
-    </g>
-    {/* Right: multi-stud misaligned collision blocked with red OBB flash */}
-    <g transform="translate(256 82)">
-      <rect x="-42" y="-13" width="84" height="26" rx="4" fill="#94a3b8" stroke="#334155" strokeWidth="1.5" />
-      <circle cx="-28" cy="0" r="5" fill="#cbd5e1" stroke="#334155" strokeWidth="1.2" />
-      <circle cx="0" cy="0" r="5" fill="#cbd5e1" stroke="#334155" strokeWidth="1.2" />
-      <circle cx="28" cy="0" r="5" fill="#cbd5e1" stroke="#334155" strokeWidth="1.2" />
-      <rect className="demo-red-blocker" x="-47" y="-18" width="94" height="36" rx="5" fill="none" stroke="#ef4444" strokeWidth="2.5" />
-      <g className="demo-blocked-twist">
-        <rect x="-42" y="-13" width="84" height="26" rx="4" fill="#64748b" fillOpacity="0.88" stroke="#0f172a" strokeWidth="1.5" />
-        <circle cx="0" cy="0" r="5" fill="#cbd5e1" stroke="#0f172a" strokeWidth="1.2" />
-      </g>
-      <text x="0" y="45" textAnchor="middle" fontSize="10.5" fontWeight="800" fill="#dc2626">
-        {isZh ? '凸点顶撞侧壁：红框拦截 ✕' : 'Stud hits wall: Blocked ✕'}
-      </text>
-    </g>
-    <rect x="20" y="144" width="320" height="24" rx="6" fill="rgba(255,255,255,0.9)" stroke="#e2e8f0" />
-    <text x="180" y="160" textAnchor="middle" fontSize="11" fontWeight="700" fill="#334155">
-      {isZh ? 'Q/E 按 90° 旋转 · Shift+Q/E 按 15° 微调 · 碰撞时红框闪烁提示阻挡件' : 'Q/E 90° · Shift+Q/E 15° · Red OBB flashes the blocking brick on collision'}
-    </text>
-  </svg>
-)
+const DEMO_CONFIGS: Record<DemoKey, DemoConfig> = {
+  camera: {
+    frames: [demoFrame('camera-1'), demoFrame('camera-2'), demoFrame('camera-3')],
+    captionsZh: ['默认视角', '左键拖拽旋转观察', '滚轮缩放拉近细节'],
+    captionsEn: ['Default view', 'Left-drag to orbit', 'Scroll wheel to zoom in'],
+  },
+  select: {
+    frames: [demoFrame('select-1'), demoFrame('select-2'), demoFrame('select-3')],
+    captionsZh: ['未选中状态', '左键点击单选（紧贴蓝框）', '双击 / Shift+点击选中整组（黄框可固化）'],
+    captionsEn: ['Idle scene', 'Click to select (tight blue OBB)', 'Double-click / Shift+Click group (yellow OBB)'],
+  },
+  move: {
+    frames: [demoFrame('move-1'), demoFrame('move-2'), demoFrame('move-3')],
+    captionsZh: ['选中零件 / 整组', '按 R / F 垂直升降', '按 W A S D 水平微调移动'],
+    captionsEn: ['Select brick / group', 'Press R / F to raise or lower', 'Press W A S D to nudge horizontally'],
+  },
+  rotate: {
+    frames: [demoFrame('rotate-1'), demoFrame('rotate-2'), demoFrame('rotate-3')],
+    captionsZh: ['初始 0° 朝向', 'Shift + Q 按 15° 精细旋转（30°）', '按 Q 顺时针旋转 90°（120°）'],
+    captionsEn: ['Initial 0° orientation', 'Shift + Q fine 15° step (30°)', 'Press Q for 90° turn (120°)'],
+  },
+  undo: {
+    frames: [demoFrame('undo-1'), demoFrame('undo-2'), demoFrame('undo-3')],
+    captionsZh: ['编辑前状态', '按 Backspace 删除选中件', '按 ⌘/Ctrl + Z 一键撤销恢复'],
+    captionsEn: ['Before edit', 'Press Backspace to delete', 'Press ⌘/Ctrl + Z to undo'],
+  },
+}
+
+const RealSceneDemo = ({
+  demoKey,
+  isZh,
+  compact = false,
+}: {
+  demoKey: DemoKey
+  isZh: boolean
+  compact?: boolean
+}) => {
+  const config = DEMO_CONFIGS[demoKey]
+  const [frameIndex, setFrameIndex] = useState(0)
+
+  useEffect(() => {
+    setFrameIndex(0)
+    const timer = window.setInterval(() => {
+      setFrameIndex((current) => (current + 1) % config.frames.length)
+    }, 1050)
+    return () => window.clearInterval(timer)
+  }, [config.frames.length, demoKey])
+
+  const captions = isZh ? config.captionsZh : config.captionsEn
+
+  return (
+    <div className={`guide-real-demo ${compact ? 'compact' : ''}`}>
+      <div className="guide-real-demo-stage">
+        {config.frames.map((src, index) => (
+          <img
+            key={src}
+            src={src}
+            alt={captions[index]}
+            className={index === frameIndex ? 'active' : ''}
+            loading="eager"
+          />
+        ))}
+        <span className="guide-real-demo-badge">
+          {captions[frameIndex]}
+        </span>
+      </div>
+      {!compact && (
+        <div className="guide-real-demo-steps" role="group" aria-label={isZh ? '演示帧切换' : 'Demo frames'}>
+          {captions.map((caption, index) => (
+            <button
+              key={caption}
+              type="button"
+              className={index === frameIndex ? 'active' : ''}
+              onClick={() => setFrameIndex(index)}
+            >
+              <span>{index + 1}</span>
+              {caption}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+type ShortcutItem = {
+  keys: string[]
+  desc: string
+  demo: DemoKey
+}
 
 export const GuideModal = ({ onClose }: GuideModalProps) => {
   const { locale, t } = useI18n()
   const isZh = locale === 'zh-CN'
-  const [tab, setTab] = useState<GuideTab>('camera')
+  const [tab, setTab] = useState<GuideTab>('shortcuts')
+  const [hovered, setHovered] = useState<{ item: ShortcutItem; x: number; y: number } | null>(null)
 
-  const shortcutGroups = [
+  const shortcutGroups: { title: string; items: ShortcutItem[] }[] = [
     {
       title: isZh ? '视角与画布' : 'Camera & Viewport',
       items: [
-        { keys: [isZh ? '左键拖拽空白' : 'Left-drag'], desc: isZh ? '围绕模型自由旋转视角' : 'Orbit camera around model' },
-        { keys: [isZh ? '右键拖拽' : 'Right-drag'], desc: isZh ? '平移画布视角' : 'Pan camera' },
-        { keys: [isZh ? '滚轮' : 'Scroll'], desc: isZh ? '缩放远近' : 'Zoom in / out' },
-        { keys: ['W', 'A', 'S', 'D'], desc: isZh ? '未选中零件时，沿当前朝向漫游镜头' : 'Fly camera horizontally when nothing is selected' },
+        { keys: [isZh ? '左键拖拽空白' : 'Left-drag'], desc: isZh ? '围绕模型自由旋转视角' : 'Orbit camera around model', demo: 'camera' },
+        { keys: [isZh ? '右键拖拽' : 'Right-drag'], desc: isZh ? '平移画布视角' : 'Pan camera', demo: 'camera' },
+        { keys: [isZh ? '滚轮' : 'Scroll'], desc: isZh ? '缩放远近' : 'Zoom in / out', demo: 'camera' },
+        { keys: ['W', 'A', 'S', 'D'], desc: isZh ? '未选中零件时，沿当前朝向漫游镜头' : 'Fly camera horizontally when nothing is selected', demo: 'camera' },
       ],
     },
     {
       title: isZh ? '选择与固化结构' : 'Selection & Structures',
       items: [
-        { keys: [isZh ? '左键点击' : 'Click'], desc: isZh ? '选中单个零件或已固化结构（紧贴蓝框）' : 'Select brick or solidified structure (blue OBB)' },
-        { keys: ['Shift', isZh ? '点击' : 'Click'], desc: isZh ? '加选 / 取消多选多个零件（黄框）' : 'Add / toggle bricks in multi-selection (yellow OBB)' },
-        { keys: [isZh ? '双击零件' : 'Double-click'], desc: isZh ? '选中一整块连通的拼装结构' : 'Select entire connected assembly' },
-        { keys: ['Esc'], desc: isZh ? '取消放置 / 关闭弹窗 / 退出当前操作' : 'Cancel placement / close active modal' },
+        { keys: [isZh ? '左键点击' : 'Click'], desc: isZh ? '选中单个零件或已固化结构（紧贴蓝框）' : 'Select brick or solidified structure (blue OBB)', demo: 'select' },
+        { keys: ['Shift', isZh ? '点击' : 'Click'], desc: isZh ? '加选 / 取消多选多个零件（黄框）' : 'Add / toggle bricks in multi-selection (yellow OBB)', demo: 'select' },
+        { keys: [isZh ? '双击零件' : 'Double-click'], desc: isZh ? '选中一整块连通的拼装结构' : 'Select entire connected assembly', demo: 'select' },
+        { keys: ['Esc'], desc: isZh ? '取消放置 / 关闭弹窗 / 退出当前操作' : 'Cancel placement / close active modal', demo: 'select' },
       ],
     },
     {
       title: isZh ? '移动、吸附与旋转' : 'Move, Snap & Rotate',
       items: [
-        { keys: ['W', 'A', 'S', 'D'], desc: isZh ? '选中后按镜头方向水平微调（0.2 格，长按连发）' : 'Nudge selected horizontally (0.2 stud, hold to repeat)' },
-        { keys: ['R', 'F'], desc: isZh ? '选中后垂直抬高 / 降低（0.2 格）' : 'Raise / lower selected brick (0.2 stud)' },
-        { keys: ['Q', 'E'], desc: isZh ? '水平 / 垂直顺时针旋转 90°' : 'Rotate horizontal / vertical by 90°' },
-        { keys: ['Shift', 'Q / E'], desc: isZh ? '水平 / 垂直精细旋转 15°（支持单件与固化结构）' : 'Fine rotate horizontal / vertical by 15°' },
-        { keys: [isZh ? '左键拖拽选中件' : 'Drag selected'], desc: isZh ? '拖动并自动吸附凸点，遇到斜角结构自动对齐角度' : 'Drag with stud snapping & auto-align to angled bricks' },
-        { keys: ['Backspace'], desc: isZh ? '删除当前选中的零件或整组选区' : 'Delete selected brick(s)' },
+        { keys: ['W', 'A', 'S', 'D'], desc: isZh ? '选中后按镜头方向水平微调（0.2 格，长按连发）' : 'Nudge selected horizontally (0.2 stud, hold to repeat)', demo: 'move' },
+        { keys: ['R', 'F'], desc: isZh ? '选中后垂直抬高 / 降低（0.2 格）' : 'Raise / lower selected brick (0.2 stud)', demo: 'move' },
+        { keys: ['Q', 'E'], desc: isZh ? '水平 / 垂直顺时针旋转 90°' : 'Rotate horizontal / vertical by 90°', demo: 'rotate' },
+        { keys: ['Shift', 'Q / E'], desc: isZh ? '水平 / 垂直精细旋转 15°（支持单件与固化结构）' : 'Fine rotate horizontal / vertical by 15°', demo: 'rotate' },
+        { keys: [isZh ? '左键拖拽选中件' : 'Drag selected'], desc: isZh ? '拖动并自动吸附凸点，遇到斜角结构自动对齐角度' : 'Drag with stud snapping & auto-align to angled bricks', demo: 'move' },
+        { keys: ['Backspace'], desc: isZh ? '删除当前选中的零件或整组选区' : 'Delete selected brick(s)', demo: 'undo' },
       ],
     },
     {
       title: isZh ? '撤销与快捷工具' : 'History & Tools',
       items: [
-        { keys: ['⌘ / Ctrl', 'Z'], desc: isZh ? '撤销上一步拼装或编辑' : 'Undo last edit' },
-        { keys: ['⌘ / Ctrl', 'Shift', 'Z'], desc: isZh ? '重做已撤销的操作' : 'Redo edit' },
-        { keys: [isZh ? '拖入文件' : 'Drop file'], desc: isZh ? '直接拖入 JSON / LDR / MPD / OBJ 模型文件' : 'Drop JSON / LDR / MPD / OBJ directly into workspace' },
+        { keys: ['⌘ / Ctrl', 'Z'], desc: isZh ? '撤销上一步拼装或编辑' : 'Undo last edit', demo: 'undo' },
+        { keys: ['⌘ / Ctrl', 'Shift', 'Z'], desc: isZh ? '重做已撤销的操作' : 'Redo edit', demo: 'undo' },
+        { keys: [isZh ? '拖入文件' : 'Drop file'], desc: isZh ? '直接拖入 JSON / LDR / MPD / OBJ 模型文件' : 'Drop JSON / LDR / MPD / OBJ directly into workspace', demo: 'camera' },
       ],
     },
   ]
+
+  const showHoverPreview = (item: ShortcutItem, target: HTMLElement) => {
+    const rect = target.getBoundingClientRect()
+    const previewW = 304
+    const previewH = 216
+    const margin = 12
+    const x = Math.min(Math.max(margin, rect.left + rect.width / 2 - previewW / 2), window.innerWidth - previewW - margin)
+    const above = rect.top - previewH - 10
+    const y = above >= margin ? above : Math.min(rect.bottom + 10, window.innerHeight - previewH - margin)
+    setHovered({ item, x, y })
+  }
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
@@ -187,28 +193,63 @@ export const GuideModal = ({ onClose }: GuideModalProps) => {
         </div>
 
         <div className="guide-tabs" role="tablist" aria-label={t('guide.title')}>
-          <button type="button" role="tab" aria-selected={tab === 'camera'} className={tab === 'camera' ? 'active' : ''} onClick={() => setTab('camera')}>
-            <Compass size={15} />
-            {isZh ? '视角与选择' : 'Camera & Select'}
-          </button>
-          <button type="button" role="tab" aria-selected={tab === 'move'} className={tab === 'move' ? 'active' : ''} onClick={() => setTab('move')}>
-            <Move size={15} />
-            {isZh ? '移动与斜角吸附' : 'Move & Snap'}
-          </button>
-          <button type="button" role="tab" aria-selected={tab === 'rotate'} className={tab === 'rotate' ? 'active' : ''} onClick={() => setTab('rotate')}>
-            <RotateCw size={15} />
-            {isZh ? '旋转与防穿模' : 'Rotate & Guard'}
-          </button>
-          <button type="button" role="tab" aria-selected={tab === 'shortcuts'} className={tab === 'shortcuts' ? 'active' : ''} onClick={() => setTab('shortcuts')}>
+          <button type="button" role="tab" aria-selected={tab === 'shortcuts'} className={tab === 'shortcuts' ? 'active' : ''} onClick={() => { setTab('shortcuts'); setHovered(null) }}>
             <Keyboard size={15} />
             {isZh ? '快捷键速查' : 'All Shortcuts'}
           </button>
+          <button type="button" role="tab" aria-selected={tab === 'camera'} className={tab === 'camera' ? 'active' : ''} onClick={() => { setTab('camera'); setHovered(null) }}>
+            <Compass size={15} />
+            {isZh ? '视角与选择' : 'Camera & Select'}
+          </button>
+          <button type="button" role="tab" aria-selected={tab === 'move'} className={tab === 'move' ? 'active' : ''} onClick={() => { setTab('move'); setHovered(null) }}>
+            <Move size={15} />
+            {isZh ? '移动与斜角吸附' : 'Move & Snap'}
+          </button>
+          <button type="button" role="tab" aria-selected={tab === 'rotate'} className={tab === 'rotate' ? 'active' : ''} onClick={() => { setTab('rotate'); setHovered(null) }}>
+            <RotateCw size={15} />
+            {isZh ? '旋转与防穿模' : 'Rotate & Guard'}
+          </button>
         </div>
 
-        <div className="guide-body">
+        <div className="guide-body" onScroll={() => setHovered(null)}>
+          {tab === 'shortcuts' && (
+            <>
+              <p className="guide-hover-hint">
+                {isZh ? '将鼠标悬浮在任意快捷键条目上，可实时查看预设 3D 场景的操作效果演示。' : 'Hover any shortcut row to preview a live animated demo from the preset 3D scene.'}
+              </p>
+              <div className="guide-shortcuts-grid">
+                {shortcutGroups.map((group) => (
+                  <section key={group.title} className="guide-shortcut-group">
+                    <h3>{group.title}</h3>
+                    <dl>
+                      {group.items.map((item) => (
+                        <div
+                          key={item.desc}
+                          className={`guide-shortcut-row interactive ${hovered?.item.desc === item.desc ? 'active' : ''}`}
+                          tabIndex={0}
+                          onMouseEnter={(event) => showHoverPreview(item, event.currentTarget)}
+                          onMouseLeave={() => setHovered((current) => (current?.item.desc === item.desc ? null : current))}
+                          onFocus={(event) => showHoverPreview(item, event.currentTarget)}
+                          onBlur={() => setHovered((current) => (current?.item.desc === item.desc ? null : current))}
+                        >
+                          <dt>
+                            {item.keys.map((key) => (
+                              <kbd key={key}>{key}</kbd>
+                            ))}
+                          </dt>
+                          <dd>{item.desc}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </section>
+                ))}
+              </div>
+            </>
+          )}
+
           {tab === 'camera' && (
             <div className="guide-panel">
-              <CameraDemoSvg isZh={isZh} />
+              <RealSceneDemo demoKey="select" isZh={isZh} />
               <div className="guide-tips-grid">
                 <article className="guide-tip-card">
                   <h3>{isZh ? '视角操控' : 'Camera Controls'}</h3>
@@ -232,7 +273,7 @@ export const GuideModal = ({ onClose }: GuideModalProps) => {
 
           {tab === 'move' && (
             <div className="guide-panel">
-              <MoveSnapDemoSvg isZh={isZh} />
+              <RealSceneDemo demoKey="move" isZh={isZh} />
               <div className="guide-tips-grid">
                 <article className="guide-tip-card">
                   <h3>{isZh ? '键盘精细微调' : 'Keyboard Nudging'}</h3>
@@ -255,7 +296,7 @@ export const GuideModal = ({ onClose }: GuideModalProps) => {
 
           {tab === 'rotate' && (
             <div className="guide-panel">
-              <RotateCollisionDemoSvg isZh={isZh} />
+              <RealSceneDemo demoKey="rotate" isZh={isZh} />
               <div className="guide-tips-grid">
                 <article className="guide-tip-card">
                   <h3>{isZh ? '90° 与 15° / 任意角度旋转' : '90°, 15° & Arbitrary Angles'}</h3>
@@ -275,29 +316,25 @@ export const GuideModal = ({ onClose }: GuideModalProps) => {
               </div>
             </div>
           )}
-
-          {tab === 'shortcuts' && (
-            <div className="guide-shortcuts-grid">
-              {shortcutGroups.map((group) => (
-                <section key={group.title} className="guide-shortcut-group">
-                  <h3>{group.title}</h3>
-                  <dl>
-                    {group.items.map((item) => (
-                      <div key={item.desc} className="guide-shortcut-row">
-                        <dt>
-                          {item.keys.map((key) => (
-                            <kbd key={key}>{key}</kbd>
-                          ))}
-                        </dt>
-                        <dd>{item.desc}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                </section>
-              ))}
-            </div>
-          )}
         </div>
+
+        {hovered && (
+          <aside
+            className="guide-hover-popover"
+            style={{ left: `${hovered.x}px`, top: `${hovered.y}px` }}
+            aria-hidden="true"
+          >
+            <div className="guide-hover-popover-head">
+              <div className="guide-hover-keys">
+                {hovered.item.keys.map((key) => (
+                  <kbd key={key}>{key}</kbd>
+                ))}
+              </div>
+              <span>{hovered.item.desc}</span>
+            </div>
+            <RealSceneDemo demoKey={hovered.item.demo} isZh={isZh} compact />
+          </aside>
+        )}
       </section>
     </div>
   )
