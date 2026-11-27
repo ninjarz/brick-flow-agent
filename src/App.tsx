@@ -1368,11 +1368,11 @@ function App() {
     }
 
     const collisionData = stationaryData ?? getStationarySpatialState(bricks, new Set([currentBrick.id]))
+    if (!hasBrickCollision(nextBrick, collisionData.stationaryBricks, collisionData.spatialState.collisionIndex)) return true
+
     const currentOverlapScore = getBrickRawOverlapScore(currentBrick, collisionData.stationaryBricks, collisionData.spatialState.collisionIndex)
     const nextOverlapScore = getBrickRawOverlapScore(nextBrick, collisionData.stationaryBricks, collisionData.spatialState.collisionIndex)
-    if (nextOverlapScore <= 0 || nextOverlapScore < currentOverlapScore - 0.000001) return true
-
-    if (!hasBrickCollision(nextBrick, collisionData.stationaryBricks, collisionData.spatialState.collisionIndex)) return true
+    if (nextOverlapScore < currentOverlapScore - 0.000001) return true
 
     if (import.meta.env.DEV) {
       console.warn('brick-flow-agent blocked move', {
