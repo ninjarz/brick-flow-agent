@@ -1239,8 +1239,17 @@ export const getStructuralCollisionCandidateIds = (
   const candidateIds = new Set<string>()
   const collisionBounds = getBrickWorldCollisionBounds(brick)
   if (!collisionBounds) return candidateIds
+  const studReach = 0.22
+  const queryBounds = {
+    minX: collisionBounds.minX - studReach,
+    maxX: collisionBounds.maxX + studReach,
+    minY: collisionBounds.minY - studReach,
+    maxY: collisionBounds.maxY + studReach,
+    minZ: collisionBounds.minZ - studReach,
+    maxZ: collisionBounds.maxZ + studReach,
+  }
 
-  for (const key of getCellHashKeys(collisionBounds, COLLISION_INDEX_HASH_STEP)) {
+  for (const key of getCellHashKeys(queryBounds, COLLISION_INDEX_HASH_STEP)) {
     const brickIds = index.keyToBrickIds.get(key)
     if (!brickIds) continue
 
@@ -1249,9 +1258,9 @@ export const getStructuralCollisionCandidateIds = (
       const target = index.boundsById.get(brickId)
       // Coarse cells reduce hashing work for large moulds. Reject disjoint
       // envelopes before invoking the unchanged exact cell narrow phase.
-      if (target && (collisionBounds.minX > target.maxX || collisionBounds.maxX < target.minX ||
-          collisionBounds.minY > target.maxY || collisionBounds.maxY < target.minY ||
-          collisionBounds.minZ > target.maxZ || collisionBounds.maxZ < target.minZ)) continue
+      if (target && (queryBounds.minX > target.maxX || queryBounds.maxX < target.minX ||
+          queryBounds.minY > target.maxY || queryBounds.maxY < target.minY ||
+          queryBounds.minZ > target.maxZ || queryBounds.maxZ < target.minZ)) continue
       candidateIds.add(brickId)
     }
   }

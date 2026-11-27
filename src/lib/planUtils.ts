@@ -21,11 +21,16 @@ import {
   getMechanicalBridgeCandidates,
   type MechanicalBridgeIndex,
 } from './mechanicalBridgeIndex'
+import { orientedCellsOverlap, type CellAxes, type CellBounds } from './orientedCellBounds'
+import { getRigidBrickMatrix } from './rigidBrickTransform'
 import { PlanSpatialState, type WorldBrickConnector } from './planSpatialState'
 import {
   createStructuralCollisionIndex,
   doBrickStructuralCellsCollide,
   getBrickStructuralOverlapVolume,
+  getBrickWorldCollisionBounds,
+  getBrickWorldCollisionCellBoxes,
+  getSourceCollisionEnvelope,
   getStructuralCacheVersion,
   getBrickWorldSupportBounds,
   getBrickWorldSupportFaces,
@@ -373,6 +378,208 @@ export const getBrickRawOverlapScore = (
   }, 0)
 }
 
+const STUD_PROBE_OFFSET = 0.11
+const STUD_PROBE_HALF_HEIGHT = 0.06
+const STUD_PROBE_HALF_RADIUS = 0.08
+const STUD_PROBE_TOLERANCE = 0.001
+const ORTHOGONAL_ALIGNMENT_SIN_TOLERANCE = 0.026 // ~1.5 degrees
+
+const areBrickOrientationsOrthogonal = (source: PlacedBrick, target: PlacedBrick) => {
+  const defA = brickById.get(source.brickId)
+  const defB = brickById.get(target.brickId)
+  if (!defA || !defB) return true
+  const a = getRigidBrickMatrix(defA, source.pose).elements
+  const b = getRigidBrickMatrix(defB, target.pose).elements
+  // Columns of a and b are the 3 world unit axes of each brick
+  for (let i = 0; i < 3; i++) {
+    const ax = a[i * 4], ay = a[i * 4 + 1], az = a[i * 4 + 2]
+    for (let j = 0; j < 3; j++) {
+      const dot = Math.abs(ax * b[j * 4] + ay * b[j * 4 + 1] + az * b[j * 4 + 2])
+      if (dot > ORTHOGONAL_ALIGNMENT_SIN_TOLERANCE && 1 - dot > ORTHOGONAL_ALIGNMENT_SIN_TOLERANCE) {
+        return false
+      }
+    }
+  }
+  return true
+}
+
+const createStudProbeBox = (
+  stud: ReturnType<typeof getBrickConnectors>[number],
+): CellBounds => {
+  const rawDir = stud.direction ?? {
+    x: stud.axis === 'x' ? 1 : 0,
+    y: stud.axis === 'y' ? 1 : 0,
+    z: stud.axis === 'z' ? 1 : 0,
+  }
+  const len = Math.hypot(rawDir.x, rawDir.y, rawDir.z) || 1
+  const d: readonly [number, number, number] = [rawDir.x / len, rawDir.y / len, rawDir.z / len]
+  // Build an orthonormal basis around the stud axis
+  const ref: readonly [number, number, number] = Math.abs(d[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0]
+  const uRaw: readonly [number, number, number] = [
+    d[1] * ref[2] - d[2] * ref[1],
+    d[2] * ref[0] - d[0] * ref[2],
+    d[0] * ref[1] - d[1] * ref[0],
+  ]
+  const uLen = Math.hypot(uRaw[0], uRaw[1], uRaw[2]) || 1
+  const u: readonly [number, number, number] = [uRaw[0] / uLen, uRaw[1] / uLen, uRaw[2] / uLen]
+  const v: readonly [number, number, number] = [
+    d[1] * u[2] - d[2] * u[1],
+    d[2] * u[0] - d[0] * u[2],
+    d[0] * u[1] - d[1] * u[0],
+  ]
+  const axes: CellAxes = [d, u, v]
+  const halfSize: readonly [number, number, number] = [
+    STUD_PROBE_HALF_HEIGHT,
+    STUD_PROBE_HALF_RADIUS,
+    STUD_PROBE_HALF_RADIUS,
+  ]
+  const cx = stud.pose.xStud + d[0] * STUD_PROBE_OFFSET
+  const cy = stud.pose.yStud + d[1] * STUD_PROBE_OFFSET
+  const cz = stud.pose.zStud + d[2] * STUD_PROBE_OFFSET
+  const rx = Math.abs(d[0]) * halfSize[0] + Math.abs(u[0]) * halfSize[1] + Math.abs(v[0]) * halfSize[2]
+  const ry = Math.abs(d[1]) * halfSize[0] + Math.abs(u[1]) * halfSize[1] + Math.abs(v[1]) * halfSize[2]
+  const rz = Math.abs(d[2]) * halfSize[0] + Math.abs(u[2]) * halfSize[1] + Math.abs(v[2]) * halfSize[2]
+  return {
+    minX: cx - rx,
+    maxX: cx + rx,
+    minY: cy - ry,
+    maxY: cy + ry,
+    minZ: cz - rz,
+    maxZ: cz + rz,
+    oriented: { axes, halfSize },
+  }
+}
+
+const isStudEngagedWithTarget = (
+  stud: ReturnType<typeof getBrickConnectors>[number],
+  targetReceptacles: ReturnType<typeof getBrickConnectors>,
+) => {
+  for (const target of targetReceptacles) {
+    if (
+      areConnectorsCompatible(stud, target) &&
+      connectorDistance(stud, target) <= getConnectorConnectionTolerance(stud, target)
+    ) {
+      return true
+    }
+  }
+  // Real LEGO 1xN / 2xN plates and brackets also have underside anti-stud tubes
+  // at the midpoint between two adjacent (1-stud-spaced) tube cavities.
+  for (let i = 0; i < targetReceptacles.length; i++) {
+    const first = targetReceptacles[i]
+    if (first.kind !== 'tube' || !areConnectorsCompatible(stud, first)) continue
+    const tol = getConnectorConnectionTolerance(stud, first)
+    for (let j = i + 1; j < targetReceptacles.length; j++) {
+      const second = targetReceptacles[j]
+      if (second.kind !== 'tube' || !areConnectorsCompatible(stud, second)) continue
+      const spacing = connectorDistance(first, second)
+      if (Math.abs(spacing - 1) > 0.05) continue
+      const mx = (first.pose.xStud + second.pose.xStud) / 2
+      const my = (first.pose.yStud + second.pose.yStud) / 2
+      const mz = (first.pose.zStud + second.pose.zStud) / 2
+      if (Math.hypot(stud.pose.xStud - mx, stud.pose.yStud - my, stud.pose.zStud - mz) <= tol) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
+const cellBoxesAabbOverlap = (a: CellBounds, b: CellBounds) =>
+  a.minX < b.maxX - STUD_PROBE_TOLERANCE &&
+  a.maxX > b.minX + STUD_PROBE_TOLERANCE &&
+  a.minY < b.maxY - STUD_PROBE_TOLERANCE &&
+  a.maxY > b.minY + STUD_PROBE_TOLERANCE &&
+  a.minZ < b.maxZ - STUD_PROBE_TOLERANCE &&
+  a.maxZ > b.minZ + STUD_PROBE_TOLERANCE
+
+const hasDirectedStudBodyInterference = (
+  studOwner: PlacedBrick,
+  bodyOwner: PlacedBrick,
+  context?: PlanValidationContext,
+) => {
+  const studDef = brickById.get(studOwner.brickId)
+  const bodyDef = brickById.get(bodyOwner.brickId)
+  if (studDef?.pack !== 'lego' || bodyDef?.pack !== 'lego') return false
+
+  const sourceConnectors = getPlacedBrickConnectors(studOwner, context)
+  const studs = sourceConnectors.filter((connector) => connector.kind === 'stud')
+  // Single-stud parts (e.g. 1x1 round plates, 2x2 jumpers) can legally pivot at any angle.
+  if (studs.length < 2) return false
+  // Orthogonal assemblies (0/90/180/270 deg) can legally engage half-stud jumper grooves and cavities.
+  if (areBrickOrientationsOrthogonal(studOwner, bodyOwner)) return false
+
+  const targetReceptacles = getPlacedBrickConnectors(bodyOwner, context).filter(
+    (connector) => connector.kind === 'tube' || connector.kind === 'studsocket',
+  )
+  if (targetReceptacles.length === 0) return false
+
+  const bodyBounds = getBrickWorldCollisionBounds(bodyOwner)
+  if (!bodyBounds) return false
+
+  const studBounds = getBrickWorldCollisionBounds(studOwner)
+  if (
+    studBounds &&
+    (studBounds.maxX + 0.25 < bodyBounds.minX ||
+      studBounds.minX - 0.25 > bodyBounds.maxX ||
+      studBounds.maxY + 0.25 < bodyBounds.minY ||
+      studBounds.minY - 0.25 > bodyBounds.maxY ||
+      studBounds.maxZ + 0.25 < bodyBounds.minZ ||
+      studBounds.minZ - 0.25 > bodyBounds.maxZ)
+  ) {
+    return false
+  }
+
+  if (hasMechanicalConnectorConnection(studOwner, bodyOwner, context)) return false
+
+  let targetCells: ReturnType<typeof getBrickWorldCollisionCellBoxes> | undefined
+  let targetEnvelope: ReturnType<typeof getSourceCollisionEnvelope> | undefined
+  let envelopeLoaded = false
+
+  for (const stud of studs) {
+    if (isStudEngagedWithTarget(stud, targetReceptacles)) continue
+
+    const probe = createStudProbeBox(stud)
+    if (
+      probe.maxX <= bodyBounds.minX + STUD_PROBE_TOLERANCE ||
+      probe.minX >= bodyBounds.maxX - STUD_PROBE_TOLERANCE ||
+      probe.maxY <= bodyBounds.minY + STUD_PROBE_TOLERANCE ||
+      probe.minY >= bodyBounds.maxY - STUD_PROBE_TOLERANCE ||
+      probe.maxZ <= bodyBounds.minZ + STUD_PROBE_TOLERANCE ||
+      probe.minZ >= bodyBounds.maxZ - STUD_PROBE_TOLERANCE
+    ) {
+      continue
+    }
+
+    if (!envelopeLoaded) {
+      targetEnvelope = getSourceCollisionEnvelope(bodyOwner)
+      envelopeLoaded = true
+    }
+    if (
+      targetEnvelope &&
+      !targetEnvelope.some((box) => cellBoxesAabbOverlap(probe, box) && orientedCellsOverlap(probe, box, STUD_PROBE_TOLERANCE))
+    ) {
+      continue
+    }
+
+    targetCells ??= getBrickWorldCollisionCellBoxes(bodyOwner)
+    if (
+      targetCells.some((cell) => cellBoxesAabbOverlap(probe, cell) && orientedCellsOverlap(probe, cell, STUD_PROBE_TOLERANCE))
+    ) {
+      return true
+    }
+  }
+
+  return false
+}
+
+const hasStudBodyInterference = (
+  brick: PlacedBrick,
+  other: PlacedBrick,
+  context?: PlanValidationContext,
+) =>
+  hasDirectedStudBodyInterference(brick, other, context) ||
+  hasDirectedStudBodyInterference(other, brick, context)
+
 export const hasBrickCollision = (
   brick: PlacedBrick,
   bricks: PlacedBrick[],
@@ -381,21 +588,24 @@ export const hasBrickCollision = (
 ) => {
   if (!collisionIndex) {
     return bricks.some((other) => (
-      other.id !== brick.id &&
-      doBrickBoundsOverlap(brick, other) &&
-      doBrickStructuralCellsCollide(brick, other) &&
-      !hasConnectorConnection(brick, other, context) &&
-      !hasIndirectMechanicalConnectorClearance(brick, other, bricks, context)
+      other.id !== brick.id && (
+        (doBrickBoundsOverlap(brick, other) &&
+          doBrickStructuralCellsCollide(brick, other) &&
+          !hasConnectorConnection(brick, other, context) &&
+          !hasIndirectMechanicalConnectorClearance(brick, other, bricks, context))
+        || hasStudBodyInterference(brick, other, context)
+      )
     ))
   }
 
   for (const candidateId of getStructuralCollisionCandidateIds(brick, collisionIndex)) {
     const other = collisionIndex.bricksById.get(candidateId)
+    if (!other) continue
     if (
-      other &&
-      doBrickStructuralCellsCollide(brick, other) &&
-      !hasConnectorConnection(brick, other, context) &&
-      !hasIndirectMechanicalConnectorClearance(brick, other, bricks, context)
+      (doBrickStructuralCellsCollide(brick, other) &&
+        !hasConnectorConnection(brick, other, context) &&
+        !hasIndirectMechanicalConnectorClearance(brick, other, bricks, context))
+      || hasStudBodyInterference(brick, other, context)
     ) return true
   }
 
@@ -1810,10 +2020,12 @@ export const validateBuildPlanStructural = (plan: BuildPlan, preparedGraph?: Bui
 
       const target = bricksById.get(targetId)
       if (
-        target &&
-        doBrickStructuralCellsCollide(source, target) &&
-        !hasConnectorConnection(source, target, context) &&
-        !hasIndirectMechanicalConnectorClearance(source, target, plan.bricks, context)
+        target && (
+          (doBrickStructuralCellsCollide(source, target) &&
+            !hasConnectorConnection(source, target, context) &&
+            !hasIndirectMechanicalConnectorClearance(source, target, plan.bricks, context))
+          || hasStudBodyInterference(source, target, context)
+        )
       ) {
         issues.push({ type: 'collision', brickIds: [source.id, target.id] })
       }

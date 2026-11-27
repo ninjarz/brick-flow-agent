@@ -14,7 +14,7 @@ import {
   rotationMatrixFromEulerAngles,
 } from './brickOrientation'
 import { getLDrawSceneMatrix } from './ldrawSceneBatches'
-import { makeBrick } from './planUtils'
+import { createBrickCollisionIndex, hasBrickCollision, makeBrick } from './planUtils'
 import { rotateRigidBrickGroupByMatrix } from './rigidBrickGroup'
 
 const hogwartsPlan = rawHogwarts as unknown as BuildPlan
@@ -123,5 +123,28 @@ describe('unified brick orientation', () => {
 
     // Identity check
     expect(isIdentityRotationMatrix(new Matrix4())).toBe(true)
+  })
+
+  it('blocks misaligned angled plates whose outer studs penetrate the upper plate, while allowing aligned or single-stud pivots', () => {
+    const base = applyBrickEulerAngles(makeBrick('plate-1x3', 'gray', 37, 0, 101), { yaw: 5, pitch: 0, roll: 0 })
+    const misalignedTop = applyBrickEulerAngles(makeBrick('plate-1x3', 'gray', 37, 0.4, 101), { yaw: 352, pitch: 0, roll: 0 })
+    const alignedTop = applyBrickEulerAngles(makeBrick('plate-1x3', 'gray', 37, 0.4, 101), { yaw: 5, pitch: 0, roll: 0 })
+    const crossedTop = applyBrickEulerAngles(makeBrick('plate-1x3', 'gray', 37, 0.4, 101), { yaw: 95, pitch: 0, roll: 0 })
+
+    // Misaligned 5 deg vs 352 deg: center stud matches, but outer studs crash into upper plate
+    const index = createBrickCollisionIndex([base])
+    expect(hasBrickCollision(misalignedTop, [base], index)).toBe(true)
+    expect(hasBrickCollision(misalignedTop, [base])).toBe(true)
+
+    // Aligned 5 deg vs 5 deg: all 3 studs engage cleanly
+    expect(hasBrickCollision(alignedTop, [base], index)).toBe(false)
+
+    // Crossed 90 deg (5 deg vs 95 deg): outer studs clear the upper plate body
+    expect(hasBrickCollision(crossedTop, [base], index)).toBe(false)
+
+    // Single-stud 1x1 pivot underneath a 1x3 plate at arbitrary 33.7 deg is legal
+    const pivot1x1 = makeBrick('plate-round-1x1', 'gray', 38, 0, 101)
+    const pivotedTop = applyBrickEulerAngles(makeBrick('plate-1x3', 'gray', 37, 0.4, 101), { yaw: 33.7, pitch: 0, roll: 0 })
+    expect(hasBrickCollision(pivotedTop, [pivot1x1], createBrickCollisionIndex([pivot1x1]))).toBe(false)
   })
 })
