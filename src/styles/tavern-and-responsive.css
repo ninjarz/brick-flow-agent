@@ -1400,12 +1400,18 @@
   line-height: 1.35;
 }
 
-.field-grid label {
+.field-grid label,
+.field-grid .angle-field {
   display: grid;
   gap: 5px;
   color: var(--muted);
   font-size: 12px;
   font-weight: 800;
+}
+
+.angle-input-row input.angle-input-blocked {
+  border-color: #f59e0b;
+  background: #fffbeb;
 }
 
 .angle-input-row {

@@ -248,8 +248,8 @@ const BrickBodyMaterial = ({
       depthWrite={opacity >= 1}
     />
     {showEdges && (edgeGeometry
-      ? <Line segments points={getLDrawEdgePoints(edgeGeometry)} color={edgeColor} raycast={() => null} />
-      : <Edges color={edgeColor} threshold={15} />)}
+      ? <Line segments points={getLDrawEdgePoints(edgeGeometry)} color={edgeColor} side={DoubleSide} raycast={() => null} />
+      : <Edges color={edgeColor} threshold={15} side={DoubleSide} />)}
   </>
 )
 

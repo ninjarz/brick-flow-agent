@@ -3,7 +3,7 @@ import { createCumulativeManualView } from './lib/manualPresentation'
 import { createKeyboardMoveSession } from './lib/keyboardMoveSession'
 import { getEditorKeyboardMove } from './lib/editorAnalysisClient'
 import { getBrickAssemblyPosition, getBrickSelectionReference } from './lib/brickEditorCoordinates'
-import { getBrickRotationMatrix, isIdentityRotationMatrix } from './lib/brickOrientation'
+import { applyBrickRotationMatrix, getBrickRotationMatrix, isIdentityRotationMatrix, rotationMatrixFromEulerAngles } from './lib/brickOrientation'
 import { getEditorValidation, getEditorGenerationValidation, getEditorConnectedSelection, getEditorSupport, getEditorManual, getPreparedManualPlan, getEditorTransform, setEditorAnalysisActive, backgroundAnalysisThreshold } from './lib/editorAnalysisClient'
 import { rotateRigidBrickGroup, rotateRigidBrickGroupByMatrix, translateRigidBrickGroup } from './lib/rigidBrickGroup'
 import { createManualHtmlBlob, createLDrawBlob } from './lib/manualExportClient'
@@ -40,7 +40,7 @@ import { formatBuildManualMarkdown, getAssemblyGuide, type BuildManual } from '.
 import { getManualStepPage } from './lib/manualPagination'
 import { createSingleBrickSteps, countBricks, createBrickCollisionIndex, createPlanSpatialState, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickPlacementDiagnostics, getBrickRawOverlapScore, hasBrickCollision, isBrickAboveGround, makeBrick, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
 import { loadCatalogPreferences, type CatalogPackPreference } from './lib/catalogPreferences'
-import { getBrickWorldFrame, normalizeHorizontalStud, normalizeQuarterTurns, normalizeVerticalQuarterTurns, normalizeYStud, roundToGrid, STUD_PITCH_WORLD, translateBrickPose } from './lib/brickUnits'
+import { getBrickWorldFrame, normalizeHorizontalStud, normalizeYStud, roundToGrid, STUD_PITCH_WORLD, translateBrickPose } from './lib/brickUnits'
 import { useI18n } from './lib/i18n'
 import type { ObjImportResult } from './lib/objImport'
 import { parseImportedProject, type ImportText } from './lib/planFileIO'
@@ -2516,23 +2516,15 @@ function App() {
         }
       }
 
-      const rotatedBrick: PlacedBrick = {
-        ...selected,
-        pose: {
-          ...selected.pose,
-          ...(axis === 'horizontal'
-            ? {
-                rotationQuarterTurns: normalizeQuarterTurns(
-                  selected.pose.rotationQuarterTurns + deltaQuarterTurns,
-                ),
-              }
-            : {
-                verticalQuarterTurns: normalizeVerticalQuarterTurns(
-                  (selected.pose.verticalQuarterTurns ?? 0) + deltaQuarterTurns,
-                ),
-            }),
-        },
-      }
+      const deltaMatrix = rotationMatrixFromEulerAngles(
+        axis === 'horizontal'
+          ? { yaw: deltaQuarterTurns * 90, pitch: 0, roll: 0 }
+          : { yaw: 0, pitch: deltaQuarterTurns * 90, roll: 0 },
+      )
+      const rotatedBrick = applyBrickRotationMatrix(
+        selected,
+        deltaMatrix.multiply(getBrickRotationMatrix(selected.pose)),
+      )
       const stationaryData = getStationarySpatialState(current.bricks, new Set([selected.id]))
       const nextBrick = isAutoSnapEnabled
         ? snapBrickToPlan(rotatedBrick, stationaryData.stationaryBricks, { previousBrick: selected, spatialState: stationaryData.spatialState })

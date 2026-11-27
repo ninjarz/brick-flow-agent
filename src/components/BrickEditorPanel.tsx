@@ -33,6 +33,9 @@ const AngleField = ({
     if (!focused) setDraft(String(value))
   }, [value, focused])
 
+  const parsedDraft = draft.trim() === '' || draft === '-' || draft.endsWith('.') ? NaN : Number(draft)
+  const isRejectedDraft = focused && Number.isFinite(parsedDraft) && Math.abs(normalizeAngleDegrees(parsedDraft) - value) > 1e-4
+
   const commit = (raw: string) => {
     const parsed = Number(raw)
     if (!Number.isFinite(parsed)) {
@@ -40,17 +43,19 @@ const AngleField = ({
       return
     }
     const normalized = normalizeAngleDegrees(parsed)
-    setDraft(String(normalized))
     if (Math.abs(normalized - value) > 1e-6) onChange(normalized)
+    setDraft(String(value))
   }
 
   return (
-    <label>
-      {label}
+    <div className="angle-field">
+      <span className="angle-field-label">{label}</span>
       <div className="angle-input-row">
         <input
           type="number"
           step={1}
+          aria-label={label}
+          className={isRejectedDraft ? 'angle-input-blocked' : undefined}
           value={draft}
           onFocus={() => setFocused(true)}
           onChange={(event) => {
@@ -65,7 +70,7 @@ const AngleField = ({
             commit(draft)
           }}
           onKeyDown={(event) => {
-            if (event.key === 'Enter') commit(draft)
+            if (event.key === 'Enter') event.currentTarget.blur()
           }}
         />
         <span className="angle-unit" aria-hidden="true">°</span>
@@ -79,7 +84,7 @@ const AngleField = ({
           +90°
         </button>
       </div>
-    </label>
+    </div>
   )
 }
 
