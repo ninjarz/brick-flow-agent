@@ -722,48 +722,41 @@ const renderStepDiagram = (step: ManualStepPage, cumulativePieces: ManualPiece[]
         arrowEnd: isNew ? project(finalX + width / 2, finalZ + depth / 2, finalY + height / 2) : undefined,
       }
     })
-  const projectedPoints = cuboids.flatMap((cuboid) => [
-    ...cuboid.top,
-    ...cuboid.right,
-    ...cuboid.front,
-    ...(cuboid.arrowStart ? [cuboid.arrowStart] : []),
-    ...(cuboid.arrowEnd ? [cuboid.arrowEnd] : []),
-  ])
-  const minX = Math.min(...projectedPoints.map((point) => point.x))
-  const minY = Math.min(...projectedPoints.map((point) => point.y))
-  const maxX = Math.max(...projectedPoints.map((point) => point.x))
-  const maxY = Math.max(...projectedPoints.map((point) => point.y))
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  const includePoint = (point: { x: number; y: number }) => {
+    if (point.x < minX) minX = point.x
+    if (point.x > maxX) maxX = point.x
+    if (point.y < minY) minY = point.y
+    if (point.y > maxY) maxY = point.y
+  }
+  for (const cuboid of cuboids) {
+    for (const p of cuboid.top) includePoint(p)
+    for (const p of cuboid.right) includePoint(p)
+    for (const p of cuboid.front) includePoint(p)
+    if (cuboid.arrowStart) includePoint(cuboid.arrowStart)
+    if (cuboid.arrowEnd) includePoint(cuboid.arrowEnd)
+  }
   const translateX = padding - minX
   const translateY = padding - minY
   const width = maxX - minX + padding * 2
   const height = maxY - minY + padding * 2
+  const widthText = width.toFixed(1)
+  const heightText = height.toFixed(1)
   const pieces = cuboids
     .map((cuboid) => {
-      const stroke = cuboid.isNew ? '#f97316' : '#334155'
-      const strokeWidth = cuboid.isNew ? 4 : 1.2
       const color = manualColorHex[cuboid.piece.color]
       const arrow = cuboid.arrowStart && cuboid.arrowEnd
-        ? `<line x1="${cuboid.arrowStart.x.toFixed(1)}" y1="${cuboid.arrowStart.y.toFixed(1)}" x2="${cuboid.arrowEnd.x.toFixed(1)}" y2="${cuboid.arrowEnd.y.toFixed(1)}" stroke="#ea580c" stroke-width="4" marker-end="url(#assembly-arrow)" />`
+        ? `<line x1="${cuboid.arrowStart.x.toFixed(1)}" y1="${cuboid.arrowStart.y.toFixed(1)}" x2="${cuboid.arrowEnd.x.toFixed(1)}" y2="${cuboid.arrowEnd.y.toFixed(1)}" class="a"/>`
         : ''
 
-      return `<g transform="translate(${translateX.toFixed(1)} ${translateY.toFixed(1)})">
-          <title>${escapeHtml(cuboid.piece.name)} · ${escapeHtml(cuboid.piece.color)} · x${cuboid.piece.pose.xStud} y${cuboid.piece.pose.yStud} z${cuboid.piece.pose.zStud}</title>
-          ${arrow}
-          <polygon points="${pointList(cuboid.right)}" fill="${color}" fill-opacity="0.72" stroke="${stroke}" stroke-width="${strokeWidth}" />
-          <polygon points="${pointList(cuboid.front)}" fill="${color}" fill-opacity="0.86" stroke="${stroke}" stroke-width="${strokeWidth}" />
-          <polygon points="${pointList(cuboid.top)}" fill="${color}" stroke="${stroke}" stroke-width="${strokeWidth}" />
-        </g>`
+      return `<g${cuboid.isNew ? ' class="n"' : ''} fill="${color}"><title>${escapeHtml(cuboid.piece.name)} · ${escapeHtml(cuboid.piece.color)} · x${cuboid.piece.pose.xStud} y${cuboid.piece.pose.yStud} z${cuboid.piece.pose.zStud}</title>${arrow}<polygon class="r" points="${pointList(cuboid.right)}"/><polygon class="f" points="${pointList(cuboid.front)}"/><polygon points="${pointList(cuboid.top)}"/></g>`
     })
-    .join('\n        ')
+    .join('')
 
-  return `<figure class="diagram">
-      <svg viewBox="0 0 ${width.toFixed(1)} ${height.toFixed(1)}" role="img" aria-label="${escapeHtml(labels.diagramAria(step.stepNumber))}">
-        <defs><marker id="assembly-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#ea580c" /></marker></defs>
-        <rect width="${width}" height="${height}" rx="10" fill="#f8fafc" />
-        ${pieces}
-      </svg>
-      <figcaption>${escapeHtml(labels.newPieceCaption)}${diagramSelection.omitted > 0 ? ` · ${escapeHtml(labels.diagramOmitted(diagramSelection.omitted))}` : ''}</figcaption>
-    </figure>`
+  return `<figure class="diagram"><svg viewBox="0 0 ${widthText} ${heightText}" role="img" aria-label="${escapeHtml(labels.diagramAria(step.stepNumber))}"><rect width="${widthText}" height="${heightText}" rx="10" fill="#f8fafc"/><g transform="translate(${translateX.toFixed(1)} ${translateY.toFixed(1)})">${pieces}</g></svg><figcaption>${escapeHtml(labels.newPieceCaption)}${diagramSelection.omitted > 0 ? ` · ${escapeHtml(labels.diagramOmitted(diagramSelection.omitted))}` : ''}</figcaption></figure>`
 }
 
 export const formatBuildManualHtml = (manual: BuildManual, locale: ManualLocale = 'zh-CN') => {
@@ -821,12 +814,18 @@ export const formatBuildManualHtml = (manual: BuildManual, locale: ManualLocale 
     .count { margin-top: 10px; color: #475569; font-weight: 750; }
     .diagram { margin: 14px 0 0; }
     .diagram svg { display: block; width: 100%; max-height: 420px; border: 1px solid #d8e0ea; border-radius: 8px; background: #f8fafc; }
+    .diagram polygon { stroke: #334155; stroke-width: 1.2; }
+    .diagram .n polygon { stroke: #f97316; stroke-width: 4; }
+    .diagram .r { fill-opacity: 0.72; }
+    .diagram .f { fill-opacity: 0.86; }
+    .diagram .a { stroke: #ea580c; stroke-width: 4; marker-end: url(#assembly-arrow); }
     .diagram figcaption { margin-top: 6px; color: #64748b; font-size: 12px; }
     .grid line { stroke: #d8e0ea; stroke-width: 1; }
     @media print { body { background: #fff; } main { padding: 0; } .step { break-inside: avoid; } }
   </style>
 </head>
 <body>
+  <svg width="0" height="0" aria-hidden="true" style="position:absolute"><defs><marker id="assembly-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#ea580c"/></marker></defs></svg>
   <main>
     <h1>${escapeHtml(manual.title)} ${escapeHtml(labels.titleSuffix)}</h1>
     <p class="meta">${escapeHtml(labels.source)}: ${escapeHtml(formatManualSource(manual.source, locale))} · ${escapeHtml(labels.prompt)}: ${escapeHtml(manual.prompt || labels.none)} · ${escapeHtml(labels.totalPieces)}: ${manual.totalPieces} · ${escapeHtml(labels.totalPages)}: ${manual.totalSteps}</p>

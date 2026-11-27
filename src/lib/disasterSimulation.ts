@@ -141,6 +141,8 @@ export type DisasterSimulationResult = {
   failedBrickCount: number
   firstFailureTimeSeconds?: number
   firstFailureBrickId?: string
+  firstHazardFailureTimeSeconds?: number
+  firstHazardFailureBrickId?: string
   peakLoadTimeSeconds: number
   score: number
   grade: 'S' | 'A' | 'B' | 'C' | 'D'
@@ -532,12 +534,22 @@ const getDynamicLoadFactor = (
   return ramp * (0.82 * Math.sin(progress * Math.PI * 12) + 0.18 * Math.sin(progress * Math.PI * 26))
 }
 
-const getGrade = (score: number): DisasterSimulationResult['grade'] => {
-  if (score >= 90) return 'S'
-  if (score >= 78) return 'A'
-  if (score >= 64) return 'B'
-  if (score >= 48) return 'C'
-  return 'D'
+const getGrade = (
+  score: number,
+  initialStaticFailureCount = 0,
+  additionalHazardFailureCount = 0,
+): DisasterSimulationResult['grade'] => {
+  let grade: DisasterSimulationResult['grade'] = score >= 90 ? 'S'
+    : score >= 78 ? 'A'
+    : score >= 64 ? 'B'
+    : score >= 48 ? 'C'
+    : 'D'
+  const totalFailures = initialStaticFailureCount + additionalHazardFailureCount
+  if (totalFailures > 0 && grade === 'S') grade = 'A'
+  if ((initialStaticFailureCount >= 10 || additionalHazardFailureCount >= 10) && (grade === 'S' || grade === 'A')) {
+    grade = 'B'
+  }
+  return grade
 }
 
 type WindBounds = {
@@ -1105,6 +1117,9 @@ export const runDisasterSimulation = (
   let firstFailureTimeSeconds: number | undefined
   let firstFailureBrickId: string | undefined
   let firstFailureWasDetached = true
+  let firstHazardFailureTimeSeconds: number | undefined
+  let firstHazardFailureBrickId: string | undefined
+  let firstHazardFailureWasDetached = true
   let peakLoadFactor = -1
   let peakLoadTimeSeconds = 0
   const multiplier = getLoadMultiplier(scenario, physicsProfile)
@@ -1128,6 +1143,18 @@ export const runDisasterSimulation = (
       firstFailureTimeSeconds = time
       firstFailureBrickId = brick.id
       firstFailureWasDetached = isDetached
+    }
+    if (
+      time > epsilon
+      && (
+        firstHazardFailureTimeSeconds === undefined
+        || time < firstHazardFailureTimeSeconds - epsilon
+        || (Math.abs(time - firstHazardFailureTimeSeconds) <= epsilon && firstHazardFailureWasDetached && !isDetached)
+      )
+    ) {
+      firstHazardFailureTimeSeconds = time
+      firstHazardFailureBrickId = brick.id
+      firstHazardFailureWasDetached = isDetached
     }
   }
 
@@ -1372,9 +1399,11 @@ export const runDisasterSimulation = (
     failedBrickCount: failureTimeByBrickId.size,
     firstFailureTimeSeconds,
     firstFailureBrickId,
+    firstHazardFailureTimeSeconds,
+    firstHazardFailureBrickId,
     peakLoadTimeSeconds,
     score,
-    grade: getGrade(score),
+    grade: getGrade(score, initialStaticFailureCount, Math.max(0, failureTimeByBrickId.size - initialStaticFailureCount)),
     scoreBreakdown,
   }
 }

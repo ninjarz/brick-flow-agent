@@ -772,7 +772,21 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
                   <RotateCcw size={15} />
                   {t('stabilityLab.restart')}
                 </button>
-                {result.firstFailureTimeSeconds !== undefined && result.firstFailureBrickId && (
+                {result.firstHazardFailureTimeSeconds !== undefined && result.firstHazardFailureBrickId ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsPlaying(false)
+                      setTimeSeconds(result.firstHazardFailureTimeSeconds!)
+                      setInspectedBrickId(result.firstHazardFailureBrickId!)
+                    }}
+                  >
+                    <Zap size={15} />
+                    {locale === 'zh-CN'
+                      ? `首个外载失效 (${result.firstHazardFailureTimeSeconds.toFixed(1)}s)`
+                      : `First hazard failure (${result.firstHazardFailureTimeSeconds.toFixed(1)}s)`}
+                  </button>
+                ) : result.firstFailureTimeSeconds !== undefined && result.firstFailureBrickId && (
                   <button
                     type="button"
                     onClick={() => {
@@ -783,8 +797,8 @@ export const StabilityLab = ({ plan, projectId, inventoryOverrides, onClose, onS
                   >
                     <Zap size={15} />
                     {locale === 'zh-CN'
-                      ? `首个失效 (${result.firstFailureTimeSeconds.toFixed(1)}s)`
-                      : `First failure (${result.firstFailureTimeSeconds.toFixed(1)}s)`}
+                      ? `首个自重失效 (${result.firstFailureTimeSeconds.toFixed(1)}s)`
+                      : `First static failure (${result.firstFailureTimeSeconds.toFixed(1)}s)`}
                   </button>
                 )}
               </div>

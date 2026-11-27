@@ -464,6 +464,9 @@ describe('disaster simulation', () => {
     expect(secondRain.rainOcclusionField).toBe(firstRain.rainOcclusionField)
     expect(firstRain.firstFailureTimeSeconds).toBeDefined()
     expect(firstRain.firstFailureBrickId).toBeDefined()
+    expect(firstRain.firstHazardFailureTimeSeconds).toBeGreaterThan(0)
+    expect(firstRain.firstHazardFailureBrickId).toBeDefined()
+    expect(firstRain.grade).not.toBe('S')
     expect(firstRain.failureModeByBrickId.get(firstRain.firstFailureBrickId!)).not.toBe('detached')
 
     const firstWind = runDisasterSimulation(bricks, { scenario: 'wind', intensity: 70, directionDegrees: 25 })
