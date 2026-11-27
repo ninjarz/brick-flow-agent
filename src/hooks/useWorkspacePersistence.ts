@@ -7,7 +7,10 @@ import { claimLegacyProjectAnalysis, clearProjectAnalysis } from '../lib/project
 import type { BuildPlan } from '../types/bricks'
 
 type Status = 'loading' | 'saving' | 'saved' | 'unavailable' | 'recovery' | 'conflict'
-export const useWorkspacePersistence = (session: ReturnType<typeof createWorkspaceSession>) => {
+export const useWorkspacePersistence = (
+  session: ReturnType<typeof createWorkspaceSession>,
+  resolveDefaultSnapshot?: () => Promise<WorkspaceSnapshot>,
+) => {
   const [hydrated, setHydrated] = useState(false)
   const [status, setStatus] = useState<Status>('loading')
   const [saveSequence, setSaveSequence] = useState(0)
@@ -20,6 +23,8 @@ export const useWorkspacePersistence = (session: ReturnType<typeof createWorkspa
   const lastSaved = useRef<WorkspaceSnapshot>()
   const lastNotifiedEdit = useRef(0)
   const histories = useRef(new Map<string, WorkspaceHistory>())
+  const resolveDefaultRef = useRef(resolveDefaultSnapshot)
+  resolveDefaultRef.current = resolveDefaultSnapshot
   const queue = useRef<Promise<unknown>>(Promise.resolve())
   const enqueue = useCallback(<T,>(operation: () => Promise<T>): Promise<T> => {
     const next = queue.current.then(operation)
@@ -68,7 +73,16 @@ export const useWorkspacePersistence = (session: ReturnType<typeof createWorkspa
         const draft = await loadWorkspaceDraftFromIndexedDb()
         if (canceled) return
         if (getWorkspaceRecovery()) { setStatus('recovery'); setHydrated(true); return }
-        project = await projectStore.initialize(draft ?? initial)
+        let seed = draft ?? initial
+        const resolveDefault = resolveDefaultRef.current
+        if (!draft && resolveDefault && session.getEditRevision() === editing) {
+          try {
+            const resolved = await resolveDefault()
+            if (canceled) return
+            if (session.getEditRevision() === editing) seed = resolved
+          } catch { /* Fall back to synchronous initial snapshot if default model fails to load. */ }
+        }
+        project = await projectStore.initialize(seed)
       }
       if (canceled) return
       if (session.getEditRevision() !== editing) {

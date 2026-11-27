@@ -8,6 +8,12 @@ test.beforeEach(async ({ page }) => {
   await page.goto('./')
 })
 
+test('fresh workspace loads LEGO 71043 Hogwarts Castle by default', async ({ page }) => {
+  test.setTimeout(60_000)
+  await expect(page.getByLabel('Current work title', { exact: true })).toHaveText('LEGO 71043 Hogwarts Castle', { timeout: 30_000 })
+  await expect(page.getByText('6025 parts', { exact: true })).toBeVisible({ timeout: 30_000 })
+})
+
 test('clear canvas leaves a genuinely empty workspace', async ({ page }) => {
   page.once('dialog', (dialog) => dialog.accept())
   await page.getByLabel('Clear Canvas').click()
@@ -92,6 +98,7 @@ test('current work actions share one dialog and saving as an asset opens its mod
 
 test('loading a library model shows progress before the model is placed', async ({ page }) => {
   test.setTimeout(60_000)
+  await page.goto('./?preset=robot')
   page.once('dialog', dialog => dialog.accept())
   await page.getByLabel('Clear Canvas').click()
   await expect(page.getByText('0 parts', { exact: true })).toBeVisible()

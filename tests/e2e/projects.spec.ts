@@ -3,7 +3,7 @@ import { renameCurrentWork } from './fixtures/currentWork'
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('brick-flow-agent:locale:v1', 'en-US'))
-  await page.goto('./')
+  await page.goto('./?preset=robot')
   await expect(page.locator('main[data-workspace-storage="saved"]')).toBeVisible()
 })
 test('workspace edits still autosave after removing project controls', async ({ page }) => {

@@ -34,7 +34,7 @@ import { dropBrickGroupAtPoint, findNearestOpenBrickGroupAround, getBrickGroupDr
 import { createEmptyBuildPlan, generateBuildPlan, robotTemplateTitle } from './lib/localGenerator'
 import { buildLlmUserPrompt, generateLlmBuildPlan, llmSystemPrompt, requestLlmJsonContent, requestLlmTextStream, testLlmConnection } from './lib/llmGenerator'
 import { clearLlmConnection, normalizeMaxRepairAttempts, saveLlmConnection } from './lib/llmConfig'
-import { defaultFinishedAssets, getFinishedAssetCounts, isFinishedAssetPlanDeferred, needsFinishedAssetsRecovery, isDefaultFinishedAsset, mergeRecoveredFinishedAssets, loadAllDefaultFinishedAssets, loadFinishedAssets, loadFinishedAssetsFromIndexedDb, mergeWithDefaultAssets, resolveFinishedAssetPlan, saveFinishedAssets } from './lib/finishedAssets'
+import { defaultFinishedAssets, getFinishedAssetCounts, hogwartsAssetId, isFinishedAssetPlanDeferred, needsFinishedAssetsRecovery, isDefaultFinishedAsset, mergeRecoveredFinishedAssets, loadAllDefaultFinishedAssets, loadFinishedAssets, loadFinishedAssetsFromIndexedDb, mergeWithDefaultAssets, resolveFinishedAssetPlan, saveFinishedAssets } from './lib/finishedAssets'
 import { preparePlanGeometry } from './lib/planGeometry'
 import { formatBuildManualMarkdown, getAssemblyGuide, type BuildManual } from './lib/manualSerializer'
 import { getManualStepPage } from './lib/manualPagination'
@@ -211,7 +211,34 @@ function App() {
     importedPlanTitle: t('manual.importedPlanTitle'),
     importedStepTitle: (stepNumber) => t('manual.importedStepTitle', { step: stepNumber }),
   }), [t])
-  const [initialPlan] = useState(() => synchronizePlanVoxelBlockStates(workspaceDraft?.plan ?? generateBuildPlan({ prompt: defaultPrompt })))
+  const useRobotPreset = useMemo(
+    () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('preset') === 'robot',
+    [],
+  )
+  const shouldLoadDefaultHogwarts = !workspaceDraft && !useRobotPreset
+  const [initialPlan] = useState(() => synchronizePlanVoxelBlockStates(
+    workspaceDraft?.plan
+      ?? (useRobotPreset
+        ? generateBuildPlan({ prompt: defaultPrompt })
+        : createEmptyBuildPlan({ title: locale === 'zh-CN' ? 'LEGO 71043 霍格沃茨城堡' : 'LEGO 71043 Hogwarts Castle' })),
+  ))
+  const resolveDefaultHogwartsSnapshot = useCallback(async () => {
+    const hogwartsAsset = defaultFinishedAssets.find((asset) => asset.id === hogwartsAssetId)
+    if (!hogwartsAsset) {
+      const fallbackPlan = synchronizePlanVoxelBlockStates(generateBuildPlan({ prompt: defaultPrompt }))
+      return { plan: fallbackPlan, prompt: defaultPrompt, world: createEmptyWorldState(fallbackPlan.id) }
+    }
+    const resolved = await resolveFinishedAssetPlan(hogwartsAsset)
+    const hogwartsPlan = synchronizePlanVoxelBlockStates({
+      ...resolved.plan,
+      title: locale === 'zh-CN' ? 'LEGO 71043 霍格沃茨城堡' : 'LEGO 71043 Hogwarts Castle',
+    })
+    return {
+      plan: hogwartsPlan,
+      prompt: hogwartsPlan.prompt || defaultPrompt,
+      world: createEmptyWorldState(hogwartsPlan.id),
+    }
+  }, [defaultPrompt, locale])
   const { plan, world, prompt, planRef, worldRef, promptRef, setPlan, setWorld, editWorld, setPrompt, session: workspaceSession } = useWorkspace({
     plan: initialPlan,
     world: workspaceDraft?.world ?? createEmptyWorldState(initialPlan.id),
@@ -304,7 +331,11 @@ function App() {
   const [promptCopyStatus, setPromptCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
   const [promptPreview, setPromptPreview] = useState({ original: '', system: '', user: '' })
   const [finishedAssets, setFinishedAssets] = useState<FinishedAsset[]>(() => loadFinishedAssets())
-  const workspaceStorage = useWorkspacePersistence(workspaceSession)
+  const workspaceStorage = useWorkspacePersistence(
+    workspaceSession,
+    shouldLoadDefaultHogwarts ? resolveDefaultHogwartsSnapshot : undefined,
+  )
+  const isLoadingDefaultHogwarts = shouldLoadDefaultHogwarts && !workspaceStorage.hydrated && plan.bricks.length === 0
   const activeProjectId = workspaceStorage.current?.id
   useAiTaskContext(workspaceSession, activeProjectId ?? 'loading', llmConfig)
 
@@ -3378,8 +3409,8 @@ function App() {
               <BrickScene
               bricks={generationPreview?.bricks ?? plan.bricks}
               preserveDrawingBuffer={llmConfig.buildMode === 'agentic'}
-              building={isLoadingAsset || isGenerating || isManualPreparing || isExportingPlan}
-              buildingLabel={isLoadingAsset ? t('asset.loadingModel') : isGenerating ? generationLabel : isExportingPlan ? (locale === 'zh-CN' ? '正在导出' : 'Exporting') : (locale === 'zh-CN' ? '正在准备手册' : 'Preparing manual')}
+              building={isLoadingDefaultHogwarts || isLoadingAsset || isGenerating || isManualPreparing || isExportingPlan}
+              buildingLabel={isLoadingDefaultHogwarts || isLoadingAsset ? t('asset.loadingModel') : isGenerating ? generationLabel : isExportingPlan ? (locale === 'zh-CN' ? '正在导出' : 'Exporting') : (locale === 'zh-CN' ? '正在准备手册' : 'Preparing manual')}
               framingBricks={generationPreview?.frameBricks}
               selectedId={generationPreview ? undefined : selectedId}
               cameraFrameKey={`${generationPreview?.id ?? plan.id}:asset-import-${assetImportFrameVersion}${generationPreview ? `:module-${generationPreview.structures?.length ?? 0}` : ''}`}

@@ -7,7 +7,7 @@ const storePath = '/brick-flow-agent/src/lib/projectStore.ts'
 const restoreModule = /\/src\/lib\/projectStore\.ts(?:\?.*)?$/
 const prepare = async (page: Page) => {
   await page.addInitScript(() => localStorage.setItem('brick-flow-agent:locale:v1', 'en-US'))
-  await page.goto('./')
+  await page.goto('./?preset=robot')
   await expect(page.locator('main[data-workspace-storage="saved"]')).toBeVisible()
   await renameCurrentWork(page, 'Authoritative project')
   await expect.poll(() => page.evaluate(async path => {
