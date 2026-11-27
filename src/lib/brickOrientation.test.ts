@@ -128,13 +128,15 @@ describe('unified brick orientation', () => {
   it('blocks misaligned angled plates whose outer studs penetrate the upper plate, while allowing aligned or single-stud pivots', () => {
     const base = applyBrickEulerAngles(makeBrick('plate-1x3', 'gray', 37, 0, 101), { yaw: 5, pitch: 0, roll: 0 })
     const misalignedTop = applyBrickEulerAngles(makeBrick('plate-1x3', 'gray', 37, 0.4, 101), { yaw: 352, pitch: 0, roll: 0 })
+    const grazingTop = applyBrickEulerAngles(makeBrick('plate-1x3', 'gray', 37, 0.4, 101), { yaw: 142, pitch: 0, roll: 0 })
     const alignedTop = applyBrickEulerAngles(makeBrick('plate-1x3', 'gray', 37, 0.4, 101), { yaw: 5, pitch: 0, roll: 0 })
     const crossedTop = applyBrickEulerAngles(makeBrick('plate-1x3', 'gray', 37, 0.4, 101), { yaw: 95, pitch: 0, roll: 0 })
 
-    // Misaligned 5 deg vs 352 deg: center stud matches, but outer studs crash into upper plate
+    // Misaligned 5 deg vs 352 deg and grazing 5 deg vs 142 deg (43 deg relative): outer studs hit upper plate wall
     const index = createBrickCollisionIndex([base])
     expect(hasBrickCollision(misalignedTop, [base], index)).toBe(true)
     expect(hasBrickCollision(misalignedTop, [base])).toBe(true)
+    expect(hasBrickCollision(grazingTop, [base], index)).toBe(true)
 
     // Aligned 5 deg vs 5 deg: all 3 studs engage cleanly
     expect(hasBrickCollision(alignedTop, [base], index)).toBe(false)

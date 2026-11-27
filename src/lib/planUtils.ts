@@ -380,7 +380,7 @@ export const getBrickRawOverlapScore = (
 
 const STUD_PROBE_OFFSET = 0.11
 const STUD_PROBE_HALF_HEIGHT = 0.06
-const STUD_PROBE_HALF_RADIUS = 0.08
+const STUD_PROBE_HALF_RADIUS = 0.21
 const STUD_PROBE_TOLERANCE = 0.001
 const ORTHOGONAL_ALIGNMENT_SIN_TOLERANCE = 0.026 // ~1.5 degrees
 

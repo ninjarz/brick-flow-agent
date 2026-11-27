@@ -1361,7 +1361,7 @@ function App() {
           context,
           current: currentBrick,
           attempted: nextBrick,
-          attemptedDiagnostics: getBrickPlacementDiagnostics(nextBrick, bricks),
+          ...(bricks.length <= 200 ? { attemptedDiagnostics: getBrickPlacementDiagnostics(nextBrick, bricks) } : {}),
         })
       }
       return false
@@ -1381,8 +1381,12 @@ function App() {
         nextOverlapScore,
         current: currentBrick,
         attempted: nextBrick,
-        currentDiagnostics: getBrickPlacementDiagnostics(currentBrick, bricks),
-        attemptedDiagnostics: getBrickPlacementDiagnostics(nextBrick, bricks),
+        ...(bricks.length <= 200
+          ? {
+              currentDiagnostics: getBrickPlacementDiagnostics(currentBrick, bricks),
+              attemptedDiagnostics: getBrickPlacementDiagnostics(nextBrick, bricks),
+            }
+          : {}),
       })
     }
 
