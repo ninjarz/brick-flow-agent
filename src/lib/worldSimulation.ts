@@ -277,11 +277,125 @@ export const findWorldPath = (
   const maxX = Math.max(startNode.x, goalNode.x) + Math.ceil(navigationMarginStuds / navigationGridStuds)
   const minZ = Math.min(startNode.z, goalNode.z) - Math.ceil(navigationMarginStuds / navigationGridStuds)
   const maxZ = Math.max(startNode.z, goalNode.z) + Math.ceil(navigationMarginStuds / navigationGridStuds)
-  const startKey = gridKey(startNode)
-  const goalKey = gridKey(goalNode)
-  if (startKey === goalKey) {
+  if (startNode.x === goalNode.x && startNode.z === goalNode.z) {
     return [{ x: fromGrid(goalNode.x), y: 0, z: fromGrid(goalNode.z) }]
   }
+  const width = maxX - minX + 1
+  const height = maxZ - minZ + 1
+  const totalCells = width * height
+  const cellIndex = (x: number, z: number) => (x - minX) + (z - minZ) * width
+  const startIdx = cellIndex(startNode.x, startNode.z)
+  const goalIdx = cellIndex(goalNode.x, goalNode.z)
+
+  if (totalCells <= 262_144) {
+    const blockedCache = new Int8Array(totalCells)
+    const isCellBlocked = (x: number, z: number, idx: number) => {
+      const cached = blockedCache[idx]
+      if (cached !== 0) return cached === 1
+      const blocked = isBlocked(fromGrid(x), fromGrid(z))
+      blockedCache[idx] = blocked ? 1 : -1
+      return blocked
+    }
+    const cost = new Float64Array(totalCells)
+    cost.fill(Infinity)
+    const cameFrom = new Int32Array(totalCells)
+    cameFrom.fill(-1)
+    const openOrder = new Int32Array(totalCells)
+    openOrder.fill(-1)
+    const openVersion = new Int32Array(totalCells)
+    const closed = new Uint8Array(totalCells)
+    type DenseOpenNode = { idx: number; x: number; z: number; score: number; order: number; version: number }
+    const heap: DenseOpenNode[] = []
+    let nextOrder = 0
+    let versionCounter = 0
+    const precedes = (left: DenseOpenNode, right: DenseOpenNode) =>
+      left.score < right.score || (left.score === right.score && left.order < right.order)
+    const offer = (idx: number, x: number, z: number, score: number) => {
+      const order = openOrder[idx] >= 0 ? openOrder[idx] : (openOrder[idx] = nextOrder++)
+      const version = ++versionCounter
+      openVersion[idx] = version
+      const entry: DenseOpenNode = { idx, x, z, score, order, version }
+      let index = heap.length
+      heap.push(entry)
+      while (index > 0) {
+        const parent = (index - 1) >>> 1
+        if (!precedes(entry, heap[parent])) break
+        heap[index] = heap[parent]
+        index = parent
+      }
+      heap[index] = entry
+    }
+    const takeNext = () => {
+      while (heap.length > 0) {
+        const entry = heap[0]
+        const tail = heap.pop()!
+        if (heap.length > 0) {
+          let index = 0
+          while (index * 2 + 1 < heap.length) {
+            let child = index * 2 + 1
+            if (child + 1 < heap.length && precedes(heap[child + 1], heap[child])) child += 1
+            if (!precedes(heap[child], tail)) break
+            heap[index] = heap[child]
+            index = child
+          }
+          heap[index] = tail
+        }
+        if (!closed[entry.idx] && openVersion[entry.idx] === entry.version) return entry
+      }
+      return undefined
+    }
+
+    cost[startIdx] = 0
+    offer(startIdx, startNode.x, startNode.z, 0)
+    const dirX = [1, -1, 0, 0, 1, 1, -1, -1]
+    const dirZ = [0, 0, 1, -1, 1, -1, 1, -1]
+
+    for (let visited = 0; visited < maxNavigationNodes; visited += 1) {
+      const entry = takeNext()
+      if (!entry) break
+      const currentIdx = entry.idx
+      closed[currentIdx] = 1
+      if (currentIdx === goalIdx) {
+        const path: Array<{ x: number; y: number; z: number }> = []
+        let cursor = currentIdx
+        while (cursor >= 0 && cursor !== startIdx) {
+          const z = Math.floor(cursor / width) + minZ
+          const x = (cursor % width) + minX
+          path.push({ x: fromGrid(x), y: 0, z: fromGrid(z) })
+          cursor = cameFrom[cursor]
+        }
+        return path.reverse()
+      }
+
+      const cx = entry.x
+      const cz = entry.z
+      const baseCost = cost[currentIdx]
+      for (let d = 0; d < 8; d += 1) {
+        const dx = dirX[d]
+        const dz = dirZ[d]
+        const nx = cx + dx
+        const nz = cz + dz
+        if (nx < minX || nx > maxX || nz < minZ || nz > maxZ) continue
+        const nextIdx = currentIdx + dx + dz * width
+        if (isCellBlocked(nx, nz, nextIdx)) continue
+        if (dx !== 0 && dz !== 0 && (
+          isCellBlocked(cx + dx, cz, currentIdx + dx)
+          || isCellBlocked(cx, cz + dz, currentIdx + dz * width)
+        )) continue
+
+        const nextCost = baseCost + (dx !== 0 && dz !== 0 ? Math.SQRT2 : 1)
+        if (nextCost >= cost[nextIdx]) continue
+        cost[nextIdx] = nextCost
+        cameFrom[nextIdx] = currentIdx
+        const heuristic = Math.hypot(goalNode.x - nx, goalNode.z - nz)
+        offer(nextIdx, nx, nz, nextCost + heuristic)
+      }
+    }
+    return []
+  }
+
+  const startKey = gridKey(startNode)
+  const goalKey = gridKey(goalNode)
   type OpenNode = { key: string; node: GridNode; score: number; order: number }
   const open = new Map<string, OpenNode>()
   const heap: OpenNode[] = []
