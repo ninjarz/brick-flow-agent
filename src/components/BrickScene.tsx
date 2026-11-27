@@ -472,6 +472,24 @@ const exactOrientationMatrix4 = (values: NonNullable<BrickPose['orientationMatri
   values[0], values[1], values[2], 0, values[3], values[4], values[5], 0, values[6], values[7], values[8], 0, 0, 0, 0, 1,
 )
 
+const MatrixGroup = ({
+  values,
+  children,
+}: {
+  values: NonNullable<BrickPose['orientationMatrix']>
+  children: ReactNode
+}) => {
+  const ref = useRef<Group>(null)
+  useLayoutEffect(() => {
+    const group = ref.current
+    if (!group) return
+    group.matrixAutoUpdate = false
+    group.matrix.copy(exactOrientationMatrix4(values))
+    group.matrixWorldNeedsUpdate = true
+  }, [values])
+  return <group ref={ref} matrixAutoUpdate={false}>{children}</group>
+}
+
 const BrickPoseRotation = ({
   rotationQuarterTurns,
   verticalQuarterTurns,
@@ -488,7 +506,7 @@ const BrickPoseRotation = ({
   <group rotation={[0, getHorizontalRotationRadians(rotationQuarterTurns), 0]}>
     <group rotation={[getVerticalRotationRadians(verticalQuarterTurns), 0, 0]}>
       <group rotation={[0, 0, rollQuarterTurns * Math.PI / 2]}>
-        {orientationMatrix ? <group matrix={exactOrientationMatrix4(orientationMatrix)} matrixAutoUpdate={false}>{children}</group> : children}
+        {orientationMatrix ? <MatrixGroup values={orientationMatrix}>{children}</MatrixGroup> : children}
       </group>
     </group>
   </group>
