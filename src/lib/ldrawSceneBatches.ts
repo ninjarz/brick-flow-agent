@@ -10,7 +10,7 @@ import { brickById, colorHex, colorOpacity } from '../data/basicBricks'
 import type { BrickDefinition, PlacedBrick } from '../types/bricks'
 import { mergeLDrawPrintBatches, prepareLDrawPrintBatches, prepareLDrawPickingGeometry, type LDrawPrintBatch } from './ldrawPrintBatches'
 import { getBrickWorldFrame } from './brickUnits'
-import { getBrickWorldBoundsFrame } from './ldrawBounds'
+import { getBrickLocalBounds } from './ldrawBounds'
 import { getLDrawEdgePoints } from './ldrawEdgePoints'
 import { onLDrawGeneratedVisualLoaded } from './ldrawGeneratedVisualLoader'
 import { createLoadedLDrawBodyGeometry, createLDrawPrintGeometries } from './ldrawVisualGeometry'
@@ -38,6 +38,29 @@ export const getLDrawSceneMatrix = (definition: BrickDefinition, brick: PlacedBr
   if (m) matrix.multiply(new Matrix4().set(m[0], m[1], m[2], 0, m[3], m[4], m[5], 0, m[6], m[7], m[8], 0, 0, 0, 0, 1))
   byBrick.set(brick, matrix)
   return matrix
+}
+
+/** Tightly fitted oriented bounding-box matrix in world space for selection/highlight outlines. */
+export const getBrickOrientedBoundsMatrix = (
+  definition: BrickDefinition,
+  brick: PlacedBrick,
+  paddingX = 0,
+  paddingY = 0,
+  paddingZ = 0,
+) => {
+  const local = getBrickLocalBounds(definition)
+  const localBox = new Matrix4()
+    .makeTranslation(
+      (local.minX + local.maxX) / 2 - definition.footprint.widthStuds / 2,
+      (local.minY + local.maxY) / 2 - definition.footprint.heightStuds / 2,
+      (local.minZ + local.maxZ) / 2 - definition.footprint.depthStuds / 2,
+    )
+    .scale(new Vector3(
+      local.maxX - local.minX + paddingX,
+      local.maxY - local.minY + paddingY,
+      local.maxZ - local.minZ + paddingZ,
+    ))
+  return getLDrawSceneMatrix(definition, brick).clone().multiply(localBox)
 }
 
 // InstancedMesh does not support negative determinants. Reflect the shared mould
@@ -164,9 +187,7 @@ function* generateLDrawSceneBatches(bricks: PlacedBrick[], options: Options, pre
       appendLines(`body:${splitBaseLines ? 'active:' : ''}${chunk}`, '#172033', getLDrawEdgePoints(body), matrix, brick, splitBaseLines)
     }
     if (highlighted || floating) {
-      const bounds = getBrickWorldBoundsFrame(definition, brick.pose)
-      const boundsMatrix = (x: number, y: number, z: number) => new Matrix4().makeTranslation(bounds.x, bounds.y, bounds.z)
-        .scale(new Vector3(bounds.width + x, bounds.height + y, bounds.depth + z))
+      const boundsMatrix = (x: number, y: number, z: number) => getBrickOrientedBoundsMatrix(definition, brick, x, y, z)
       const rigid = options.highlightedIds.size > 1 && highlighted
       if (highlighted) appendLines(`highlight:${rigid ? 'active:' : ''}${chunk}`, '#f59e0b', boxEdges, boundsMatrix(.16, .2, .16), brick, rigid)
       if (floating) appendLines(`floating:${splitBaseLines ? 'active:' : ''}${chunk}`, '#ef4444', boxEdges, boundsMatrix(.14, .18, .14), brick, splitBaseLines)

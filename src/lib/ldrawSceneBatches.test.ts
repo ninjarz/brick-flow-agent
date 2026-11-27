@@ -3,7 +3,7 @@ import { BoxGeometry, Color, DoubleSide, FrontSide, Matrix3, Matrix4, Mesh, Mesh
 import { brickById } from '../data/basicBricks'
 import { getBrickWorldFrame } from './brickUnits'
 import { loadLDrawGeneratedVisual } from './ldrawGeneratedVisualLoader'
-import { buildLDrawSceneBatches, clearPreparedLDrawScenes, prepareLDrawSceneBatches, createLDrawBatchMesh, updateLDrawBatchMesh, getLDrawSceneMatrix, getPositiveLDrawGeometry } from './ldrawSceneBatches'
+import { buildLDrawSceneBatches, clearPreparedLDrawScenes, prepareLDrawSceneBatches, createLDrawBatchMesh, updateLDrawBatchMesh, getBrickOrientedBoundsMatrix, getLDrawSceneMatrix, getPositiveLDrawGeometry } from './ldrawSceneBatches'
 import { createLDrawPrintBatchMesh, mergeLDrawPrintBatches, prepareLDrawPrintBatches } from './ldrawPrintBatches'
 import { makeBrick } from './planUtils'
 
@@ -394,4 +394,29 @@ it('defers pending official artwork while retaining its mould and restores it on
   expect(pending.meshBatches.filter(batch => !batch.print)).toEqual(complete.meshBatches.filter(batch => !batch.print))
   const restored = buildLDrawSceneBatches([brick], options)
   expect(restored.printSources.some(batch => batch.print)).toBe(true)
+})
+
+it('builds tightly fitted oriented bounding boxes for angled bricks instead of world AABBs', () => {
+  const angle = (33.7 * Math.PI) / 180
+  const cos = Math.cos(-angle)
+  const sin = Math.sin(-angle)
+  const brick = {
+    ...makeBrick('plate-1x3', 'gray', 10, 0, 10),
+    pose: {
+      xStud: 10,
+      yStud: 0,
+      zStud: 10,
+      rotationQuarterTurns: 0 as const,
+      orientationMatrix: [cos, 0, sin, 0, 1, 0, -sin, 0, cos] as [number, number, number, number, number, number, number, number, number],
+    },
+  }
+  const definition = brickById.get(brick.brickId)!
+  const obb = getBrickOrientedBoundsMatrix(definition, brick, 0, 0, 0)
+  // Extract column lengths (OBB side extents) and verify they match the uninflated 3x0.4x1 plate
+  const colX = new Vector3().setFromMatrixColumn(obb, 0)
+  const colZ = new Vector3().setFromMatrixColumn(obb, 2)
+  expect(colX.length()).toBeCloseTo(3, 1)
+  expect(colZ.length()).toBeCloseTo(1, 1)
+  // And the X axis is rotated by -33.7 deg around Y (not aligned with world X)
+  expect(Math.abs(colX.clone().normalize().z)).toBeGreaterThan(0.5)
 })

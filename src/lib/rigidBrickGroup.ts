@@ -1,11 +1,46 @@
 import { Matrix4, Vector3 } from 'three'
 import { brickById } from '../data/basicBricks'
+import { getBrickRotationMatrix, poseOrientationFromMatrix } from './brickOrientation'
 import { footprintToWorld, getBrickWorldFrame, normalizeQuarterTurns } from './brickUnits'
 import type { PlacedBrick } from '../types/bricks'
 
 export const translateRigidBrickGroup = (bricks: PlacedBrick[], delta: { xStud?: number; yStud?: number; zStud?: number }) => bricks.map(brick => ({ ...brick, pose: { ...brick.pose,
   xStud: brick.pose.xStud + (delta.xStud ?? 0), yStud: brick.pose.yStud + (delta.yStud ?? 0), zStud: brick.pose.zStud + (delta.zStud ?? 0),
 } }))
+
+/** Rotates a rigid group of bricks by an arbitrary 3D rotation matrix around a world pivot. */
+export const rotateRigidBrickGroupByMatrix = (
+  bricks: PlacedBrick[],
+  rotation: Matrix4,
+  pivot: { x: number; y: number; z: number },
+): PlacedBrick[] => {
+  const pivotVec = new Vector3(pivot.x, pivot.y, pivot.z)
+  return bricks.map((brick) => {
+    const definition = brickById.get(brick.brickId)
+    if (!definition) return brick
+    const frame = getBrickWorldFrame(definition, brick.pose)
+    const center = new Vector3(frame.x, frame.y, frame.z).sub(pivotVec).applyMatrix4(rotation).add(pivotVec)
+    const nextMatrix = rotation.clone().multiply(getBrickRotationMatrix(brick.pose))
+    const orientation = poseOrientationFromMatrix(nextMatrix)
+    const size = footprintToWorld(
+      definition,
+      orientation.rotationQuarterTurns,
+      orientation.verticalQuarterTurns ?? 0,
+      orientation.rollQuarterTurns ?? 0,
+      orientation.orientationMatrix,
+    )
+    return {
+      ...brick,
+      pose: {
+        ...brick.pose,
+        ...orientation,
+        xStud: center.x - size.width / 2,
+        yStud: center.y - size.height / 2,
+        zStud: center.z - size.depth / 2,
+      },
+    }
+  })
+}
 
 export const rotateRigidBrickGroup = (bricks: PlacedBrick[], pivotBrick: PlacedBrick, axis: 'horizontal' | 'vertical', turns: number, reference?: { x: number; y: number; z: number }) => {
   const pivotDefinition = brickById.get(pivotBrick.brickId)

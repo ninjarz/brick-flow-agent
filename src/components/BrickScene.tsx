@@ -23,7 +23,7 @@ import { brickById, colorHex, colorOpacity } from '../data/basicBricks'
 import { worldEntityDefinitionById } from '../data/worldEntityDefinitions'
 import { getWorldCombatPresentationPhase } from '../lib/worldCombatPresentation'
 import { createRound2x2AxleBodyGeometry, createRound2x2AxleGrilleBodyGeometry } from '../lib/csgBrickGeometry'
-import { getBrickWorldBoundsFrame } from '../lib/ldrawBounds'
+import { getBrickLocalBounds } from '../lib/ldrawBounds'
 import { prepareBrickDefinitionsGeometry } from '../lib/planGeometry'
 import { getLDrawEdgePoints } from '../lib/ldrawEdgePoints'
 import { createLoadedLDrawBodyGeometry, createLDrawPrintGeometries } from '../lib/ldrawVisualGeometry'
@@ -964,19 +964,17 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
   const rotation = (brick.pose.rotationQuarterTurns * Math.PI) / 2
   const verticalQuarterTurns = brick.pose.verticalQuarterTurns ?? 0
   const bodyY = frame.y
-  const boundsFrame = getBrickWorldBoundsFrame(definition, brick.pose)
-  const boundsBoxPosition: [number, number, number] = [
-    boundsFrame.x - frame.x,
-    boundsFrame.y - bodyY,
-    boundsFrame.z - frame.z,
+  const localBounds = getBrickLocalBounds(definition)
+  const localBoundsPosition: [number, number, number] = [
+    (localBounds.minX + localBounds.maxX) / 2 - definition.footprint.widthStuds / 2,
+    (localBounds.minY + localBounds.maxY) / 2 - definition.footprint.heightStuds / 2,
+    (localBounds.minZ + localBounds.maxZ) / 2 - definition.footprint.depthStuds / 2,
   ]
-  const renderBoundsBox = (paddingX: number, paddingY: number, paddingZ: number, color: string) => (
-    <BoundsOutline
-      position={boundsBoxPosition}
-      size={[boundsFrame.width + paddingX, boundsFrame.height + paddingY, boundsFrame.depth + paddingZ]}
-      color={color}
-    />
-  )
+  const localBoundsSize: [number, number, number] = [
+    localBounds.maxX - localBounds.minX,
+    localBounds.maxY - localBounds.minY,
+    localBounds.maxZ - localBounds.minZ,
+  ]
   const rotateWithPose = (children: ReactNode) => (
     <BrickPoseRotation
       rotationQuarterTurns={brick.pose.rotationQuarterTurns}
@@ -987,6 +985,14 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
       {children}
     </BrickPoseRotation>
   )
+  const renderBoundsBox = (paddingX: number, paddingY: number, paddingZ: number, color: string) =>
+    rotateWithPose(
+      <BoundsOutline
+        position={localBoundsPosition}
+        size={[localBoundsSize[0] + paddingX, localBoundsSize[1] + paddingY, localBoundsSize[2] + paddingZ]}
+        color={color}
+      />,
+    )
   const connectors = getBrickConnectors(definition, brick.pose)
   const rendersOwnStuds = brick.brickId === 'brick-round-2x2-axle'
     || brick.brickId === 'plate-round-2x2-axle'

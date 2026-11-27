@@ -1,11 +1,87 @@
 import { getBrickSelectionReference } from '../lib/brickEditorCoordinates'
+import {
+  applyBrickEulerAngles,
+  applyBrickRotationMatrix,
+  getBrickEulerAngles,
+  getBrickRotationMatrix,
+  isReflectedRotationMatrix,
+  normalizeAngleDegrees,
+  rotationMatrixFromEulerAngles,
+  type BrickEulerAngles,
+} from '../lib/brickOrientation'
 import { Boxes, Copy, RotateCw, Trash2, Unlink2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { brickById, colorHex } from '../data/basicBricks'
-import { WORLD_EDIT_STEP_STUDS, normalizeQuarterTurns } from '../lib/brickUnits'
+import { WORLD_EDIT_STEP_STUDS } from '../lib/brickUnits'
 import { useI18n } from '../lib/i18n'
 import type { BrickColor, BrickStructure, BuildPlan, PlacedBrick } from '../types/bricks'
 import { getVoxelInteractionKind, toggleVoxelBlockInteraction } from '../lib/voxelBlockState'
+
+const AngleField = ({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: number
+  onChange: (degrees: number) => void
+}) => {
+  const [draft, setDraft] = useState(String(value))
+  const [focused, setFocused] = useState(false)
+
+  useEffect(() => {
+    if (!focused) setDraft(String(value))
+  }, [value, focused])
+
+  const commit = (raw: string) => {
+    const parsed = Number(raw)
+    if (!Number.isFinite(parsed)) {
+      setDraft(String(value))
+      return
+    }
+    const normalized = normalizeAngleDegrees(parsed)
+    setDraft(String(normalized))
+    if (Math.abs(normalized - value) > 1e-6) onChange(normalized)
+  }
+
+  return (
+    <label>
+      {label}
+      <div className="angle-input-row">
+        <input
+          type="number"
+          step={1}
+          value={draft}
+          onFocus={() => setFocused(true)}
+          onChange={(event) => {
+            const raw = event.target.value
+            setDraft(raw)
+            if (raw.trim() === '' || raw === '-' || raw.endsWith('.')) return
+            const parsed = Number(raw)
+            if (Number.isFinite(parsed)) onChange(normalizeAngleDegrees(parsed))
+          }}
+          onBlur={() => {
+            setFocused(false)
+            commit(draft)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') commit(draft)
+          }}
+        />
+        <span className="angle-unit" aria-hidden="true">°</span>
+        <button
+          type="button"
+          className="angle-step-button"
+          title="+90°"
+          aria-label={`${label} +90°`}
+          onClick={() => onChange(normalizeAngleDegrees(value + 90))}
+        >
+          +90°
+        </button>
+      </div>
+    </label>
+  )
+}
 
 type BrickEditorPanelProps = {
   plan: BuildPlan
@@ -92,6 +168,7 @@ export const BrickEditorPanel = ({
   const reference = getBrickSelectionReference(plan.bricks.filter(brick => ids.has(brick.id)), selectedStructure)!
   const referenceBrick = reference.brick
   const assemblyPosition = reference.position
+  const referenceAngles = getBrickEulerAngles(referenceBrick.pose)
 
   const setPose = (axis: 'xStud' | 'yStud' | 'zStud', value: number) => {
     if (!Number.isFinite(value)) return
@@ -105,6 +182,20 @@ export const BrickEditorPanel = ({
       },
     }
     onUpdateBrick(next)
+  }
+
+  const setAngle = (axis: keyof BrickEulerAngles, degrees: number) => {
+    if (!Number.isFinite(degrees)) return
+    const targetAngles: BrickEulerAngles = { ...referenceAngles, [axis]: normalizeAngleDegrees(degrees) }
+    if (selectedCount <= 1 || referenceBrick.id === selectedBrick.id) {
+      onUpdateBrick(applyBrickEulerAngles(selectedBrick, targetAngles))
+      return
+    }
+    const refCurrent = getBrickRotationMatrix(referenceBrick.pose)
+    const refTarget = rotationMatrixFromEulerAngles(targetAngles, isReflectedRotationMatrix(refCurrent))
+    const deltaRotation = refTarget.clone().multiply(refCurrent.clone().invert())
+    const nextSelectedRotation = deltaRotation.multiply(getBrickRotationMatrix(selectedBrick.pose))
+    onUpdateBrick(applyBrickRotationMatrix(selectedBrick, nextSelectedRotation))
   }
 
   return (
@@ -145,7 +236,6 @@ export const BrickEditorPanel = ({
         />
       )}
 
-      {selectedBrick.pose.orientationMatrix && <p className="subtle-text">{t('control.exactOrientation')}</p>}
       <p className="subtle-text">{t(selectedCount > 1 ? 'control.groupAssemblyReference' : 'control.partAssemblyReference')}</p>
       <div className="field-grid">
         <label>
@@ -160,68 +250,21 @@ export const BrickEditorPanel = ({
           {t('control.z')}
           <input type="number" step={WORLD_EDIT_STEP_STUDS} value={Number(assemblyPosition.z.toFixed(3))} onChange={(event) => setPose('zStud', Number(event.target.value))} />
         </label>
-        <label>
-          {t('control.horizontalRotation')}
-          <select
-            value={referenceBrick.pose.rotationQuarterTurns}
-            onChange={(event) =>
-              onUpdateBrick({
-                ...selectedBrick,
-                pose: {
-                  ...selectedBrick.pose,
-                  rotationQuarterTurns: normalizeQuarterTurns(selectedBrick.pose.rotationQuarterTurns + Number(event.target.value) - referenceBrick.pose.rotationQuarterTurns),
-                },
-              })
-            }
-          >
-            <option value={0}>0°</option>
-            <option value={1}>90°</option>
-            <option value={2}>180°</option>
-            <option value={3}>270°</option>
-          </select>
-        </label>
-        <label>
-          {t('control.verticalRotation')}
-          <select
-            value={referenceBrick.pose.verticalQuarterTurns ?? 0}
-            onChange={(event) =>
-              onUpdateBrick({
-                ...selectedBrick,
-                pose: {
-                  ...selectedBrick.pose,
-                  verticalQuarterTurns: normalizeQuarterTurns((selectedBrick.pose.verticalQuarterTurns ?? 0) + Number(event.target.value) - (referenceBrick.pose.verticalQuarterTurns ?? 0)),
-                },
-              })
-            }
-          >
-            <option value={0}>0°</option>
-            <option value={1}>90°</option>
-            <option value={2}>180°</option>
-            <option value={3}>270°</option>
-          </select>
-        </label>
-        {selectedCount <= 1 && selectedDefinition?.pack === 'lego' && (
-          <label>
-            {t('control.rollRotation')}
-            <select
-              value={selectedBrick.pose.rollQuarterTurns ?? 0}
-              onChange={(event) =>
-                onUpdateBrick({
-                  ...selectedBrick,
-                  pose: {
-                    ...selectedBrick.pose,
-                    rollQuarterTurns: Number(event.target.value) as 0 | 1 | 2 | 3,
-                  },
-                })
-              }
-            >
-              <option value={0}>0°</option>
-              <option value={1}>90°</option>
-              <option value={2}>180°</option>
-              <option value={3}>270°</option>
-            </select>
-          </label>
-        )}
+        <AngleField
+          label={t('control.horizontalRotation')}
+          value={referenceAngles.yaw}
+          onChange={(degrees) => setAngle('yaw', degrees)}
+        />
+        <AngleField
+          label={t('control.verticalRotation')}
+          value={referenceAngles.pitch}
+          onChange={(degrees) => setAngle('pitch', degrees)}
+        />
+        <AngleField
+          label={t('control.rollRotation')}
+          value={referenceAngles.roll}
+          onChange={(degrees) => setAngle('roll', degrees)}
+        />
       </div>
 
       <div className="swatches" aria-label={t('control.colors')}>

@@ -2,9 +2,10 @@ import { getWorldStoryActions } from './lib/worldStoryActions'
 import { createCumulativeManualView } from './lib/manualPresentation'
 import { createKeyboardMoveSession } from './lib/keyboardMoveSession'
 import { getEditorKeyboardMove } from './lib/editorAnalysisClient'
-import { getBrickSelectionReference } from './lib/brickEditorCoordinates'
+import { getBrickAssemblyPosition, getBrickSelectionReference } from './lib/brickEditorCoordinates'
+import { getBrickRotationMatrix, isIdentityRotationMatrix } from './lib/brickOrientation'
 import { getEditorValidation, getEditorGenerationValidation, getEditorConnectedSelection, getEditorSupport, getEditorManual, getPreparedManualPlan, getEditorTransform, setEditorAnalysisActive, backgroundAnalysisThreshold } from './lib/editorAnalysisClient'
-import { rotateRigidBrickGroup, translateRigidBrickGroup } from './lib/rigidBrickGroup'
+import { rotateRigidBrickGroup, rotateRigidBrickGroupByMatrix, translateRigidBrickGroup } from './lib/rigidBrickGroup'
 import { createManualHtmlBlob, createLDrawBlob } from './lib/manualExportClient'
 import { useIntentState } from './hooks/useIntentState'
 import { yieldToBrowser } from './lib/yieldToBrowser'
@@ -1506,30 +1507,50 @@ function App() {
 
       if (selectionIds.length > 1 && selectionIds.includes(updated.id)) {
         const selectionIdSet = new Set(selectionIds)
-        const delta = {
-          xStud: updated.pose.xStud - currentBrick.pose.xStud,
-          yStud: updated.pose.yStud - currentBrick.pose.yStud,
-          zStud: updated.pose.zStud - currentBrick.pose.zStud,
-          rotationQuarterTurns: updated.pose.rotationQuarterTurns - currentBrick.pose.rotationQuarterTurns,
-          verticalQuarterTurns: (updated.pose.verticalQuarterTurns ?? 0) - (currentBrick.pose.verticalQuarterTurns ?? 0),
-        }
         const colorChanged = updated.color !== currentBrick.color
         const selectedBricks = current.bricks.filter((brick) => selectionIdSet.has(brick.id))
-        const horizontallyRotatedBricks = delta.rotationQuarterTurns === 0
-          ? selectedBricks
-          : rotateBrickGroupHorizontally(selectedBricks, currentBrick, delta.rotationQuarterTurns)
-        const verticallyRotatedBricks = delta.verticalQuarterTurns === 0
-          ? horizontallyRotatedBricks
-          : rotateBrickGroupVertically(horizontallyRotatedBricks, currentBrick, delta.verticalQuarterTurns)
-        const nextBricks = verticallyRotatedBricks
+        const deltaRotation = getBrickRotationMatrix(updated.pose).multiply(getBrickRotationMatrix(currentBrick.pose).invert())
+        const hasRotation = !isIdentityRotationMatrix(deltaRotation)
+        const structure = getExactSelectionStructure(current, selectionIds)
+        const reference = getBrickSelectionReference(selectedBricks, structure)
+        const rotatedBricks = hasRotation && reference
+          ? rotateRigidBrickGroupByMatrix(selectedBricks, deltaRotation, reference.position)
+          : selectedBricks
+        const rotatedCurrent = rotatedBricks.find((brick) => brick.id === currentBrick.id) ?? currentBrick
+        const updatedAnchor = getBrickAssemblyPosition(updated)
+        const rotatedAnchor = getBrickAssemblyPosition(rotatedCurrent)
+        const currentAnchor = getBrickAssemblyPosition(currentBrick)
+        const translationDelta = hasRotation
+          ? {
+              xStud: updatedAnchor.x - currentAnchor.x,
+              yStud: updatedAnchor.y - currentAnchor.y,
+              zStud: updatedAnchor.z - currentAnchor.z,
+            }
+          : {
+              xStud: updated.pose.xStud - rotatedCurrent.pose.xStud,
+              yStud: updated.pose.yStud - rotatedCurrent.pose.yStud,
+              zStud: updated.pose.zStud - rotatedCurrent.pose.zStud,
+            }
+        const hasTranslation = Math.abs(translationDelta.xStud) > 1e-9 || Math.abs(translationDelta.yStud) > 1e-9 || Math.abs(translationDelta.zStud) > 1e-9
+        // When rotating without translating, keep the assembly reference fixed (avoid drift from anchor rounding).
+        const effectiveDelta = hasRotation && !hasTranslation
+          ? { xStud: 0, yStud: 0, zStud: 0 }
+          : hasRotation
+            ? {
+                xStud: updatedAnchor.x - rotatedAnchor.x,
+                yStud: updatedAnchor.y - rotatedAnchor.y,
+                zStud: updatedAnchor.z - rotatedAnchor.z,
+              }
+            : translationDelta
+        const nextBricks = rotatedBricks
           .map((brick) => ({
             ...brick,
             color: colorChanged && brickById.get(brick.brickId)?.colors.includes(updated.color)
               ? updated.color
               : brick.color,
-            pose: translateBrickPose(brick.pose, delta),
+            pose: hasTranslation ? translateBrickPose(brick.pose, effectiveDelta) : brick.pose,
           }))
-        if (current.bricks.length >= 800 && typeof Worker !== 'undefined') { queueGroupEdit(current, nextBricks, delta.rotationQuarterTurns !== 0 || delta.verticalQuarterTurns !== 0); return current }
+        if (current.bricks.length >= 800 && typeof Worker !== 'undefined') { queueGroupEdit(current, nextBricks, hasRotation); return current }
         const stationaryData = getStationarySpatialState(current.bricks, selectionIdSet)
         if (!canAcceptBrickGroupPose(nextBricks, current.bricks, { action: 'updateBrickGroup', rigid: true }, stationaryData)) return current
         const nextBrickById = new Map(nextBricks.map((brick) => [brick.id, brick]))
