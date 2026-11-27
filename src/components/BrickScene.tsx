@@ -166,7 +166,7 @@ const BoundsOutline = ({ position, size, color }: {
   <mesh position={position} raycast={() => null}>
     <boxGeometry args={size} />
     <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-    <Edges color={color} threshold={15} />
+    <Edges color={color} threshold={15} side={DoubleSide} />
   </mesh>
 )
 
@@ -1003,14 +1003,32 @@ const BrickMeshBody = ({ brick, definition, selected, highlighted, floating, pre
       {children}
     </BrickPoseRotation>
   )
-  const renderBoundsBox = (paddingX: number, paddingY: number, paddingZ: number, color: string) =>
-    rotateWithPose(
-      <BoundsOutline
-        position={localBoundsPosition}
-        size={[localBoundsSize[0] + paddingX, localBoundsSize[1] + paddingY, localBoundsSize[2] + paddingZ]}
-        color={color}
-      />,
+  const renderBoundsBox = (paddingX: number, paddingY: number, paddingZ: number, color: string) => {
+    const m = brick.pose.orientationMatrix
+    const isReflected = Boolean(
+      m && (m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6])) < 0,
     )
+    const positiveMatrix = m && isReflected
+      ? ([-m[0], m[1], m[2], -m[3], m[4], m[5], -m[6], m[7], m[8]] as NonNullable<BrickPose['orientationMatrix']>)
+      : m
+    const boxPos: [number, number, number] = isReflected
+      ? [-localBoundsPosition[0], localBoundsPosition[1], localBoundsPosition[2]]
+      : localBoundsPosition
+    return (
+      <BrickPoseRotation
+        rotationQuarterTurns={brick.pose.rotationQuarterTurns}
+        verticalQuarterTurns={verticalQuarterTurns}
+        rollQuarterTurns={brick.pose.rollQuarterTurns ?? 0}
+        orientationMatrix={positiveMatrix}
+      >
+        <BoundsOutline
+          position={boxPos}
+          size={[localBoundsSize[0] + paddingX, localBoundsSize[1] + paddingY, localBoundsSize[2] + paddingZ]}
+          color={color}
+        />
+      </BrickPoseRotation>
+    )
+  }
   const connectors = getBrickConnectors(definition, brick.pose)
   const rendersOwnStuds = brick.brickId === 'brick-round-2x2-axle'
     || brick.brickId === 'plate-round-2x2-axle'
