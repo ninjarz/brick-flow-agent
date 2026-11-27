@@ -73,6 +73,7 @@ export type BrickSceneProps = {
   bricks: PlacedBrick[]
   selectedId?: string
   highlightedIds?: string[]
+  blockedCollisionIds?: string[]
   hiddenPrintBrickIds?: string[]
   cameraFollowStepKey?: string
   cameraFrameKey?: string
@@ -107,7 +108,7 @@ export type BrickSceneProps = {
   onBeginDragSelected?: (id: string, point: { x: number; z: number }) => void
   onEndNudge?: (cancel?: boolean) => void
   onNudgeSelected: (delta: { xStud?: number; yStud?: number; zStud?: number }) => void
-  onRotateSelected: (axis: 'horizontal' | 'vertical', deltaQuarterTurns: -1 | 1) => void
+  onRotateSelected: (axis: 'horizontal' | 'vertical', deltaQuarterTurns: -1 | 1, stepDegrees?: number) => void
   onDeleteSelected: () => void
 }
 
@@ -736,11 +737,11 @@ const KeyboardShortcuts = ({
       } else if (key === 'q') {
         if (event.repeat) return
         event.preventDefault()
-        onRotateSelectedRef.current('horizontal', 1)
+        onRotateSelectedRef.current('horizontal', 1, event.shiftKey ? 15 : 90)
       } else if (key === 'e') {
         if (event.repeat) return
         event.preventDefault()
-        onRotateSelectedRef.current('vertical', 1)
+        onRotateSelectedRef.current('vertical', 1, event.shiftKey ? 15 : 90)
       } else if (event.key === 'Backspace') {
         if (event.repeat) return
         event.preventDefault()
@@ -2669,6 +2670,7 @@ export const BrickScene = ({
   framingBricks,
   selectedId,
   highlightedIds = emptySceneIds,
+  blockedCollisionIds,
   hiddenPrintBrickIds = emptySceneIds,
   cameraFrameKey,
   analysisPaused = false,
@@ -2948,13 +2950,20 @@ export const BrickScene = ({
     ]))
   }, [backgroundSupport, deferredSupportBricks, ldrawBoundsVersion, resolvedStabilityAnalysis, showSupportWarnings])
 
+  const effectiveSupportedByBrickId = useMemo(() => {
+    if (!blockedCollisionIds?.length) return supportedByBrickId
+    const next = new Map(supportedByBrickId)
+    for (const id of blockedCollisionIds) next.set(id, false)
+    return next
+  }, [supportedByBrickId, blockedCollisionIds])
+
   if (orbitTargetKeyRef.current !== cameraFrameRequestKey) {
     orbitTargetKeyRef.current = cameraFrameRequestKey
     orbitTargetRef.current = [gridFrame.modelCenterX, gridFrame.centerY, gridFrame.modelCenterZ]
   }
 
   preparationOptionsRef.current = {
-    selectedId, highlightedIds: highlightedIdSet, supportedByBrickId,
+    selectedId, highlightedIds: highlightedIdSet, supportedByBrickId: effectiveSupportedByBrickId,
     hiddenPrintIds: hiddenPrintIdSet,
     displayColorByBrickId: resolvedDisplayColorByBrickId, showEdges: showBrickEdges,
     keepSelectionInBaseBatches,
@@ -3039,7 +3048,7 @@ export const BrickScene = ({
             bricks={displayedBricks}
             selectedId={selectedId}
             highlightedIdSet={highlightedIdSet}
-            supportedByBrickId={supportedByBrickId}
+            supportedByBrickId={effectiveSupportedByBrickId}
             preferDetailedGeometry={displayedDetailedGeometry}
             preparedResources={preparedResources}
             showEdges={showBrickEdges}

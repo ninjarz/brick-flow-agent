@@ -14,7 +14,7 @@ import {
   rotationMatrixFromEulerAngles,
 } from './brickOrientation'
 import { getLDrawSceneMatrix } from './ldrawSceneBatches'
-import { createBrickCollisionIndex, hasBrickCollision, makeBrick } from './planUtils'
+import { createBrickCollisionIndex, getCollidingBrickIds, hasBrickCollision, makeBrick, snapBrickToPlan } from './planUtils'
 import { rotateRigidBrickGroupByMatrix } from './rigidBrickGroup'
 
 const hogwartsPlan = rawHogwarts as unknown as BuildPlan
@@ -148,5 +148,16 @@ describe('unified brick orientation', () => {
     const pivot1x1 = makeBrick('plate-round-1x1', 'gray', 38, 0, 101)
     const pivotedTop = applyBrickEulerAngles(makeBrick('plate-1x3', 'gray', 37, 0.4, 101), { yaw: 33.7, pitch: 0, roll: 0 })
     expect(hasBrickCollision(pivotedTop, [pivot1x1], createBrickCollisionIndex([pivot1x1]))).toBe(false)
+
+    // getCollidingBrickIds reports the exact blocking brick ID
+    expect(getCollidingBrickIds(misalignedTop, [base], index)).toEqual([base.id])
+  })
+
+  it('auto-aligns yaw when snapping a 0-deg brick onto an angled 33.7-deg brick', () => {
+    const angledBase = applyBrickEulerAngles(makeBrick('plate-1x3', 'tan', 20, 0, 20), { yaw: 33.7, pitch: 0, roll: 0 })
+    const incoming = makeBrick('plate-1x3', 'gray', 20, 0.4, 20)
+    const snapped = snapBrickToPlan(incoming, [angledBase])
+    expect(getBrickEulerAngles(snapped.pose).yaw).toBeCloseTo(33.7, 1)
+    expect(hasBrickCollision(snapped, [angledBase])).toBe(false)
   })
 })

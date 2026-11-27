@@ -17,7 +17,7 @@ import { useLlmConnection } from './hooks/useLlmConnection'
 import { useWorkspacePersistence } from './hooks/useWorkspacePersistence'
 import { WorkspaceStorageStatus } from './components/WorkspaceStorageStatus'
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, Box, Boxes, ClipboardList, Eye, EyeOff, FileUp, FolderOpen, Gauge, Github, Globe2, Link, MessageCircle, MessageSquareText, Pause, Play, Redo2, ScanLine, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
+import { BookOpen, Box, Boxes, CircleHelp, ClipboardList, Eye, EyeOff, FileUp, FolderOpen, Gauge, Github, Globe2, Link, MessageCircle, MessageSquareText, Pause, Play, Redo2, ScanLine, Settings2, Trash2, Undo2, Unlink2, X } from 'lucide-react'
 import { BrickEditorPanel } from './components/BrickEditorPanel'
 import { BrickCountsPanel } from './components/BrickCountsPanel'
 import type { WorldCommandTargetOption } from './components/WorldEntityEditorPanel'
@@ -38,7 +38,7 @@ import { defaultFinishedAssets, getFinishedAssetCounts, isFinishedAssetPlanDefer
 import { preparePlanGeometry } from './lib/planGeometry'
 import { formatBuildManualMarkdown, getAssemblyGuide, type BuildManual } from './lib/manualSerializer'
 import { getManualStepPage } from './lib/manualPagination'
-import { createSingleBrickSteps, countBricks, createBrickCollisionIndex, createPlanSpatialState, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickPlacementDiagnostics, getBrickRawOverlapScore, hasBrickCollision, isBrickAboveGround, makeBrick, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
+import { createSingleBrickSteps, countBricks, createBrickCollisionIndex, createPlanSpatialState, duplicateBrick, findNearestOpenPoseAround, findSupportedOpenPose, getBlockingBuildPlanIssues, getBrickPlacementDiagnostics, getBrickRawOverlapScore, getCollidingBrickIds, hasBrickCollision, isBrickAboveGround, makeBrick, snapBrickToPlan, summarizeBuildPlanIssues, validateBuildPlan } from './lib/planUtils'
 import { loadCatalogPreferences, type CatalogPackPreference } from './lib/catalogPreferences'
 import { getBrickWorldFrame, normalizeHorizontalStud, normalizeYStud, roundToGrid, STUD_PITCH_WORLD, translateBrickPose } from './lib/brickUnits'
 import { useI18n } from './lib/i18n'
@@ -92,6 +92,7 @@ const WorldStoryDock = lazy(() => import('./components/WorldStoryDock').then((mo
 const PromptPreviewModal = lazy(() => import('./components/PromptPreviewModal').then((module) => ({ default: module.PromptPreviewModal })))
 const AssetLibraryModal = lazy(() => import('./components/AssetLibraryModal').then((module) => ({ default: module.AssetLibraryModal })))
 const BuildManualModal = lazy(() => import('./components/BuildManualModal').then((module) => ({ default: module.BuildManualModal })))
+const GuideModal = lazy(() => import('./components/GuideModal').then((module) => ({ default: module.GuideModal })))
 
 const defaultFinishedAssetI18nKeys = new Map(
   defaultFinishedAssets
@@ -245,6 +246,21 @@ function App() {
   const [generationSummary, setGenerationSummary] = useState<string>()
   const [importReport, setImportReport] = useState<{ title: string; details: string[] }>()
   const [isConfigOpen, setIsConfigOpen] = useState(false)
+  const [isGuideOpen, setIsGuideOpen] = useState(false)
+  const [blockedCollisionIds, setBlockedCollisionIds] = useState<string[]>([])
+  const blockedCollisionTimerRef = useRef<number | undefined>(undefined)
+  const flashBlockedCollisions = useCallback((ids: string[]) => {
+    if (ids.length === 0) return
+    setBlockedCollisionIds(ids)
+    if (blockedCollisionTimerRef.current !== undefined) window.clearTimeout(blockedCollisionTimerRef.current)
+    blockedCollisionTimerRef.current = window.setTimeout(() => {
+      setBlockedCollisionIds([])
+      blockedCollisionTimerRef.current = undefined
+    }, 900)
+  }, [])
+  useEffect(() => () => {
+    if (blockedCollisionTimerRef.current !== undefined) window.clearTimeout(blockedCollisionTimerRef.current)
+  }, [])
   const [isPromptPreviewOpen, setIsPromptPreviewOpen] = useState(false)
   const [isAssetLibraryOpen, setIsAssetLibraryOpen] = useState(false)
   const [isLoadingAsset, setIsLoadingAsset, isLoadingAssetRef] = useIntentState(false)
@@ -854,7 +870,7 @@ function App() {
   }, [buildManual, isManualOpen, isManualPlaying, manualPlaybackIntervalMs, manualStepIndex])
 
   useEffect(() => {
-    if (!isConfigOpen && !isPromptPreviewOpen && !isAssetLibraryOpen && !isObjImportOpen && !isImportDiagnosticsOpen && !isManualOpen && !isManualPreparing && !isStabilityLabOpen && !isTavernOpen) return
+    if (!isConfigOpen && !isGuideOpen && !isPromptPreviewOpen && !isAssetLibraryOpen && !isObjImportOpen && !isImportDiagnosticsOpen && !isManualOpen && !isManualPreparing && !isStabilityLabOpen && !isTavernOpen) return
 
     const handleModalEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
@@ -862,6 +878,8 @@ function App() {
 
       if (isTavernOpen) {
         setIsTavernOpen(false)
+      } else if (isGuideOpen) {
+        setIsGuideOpen(false)
       } else if (isManualOpen || isManualPreparing) {
         closeManual()
       } else if (isStabilityLabOpen) {
@@ -882,11 +900,11 @@ function App() {
 
     window.addEventListener('keydown', handleModalEscape)
     return () => window.removeEventListener('keydown', handleModalEscape)
-  }, [closeManual, isAssetLibraryOpen, isConfigOpen, isImportDiagnosticsOpen, isManualOpen, isManualPreparing, isObjImportOpen, isPromptPreviewOpen, isStabilityLabOpen, isTavernOpen])
+  }, [closeManual, isAssetLibraryOpen, isConfigOpen, isGuideOpen, isImportDiagnosticsOpen, isManualOpen, isManualPreparing, isObjImportOpen, isPromptPreviewOpen, isStabilityLabOpen, isTavernOpen])
 
   useEffect(() => {
     const handleHistoryKeyDown = (event: KeyboardEvent) => {
-      if (isConfigOpen || isPromptPreviewOpen || isAssetLibraryOpen || isObjImportOpen || isImportDiagnosticsOpen || isManualOpen || isStabilityLabOpen || isTavernOpen) return
+      if (isConfigOpen || isGuideOpen || isPromptPreviewOpen || isAssetLibraryOpen || isObjImportOpen || isImportDiagnosticsOpen || isManualOpen || isStabilityLabOpen || isTavernOpen) return
       if (isTypingElement(event.target)) return
       if (!event.metaKey && !event.ctrlKey) return
 
@@ -905,7 +923,7 @@ function App() {
 
     window.addEventListener('keydown', handleHistoryKeyDown)
     return () => window.removeEventListener('keydown', handleHistoryKeyDown)
-  }, [isAssetLibraryOpen, isConfigOpen, isImportDiagnosticsOpen, isManualOpen, isManualPreparing, isObjImportOpen, isPromptPreviewOpen, isStabilityLabOpen, isTavernOpen, redoPlan, undoPlan])
+  }, [isAssetLibraryOpen, isConfigOpen, isGuideOpen, isImportDiagnosticsOpen, isManualOpen, isManualPreparing, isObjImportOpen, isPromptPreviewOpen, isStabilityLabOpen, isTavernOpen, redoPlan, undoPlan])
 
 
   const handleImage = async (file?: File) => {
@@ -1373,6 +1391,9 @@ function App() {
     const currentOverlapScore = getBrickRawOverlapScore(currentBrick, collisionData.stationaryBricks, collisionData.spatialState.collisionIndex)
     const nextOverlapScore = getBrickRawOverlapScore(nextBrick, collisionData.stationaryBricks, collisionData.spatialState.collisionIndex)
     if (nextOverlapScore < currentOverlapScore - 0.000001) return true
+
+    const blockers = getCollidingBrickIds(nextBrick, collisionData.stationaryBricks, collisionData.spatialState.collisionIndex)
+    if (blockers.length > 0) flashBlockedCollisions(blockers)
 
     if (import.meta.env.DEV) {
       console.warn('brick-flow-agent blocked move', {
@@ -2488,7 +2509,7 @@ function App() {
     })
   }
 
-  const rotateSelected = (axis: 'horizontal' | 'vertical', deltaQuarterTurns: -1 | 1) => {
+  const rotateSelected = (axis: 'horizontal' | 'vertical', deltaQuarterTurns: -1 | 1, stepDegrees = 90) => {
     keyboardMove.current?.session.cancel()
     if (!selectedId) return
 
@@ -2497,14 +2518,25 @@ function App() {
       const selectionIdSet = new Set(selectionIds)
       const selected = current.bricks.find((brick) => brick.id === selectedId)
       if (!selected) return current
+      const deltaMatrix = rotationMatrixFromEulerAngles(
+        axis === 'horizontal'
+          ? { yaw: deltaQuarterTurns * stepDegrees, pitch: 0, roll: 0 }
+          : { yaw: 0, pitch: deltaQuarterTurns * stepDegrees, roll: 0 },
+      )
       if (selectionIds.length > 1) {
         const selectedBricks = current.bricks.filter((brick) => selectionIdSet.has(brick.id))
-        const nextBricks = axis === 'horizontal'
-          ? rotateBrickGroupHorizontally(selectedBricks, selected, deltaQuarterTurns)
-          : rotateBrickGroupVertically(selectedBricks, selected, deltaQuarterTurns)
+        const structure = getExactSelectionStructure(current, selectionIds)
+        const reference = getBrickSelectionReference(selectedBricks, structure)
+        const nextBricks = stepDegrees === 90
+          ? (axis === 'horizontal'
+              ? rotateBrickGroupHorizontally(selectedBricks, selected, deltaQuarterTurns)
+              : rotateBrickGroupVertically(selectedBricks, selected, deltaQuarterTurns))
+          : reference
+            ? rotateRigidBrickGroupByMatrix(selectedBricks, deltaMatrix, reference.position)
+            : selectedBricks
         if (current.bricks.length >= 800 && typeof Worker !== 'undefined') { queueGroupEdit(current, nextBricks, true); return current }
         const stationaryData = getStationarySpatialState(current.bricks, selectionIdSet)
-        const acceptedBricks = canAcceptBrickGroupPose(nextBricks, current.bricks, { action: 'rotateSelectedGroup', axis, deltaQuarterTurns, rigid: true }, stationaryData)
+        const acceptedBricks = canAcceptBrickGroupPose(nextBricks, current.bricks, { action: 'rotateSelectedGroup', axis, deltaQuarterTurns, stepDegrees, rigid: true }, stationaryData)
           ? nextBricks
           : findNearestOpenBrickGroupAround(nextBricks, current.bricks, selectionIdSet, stationaryData, true)
         if (!acceptedBricks) return current
@@ -2516,11 +2548,6 @@ function App() {
         }
       }
 
-      const deltaMatrix = rotationMatrixFromEulerAngles(
-        axis === 'horizontal'
-          ? { yaw: deltaQuarterTurns * 90, pitch: 0, roll: 0 }
-          : { yaw: 0, pitch: deltaQuarterTurns * 90, roll: 0 },
-      )
       const rotatedBrick = applyBrickRotationMatrix(
         selected,
         deltaMatrix.multiply(getBrickRotationMatrix(selected.pose)),
@@ -3102,6 +3129,15 @@ function App() {
                 >
                   <Settings2 size={18} />
                 </button>
+                <button
+                  className="icon-button"
+                  type="button"
+                  aria-label={t('top.guide')}
+                  title={t('top.guide')}
+                  onClick={() => setIsGuideOpen(true)}
+                >
+                  <CircleHelp size={18} />
+                </button>
                 <a
                   className="icon-button github-link"
                   href={createFeedbackUrl(plan, locale)}
@@ -3351,6 +3387,7 @@ function App() {
               viewMode={sceneViewMode}
               stabilityAnalysis={generationPreview ? undefined : sceneStabilityAnalysis}
               highlightedIds={highlightedSceneIds}
+              blockedCollisionIds={blockedCollisionIds}
               worldEntities={generationPreview ? [] : world.entities}
               worldEvents={world.events}
               worldElapsedSeconds={world.elapsedSeconds}
@@ -3375,7 +3412,7 @@ function App() {
               onEndNudge={endKeyboardMove}
               onNudgeSelected={nudgeSelected}
               onRotateSelected={rotateSelected}
-              keyboardEnabled={!isGenerating && !isConfigOpen && !isPromptPreviewOpen && !isAssetLibraryOpen && !isObjImportOpen && !isImportDiagnosticsOpen && !isManualOpen && !isStabilityLabOpen && !isTavernOpen}
+              keyboardEnabled={!isGenerating && !isConfigOpen && !isGuideOpen && !isPromptPreviewOpen && !isAssetLibraryOpen && !isObjImportOpen && !isImportDiagnosticsOpen && !isManualOpen && !isStabilityLabOpen && !isTavernOpen}
               onDeleteSelected={deleteSelected}
             />
           </Suspense>
@@ -3754,6 +3791,11 @@ function App() {
             getManualMarkdown={getManualMarkdown}
             ignoreSceneInteraction={ignoreSceneInteraction}
           />
+        </Suspense>
+      )}
+      {isGuideOpen && (
+        <Suspense fallback={null}>
+          <GuideModal onClose={() => setIsGuideOpen(false)} />
         </Suspense>
       )}
     </main>

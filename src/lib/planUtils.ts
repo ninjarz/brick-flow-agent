@@ -22,6 +22,7 @@ import {
   type MechanicalBridgeIndex,
 } from './mechanicalBridgeIndex'
 import { orientedCellsOverlap, type CellAxes, type CellBounds } from './orientedCellBounds'
+import { applyBrickEulerAngles, getBrickEulerAngles, normalizeAngleDegrees } from './brickOrientation'
 import { getRigidBrickMatrix } from './rigidBrickTransform'
 import { PlanSpatialState, type WorldBrickConnector } from './planSpatialState'
 import {
@@ -610,6 +611,45 @@ export const hasBrickCollision = (
   }
 
   return false
+}
+
+export const getCollidingBrickIds = (
+  brick: PlacedBrick,
+  bricks: PlacedBrick[],
+  collisionIndex?: StructuralCollisionIndex,
+  context?: PlanValidationContext,
+): string[] => {
+  const collidingIds: string[] = []
+  if (!collisionIndex) {
+    for (const other of bricks) {
+      if (
+        other.id !== brick.id && (
+          (doBrickBoundsOverlap(brick, other) &&
+            doBrickStructuralCellsCollide(brick, other) &&
+            !hasConnectorConnection(brick, other, context) &&
+            !hasIndirectMechanicalConnectorClearance(brick, other, bricks, context))
+          || hasStudBodyInterference(brick, other, context)
+        )
+      ) {
+        collidingIds.push(other.id)
+      }
+    }
+    return collidingIds
+  }
+
+  for (const candidateId of getStructuralCollisionCandidateIds(brick, collisionIndex)) {
+    const other = collisionIndex.bricksById.get(candidateId)
+    if (!other) continue
+    if (
+      (doBrickStructuralCellsCollide(brick, other) &&
+        !hasConnectorConnection(brick, other, context) &&
+        !hasIndirectMechanicalConnectorClearance(brick, other, bricks, context))
+      || hasStudBodyInterference(brick, other, context)
+    ) {
+      collidingIds.push(other.id)
+    }
+  }
+  return collidingIds
 }
 
 const doBoundsOverlapHorizontally = (
@@ -1632,6 +1672,9 @@ export const snapBrickToPlan = (
     | {
         score: number
         pose: BrickPose
+        targetBrickId: string
+        sourceConnectorId: string
+        targetConnector: ReturnType<typeof getBrickConnectors>[number]
       }
     | undefined
 
@@ -1661,6 +1704,9 @@ export const snapBrickToPlan = (
         best = {
           score: distance,
           pose: snappedPose,
+          targetBrickId: brickId,
+          sourceConnectorId: source.id,
+          targetConnector: target,
         }
       }
     }
@@ -1669,11 +1715,45 @@ export const snapBrickToPlan = (
   if (!best) return rememberSnap(brick)
 
   const snappedBrick = buildPlacedBrickWithPose(brick, best.pose)
-  return rememberSnap(
-    hasBrickCollision(snappedBrick, staticBricks, spatialState.collisionIndex, context)
-      ? brick
-      : snappedBrick,
-  )
+  if (!hasBrickCollision(snappedBrick, staticBricks, spatialState.collisionIndex, context)) {
+    return rememberSnap(snappedBrick)
+  }
+
+  // If snapping onto an angled brick's stud failed due to yaw mismatch, auto-align
+  // to the nearest 90°-equivalent yaw of the target brick and re-snap onto that stud.
+  const targetBrick = spatialState.collisionIndex.bricksById.get(best.targetBrickId)
+  if (
+    targetBrick &&
+    definition.pack === 'lego' &&
+    brickById.get(targetBrick.brickId)?.pack === 'lego' &&
+    (best.targetConnector.kind === 'stud' || best.targetConnector.kind === 'tube' || best.targetConnector.kind === 'studsocket') &&
+    !areBrickOrientationsOrthogonal(brick, targetBrick)
+  ) {
+    const sourceAngles = getBrickEulerAngles(brick.pose)
+    const targetAngles = getBrickEulerAngles(targetBrick.pose)
+    if (Math.abs(sourceAngles.pitch - targetAngles.pitch) < 1 && Math.abs(sourceAngles.roll - targetAngles.roll) < 1) {
+      const quarterOffset = Math.round((sourceAngles.yaw - targetAngles.yaw) / 90) * 90
+      const alignedYaw = normalizeAngleDegrees(targetAngles.yaw + quarterOffset)
+      const rotated = applyBrickEulerAngles(brick, { ...sourceAngles, yaw: alignedYaw })
+      const rotatedSource = getBrickConnectors(definition, rotated.pose).find((c) => c.id === best!.sourceConnectorId)
+      if (rotatedSource && areConnectorsCompatible(rotatedSource, best.targetConnector)) {
+        const alignedPose: BrickPose = {
+          ...translateBrickPose(rotated.pose, {
+            xStud: best.targetConnector.pose.xStud - rotatedSource.pose.xStud,
+            yStud: best.targetConnector.pose.yStud - rotatedSource.pose.yStud,
+            zStud: best.targetConnector.pose.zStud - rotatedSource.pose.zStud,
+          }),
+          verticalQuarterTurns: rotated.pose.verticalQuarterTurns ?? 0,
+        }
+        const alignedBrick = buildPlacedBrickWithPose(rotated, alignedPose)
+        if (!hasBrickCollision(alignedBrick, staticBricks, spatialState.collisionIndex, context)) {
+          return rememberSnap(alignedBrick)
+        }
+      }
+    }
+  }
+
+  return rememberSnap(brick)
 }
 
 export const getBounds = (bricks: PlacedBrick[]) => {
