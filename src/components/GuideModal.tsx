@@ -1,172 +1,79 @@
 import { BookOpen, Compass, Keyboard, Move, RotateCw, ShieldAlert, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useI18n } from '../lib/i18n'
+import { GuideDemoCanvas, type GuideDemoMode } from './GuideDemoCanvas'
 
 type GuideTab = 'shortcuts' | 'camera' | 'move' | 'rotate'
-type DemoKey = 'camera' | 'select' | 'move' | 'rotate' | 'undo'
 
 type GuideModalProps = {
   onClose: () => void
 }
 
-type DemoConfig = {
-  frames: string[]
-  captionsZh: string[]
-  captionsEn: string[]
-}
-
-const guideDemoModules = import.meta.glob('../assets/guide-demos/*.jpg', {
-  eager: true,
-  import: 'default',
-}) as Record<string, string>
-
-const demoFrame = (name: string) => guideDemoModules[`../assets/guide-demos/${name}.jpg`] ?? ''
-
-const DEMO_CONFIGS: Record<DemoKey, DemoConfig> = {
-  camera: {
-    frames: [demoFrame('camera-1'), demoFrame('camera-2'), demoFrame('camera-3')],
-    captionsZh: ['默认视角', '左键拖拽旋转观察', '滚轮缩放拉近细节'],
-    captionsEn: ['Default view', 'Left-drag to orbit', 'Scroll wheel to zoom in'],
-  },
-  select: {
-    frames: [demoFrame('select-1'), demoFrame('select-2'), demoFrame('select-3')],
-    captionsZh: ['未选中状态', '左键点击单选（紧贴蓝框）', '双击 / Shift+点击选中整组（黄框可固化）'],
-    captionsEn: ['Idle scene', 'Click to select (tight blue OBB)', 'Double-click / Shift+Click group (yellow OBB)'],
-  },
-  move: {
-    frames: [demoFrame('move-1'), demoFrame('move-2'), demoFrame('move-3')],
-    captionsZh: ['选中零件 / 整组', '按 R / F 垂直升降', '按 W A S D 水平微调移动'],
-    captionsEn: ['Select brick / group', 'Press R / F to raise or lower', 'Press W A S D to nudge horizontally'],
-  },
-  rotate: {
-    frames: [demoFrame('rotate-1'), demoFrame('rotate-2'), demoFrame('rotate-3')],
-    captionsZh: ['初始 0° 朝向', 'Shift + Q 按 15° 精细旋转（30°）', '按 Q 顺时针旋转 90°（120°）'],
-    captionsEn: ['Initial 0° orientation', 'Shift + Q fine 15° step (30°)', 'Press Q for 90° turn (120°)'],
-  },
-  undo: {
-    frames: [demoFrame('undo-1'), demoFrame('undo-2'), demoFrame('undo-3')],
-    captionsZh: ['编辑前状态', '按 Backspace 删除选中件', '按 ⌘/Ctrl + Z 一键撤销恢复'],
-    captionsEn: ['Before edit', 'Press Backspace to delete', 'Press ⌘/Ctrl + Z to undo'],
-  },
-}
-
-const RealSceneDemo = ({
-  demoKey,
-  isZh,
-  compact = false,
-}: {
-  demoKey: DemoKey
-  isZh: boolean
-  compact?: boolean
-}) => {
-  const config = DEMO_CONFIGS[demoKey]
-  const [frameIndex, setFrameIndex] = useState(0)
-
-  useEffect(() => {
-    setFrameIndex(0)
-    const timer = window.setInterval(() => {
-      setFrameIndex((current) => (current + 1) % config.frames.length)
-    }, 1050)
-    return () => window.clearInterval(timer)
-  }, [config.frames.length, demoKey])
-
-  const captions = isZh ? config.captionsZh : config.captionsEn
-
-  return (
-    <div className={`guide-real-demo ${compact ? 'compact' : ''}`}>
-      <div className="guide-real-demo-stage">
-        {config.frames.map((src, index) => (
-          <img
-            key={src}
-            src={src}
-            alt={captions[index]}
-            className={index === frameIndex ? 'active' : ''}
-            loading="eager"
-          />
-        ))}
-        <span className="guide-real-demo-badge">
-          {captions[frameIndex]}
-        </span>
-      </div>
-      {!compact && (
-        <div className="guide-real-demo-steps" role="group" aria-label={isZh ? '演示帧切换' : 'Demo frames'}>
-          {captions.map((caption, index) => (
-            <button
-              key={caption}
-              type="button"
-              className={index === frameIndex ? 'active' : ''}
-              onClick={() => setFrameIndex(index)}
-            >
-              <span>{index + 1}</span>
-              {caption}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
 type ShortcutItem = {
   keys: string[]
   desc: string
-  demo: DemoKey
+  mode: GuideDemoMode
+  badgeZh: string
+  badgeEn: string
 }
 
 export const GuideModal = ({ onClose }: GuideModalProps) => {
   const { locale, t } = useI18n()
   const isZh = locale === 'zh-CN'
   const [tab, setTab] = useState<GuideTab>('shortcuts')
+  const [cameraSubMode, setCameraSubMode] = useState<GuideDemoMode>('orbit')
+  const [moveSubMode, setMoveSubMode] = useState<GuideDemoMode>('angledSnap')
+  const [rotateSubMode, setRotateSubMode] = useState<GuideDemoMode>('rotate15')
   const [hovered, setHovered] = useState<{ item: ShortcutItem; x: number; y: number } | null>(null)
 
   const shortcutGroups: { title: string; items: ShortcutItem[] }[] = [
     {
       title: isZh ? '视角与画布' : 'Camera & Viewport',
       items: [
-        { keys: [isZh ? '左键拖拽空白' : 'Left-drag'], desc: isZh ? '围绕模型自由旋转视角' : 'Orbit camera around model', demo: 'camera' },
-        { keys: [isZh ? '右键拖拽' : 'Right-drag'], desc: isZh ? '平移画布视角' : 'Pan camera', demo: 'camera' },
-        { keys: [isZh ? '滚轮' : 'Scroll'], desc: isZh ? '缩放远近' : 'Zoom in / out', demo: 'camera' },
-        { keys: ['W', 'A', 'S', 'D'], desc: isZh ? '未选中零件时，沿当前朝向漫游镜头' : 'Fly camera horizontally when nothing is selected', demo: 'camera' },
+        { keys: [isZh ? '左键拖拽空白' : 'Left-drag'], desc: isZh ? '围绕模型自由旋转 360° 视角' : 'Orbit camera 360° around model', mode: 'orbit', badgeZh: '360° 环绕旋转', badgeEn: '360° Orbit' },
+        { keys: [isZh ? '右键拖拽' : 'Right-drag'], desc: isZh ? '平移画布视角' : 'Pan camera', mode: 'pan', badgeZh: '右键平移视角', badgeEn: 'Right-drag Pan' },
+        { keys: [isZh ? '滚轮' : 'Scroll'], desc: isZh ? '缩放远近' : 'Zoom in / out', mode: 'zoom', badgeZh: '滚轮推拉缩放', badgeEn: 'Scroll Zoom' },
+        { keys: ['W', 'A', 'S', 'D'], desc: isZh ? '未选中零件时，沿当前朝向漫游镜头' : 'Fly camera horizontally when nothing is selected', mode: 'fly', badgeZh: '镜头漫游', badgeEn: 'Camera Fly' },
       ],
     },
     {
       title: isZh ? '选择与固化结构' : 'Selection & Structures',
       items: [
-        { keys: [isZh ? '左键点击' : 'Click'], desc: isZh ? '选中单个零件或已固化结构（紧贴蓝框）' : 'Select brick or solidified structure (blue OBB)', demo: 'select' },
-        { keys: ['Shift', isZh ? '点击' : 'Click'], desc: isZh ? '加选 / 取消多选多个零件（黄框）' : 'Add / toggle bricks in multi-selection (yellow OBB)', demo: 'select' },
-        { keys: [isZh ? '双击零件' : 'Double-click'], desc: isZh ? '选中一整块连通的拼装结构' : 'Select entire connected assembly', demo: 'select' },
-        { keys: ['Esc'], desc: isZh ? '取消放置 / 关闭弹窗 / 退出当前操作' : 'Cancel placement / close active modal', demo: 'select' },
+        { keys: [isZh ? '左键点击' : 'Click'], desc: isZh ? '选中单个零件或已固化结构（紧贴蓝框）' : 'Select brick or solidified structure (blue OBB)', mode: 'select', badgeZh: '单选蓝框', badgeEn: 'Single Blue OBB' },
+        { keys: ['Shift', isZh ? '点击' : 'Click'], desc: isZh ? '加选 / 取消多选多个零件（黄框）' : 'Add / toggle bricks in multi-selection (yellow OBB)', mode: 'multiselect', badgeZh: 'Shift 多选黄框', badgeEn: 'Multi-Select' },
+        { keys: [isZh ? '双击零件' : 'Double-click'], desc: isZh ? '选中一整块连通的拼装结构' : 'Select entire connected assembly', mode: 'connected', badgeZh: '双击选整组', badgeEn: 'Connected Group' },
+        { keys: ['Esc'], desc: isZh ? '取消放置 / 关闭弹窗 / 退出当前操作' : 'Cancel placement / close active modal', mode: 'select', badgeZh: '退出 / 取消', badgeEn: 'Cancel / Close' },
       ],
     },
     {
       title: isZh ? '移动、吸附与旋转' : 'Move, Snap & Rotate',
       items: [
-        { keys: ['W', 'A', 'S', 'D'], desc: isZh ? '选中后按镜头方向水平微调（0.2 格，长按连发）' : 'Nudge selected horizontally (0.2 stud, hold to repeat)', demo: 'move' },
-        { keys: ['R', 'F'], desc: isZh ? '选中后垂直抬高 / 降低（0.2 格）' : 'Raise / lower selected brick (0.2 stud)', demo: 'move' },
-        { keys: ['Q', 'E'], desc: isZh ? '水平 / 垂直顺时针旋转 90°' : 'Rotate horizontal / vertical by 90°', demo: 'rotate' },
-        { keys: ['Shift', 'Q / E'], desc: isZh ? '水平 / 垂直精细旋转 15°（支持单件与固化结构）' : 'Fine rotate horizontal / vertical by 15°', demo: 'rotate' },
-        { keys: [isZh ? '左键拖拽选中件' : 'Drag selected'], desc: isZh ? '拖动并自动吸附凸点，遇到斜角结构自动对齐角度' : 'Drag with stud snapping & auto-align to angled bricks', demo: 'move' },
-        { keys: ['Backspace'], desc: isZh ? '删除当前选中的零件或整组选区' : 'Delete selected brick(s)', demo: 'undo' },
+        { keys: ['W', 'A', 'S', 'D'], desc: isZh ? '选中后按镜头方向水平微调（0.2 格，长按连发）' : 'Nudge selected horizontally (0.2 stud, hold to repeat)', mode: 'nudge', badgeZh: 'WASD 水平微调', badgeEn: 'WASD Nudge' },
+        { keys: ['R', 'F'], desc: isZh ? '选中后垂直抬高 / 降低（0.2 格）' : 'Raise / lower selected brick (0.2 stud)', mode: 'lift', badgeZh: 'R / F 升降', badgeEn: 'R / F Lift' },
+        { keys: ['Q', 'E'], desc: isZh ? '水平 / 垂直顺时针旋转 90°' : 'Rotate horizontal / vertical by 90°', mode: 'rotate90', badgeZh: '90° 旋转', badgeEn: '90° Turn' },
+        { keys: ['Shift', 'Q / E'], desc: isZh ? '水平 / 垂直精细旋转 15°（支持单件与固化结构）' : 'Fine rotate horizontal / vertical by 15°', mode: 'rotate15', badgeZh: '15° 精细步进', badgeEn: '15° Fine Step' },
+        { keys: [isZh ? '左键拖拽选中件' : 'Drag selected'], desc: isZh ? '拖动并自动吸附凸点，遇到斜角结构自动对齐角度' : 'Drag with stud snapping & auto-align to angled bricks', mode: 'angledSnap', badgeZh: '33.7° 斜角自动对齐', badgeEn: 'Angled Auto-Snap' },
+        { keys: ['Backspace'], desc: isZh ? '删除当前选中的零件或整组选区' : 'Delete selected brick(s)', mode: 'undo', badgeZh: '删除 / 撤销', badgeEn: 'Delete / Undo' },
       ],
     },
     {
       title: isZh ? '撤销与快捷工具' : 'History & Tools',
       items: [
-        { keys: ['⌘ / Ctrl', 'Z'], desc: isZh ? '撤销上一步拼装或编辑' : 'Undo last edit', demo: 'undo' },
-        { keys: ['⌘ / Ctrl', 'Shift', 'Z'], desc: isZh ? '重做已撤销的操作' : 'Redo edit', demo: 'undo' },
-        { keys: [isZh ? '拖入文件' : 'Drop file'], desc: isZh ? '直接拖入 JSON / LDR / MPD / OBJ 模型文件' : 'Drop JSON / LDR / MPD / OBJ directly into workspace', demo: 'camera' },
+        { keys: ['⌘ / Ctrl', 'Z'], desc: isZh ? '撤销上一步拼装或编辑' : 'Undo last edit', mode: 'undo', badgeZh: '撤销恢复', badgeEn: 'Undo' },
+        { keys: ['⌘ / Ctrl', 'Shift', 'Z'], desc: isZh ? '重做已撤销的操作' : 'Redo edit', mode: 'undo', badgeZh: '重做操作', badgeEn: 'Redo' },
+        { keys: [isZh ? '拖入文件' : 'Drop file'], desc: isZh ? '直接拖入 JSON / LDR / MPD / OBJ 模型文件' : 'Drop JSON / LDR / MPD / OBJ directly into workspace', mode: 'orbit', badgeZh: '拖入导入模型', badgeEn: 'Drop to Import' },
       ],
     },
   ]
 
   const showHoverPreview = (item: ShortcutItem, target: HTMLElement) => {
     const rect = target.getBoundingClientRect()
-    const previewW = 304
-    const previewH = 216
+    const previewW = 420
+    const previewH = 290
     const margin = 12
     const x = Math.min(Math.max(margin, rect.left + rect.width / 2 - previewW / 2), window.innerWidth - previewW - margin)
-    const above = rect.top - previewH - 10
-    const y = above >= margin ? above : Math.min(rect.bottom + 10, window.innerHeight - previewH - margin)
+    const above = rect.top - previewH - 12
+    const y = above >= margin ? above : Math.min(rect.bottom + 12, window.innerHeight - previewH - margin)
     setHovered({ item, x, y })
   }
 
@@ -215,7 +122,7 @@ export const GuideModal = ({ onClose }: GuideModalProps) => {
           {tab === 'shortcuts' && (
             <>
               <p className="guide-hover-hint">
-                {isZh ? '将鼠标悬浮在任意快捷键条目上，可实时查看预设 3D 场景的操作效果演示。' : 'Hover any shortcut row to preview a live animated demo from the preset 3D scene.'}
+                {isZh ? '将鼠标悬浮在任意按键条目上，实时弹出 3D 砖块近景操作演示。' : 'Hover any shortcut row to preview a live close-up 3D brick animation.'}
               </p>
               <div className="guide-shortcuts-grid">
                 {shortcutGroups.map((group) => (
@@ -249,12 +156,38 @@ export const GuideModal = ({ onClose }: GuideModalProps) => {
 
           {tab === 'camera' && (
             <div className="guide-panel">
-              <RealSceneDemo demoKey="select" isZh={isZh} />
+              <div className="guide-demo-switcher">
+                {([
+                  ['orbit', isZh ? '左键 360° 旋转视角' : '360° Orbit'],
+                  ['pan', isZh ? '右键平移' : 'Right-drag Pan'],
+                  ['zoom', isZh ? '滚轮缩放' : 'Scroll Zoom'],
+                  ['select', isZh ? '单选蓝框' : 'Single Select'],
+                  ['multiselect', isZh ? 'Shift 多选黄框' : 'Multi-Select'],
+                ] as const).map(([m, label]) => (
+                  <button key={m} type="button" className={cameraSubMode === m ? 'active' : ''} onClick={() => setCameraSubMode(m)}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <GuideDemoCanvas
+                mode={cameraSubMode}
+                caption={
+                  cameraSubMode === 'orbit'
+                    ? (isZh ? '按住左键拖拽空白处，围绕砖块 360° 旋转观察' : 'Left-drag empty space to orbit 360° around the brick')
+                    : cameraSubMode === 'pan'
+                      ? (isZh ? '按住右键拖拽平移视角' : 'Right-drag to pan the viewport')
+                      : cameraSubMode === 'zoom'
+                        ? (isZh ? '滚动滚轮拉近或拉远视角' : 'Scroll wheel to zoom in or out')
+                        : cameraSubMode === 'select'
+                          ? (isZh ? '左键点击零件，显示紧贴砖块的蓝色 OBB 选框' : 'Click a brick to select it with a tight blue OBB')
+                          : (isZh ? '按住 Shift 点击多个零件，显示黄色多选框并可固化为整体' : 'Shift+Click multiple bricks for yellow OBB multi-selection')
+                }
+              />
               <div className="guide-tips-grid">
                 <article className="guide-tip-card">
                   <h3>{isZh ? '视角操控' : 'Camera Controls'}</h3>
                   <ul>
-                    <li><kbd>{isZh ? '左键拖拽' : 'Left-drag'}</kbd> {isZh ? '旋转镜头观察任意角度' : 'Orbit around the build'}</li>
+                    <li><kbd>{isZh ? '左键拖拽' : 'Left-drag'}</kbd> {isZh ? '围绕砖块 360° 自由旋转视角' : 'Orbit 360° around the build'}</li>
                     <li><kbd>{isZh ? '右键拖拽' : 'Right-drag'}</kbd> {isZh ? '平移视角' : 'Pan viewport'}</li>
                     <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> {isZh ? '未选中零件时自由漫游' : 'Fly when nothing is selected'}</li>
                   </ul>
@@ -273,7 +206,27 @@ export const GuideModal = ({ onClose }: GuideModalProps) => {
 
           {tab === 'move' && (
             <div className="guide-panel">
-              <RealSceneDemo demoKey="move" isZh={isZh} />
+              <div className="guide-demo-switcher">
+                {([
+                  ['angledSnap', isZh ? '斜角 33.7° 自动对齐吸附' : '33.7° Angled Auto-Snap'],
+                  ['nudge', isZh ? 'WASD 水平微调' : 'WASD Nudge'],
+                  ['lift', isZh ? 'R / F 垂直升降' : 'R / F Lift'],
+                ] as const).map(([m, label]) => (
+                  <button key={m} type="button" className={moveSubMode === m ? 'active' : ''} onClick={() => setMoveSubMode(m)}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <GuideDemoCanvas
+                mode={moveSubMode}
+                caption={
+                  moveSubMode === 'angledSnap'
+                    ? (isZh ? '拖到 33.7° 斜角砖块上方时，自动对齐朝向并吸合凸点' : 'Drag over a 33.7° angled brick to auto-align and snap onto studs')
+                    : moveSubMode === 'nudge'
+                      ? (isZh ? '按 W A S D 沿镜头方向水平步进微调（0.2 格）' : 'Press W A S D to nudge horizontally by 0.2 stud')
+                      : (isZh ? '按 R / F 垂直抬高或降低砖块（0.2 格）' : 'Press R / F to raise or lower by 0.2 stud')
+                }
+              />
               <div className="guide-tips-grid">
                 <article className="guide-tip-card">
                   <h3>{isZh ? '键盘精细微调' : 'Keyboard Nudging'}</h3>
@@ -296,7 +249,27 @@ export const GuideModal = ({ onClose }: GuideModalProps) => {
 
           {tab === 'rotate' && (
             <div className="guide-panel">
-              <RealSceneDemo demoKey="rotate" isZh={isZh} />
+              <div className="guide-demo-switcher">
+                {([
+                  ['rotate15', isZh ? 'Shift + Q 15° 精细旋转' : 'Shift + Q 15° Step'],
+                  ['rotate90', isZh ? 'Q 90° 快速旋转' : 'Q 90° Turn'],
+                  ['collision', isZh ? '凸点干涉红框拦截' : 'Stud Collision Guard'],
+                ] as const).map(([m, label]) => (
+                  <button key={m} type="button" className={rotateSubMode === m ? 'active' : ''} onClick={() => setRotateSubMode(m)}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <GuideDemoCanvas
+                mode={rotateSubMode}
+                caption={
+                  rotateSubMode === 'rotate15'
+                    ? (isZh ? '单凸点轴心上按 Shift + Q 按 15° 精细旋转' : 'Press Shift + Q on a 1-stud pivot for 15° fine turns')
+                    : rotateSubMode === 'rotate90'
+                      ? (isZh ? '按 Q / E 绕装配原点 90° 旋转' : 'Press Q / E for crisp 90° turns around assembly origin')
+                      : (isZh ? '多凸点歪斜顶撞侧壁时自动拦截，下方阻挡件闪烁红框' : 'Misaligned multi-stud twist is blocked with red OBB flash')
+                }
+              />
               <div className="guide-tips-grid">
                 <article className="guide-tip-card">
                   <h3>{isZh ? '90° 与 15° / 任意角度旋转' : '90°, 15° & Arbitrary Angles'}</h3>
@@ -332,7 +305,12 @@ export const GuideModal = ({ onClose }: GuideModalProps) => {
               </div>
               <span>{hovered.item.desc}</span>
             </div>
-            <RealSceneDemo demoKey={hovered.item.demo} isZh={isZh} compact />
+            <GuideDemoCanvas
+              mode={hovered.item.mode}
+              badge={isZh ? hovered.item.badgeZh : hovered.item.badgeEn}
+              caption={hovered.item.desc}
+              compact
+            />
           </aside>
         )}
       </section>
